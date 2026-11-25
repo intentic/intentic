@@ -3,7 +3,7 @@ import TourMark from "../../tour/TourMark.vue";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { type NativeProvider, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
-import { Button, Icon, Notice, type NoticeModel, Row, RowGroup } from "@intentic/ui";
+import { Button, Icon, InfoHint, Notice, type NoticeModel, Row, RowGroup, Section } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { lessMotion } from "@intentic/ui/motion";
 import { computed, inject, nextTick, onMounted, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
@@ -425,14 +425,6 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
 <template>
     <!-- `@container`: the docked chat can leave this pane a third of the window, and the grid reflows against it. -->
     <div class="@container flex flex-col gap-6">
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p class="flex min-w-0 grow basis-64 items-center gap-1.5 text-xs text-muted">
-                <span class="min-w-0">{{ t(`connect.providerGrid.intro`) }}</span>
-                <!-- Getting started's mark for connecting a model: this page is where that step is done. -->
-                <TourMark step="models" place="models" :priority="3" side="bottom" />
-            </p>
-        </div>
-
         <Notice
             v-if="!accessKnown && !reachable"
             :of="{
@@ -514,20 +506,30 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
         </RowGroup>
         <Notice v-if="keyNotice" :of="keyNotice" />
 
-        <!-- The grid: every way in, always the same tiles in the same places; fluid columns, so a scrollbar never reflows it. -->
-        <div role="group" :aria-label="t(`shared.models`)" class="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-1">
-            <ProviderTile
-                v-for="tile in tiles"
-                :key="tile"
-                :tile="tile"
-                :selected="selected === tile"
-                :line="tileFacts[tile]?.line"
-                :standing="tileFacts[tile]?.standing"
-                :found="tileFacts[tile]?.found ?? false"
-                :controls="panelId"
-                @select="select(tile)"
-            />
-        </div>
+        <!-- The grid: every way in, always the same tiles in the same places; fluid columns, so a scrollbar never reflows it.
+             How it works and where what you connect is kept sit behind its (i). -->
+        <Section :label="t(`shared.allProviders`)">
+            <template #info>
+                <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`shared.allProviders`) })">
+                    <span class="block text-xs text-content">{{ t(`connect.providerGrid.intro`) }}</span>
+                </InfoHint>
+                <!-- Getting started's mark for connecting a model: this page is where that step is done. -->
+                <TourMark step="models" place="models" :priority="3" side="bottom" />
+            </template>
+            <div role="group" :aria-label="t(`shared.models`)" class="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-1">
+                <ProviderTile
+                    v-for="tile in tiles"
+                    :key="tile"
+                    :tile="tile"
+                    :selected="selected === tile"
+                    :line="tileFacts[tile]?.line"
+                    :standing="tileFacts[tile]?.standing"
+                    :found="tileFacts[tile]?.found ?? false"
+                    :controls="panelId"
+                    @select="select(tile)"
+                />
+            </div>
+        </Section>
 
         <!-- The open tile's panel. Nothing until the lists land: an empty provider would claim "not connected". -->
         <div :id="panelId" ref="panelEl" class="scroll-mt-4">

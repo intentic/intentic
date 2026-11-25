@@ -5,7 +5,7 @@
      allowed with a card's Always, approved hook sets and approved workspace extensions. -->
 <script setup lang="ts">
 import type { ConversationGrantRevoke, GrantRevoke, OwnerGrant, StandingGrants } from "@intentic/sandbox-contract/schemas/needs";
-import { Button, type IconName, Notice, Row, RowGroup, RowNote, timeAgo } from "@intentic/ui";
+import { Button, type IconName, InfoHint, Notice, Row, RowGroup, RowNote, timeAgo } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import { RouterLink } from "vue-router";
@@ -216,6 +216,12 @@ const pageOf = (conversationId: string): string => here(page.agent(conversationI
             v-if="ownerItems.length > 0 || unreadable.length > 0"
             :label="t(`needs.grants.ownerWideTitle`)"
         >
+            <!-- When a revoke takes effect is how the list works, not news about it, so it sits behind the (i). -->
+            <template #info>
+                <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`needs.grants.ownerWideTitle`) })">
+                    <span class="block text-xs text-content">{{ t(`needs.grants.ownerWideWhen`) }}</span>
+                </InfoHint>
+            </template>
             <RowNote v-if="unreadable.length > 0" variant="block"><Notice tone="warning" size="sm">{{ t(`needs.grants.unreadable`, { what: unreadableWhat }) }}</Notice></RowNote>
             <Row v-for="item in ownerItems" :key="keyOf(item.grant)" :icon="item.icon" :description="item.note" indent>
                 <template #title>
@@ -232,9 +238,13 @@ const pageOf = (conversationId: string): string => here(page.agent(conversationI
                     />
                 </template>
             </Row>
-            <RowNote>{{ t(`needs.grants.ownerWideWhen`) }}</RowNote>
         </RowGroup>
         <RowGroup v-if="rows.length > 0" :label="t(`needs.grants.title`)">
+            <template #info>
+                <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`needs.grants.title`) })">
+                    <span class="block text-xs text-content">{{ t(`needs.grants.when`) }}</span>
+                </InfoHint>
+            </template>
             <Row
                 v-for="row in rows"
                 :key="row.conversation.conversationId"
@@ -280,7 +290,6 @@ const pageOf = (conversationId: string): string => here(page.agent(conversationI
                     </ul>
                 </template>
             </Row>
-            <RowNote>{{ t(`needs.grants.when`) }}</RowNote>
             <RowNote v-if="notice" variant="block"><Notice :of="notice" /></RowNote>
         </RowGroup>
     </div>
