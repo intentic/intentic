@@ -71,7 +71,7 @@ import { useAttentionAsk } from "./view/attentionAsk";
 import { useBoardPresses } from "./view/boardPresses";
 import { useBoardScope } from "../../../models/fleet/board/boardScope";
 import { useBoardView } from "./view/boardView";
-import { GRID_PAD, LANE_GLYPH, useBoardGrid } from "./view/boardGrid";
+import { GRID_PAD, HEADER_PAD, LANE_GLYPH, useBoardGrid } from "./view/boardGrid";
 import { useCornerFit } from "./view/cornerFit";
 import { useCardMenu } from "./view/cardMenu";
 import { useFamilyArchive } from "./view/familyArchive";
@@ -337,7 +337,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
              share, and the right half, holding the metrics beside night and New agent, ran out of room while the left
              one stood empty. Narrow, the field takes all the room the groups leave. A phone has no such bar: there the
              search takes a row of its own, at a finger's height. -->
-        <div class="view-header view-header-blend flex items-center gap-2 px-3" :class="mobile ? 'view-header-wrap flex-wrap gap-y-1 py-1' : ''">
+        <div class="view-header view-header-blend flex items-center gap-2" :class="[HEADER_PAD[fit], narrow ? '' : 'lg:px-6', mobile ? 'view-header-wrap flex-wrap gap-y-1 py-1' : 'scrollbar-stable overflow-hidden']">
             <div v-show="!searchRow" class="flex min-w-0 items-center gap-2" :class="mobile ? `flex-auto flex-wrap` : slim ? `min-w-0 flex-1` : `shrink-0`">
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, on a first run, with no sessions to split, and on a tile board, whose header holds the filter alone. -->
                 <BoardOwnerScope v-if="user !== null && sharedAccess && !first && fit !== `tile`" v-model="ownerScope" :options="ownerOptions" :folded="slim" :mobile="mobile" />

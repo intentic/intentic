@@ -57,6 +57,18 @@ export const GRID_PAD = {
     tile: `gap-2.5 px-1.5 py-2`,
 } satisfies Record<CardFit, string>;
 
+// The header's sides by the same fit, so its first control starts where the first lane's cards do and its last ends where
+// the last lane's do. AgentsView adds the lane grid's `lg:px-6` wherever the lanes stand in columns, and keeps a scrollbar
+// gutter of its own, as the lanes' scroller does, so the right ends meet whatever the platform's scrollbar. Until 2026-11-25
+// the header kept a 12px edge of its own beside the lanes' 24px, and the search, first in its row, stood off every line
+// the board drew under it.
+export const HEADER_PAD = {
+    full: `px-3.5 sm:px-4`,
+    compact: `px-3`,
+    mini: `px-2`,
+    tile: `px-1.5`,
+} satisfies Record<CardFit, string>;
+
 // AND BY WHAT THE LANES HOLD. On a wide board an empty lane still took a third of it for one sentence, while the lane
 // with something to read cut its titles short beside it. So an empty lane gives its column away and says its sentence
 // on its header's line:
