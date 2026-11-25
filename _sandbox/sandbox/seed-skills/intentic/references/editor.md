@@ -49,7 +49,7 @@ is **Home** (`/home`): every sandbox the person has, at once. Going into a sandb
   words, **Accept**) applies a conversation's delta to the main tree; a conflict card names the paths. Cards carry
   titles, reactions and a tint for the kind of work, never tags (`agents-board.md`). With geek metrics on (Settings ▸
   Appearance), the right of the board's header carries the sandbox's CPU, memory and disk as three small meters, beside
-  the night moon and **New agent** (the search sits on the left with the board's filters). Once anything nears a limit
+  the night moon and **New agent** (the search sits in the middle). Once anything nears a limit
   the meters give way to one line naming the resource worst off ("Memory 13 / 17 GiB · swap full", "+1" for any other).
   A press opens a panel with every figure, memory by kind of process, and memory and CPU by session; each card shows its
   own conversation's. Desktop only: a phone shows no geek metrics.

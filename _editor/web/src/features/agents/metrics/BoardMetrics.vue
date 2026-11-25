@@ -1,6 +1,7 @@
 <!-- THE GEEK METRICS ON THE AGENTS BOARD (AgentsView.vue), at the right of its header with night and New agent, the search
-     having gone left to the filters it belongs with: one line (SandboxMetricsSummary), three small meters at rest and one
-     verdict once anything nears a limit, with no frame and no line of its own, so they take none of the board's height.
+     centred between the halves: one line (SandboxMetricsSummary), three small meters at rest and one verdict once
+     anything nears a limit, so the line never outgrows its half, with no frame and no line of its own, so they take none
+     of the board's height.
      On 2026-11-24 they stood for a day in the board's bottom-left corner instead, where a card filled the empty foot of
      the Attention lane, the room that says nothing more needs the reader. Pressed, the full readout (load, processes,
      pressure, memory by kind, each agent's share) hangs off it as a popover, over the board rather than pushing it up,

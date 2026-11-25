@@ -330,15 +330,22 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
     <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col overflow-x-clip">
         <!-- The board's segment of the window's top bar (`.view-header`), blended: the wallpaper runs up under it (wallpapers.css
              paints `.agents-board`) with no line, and it is one row, never two, so its height meets the chat's.
-             WHAT THE BOARD SHOWS ON THE LEFT, WHAT THE SANDBOX IS DOING AND WHAT TO DO ON THE RIGHT: the owner filters, the
-             project and the search, which all narrow the board, read as one group; the geek metrics, night and New agent
-             stand at the far end. The field grows into the room left up to its width and gives it up first, to its
-             least, before the metrics' line does. Until 2026-11-24 the search sat centred between two halves of equal
-             share, and the right half, holding the metrics beside night and New agent, ran out of room while the left
-             one stood empty. Narrow, the field takes all the room the groups leave. A phone has no such bar: there the
-             search takes a row of its own, at a finger's height. -->
-        <div class="view-header view-header-blend flex items-center gap-2" :class="[HEADER_PAD[fit], narrow ? '' : 'lg:px-6', mobile ? 'view-header-wrap flex-wrap gap-y-1 py-1' : 'scrollbar-stable overflow-hidden']">
-            <div v-show="!searchRow" class="flex min-w-0 items-center gap-2" :class="mobile ? `flex-auto flex-wrap` : slim ? `min-w-0 flex-1` : `shrink-0`">
+             Wide, three columns, the outer two of equal share, so the search sits in the middle of the board whatever stands
+             either side of it (the owner filters on the left, the geek metrics, night and New agent on the right). The
+             metrics hold to one line that does not grow with what goes wrong (SandboxMetricsSummary), so their half keeps
+             room; on 2026-11-24 the search went left for a day to give them more, and the header lost its centre. Narrow, the
+             groups keep their controls' width and the search takes what is left. A phone has no such bar: there the search
+             takes a row of its own, at a finger's height. -->
+        <div
+            class="view-header view-header-blend items-center gap-2"
+            :class="[
+                HEADER_PAD[fit],
+                mobile ? 'view-header-wrap flex flex-wrap gap-y-1 py-1' : 'scrollbar-stable overflow-hidden',
+                !mobile && narrow ? 'flex' : '',
+                !mobile && !narrow ? 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:px-6' : '',
+            ]"
+        >
+            <div v-show="!searchRow" class="col-start-1 flex min-w-0 items-center gap-2" :class="mobile ? `flex-auto flex-wrap` : slim ? `min-w-0 flex-1` : narrow ? `shrink-0` : ``">
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, on a first run, with no sessions to split, and on a tile board, whose header holds the filter alone. -->
                 <BoardOwnerScope v-if="user !== null && sharedAccess && !first && fit !== `tile`" v-model="ownerScope" :options="ownerOptions" :folded="slim" :mobile="mobile" />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
@@ -355,11 +362,11 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 :folds="slim"
                 :dense="!mobile"
                 :busy="searching"
-                :field-class="mobile ? 'order-last basis-full' : narrow ? 'min-w-24 flex-1' : 'min-w-24 max-w-72 flex-1'"
+                :field-class="mobile ? 'order-last basis-full' : narrow ? 'min-w-24 flex-1' : 'col-start-2 mx-auto w-72 max-w-full shrink-0'"
                 @enter="onFieldEnter"
             />
             <!-- One row, never two: what is here gives way inside it rather than pushing New agent under the rest. -->
-            <div v-show="!searchRow" class="flex min-w-0 items-center justify-end gap-2" :class="mobile ? 'flex-auto' : 'ml-auto'">
+            <div v-show="!searchRow" class="col-start-3 flex min-w-0 items-center justify-end gap-2" :class="mobile ? 'flex-auto' : ''">
                 <!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering && !sliver" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
                 <!-- The geek metrics, while the reader opted in: one line beside night and New agent, three small meters or the
