@@ -52,10 +52,9 @@ const promptAt = (scroller: HTMLElement, box: { top: number; height: number }) =
     scroller.firstElementChild!.append(host);
     element.getBoundingClientRect = () => {
         reads.rows += 1;
-        // SAFETY: the watcher reads only `top` off a prompt's box.
-        return { top: box.top } as DOMRect;
+        // SAFETY: the watcher reads only `top` and `height` off a prompt's box.
+        return { top: box.top, height: box.height } as DOMRect;
     };
-    Object.defineProperty(element, `offsetHeight`, { configurable: true, get: () => box.height });
     const said: boolean[] = [];
     return { host, element, box, said, pinned: (value: boolean) => said.push(value) };
 };
@@ -128,9 +127,28 @@ it(`keeps a collapsed prompt pinned while it sits below the edge by less than it
     scroller.dispatchEvent(new Event(`scroll`));
     expect(prompt.said.at(-1)).toBe(true);
 
-    prompt.box.top = 151;
+    // Past what it freed by more than the slack the scroll's rounding needs.
+    prompt.box.top = 152;
     scroller.dispatchEvent(new Event(`scroll`));
     expect(prompt.said.at(-1)).toBe(false);
+});
+
+// The 2026-11-25 flicker, in the numbers it was reproduced with: 97.5px freed, but the clamped scroll position snaps to
+// whole pixels and dropped the row 98. Measured against exactly what it freed, the row sat 0.06px past the line: loose
+// it is stuck, collapsed it is not, at frame rate.
+it(`keeps a collapsed prompt pinned when the scroll's pixel snap drops it a little further than it freed`, async () => {
+    const scroller = scrollerAt(100);
+    const prompt = promptAt(scroller, { top: 99.06, height: 154 });
+    pinPrompt(scroller, prompt);
+    await settle();
+    intersections[0]!.callback([{ target: prompt.element, isIntersecting: true }]);
+    expect(prompt.said.at(-1)).toBe(true);
+
+    prompt.element.classList.add(`chat-prompt-pinned`);
+    prompt.box.height = 56.5;
+    prompt.box.top = 99.06 + 98;
+    resizes[0]!.callback([{ target: prompt.element }]);
+    expect(prompt.said.at(-1)).toBe(true);
 });
 
 it(`remeasures when the content grows, and lets go of everything with its last prompt`, async () => {

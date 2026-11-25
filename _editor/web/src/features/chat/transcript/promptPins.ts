@@ -42,8 +42,17 @@ const groups = new WeakMap<HTMLElement, Group>();
 // scrollTop to the smaller maximum, and the row's own flow position drops by the freed px — past the edge, which unpins
 // it, which restores the height, which pins it again, at frame rate, for as long as the reader stays at the foot of a
 // turn whose remaining content is within one collapse of filling the pane. Below the edge by less than its own collapse
-// freed, a row is still the pinned one. Compared against the midpoint of the row's 1px sticky offset (`top: -1px`), robust
-// to fractional scroll positions and display scaling.
+// freed, plus PIN_SLACK, a row is still the pinned one. Compared against the midpoint of the row's 1px sticky offset
+// (`top: -1px`).
+//
+// WITHOUT THE SLACK THAT HYSTERESIS HAS NO WIDTH: "freed" exactly cancels the drop, so pinned and loose ask the same
+// question of the same scroll position, and the answer is only stable if the two agree to the pixel. They do not: the
+// clamped scroll position is snapped to whole pixels, so a collapse that freed 97.5px drops the row 97 or 98, and a
+// reader parked inside that pixel saw the prompt open and shut at frame rate, indefinitely, while an idle turn left the
+// transcript still (2026-11-25, two wake prompts in a row at the foot of a waiting turn). The slack gives the band a
+// width the rounding cannot cross; heights are read fractional so it is the scroll snap alone that slack has to cover.
+const PIN_SLACK = 2;
+
 const measure = (group: Group): void => {
     const rows = [...group.rows.values()].filter((row) => row.visible || group.dirty.has(row));
     group.dirty.clear();
@@ -55,12 +64,12 @@ const measure = (group: Group): void => {
         // Read off the row rather than off its `pinned` state, which leads the DOM by a render: the next measurement has
         // to account for the geometry on screen, not the intent.
         const collapsed = row.element.classList.contains(`chat-prompt-pinned`);
-        const height = row.element.offsetHeight;
+        const box = row.element.getBoundingClientRect();
         if (!collapsed) {
-            row.loose = height;
+            row.loose = box.height;
         }
-        const freed = collapsed ? Math.max(0, row.loose - height) : 0;
-        return { row, height, stuck: row.element.getBoundingClientRect().top < edge - 0.5 + freed };
+        const hold = collapsed ? Math.max(0, row.loose - box.height) + PIN_SLACK : 0;
+        return { row, height: box.height, stuck: box.top < edge - 0.5 + hold };
     });
     for (const { row, height, stuck } of readings) {
         // What this row covers while pinned: the row's last pixel sits 1px above the scroller's edge (`top: -1px`).
