@@ -242,16 +242,16 @@ onBeforeUnmount(() => {
         class="!h-auto !max-h-panel-xl !rounded-t-2xl !border-x-0 !border-b-0 !border-t !border-line !bg-card"
         :pt="{ header: { class: `!hidden` }, content: { class: `flex min-h-0 flex-col !overflow-hidden !p-0` } }"
     >
-        <!-- `touch-none`: the browser must not read the drag as a scroll, or the sheet never sees the move. -->
+        <!-- `touch-none`: the browser must not read the drag as a scroll, or the sheet never sees the move. The handle bar
+     is its `::before`: drawn, never in the accessibility tree. -->
         <div
             ref="grip"
-            class="shrink-0 cursor-grab touch-none pb-2 pt-1 active:cursor-grabbing"
+            class="shrink-0 cursor-grab touch-none pb-2 pt-1 before:mx-auto before:mt-2 before:block before:h-1 before:w-9 before:rounded-full before:bg-line active:cursor-grabbing"
             @pointerdown="onDown"
             @pointermove="onMove"
             @pointerup="onUp"
             @pointercancel="onUp"
         >
-            <div class="mx-auto mt-2 h-1 w-9 rounded-full bg-line" aria-hidden="true" />
             <div v-if="header" :id="headerId" class="px-4 pt-3 text-sm font-semibold text-content">{{ header }}</div>
         </div>
         <!-- THE ONE SCROLLER IN THE SHEET. It must be the element that overflows: `overscroll-behavior: contain` on a scroll

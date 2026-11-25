@@ -118,7 +118,7 @@ const flushInline = useRowFlushInline();
 // Read from <Row>'s own tier table, so the hidden mirror below stays in step with what it mirrors.
 const gap = computed(() => ROW_TIERS[tier.value].gap);
 const mark = computed(() => (lead === `face` ? FACE_SIZES.row : ROW_TIERS[tier.value].mark));
-const chevronSize = computed(() => ROW_TOGGLE_SIZES[tier.value]);
+const chevronTurn = computed(() => [ROW_TOGGLE_SIZES[tier.value], open ? `rotate-90` : ``]);
 
 // The one open-row tint, so every list in the app shades an open row the same colour.
 const tint = computed(() => {
@@ -181,28 +181,20 @@ const wrapperBleed = computed(() => (flushInline && (wrapperSelect.value !== `` 
             <!-- The disclosure mark takes <Row chevron>'s place: last in the trailing cluster, after the verbs, at the row's right edge. -->
             <template v-if="!disabled" #chevron>
                 <!-- In `pair` this button IS the keyboard's way into the toggle, since the row-wide click handler only reaches pointers. -->
-                <component
-                    :is="hit !== `header` ? `button` : `span`"
-                    :type="hit !== `header` ? `button` : undefined"
-                    :aria-expanded="hit !== `header` ? open : undefined"
-                    :aria-controls="hit !== `header` ? bodyId : undefined"
-                    :aria-label="hit !== `header` ? toggleLabel : undefined"
-                    class="flex shrink-0 items-center"
-                    :class="
-                        hit !== `header`
-                            ? `cursor-pointer rounded-sm text-subtle hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500`
-                            : ``
-                    "
+                <button
+                    v-if="hit !== `header`"
+                    type="button"
+                    :aria-expanded="open"
+                    :aria-controls="bodyId"
+                    :aria-label="toggleLabel"
+                    class="flex shrink-0 cursor-pointer items-center rounded-sm text-subtle hover:text-content focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
                     @click="onPairClick"
                 >
                     <!-- Rotation, not an icon swap: `chevron-up`/`chevron-down` are two names a caller could get backwards. -->
-                    <Icon
-                        name="chevron-right"
-                        class="shrink-0 text-subtle transition group-hover:text-muted"
-                        :class="[chevronSize, open ? `rotate-90` : ``]"
-                        aria-hidden="true"
-                    />
-                </component>
+                    <Icon name="chevron-right" class="shrink-0 text-subtle transition group-hover:text-muted" :class="chevronTurn" aria-hidden="true" />
+                </button>
+                <!-- In `header` the chevron is only a mark: the header button and the row-wide handler already take its press. -->
+                <Icon v-else name="chevron-right" class="shrink-0 text-subtle transition group-hover:text-muted" :class="chevronTurn" aria-hidden="true" />
             </template>
 
             <!-- The rail: inside <Row>'s padding so it aligns with the row above, offset by a hidden copy of the lead so it starts
