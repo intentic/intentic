@@ -335,7 +335,7 @@ watch(item, async (found) => {
                     <template #actions><Button tier="accent" size="small" :label="t(`app.remember.turnOn`)" @click="rememberAll()" /></template>
                 </Notice>
                 <p v-if="ready?.locked" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                    <span>{{ t(`app.lock.lockedNote`) }}</span>
+                    {{ t(`app.lock.lockedNote`) }}
                     <button v-if="canReset" type="button" :class="ui.textButton({ tone: `quiet` })" @click="confirmReset = true">{{ t(`app.reset.lost`) }}</button>
                 </p>
             </template>
@@ -365,9 +365,10 @@ watch(item, async (found) => {
                     <div v-if="showList" class="flex min-h-0 flex-col" :class="narrow ? `flex-1` : `w-80 shrink-0`">
                         <PasswordList :items="visible" :selected="selected" :recent="recent" :empty="emptyText" @select="select" @open="open" @review="pick(`fresh`)" />
                     </div>
-                    <div v-if="showDetail && (!narrow || item)" class="flex min-h-0 min-w-0 flex-1 flex-col">
+                    <template v-if="showDetail && (!narrow || item)">
                         <PasswordDetail
                             v-if="item"
+                            class="min-w-0"
                             :item="item"
                             :port="port"
                             :sandboxes="knownSandboxes"
@@ -379,7 +380,7 @@ watch(item, async (found) => {
                             @removed="removedOne"
                         />
                         <p v-else class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-subtle">{{ t(`app.list.nothingSelected`) }}</p>
-                    </div>
+                    </template>
                 </div>
             </template>
         </SplitView>
