@@ -14059,6 +14059,8 @@
             "showSource": "Voir la source",
             "soleDocumentOnly": "Cette fenêtre a été ouverte pour {name} seul : les autres fichiers de son dossier s'ouvrent donc en lecture seule.",
             "loadFailed": "Impossible de charger le fichier.",
+            "loadedOf": "{loaded} sur {total}",
+            "loadedSoFar": "{loaded} jusqu'ici",
             "reloadFailed": "Impossible de recharger le fichier.",
             "downloadFailed": "Impossible de télécharger le fichier.",
             "saveFailed": "Impossible d'enregistrer vos modifications.",
@@ -14699,7 +14701,10 @@
         },
         "fileUnsupported": {
             "empty": "Ce fichier est vide.",
+            "largeLine": "Pour l'ouvrir ici, il est d'abord chargé en entier dans cet onglet, ce qui peut prendre du temps et beaucoup de mémoire.",
+            "largeSized": "Ce fichier fait {size}.",
             "noPreview": "L'aperçu n'est pas disponible pour ce type de fichier.",
+            "openHere": "Ouvrir ici",
             "tooLarge": "Ce fichier est trop volumineux pour être prévisualisé ici.",
             "tooLargeSized": "Ce fichier fait {size}, trop pour être prévisualisé ici."
         },

@@ -5,7 +5,6 @@ import { messageOr } from "@intentic/ui/async";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { FILE_WINDOW_BYTES, readFileWindow } from "../../../models/workspace/files/fileWindow";
 import { changeEpochOf } from "../../../models/workspace/changes/useWorkspaceLive";
-import { RAW_MAX_BYTES } from "../../../models/workspace/tree/fileType";
 import { useViewScope } from "../../../app/workspaceScope";
 import CodeView from "./CodeView.vue";
 import { useT } from "@intentic/ui/i18n";
@@ -175,9 +174,8 @@ watch(
             >
                 <Icon :name="following ? `wave-pulse` : `chevron-down`" class="text-[0.7rem]" /> {{ t(`workspace.bigTextView.follow`) }}
             </Button>
-            <!-- Shown only when download would work: /workspace/raw 413s past RAW_MAX_BYTES, and a button whose only job is to fail is worse than none. -->
+            <!-- The whole file, whatever its size: a download streams to disk rather than through this tab. -->
             <Button
-                v-if="size <= RAW_MAX_BYTES"
                 size="small"
                 tier="quiet"
                 class="shrink-0"

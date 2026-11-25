@@ -32,12 +32,11 @@ export const createDiffRawRoute = (services: Services) => {
             if (located === undefined) {
                 throw new DiffLocateError(404, "not found");
             }
-            const bytes = await locator.read(located);
-
-            // Copied into a fresh Uint8Array: Hono rejects a Buffer's ArrayBufferLike backing.
-            return c.body(new Uint8Array(bytes), 200, {
+            // Streamed, as /workspace/raw is: a side of any size costs the daemon one read buffer, never the whole file.
+            const opened = await locator.open(located);
+            return c.body(opened.body(), 200, {
                 "Content-Type": contentTypeForPath(source.path),
-                "Content-Length": String(bytes.byteLength),
+                "Content-Length": String(opened.size),
             });
         } catch (error) {
             if (error instanceof DiffLocateError) {

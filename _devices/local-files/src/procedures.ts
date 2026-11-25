@@ -7,6 +7,7 @@ import { toRelPath } from "@intentic/workspace-ignore";
 import type { DerivedTexts } from "./derived.js";
 import { type Grant, isHandoff } from "./grants.js";
 import { readWindow } from "./files.js";
+import type { MediaTickets } from "./media.js";
 import { resolveExisting, within } from "./paths.js";
 import { placeOf, type Ripgrep } from "./ripgrep.js";
 import { resolveIn, searchFolder } from "./search.js";
@@ -136,7 +137,7 @@ const chromeFor = (grant: Grant, context: ProcedureContext): FixtureRouter => {
 const NO_CONVERSATIONS = `This folder has no conversations.`;
 
 // Every procedure but the event stream, which advertises them.
-const answersFor = (grant: Grant, context: ProcedureContext) =>
+const answersFor = (grant: Grant, context: ProcedureContext, tickets: MediaTickets) =>
     ({
         ...chromeFor(grant, context),
         system: {
@@ -161,6 +162,18 @@ const answersFor = (grant: Grant, context: ProcedureContext) =>
             search: (query, { signal }) => searchFolder(grant.root, query, { rg: context.rg, signal }),
             resolve: ({ path, agent }, { signal }) =>
                 agent === undefined ? resolveIn(grant.root, path, { rg: context.rg, signal }) : refuse(NO_CONVERSATIONS, 404),
+            // The pass an element streaming one of the folder's recordings carries (media.ts): minted for the file as it
+            // resolves now, so a ticket never names a path outside the folder.
+            mediaTicket: async ({ path, agent }) => {
+                if (agent !== undefined) {
+                    return refuse(NO_CONVERSATIONS, 404);
+                }
+                const resolved = await resolveExisting(grant.root, path);
+                if (resolved.kind === `refused`) {
+                    return refuse(resolved.why, 400);
+                }
+                return resolved.kind === `found` ? tickets.mint(grant, resolved.abs) : refuse(`not found`, 404);
+            },
             derived: ({ path }) => context.derived.read(grant.root, path),
             derive: ({ path }) => context.derived.derive(grant.root, path),
             ...treeVerbsFor(grant, context.ask),
@@ -172,9 +185,10 @@ const answersFor = (grant: Grant, context: ProcedureContext) =>
         },
     }) satisfies FixtureRouter;
 
-// A window's procedures. `raw` names the routes it serves outside oRPC (raw.ts), which its hello advertises beside these.
-export const proceduresFor = (grant: Grant, context: ProcedureContext, raw: readonly string[]) => {
-    const answers = answersFor(grant, context);
+// A window's procedures. `raw` names the routes it serves outside oRPC (raw.ts, media.ts), which its hello advertises
+// beside these; `tickets` is where the streams its recordings play from are minted.
+export const proceduresFor = (grant: Grant, context: ProcedureContext, raw: readonly string[], tickets: MediaTickets) => {
+    const answers = answersFor(grant, context, tickets);
     const advertised = advertisedOf(grant, [...servedProcedures(answers), `system.events`, ...raw]);
     return { ...answers, system: { ...answers.system, events: () => eventsFor(grant, context, advertised) } } satisfies FixtureRouter;
 };

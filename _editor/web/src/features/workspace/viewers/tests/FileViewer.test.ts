@@ -5,7 +5,8 @@ import type { ViewScope } from "../../../../app/workspaceScope";
 import type { WorkspaceFile } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { type App, computed, createApp, defineComponent, h, nextTick, provide, ref, useSlots } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-import { MINIMUM_HOLD_MS, REVEAL_DELAY_MS } from "@intentic/ui";
+import { formatBytes, MINIMUM_HOLD_MS, REVEAL_DELAY_MS } from "@intentic/ui";
+import { BLOB_CONFIRM_BYTES } from "../../../../models/workspace/tree/fileType";
 import { SandboxHttpError } from "../../../../client/sandbox/sandboxHttpError";
 
 // The daemon's two reads, stood in for at the viewer's seams: a file's text window, and its bytes. Each text read says
@@ -23,11 +24,15 @@ jest.mock("../../../../models/workspace/files/fileWindow", () => ({
         });
     },
 }));
+// A viewer's first read of the whole file: its bytes at once, unless a test has it arrive slowly (saying how far along
+// it is) or be refused.
+let bytesAnswer: (onProgress: (loaded: number) => void) => Promise<Blob> = () => Promise.resolve(new Blob([`bytes`]));
 // The rest of the client stays real: the viewer's imports reach sandboxJson too.
 const sandboxClient = { ...(await import("../../../../client/sandbox/sandboxClient")) };
 jest.mock("../../../../client/sandbox/sandboxClient", () => ({
     ...sandboxClient,
     sandboxBlob: (path: string) => Promise.resolve(new Blob([`bytes of ${path}`])),
+    sandboxBlobProgress: (_path: string, onProgress: (loaded: number) => void) => bytesAnswer(onProgress),
     // Imported on the way in (sandboxRaw, useDirectoryUi); no daemon answers here, so a read never settles.
     sandboxJson: () => new Promise(() => undefined),
 }));
@@ -118,8 +123,9 @@ const register = (extensions: readonly string[], fetch: `blob` | `path`): void =
 };
 
 let app: App | undefined;
-// `readOnly` draws it as a look; `scope` is the copy a surface around it names (the side panel's), none for the Workspace's.
-const mount = (path: string, options: { readOnly?: true; scope?: string } = {}): HTMLElement => {
+// `readOnly` draws it as a look; `scope` is the copy a surface around it names (the side panel's), none for the Workspace's;
+// `size` is the file's size as the tree knows it.
+const mount = (path: string, options: { readOnly?: true; scope?: string; size?: number } = {}): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
@@ -127,7 +133,8 @@ const mount = (path: string, options: { readOnly?: true; scope?: string } = {}):
             if (options.scope !== undefined) {
                 provide(VIEW_SCOPE, ref({ agent: options.scope }));
             }
-            return () => h(FileViewer, { path, readOnly: options.readOnly });
+            const meta = options.size === undefined ? undefined : { name: path, path, type: `file` as const, size: options.size };
+            return () => h(FileViewer, { path, readOnly: options.readOnly, meta });
         },
     });
     app.component(`Icon`, IconStub);
@@ -178,8 +185,62 @@ afterEach(() => {
     saveText.mockClear();
     saveSurface = undefined;
     answer = (path) => ({ present: false, path });
+    bytesAnswer = () => Promise.resolve(new Blob([`bytes`]));
     writable = (path) => path.length >= 0;
     document.body.innerHTML = ``;
+});
+
+// A 30 MB PDF said "This file is 31.5 MB, too large to preview here" (2026-11-25): nothing is refused for its size now.
+describe(`a large file`, () => {
+    const MB = 1024 * 1024;
+
+    it(`opens in its viewer, the wait saying how much of it has arrived`, async () => {
+        register([`pdf`], `blob`);
+        let arrive: ((blob: Blob) => void) | undefined;
+        bytesAnswer = (onProgress) => {
+            onProgress(12 * MB);
+            return new Promise((resolve) => (arrive = resolve));
+        };
+        const element = mount(`scan.pdf`, { size: 30 * MB });
+        await settle();
+        await pastReveal();
+        expect(element.querySelector(`[role="status"]`)?.textContent).toContain(`${formatBytes(12 * MB)} of ${formatBytes(30 * MB)}`);
+
+        arrive?.(new Blob([`bytes`]));
+        await settle();
+        expect(element.querySelector(`.fake-viewer`)?.getAttribute(`data-blob`)).toBe(`true`);
+        expect(element.textContent).not.toContain(`too large`);
+    });
+
+    it(`past what a click should commit a tab to, opens on the reader's word`, async () => {
+        register([`pdf`], `blob`);
+        let read = false;
+        bytesAnswer = () => {
+            read = true;
+            return Promise.resolve(new Blob([`bytes`]));
+        };
+        const element = mount(`atlas.pdf`, { size: BLOB_CONFIRM_BYTES + MB });
+        await settle();
+        expect(element.querySelector(`.fake-viewer`)).toBeNull();
+        expect(read).toBe(false);
+        expect(element.textContent).toContain(`This file is ${formatBytes(BLOB_CONFIRM_BYTES + MB)}.`);
+
+        const openHere = [...element.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`Open here`));
+        openHere?.click();
+        await settle();
+        expect(read).toBe(true);
+        expect(element.querySelector(`.fake-viewer`)?.getAttribute(`data-blob`)).toBe(`true`);
+    });
+
+    // Its text where it has one, as for any file nothing can draw, and the download either way; never a failure in red.
+    it(`falls back to its text where a server from before any size was served refuses it`, async () => {
+        register([`pdf`], `blob`);
+        bytesAnswer = () => Promise.reject(new SandboxHttpError(413, `file too large`));
+        const element = mount(`scan.pdf`, { size: 30 * MB });
+        await settle();
+        expect(element.querySelector(`.derived-text`)?.textContent).toBe(`text of scan.pdf`);
+        expect(element.textContent).not.toContain(`Could not load the file.`);
+    });
 });
 
 describe(`a viewer that registers after the tab opened`, () => {

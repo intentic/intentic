@@ -2,7 +2,7 @@ import { lutimes, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { json, type RawRoutes } from "@intentic/contract-serve";
 import type { LocalFolder, LocalOffice } from "@intentic/ext-onlyoffice/local-office";
-import { contentTypeFor, MAX_RAW_BYTES, MAX_WRITE_BYTES, openFile, writeFileWhole, writePartAt, type WriteRefusal } from "./files.js";
+import { contentTypeFor, MAX_WRITE_BYTES, openFile, writeFileWhole, writePartAt, type WriteRefusal } from "./files.js";
 import { type Grant, mayWrite, READ_ONLY } from "./grants.js";
 import { cleanRelPath, entryOf, resolveExisting, resolveWritable } from "./paths.js";
 
@@ -75,9 +75,7 @@ export const rawFor = (grant: Grant, office: LocalOffice, folder: LocalFolder, c
             if (resolved.kind === `missing` || file === undefined) {
                 return json({ error: `not found` }, 404);
             }
-            if (file.size > MAX_RAW_BYTES) {
-                return json({ error: `file too large` }, 413);
-            }
+            // Any size, as the daemon's: the body streams off disk, so a film or a scanned book costs one read buffer here.
             const headers = { "content-type": contentTypeFor(resolved.abs), etag: file.tag, "cache-control": `private, no-cache` };
             const held = (request.headers.get(`if-none-match`) ?? ``).split(`,`).map((tag) => tag.trim());
             if (held.includes(file.tag)) {

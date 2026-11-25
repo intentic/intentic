@@ -39,8 +39,8 @@ const render = async (source: Blob): Promise<void> => {
     });
 };
 
-// Parses on the main thread; bounded by the viewer's 25 MiB raw cap. If a huge .docx janks the UI, move the
-// parse into a ?worker module (Vite supports it out of the box).
+// Parses on the main thread; a file past the editor's BLOB_CONFIRM_BYTES reaches it only on the reader's word. If a huge
+// .docx janks the UI, move the parse into a ?worker module (Vite supports it out of the box).
 let unfit: (() => void) | undefined;
 onMounted(() => {
     if (container.value !== undefined) {

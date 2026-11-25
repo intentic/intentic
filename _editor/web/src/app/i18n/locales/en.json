@@ -14059,6 +14059,8 @@
             "showSource": "Show source",
             "soleDocumentOnly": "This window was opened for {name} alone, so the other files in its folder open read-only.",
             "loadFailed": "Could not load the file.",
+            "loadedOf": "{loaded} of {total}",
+            "loadedSoFar": "{loaded} so far",
             "reloadFailed": "Could not reload the file.",
             "downloadFailed": "Could not download the file.",
             "saveFailed": "Couldn't save your changes.",
@@ -14699,7 +14701,10 @@
         },
         "fileUnsupported": {
             "empty": "This file is empty.",
+            "largeLine": "Opening it here reads all of it into this tab first, which can take a while and a lot of memory.",
+            "largeSized": "This file is {size}.",
             "noPreview": "Preview isn't available for this file type.",
+            "openHere": "Open here",
             "tooLarge": "This file is too large to preview here.",
             "tooLargeSized": "This file is {size}, too large to preview here."
         },

@@ -14059,6 +14059,8 @@
             "showSource": "Quelltext zeigen",
             "soleDocumentOnly": "Dieses Fenster wurde nur für {name} geöffnet, daher öffnen sich die anderen Dateien in seinem Ordner schreibgeschützt.",
             "loadFailed": "Die Datei ließ sich nicht laden.",
+            "loadedOf": "{loaded} von {total}",
+            "loadedSoFar": "{loaded} bisher",
             "reloadFailed": "Die Datei ließ sich nicht neu laden.",
             "downloadFailed": "Die Datei ließ sich nicht herunterladen.",
             "saveFailed": "Ihre Änderungen ließen sich nicht speichern.",
@@ -14699,7 +14701,10 @@
         },
         "fileUnsupported": {
             "empty": "Diese Datei ist leer.",
+            "largeLine": "Um sie hier zu öffnen, wird sie zuerst vollständig in diesen Tab geladen. Das kann dauern und viel Speicher brauchen.",
+            "largeSized": "Diese Datei ist {size} groß.",
             "noPreview": "Für diesen Dateityp gibt es keine Vorschau.",
+            "openHere": "Hier öffnen",
             "tooLarge": "Diese Datei ist zu groß für eine Vorschau hier.",
             "tooLargeSized": "Diese Datei ist {size} groß, zu groß für eine Vorschau hier."
         },

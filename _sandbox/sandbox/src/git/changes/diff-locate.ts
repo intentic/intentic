@@ -1,6 +1,10 @@
+import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { type DiffSourceQuery, DiffSourceQuerySchema } from "@intentic/sandbox-contract/schemas/diff";
-import { gitBytes } from "@intentic/base/git";
+import { GIT_GLOBAL_ARGS, gitBytes } from "@intentic/base/git";
+import { untranslatedEnv } from "@intentic/base/process";
+import { webStream } from "@intentic/base/web-stream";
 import type { Services } from "../../composition.js";
 import { gitViewRepoDir } from "../review/git-view.js";
 import { isValidRepoId } from "../../workspace/layout/repo-discovery.js";
@@ -42,44 +46,73 @@ export const parseDiffSourceQuery = (query: URLSearchParams): DiffSourceQuery =>
     return parsed.data;
 };
 
-// Reads a blob at a rev-spec, sized first so an oversized object is refused before buffering, and a missing one (git
-// exits non-zero) 404s instead of returning an empty body.
-const readBlob = async (dir: string, spec: string): Promise<Buffer> => {
+// A blob's size at a rev-spec, asked before anything is read; a missing one (git exits non-zero) 404s instead of
+// answering an empty body.
+const blobSize = async (dir: string, spec: string): Promise<number> => {
     const size = await gitBytes(dir, ["cat-file", "-s", spec], SIZE_OUTPUT_BYTES)
         .then((stdout) => Number(stdout.toString().trim()))
         .catch(() => Number.NaN);
     if (Number.isNaN(size)) {
         throw new DiffLocateError(404, "not found");
     }
-    if (size > MAX_RAW_BYTES) {
+    return size;
+};
+
+// Reads a blob at a rev-spec whole, sized first so an oversized object is refused before buffering.
+const readBlob = async (dir: string, spec: string): Promise<Buffer> => {
+    if ((await blobSize(dir, spec)) > MAX_RAW_BYTES) {
         throw new DiffLocateError(413, "file too large");
     }
     return gitBytes(dir, ["cat-file", "-p", spec], MAX_RAW_BYTES);
 };
 
+// A side sized and opened rather than read: its bytes leave as they are read, so its size costs the daemon nothing.
+export interface OpenedSide {
+    readonly size: number;
+    readonly body: () => ReadableStream<Uint8Array>;
+}
+
+// A blob piped out of `git cat-file` as git writes it.
+const openBlob = async (dir: string, spec: string): Promise<OpenedSide> => ({
+    size: await blobSize(dir, spec),
+    body: () => {
+        // allow(process-tiers): a blob streamed as git writes it, which exec's buffered stdout cannot do; it lives as long
+        // as its reader reads, and a reader that stops closes the pipe, which ends it.
+        const git = spawn("git", [...GIT_GLOBAL_ARGS, "-C", dir, "cat-file", "-p", spec], { env: untranslatedEnv(process.env), stdio: ["ignore", "pipe", "ignore"] });
+        return webStream<Uint8Array>(Readable.toWeb(git.stdout));
+    },
+});
+
+// The worktree side, opened the way /workspace/raw opens a file (and read whole for a route that reads it here); a
+// deleted file 404s honestly.
+const openWorktreeFile = async (files: DiffLocatorDeps["files"], file: string): Promise<OpenedSide> => {
+    const opened = await files.open(file);
+    if (opened === undefined) {
+        throw new DiffLocateError(404, "not found");
+    }
+    return opened;
+};
+const readWorktreeFile = async (files: DiffLocatorDeps["files"], file: string): Promise<Buffer> => {
+    const opened = await openWorktreeFile(files, file);
+    if (opened.size > MAX_RAW_BYTES) {
+        throw new DiffLocateError(413, "file too large");
+    }
+    return Buffer.from(await new Response(opened.body()).arrayBuffer());
+};
+
 export interface DiffLocator {
     // Where the named side lives; undefined means that side never existed for this file (a checkpoint's added file).
     readonly locate: (query: DiffSourceQuery, which: Which) => Promise<BlobLocation | undefined>;
-    // The side's bytes, whole; refuses past MAX_RAW_BYTES and 404s a side that is not there.
+    // The side's bytes, whole, for a route that reads them here (its derived text); refuses past MAX_RAW_BYTES and 404s a
+    // side that is not there.
     readonly read: (located: BlobLocation) => Promise<Buffer>;
+    // The side's bytes as a stream, for a route that hands them on (/diff/raw): any size, and the same 404.
+    readonly open: (located: BlobLocation) => Promise<OpenedSide>;
 }
 
 const checkoutRoot = (dir: string, repo: string): string => repo === "root" ? dir : join(dir, ...repo.split("/").map(() => ".."));
 
 export const createDiffLocator = (services: DiffLocatorDeps): DiffLocator => {
-    // The worktree side, opened the way /workspace/raw opens a file and read whole, since the other side is a whole
-    // blob; a deleted file 404s honestly.
-    const readWorktreeFile = async (file: string): Promise<Buffer> => {
-        const opened = await services.files.open(file);
-        if (opened === undefined) {
-            throw new DiffLocateError(404, "not found");
-        }
-        if (opened.size > MAX_RAW_BYTES) {
-            throw new DiffLocateError(413, "file too large");
-        }
-        return Buffer.from(await new Response(opened.body()).arrayBuffer());
-    };
-
     // Not the git routes' `repoDir`: that one heals the --separate-git-dir pointer (a write), and these routes only ever
     // run after their JSON sibling already did that.
     const repoDir = (repo: string): string => {
@@ -166,6 +199,7 @@ export const createDiffLocator = (services: DiffLocatorDeps): DiffLocator => {
             // Delegates to history.ts; undefined means that checkpoint's file never had this side.
             return services.history.fileBlob(query.snapshot, query.scope, query.path, which);
         },
-        read: (located) => ("file" in located ? readWorktreeFile(located.file) : readBlob(located.dir, located.spec)),
+        read: (located) => ("file" in located ? readWorktreeFile(services.files, located.file) : readBlob(located.dir, located.spec)),
+        open: (located) => ("file" in located ? openWorktreeFile(services.files, located.file) : openBlob(located.dir, located.spec)),
     };
 };

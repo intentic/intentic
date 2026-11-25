@@ -1,9 +1,9 @@
 import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract/state/workspace-state";
 import { STATE_DIR } from "@intentic/sandbox-contract";
 import { registerViewer, renderViewerForExtension } from "../../../../workbench/views/viewerRegistry";
-import { RAW_MAX_BYTES } from "../../../../models/workspace/tree/fileType";
+import { BLOB_CONFIRM_BYTES } from "../../../../models/workspace/tree/fileType";
 import { extensionHostStarted, extensionsLoaded } from "../../../../workbench/views/extensionStatuses";
-import { claimOf, resolveOpenFile } from "../openFile";
+import { claimOf, openAnyway, resolveOpenFile } from "../openFile";
 
 // Order between the core's text resolver and the extensions' viewer registry: FileViewer itself has no per-format
 // branches. Registrations are made/disposed per test against the real registry, a module-level singleton (no-Pinia).
@@ -53,7 +53,7 @@ describe(`resolveOpenFile while the extension host is still activating`, () => {
     it(`holds a file only a viewer could draw, and nothing the core draws itself`, () => {
         extensionHostStarted.value = true;
         expect(resolveOpenFile(`take.wav`, 1000)).toEqual({ kind: `pending` });
-        expect(resolveOpenFile(`clip.mp4`, RAW_MAX_BYTES * 2)).toEqual({ kind: `pending` });
+        expect(resolveOpenFile(`clip.mp4`, BLOB_CONFIRM_BYTES * 2)).toEqual({ kind: `pending` });
         expect(claimOf(`take.wav`, 1000)).toBe(`pending`);
         expect(resolveOpenFile(`src/app.ts`, 1000)).toEqual({ kind: `code`, lang: `typescript` });
         expect(resolveOpenFile(`take.wav`, 0)).toEqual({ kind: `empty` });
@@ -121,18 +121,30 @@ describe(`resolveOpenFile with viewers registered`, () => {
 
     it(`never size-gates a path viewer: its backend reads the file, not /workspace/raw`, () => {
         register(`office`, [`xlsx`], `path`, { edit: true });
-        expect(resolveOpenFile(`ledger.xlsx`, RAW_MAX_BYTES + 1)).toMatchObject({ kind: `viewer`, viewer: { id: `office` } });
+        expect(resolveOpenFile(`ledger.xlsx`, BLOB_CONFIRM_BYTES + 1)).toMatchObject({ kind: `viewer`, viewer: { id: `office` } });
     });
 });
 
-// A `blob` viewer is refused past the size cap since /workspace/raw holds the whole answer in memory; a `url` viewer
-// range-reads /workspace/media and isn't size-gated.
+// Nothing is refused for its size. A `blob` viewer holds the whole file in the tab, so past BLOB_CONFIRM_BYTES it waits for
+// the reader's word; a `url` viewer range-reads /workspace/media and never asks.
 describe(`resolveOpenFile size gates follow the fetch kind`, () => {
-    it(`refuses an oversize blob and streams an oversize url`, () => {
-        register(`docx`, [`docx`], `blob`);
+    // A 30 MB PDF said "too large to preview" (2026-11-25): what the old 25 MiB cap refused now simply opens.
+    it(`opens a large blob at once, asks before a huge one, and streams a huge url`, () => {
+        register(`pdf`, [`pdf`], `blob`);
         register(`media`, [`mp4`], `url`);
-        expect(resolveOpenFile(`report.docx`, RAW_MAX_BYTES + 1)).toEqual({ kind: `too-large` });
-        expect(resolveOpenFile(`film.mp4`, RAW_MAX_BYTES * 80)).toMatchObject({ kind: `viewer`, viewer: { fetch: `url` } });
+        expect(resolveOpenFile(`scan.pdf`, 30 * 1024 * 1024)).toMatchObject({ kind: `viewer`, viewer: { id: `pdf` } });
+        expect(resolveOpenFile(`atlas.pdf`, BLOB_CONFIRM_BYTES + 1)).toMatchObject({ kind: `large`, viewer: { id: `pdf` } });
+        expect(resolveOpenFile(`film.mp4`, BLOB_CONFIRM_BYTES * 80)).toMatchObject({ kind: `viewer`, viewer: { fetch: `url` } });
+    });
+
+    it(`opens a huge file once the reader says so, and re-resolves the tab on that word`, () => {
+        register(`pdf`, [`pdf`], `blob`);
+        const before = claimOf(`archive/scans.pdf`, BLOB_CONFIRM_BYTES * 2);
+        openAnyway(`archive/scans.pdf`);
+        expect(resolveOpenFile(`archive/scans.pdf`, BLOB_CONFIRM_BYTES * 2)).toMatchObject({ kind: `viewer`, viewer: { id: `pdf` } });
+        expect(claimOf(`archive/scans.pdf`, BLOB_CONFIRM_BYTES * 2)).not.toBe(before);
+        // The word was for that file alone.
+        expect(resolveOpenFile(`archive/other.pdf`, BLOB_CONFIRM_BYTES * 2)).toMatchObject({ kind: `large` });
     });
 
     it(`proceeds optimistically when the tree never reported a size`, () => {

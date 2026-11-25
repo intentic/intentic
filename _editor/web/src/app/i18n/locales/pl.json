@@ -13337,6 +13337,8 @@
             "showSource": "Pokaż kod",
             "soleDocumentOnly": "To okno otwarto tylko dla {name}, więc pozostałe pliki w jego folderze otwierają się tylko do odczytu.",
             "loadFailed": "Nie udało się wczytać pliku.",
+            "loadedOf": "{loaded} z {total}",
+            "loadedSoFar": "{loaded} do tej pory",
             "reloadFailed": "Nie udało się ponownie wczytać pliku.",
             "downloadFailed": "Nie udało się pobrać pliku.",
             "saveFailed": "Nie udało się zapisać Twoich zmian.",
@@ -14054,7 +14056,10 @@
         },
         "fileUnsupported": {
             "empty": "Ten plik jest pusty.",
+            "largeLine": "Otwarcie go tutaj najpierw wczyta go w całości do tej karty, co może potrwać i zająć dużo pamięci.",
+            "largeSized": "Ten plik ma {size}.",
             "noPreview": "Podgląd nie jest dostępny dla tego typu pliku.",
+            "openHere": "Otwórz tutaj",
             "tooLarge": "Ten plik jest za duży na podgląd tutaj.",
             "tooLargeSized": "Ten plik ma {size}, to za dużo na podgląd tutaj."
         },

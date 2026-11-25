@@ -2,24 +2,21 @@
 import { deliverableKindOf } from "@intentic/sandbox-contract/text/documents";
 import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/workspace/workspace-tree";
 import { useLoaded } from "@intentic/extension-api";
-import { Await, Button, CopyButton, EmptyState, Notice, ui, useDevice } from "@intentic/ui";
+import { Await, Button, CopyButton, EmptyState, Meter, Notice, ui, useDevice } from "@intentic/ui";
 import { messageOr, useLatest } from "@intentic/ui/async";
 import { basename } from "@intentic/ui/path";
-import { computed, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
+import { computed, ref, shallowRef, watch, type Component } from "vue";
 import { localFace } from "../../../app/environments/local";
-import { sandboxBlob } from "../../../client/sandbox/sandboxClient";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { type AccessReason, accessReasonOf } from "../../../client/sandbox/access/accessReason";
 import AccessGate from "../../../components/access/AccessGate.vue";
 import { readOnlyTip, sharedCopyTip } from "./readOnlyTip";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { isArchiveContent } from "../../../models/workspace/files/archiveEntries";
 import { sha256Hex } from "../../../lib/files/contentHash";
 import { downloadEntries } from "../files/downloadEntries";
 import { setExternalDirty } from "../files/externalDirty";
 import { readFileWindow } from "../../../models/workspace/files/fileWindow";
-import { mediaUrl } from "../../../models/workspace/files/mediaUrl";
 import { useEditBuffers } from "../../../models/workspace/files/useEditBuffers";
 import { useLayout } from "../../../workbench/window/useLayout";
 import { formatChord, isApplePlatform } from "../../../workbench/commands/keybindings";
@@ -28,7 +25,7 @@ import { useNotifications } from "../../../workbench/notifications/notifications
 import { useMonaco } from "../files/useMonaco";
 import { changeEpochOf } from "../../../models/workspace/changes/useWorkspaceLive";
 import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTree";
-import { isShared, scopeKey, scopeQuery, useViewScope } from "../../../app/workspaceScope";
+import { isShared, scopeKey, useViewScope } from "../../../app/workspaceScope";
 import { useScopeTitle } from "../health/scopeTitle";
 import { useFollowCheckout } from "../../../models/workspace/files/useFollowCheckout";
 import { followEdits, useDraftSeed, useLiveFile, viewerRefresh } from "./liveFile";
@@ -42,11 +39,12 @@ import { derivedIsOnlyView, mayHaveDerivedText } from "../files/derivedText";
 import FileBreadcrumb from "../explorer/FileBreadcrumb.vue";
 import FileLocked from "./FileLocked.vue";
 import FileUnsupported from "./FileUnsupported.vue";
+import { useViewerBytes } from "../../../models/workspace/files/viewerBytes";
 import { highlightLangFor } from "@intentic/code-read";
 import { TEXT_EDIT_MAX_BYTES } from "../../../models/workspace/tree/fileType";
 import type { LineJump } from "../../../models/workspace/tabs/workspaceTabs";
 import MarkdownViewer from "./MarkdownViewer.vue";
-import { claimOf, resolveOpenFile, type OpenFile } from "./openFile";
+import { claimOf, openAnyway, resolveOpenFile, type OpenFile } from "./openFile";
 import HtmlPreview from "../../../parts/workspace/HtmlPreview.vue";
 import { printRendered } from "../../../parts/workspace/printRendered";
 import { MAX_FILE_BYTES } from "../../../models/workspace/viewers/htmlDocument";
@@ -124,28 +122,11 @@ useFollowCheckout(() => [path], () => viewScope.value);
 // Warms Monaco + grammar alongside the fetch, so CodeView paints coloured immediately, no flash.
 const { ensureMonaco, ensureLanguage } = useMonaco();
 
-const readBlob = (target: string): Promise<Blob> =>
-    sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path: target }), viewScope.value).toString()}`);
-
-// A backend that mints no media tickets (a folder on this computer, whose file server has only /workspace/raw) plays a
-// recording from its bytes instead, through an object URL held for the one file on screen and let go with it.
-let heldUrl: string | undefined;
-const letGo = (): void => {
-    if (heldUrl !== undefined) {
-        URL.revokeObjectURL(heldUrl);
-        heldUrl = undefined;
-    }
-};
-const mediaSource = async (target: string): Promise<string> => {
-    if (supportsRoute(`workspace.mediaTicket`)) {
-        return mediaUrl(target, { scope: viewScope.value });
-    }
-    const blob = await readBlob(target);
-    letGo();
-    heldUrl = URL.createObjectURL(blob);
-    return heldUrl;
-};
-onBeforeUnmount(letGo);
+// The bytes and streams the viewers draw from, measured on a first open and let go with the file (viewerBytes.ts).
+const { read: readBlob, readMeasured, measured, stream: mediaSource, stop: stopReading, forget: forgetBytes } = useViewerBytes(
+    () => viewScope.value,
+    () => meta?.size,
+);
 
 // A document window (the desktop app opened one file on its own, `LocalFace.file`) may change that document and nothing
 // else: the folder's other files open read-only there, and its file server refuses their writes anyway.
@@ -165,17 +146,19 @@ const pathViewerProps = (target: string, agent: string | undefined): PathViewerP
 };
 
 // The one content prop a viewer's manifest `fetch` kind asks for; a `path` viewer reads through its own backend, so
-// it gets the scope it is viewed in and whether this window may write the file instead.
+// it gets the scope it is viewed in and whether this window may write the file instead. `bytes` reads a `blob` viewer's
+// file: the measured read on a first open, the plain one for a redraw over what is already drawn.
 const viewerContentFor = (
     fetch: RegisteredViewer[`fetch`],
     target: string,
     agent: string | undefined,
+    bytes: (target: string) => Promise<Blob> = readBlob,
 ): Promise<NonNullable<typeof viewerContent.value>> => {
     switch (fetch) {
         case `text`:
             return readText(target).then(({ content: body }) => ({ text: body }));
         case `blob`:
-            return readBlob(target).then((blob) => ({ blob }));
+            return bytes(target).then((blob) => ({ blob }));
         case `url`:
             return mediaSource(target).then((src) => ({ src }));
         case `path`:
@@ -374,7 +357,7 @@ const resetFor = (currentPath: string): OpenFile => {
     text.value = null;
     viewerContent.value = undefined;
     viewerComponent.value = undefined;
-    letGo();
+    forgetBytes();
     firstWindow.value = undefined;
     fromShared.value = false;
     clearFailure();
@@ -425,8 +408,9 @@ watch(
         const isLatest = latest();
 
         onCleanup(() => {
-            // Nobody is waiting for this file's text any more: stop paying for it mid-flight.
+            // Nobody is waiting for this file's text or bytes any more: stop paying for them mid-flight.
             reading?.abort();
+            stopReading();
         });
 
         const fail = (err: unknown): void => {
@@ -437,6 +421,11 @@ watch(
             // Text reports missing via FileGone; a binary/media fetch just 404s instead. Both mean the file is gone.
             if (gone(err) || (err instanceof SandboxHttpError && err.status === 404)) {
                 emit(`gone`, currentPath);
+                return;
+            }
+            // A server from before any size was served refuses a large file; it can still be downloaded.
+            if (err instanceof SandboxHttpError && err.status === 413) {
+                open.value = { kind: `too-large` };
                 return;
             }
             failWith(err instanceof Error ? err : undefined, t(`workspace.fileViewer.loadFailed`));
@@ -481,7 +470,7 @@ watch(
         if (resolution.kind === `viewer`) {
             const { viewer } = resolution;
             loading.value = true;
-            const content = viewerContentFor(viewer.fetch, currentPath, viewScope.value.agent);
+            const content = viewerContentFor(viewer.fetch, currentPath, viewScope.value.agent, readMeasured);
             Promise.all([viewer.component(), content]).then(([component, loaded]) => {
                 if (!isLatest()) {
                     return;
@@ -518,9 +507,9 @@ const reloadFromDisk = (): void => {
     );
 };
 
-// Via /workspace/media, not /workspace/raw or a Blob: the daemon streams it as an attachment straight to disk,
-// so nothing is held in the tab and the 25 MiB raw-route ceiling doesn't apply. A backend with no media tickets hands
-// the bytes over instead (downloadEntries.ts).
+// Via /workspace/media, not /workspace/raw or a Blob: the daemon streams it as an attachment straight to disk, so
+// nothing is held in the tab, whatever the size. A window on this computer's folder hands the bytes over instead
+// (downloadEntries.ts).
 const download = async (): Promise<void> => {
     try {
         await downloadEntries([{ path, type: `file` }], viewScope.value);
@@ -808,8 +797,12 @@ const onEditorSave = (value: string): void =>
             <Await v-else :of="fileLoaded" :imprint="`file:${path}`">
                 <template #fallback>
                     <DiffSkeleton v-if="open.kind === 'code' || open.kind === 'markdown'" single />
-                    <div v-else class="flex h-full items-center justify-center text-muted" role="status">
+                    <div v-else class="flex h-full flex-col items-center justify-center gap-3 text-muted" role="status">
                         <Icon name="spinner" class="text-xl" spin :aria-label="t(`ui.status.loading`)" />
+                        <template v-if="measured">
+                            <Meter v-if="measured.share !== undefined" :value="measured.share" class="w-48" />
+                            <span class="text-2xs tabular-nums">{{ measured.words }}</span>
+                        </template>
                     </div>
                 </template>
                 <!-- The page running in a sandboxed frame, from the same text the editor below holds (HtmlPreview). -->
@@ -848,6 +841,8 @@ const onEditorSave = (value: string): void =>
                         <DerivedTextView :path="path" />
                     </template>
                 </component>
+                <!-- A file the viewer would hold whole, past the size a click should commit a tab to: opened on the reader's word. -->
+                <FileUnsupported v-else-if="open.kind === 'large'" mode="large" :size="meta?.size" @open="openAnyway(path)" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'too-large'" mode="too-large" :size="meta?.size" @download="download" />
                 <FileUnsupported v-else-if="open.kind === 'empty'" mode="empty" />
                 <!-- Sandbox keeps this one to itself; resolveOpenFile knows from the path alone, no fetch needed. -->

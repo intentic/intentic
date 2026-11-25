@@ -4,6 +4,7 @@ import type { LocalFolder, LocalOffice } from "@intentic/ext-onlyoffice/local-of
 import { RAW_ROUTE_LIST, type RawRouteKey } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import { SANDBOX_ROUTE_NAMES, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { type Grant, type Grants, isHandoff, mayWrite } from "./grants.js";
+import { MediaTickets, mediaAnswer } from "./media.js";
 import { cleanRelPath, resolveExisting } from "./paths.js";
 import { type ProcedureContext, proceduresFor } from "./procedures.js";
 import { rawFor } from "./raw.js";
@@ -58,6 +59,8 @@ const UNHURRIED = new Set([
 export const unhurried = (request: Request): boolean => UNHURRIED.has(sandboxRouteFor(request.method, new URL(request.url).pathname)?.name ?? ``);
 
 const HEALTH = `GET /health` satisfies RawRouteKey;
+// The one route answered on a ticket rather than the bearer: an element streaming a recording (media.ts).
+const MEDIA = `GET /workspace/media` satisfies RawRouteKey;
 
 // What a page of another origin may ask of a handoff grant, and the one route that answers it.
 const HANDOFF_METHODS = `GET, HEAD, OPTIONS`;
@@ -92,6 +95,56 @@ const handoffAllows = (grant: Grant, request: Request, url: URL): boolean => {
     );
 };
 
+// The CORS answer for an origin this side answers; a request with no Origin (the app's own process) needs none.
+const corsFor = (origin: string | null): Record<string, string> =>
+    origin === null ? {} : { "access-control-allow-origin": origin, vary: `Origin`, "access-control-expose-headers": `ETag, Content-Length` };
+
+const withHeaders = (response: Response, headers: Record<string, string>): Response => {
+    for (const [name, value] of Object.entries(headers)) {
+        response.headers.set(name, value);
+    }
+    return response;
+};
+
+// Why a granted token is not answered for this request: a handoff grant outside the one read it allows, or an app
+// window's grant presented by a page of another origin.
+const refusalFor = (grant: Grant, request: Request, url: URL, origins: ReadonlySet<string>): string | undefined => {
+    if (isHandoff(grant)) {
+        return handoffAllows(grant, request, url) ? undefined : HANDOFF_ONLY;
+    }
+    const origin = request.headers.get(`origin`);
+    return origin === null || origins.has(origin) ? undefined : `not this app's page`;
+};
+
+// An element's read of a recording, on the ticket its address carries in place of the bearer it cannot send: answered
+// for the file the ticket was minted for, while the grant that minted it lasts, to the pages that grant answers.
+const streamed = async (deps: ServerDeps, tickets: MediaTickets, request: Request, url: URL): Promise<Response> => {
+    const held = tickets.redeem(url.searchParams.get(`ticket`) ?? ``);
+    if (held === undefined || deps.grants.byToken(held.grant.token) !== held.grant) {
+        return json({ error: `this recording's link has expired; open it again` }, 401);
+    }
+    const refused = refusalFor(held.grant, request, url, deps.origins);
+    if (refused !== undefined) {
+        return json({ error: refused }, 403);
+    }
+    // Resolved again on every read, so a link put in the file's place since never leads out of the folder.
+    const resolved = await resolveExisting(held.grant.root, url.searchParams.get(`path`) ?? ``);
+    if (resolved.kind !== `found` || resolved.abs !== held.abs) {
+        return json({ error: `not found` }, 404);
+    }
+    return mediaAnswer(resolved.abs, request, url);
+};
+
+// The doors answered before any bearer is read: the health probe, whose asker learns only that something answers (as
+// the daemon's), and an element's ticketed stream.
+const bearerless = async (deps: ServerDeps, tickets: MediaTickets, request: Request, url: URL): Promise<Response | undefined> => {
+    if (request.method === `GET` && url.pathname === `/health`) {
+        return json({ ok: true });
+    }
+    const reads = request.method === `GET` || request.method === `HEAD`;
+    return reads && url.pathname === `/workspace/media` ? streamed(deps, tickets, request, url) : undefined;
+};
+
 export const createLocalFilesServer = (deps: ServerDeps): LocalFilesServer => {
     // What each grant holds, its handlers and its office editor, by a key of the grant's own rather than its token: a
     // grant that replaces another under the same token starts afresh, never with the folder or rights of the one before.
@@ -102,6 +155,7 @@ export const createLocalFilesServer = (deps: ServerDeps): LocalFilesServer => {
         return key;
     };
     const handlers = new Map<string, (request: Request, url: URL) => Promise<Response>>();
+    const tickets = new MediaTickets();
 
     const folderOf = (grant: Grant): LocalFolder => ({
         key: keyOf(grant),
@@ -120,9 +174,9 @@ export const createLocalFilesServer = (deps: ServerDeps): LocalFilesServer => {
         let handler = handlers.get(keyOf(grant));
         if (handler === undefined) {
             const raw = rawFor(grant, deps.office, folderOf(grant), deps.writeCap);
-            // What this side answers outside oRPC, the health probe the gates below answer included.
-            const rawServed = [HEALTH, ...Object.keys(raw)];
-            const procedures = proceduresFor(grant, deps.context, rawServed);
+            // What this side answers outside oRPC, the health probe and the ticketed stream the gates below answer included.
+            const rawServed = [HEALTH, MEDIA, ...Object.keys(raw)];
+            const procedures = proceduresFor(grant, deps.context, rawServed, tickets);
             const served = new Set<string>([...servedProcedures(procedures), ...rawServed]);
             const unserved = Object.fromEntries(
                 [...SANDBOX_ROUTE_NAMES, ...RAW_ROUTE_LIST.map((route) => route.name)].filter((name) => !served.has(name)).map((name) => [name, NO_SANDBOX]),
@@ -131,27 +185,6 @@ export const createLocalFilesServer = (deps: ServerDeps): LocalFilesServer => {
             handlers.set(keyOf(grant), handler);
         }
         return handler;
-    };
-
-    // The CORS answer for an origin this side answers; a request with no Origin (the app's own process) needs none.
-    const corsFor = (origin: string | null): Record<string, string> =>
-        origin === null ? {} : { "access-control-allow-origin": origin, vary: `Origin`, "access-control-expose-headers": `ETag, Content-Length` };
-
-    const withHeaders = (response: Response, headers: Record<string, string>): Response => {
-        for (const [name, value] of Object.entries(headers)) {
-            response.headers.set(name, value);
-        }
-        return response;
-    };
-
-    // Why a granted token is not answered for this request: a handoff grant outside the one read it allows, or an app
-    // window's grant presented by a page of another origin.
-    const refusalFor = (grant: Grant, request: Request, url: URL): string | undefined => {
-        if (isHandoff(grant)) {
-            return handoffAllows(grant, request, url) ? undefined : HANDOFF_ONLY;
-        }
-        const origin = request.headers.get(`origin`);
-        return origin === null || deps.origins.has(origin) ? undefined : `not this app's page`;
     };
 
     return {
@@ -169,16 +202,16 @@ export const createLocalFilesServer = (deps: ServerDeps): LocalFilesServer => {
             if (request.method === `OPTIONS`) {
                 return preflightAnswer(request, cors, handedTo ? HANDOFF_METHODS : `GET, POST, PUT, DELETE, OPTIONS`);
             }
-            // The one door with no credential, as the daemon's: whoever probes it learns only that something answers.
-            if (request.method === `GET` && url.pathname === `/health`) {
-                return withHeaders(json({ ok: true }), cors);
+            const open = await bearerless(deps, tickets, request, url);
+            if (open !== undefined) {
+                return withHeaders(open, cors);
             }
             const token = bearerOf(request);
             const grant = token === undefined ? undefined : deps.grants.byToken(token);
             if (grant === undefined) {
                 return withHeaders(json({ error: `this window no longer has that folder open` }, 401), cors);
             }
-            const refused = refusalFor(grant, request, url);
+            const refused = refusalFor(grant, request, url, deps.origins);
             if (refused !== undefined) {
                 return withHeaders(json({ error: refused }, 403), cors);
             }
@@ -191,6 +224,7 @@ export const createLocalFilesServer = (deps: ServerDeps): LocalFilesServer => {
         },
         forget: async (grant) => {
             handlers.delete(keyOf(grant));
+            tickets.forget(grant);
             await deps.office.release(keyOf(grant));
         },
     };

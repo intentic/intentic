@@ -5,7 +5,7 @@ import type { AppEnv } from "../../app-env.js";
 import { extractTarToWorkspace, PathEscapeError } from "./archive/workspace-archive.js";
 import { computeUploadSkip, type UploadManifestEntry } from "./workspace-diff.js";
 import { sha256Text } from "./workspace-files.js";
-import { MAX_RAW_BYTES, contentTypeForPath, openWorkspaceFileRange, parseByteRange } from "./workspace-files-download.js";
+import { contentTypeForPath, openWorkspaceFileRange, parseByteRange } from "./workspace-files-download.js";
 import { resolveWorkspacePath } from "./workspace-files-paths.js";
 import { planEntries, planOfBinding } from "./download/workspace-download.js";
 import { type ZipEntry, zipChunks, zipLength } from "./download/workspace-zip.js";
@@ -156,7 +156,8 @@ const uploadFileTarget = async (services: WorkspaceBytesRoutesDeps, c: Context<A
 
 const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
     // GET /workspace/raw: raw bytes for any file under /work, typed by extension; the text route utf8-decodes and would
-    // corrupt these. Same guard order as workspace.file: 400/404/413.
+    // corrupt these. Same guard order as workspace.file: 400/404. No byte cap: the body streams off disk, so a large file
+    // costs the daemon one read buffer, and how much a reader can hold is the reader's to judge (the editor's openFile.ts).
     raw: async (c: Context<AppEnv>): Promise<Response> => {
         const path = c.req.query("path");
         if (path === undefined) {
@@ -171,9 +172,6 @@ const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) => ({
         const file = await services.files.open(target);
         if (file === undefined) {
             return c.json({ error: "not found" }, 404);
-        }
-        if (file.size > MAX_RAW_BYTES) {
-            return c.json({ error: "file too large" }, 413);
         }
         // Kept and revalidated: a file read again unchanged costs a 304, not its bytes over the tunnel a second time.
         const headers = { "Content-Type": contentTypeForPath(target), ETag: file.tag, "Cache-Control": "private, no-cache" };

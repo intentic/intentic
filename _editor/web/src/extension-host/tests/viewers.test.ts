@@ -66,8 +66,8 @@ describe(`ext-viewers`, () => {
         }
     });
 
-    // Media is the only `url` viewer: a blob fetch would download the whole file before the first frame and hit the
-    // daemon's 25 MiB raw cap for most recordings.
+    // Media is the only `url` viewer: a blob fetch would download the whole file before the first frame, and hold all of
+    // a film in the tab.
     // Audio and video share one entry because the player decides which it is from the decoded track, not the extension.
     it(`declares audio and video as one streaming viewer`, () => {
         const media = (viewers.manifest.contributes?.viewers ?? []).find((viewer) => viewer.id === `media`);

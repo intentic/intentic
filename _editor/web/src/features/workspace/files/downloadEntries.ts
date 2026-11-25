@@ -5,6 +5,7 @@ import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useEndpoint } from "../../../client/endpoint/useEndpoint";
 import { elementAddress } from "../../../client/endpoint/elementAddress";
 import { scopeQuery, type ViewScope, workspaceScope } from "../../../app/workspaceScope";
+import { localFace } from "../../../app/environments/local";
 import { mediaUrl } from "../../../models/workspace/files/mediaUrl";
 
 // Saves workspace entries onto this computer through the browser's own download manager, which streams them to disk:
@@ -28,8 +29,9 @@ const hand = (url: string): void => {
 // How long a download's object URL outlives the click that started it, in milliseconds.
 const HOLD_MS = 10_000;
 
-// One file from its bytes, for a backend with no media tickets (a folder on this computer, whose file server has only
-// /workspace/raw): read whole into the tab, as far as that route's cap, and saved under the file's own name.
+// One file from its bytes, for a backend with no media tickets (an older file server), and in a window on a folder of
+// this computer, whose links the desktop app takes out to the system's browser (local_pages.rs): read whole into the
+// tab, at any size, and saved under the file's own name.
 const handBytes = async (path: string, scope: ViewScope): Promise<void> => {
     const url = URL.createObjectURL(await sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path }), scope).toString()}`));
     const anchor = document.createElement(`a`);
@@ -48,7 +50,7 @@ export const downloadEntries = async (targets: readonly DownloadTarget[], scope:
         return undefined;
     }
     if (targets.length === 1 && only.type === `file`) {
-        if (supportsRoute(`workspace.mediaTicket`)) {
+        if (supportsRoute(`workspace.mediaTicket`) && localFace() === undefined) {
             hand(await mediaUrl(only.path, { download: true, scope }));
         } else {
             await handBytes(only.path, scope);

@@ -212,7 +212,7 @@ test("workspace.file passes the requested window through and reports the range i
     expect(asked).toEqual([{ offset: -8, limit: 64 }]);
 });
 
-test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s escape, 413s oversize", async () => {
+test("GET /workspace/raw streams bytes of any size with a content-type, 404s missing, 400s escape", async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     const env = Buffer.from("SECRET=1");
     const opened = (bytes: Buffer, size = bytes.byteLength) => ({
@@ -246,8 +246,11 @@ test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s e
     expect((await app.request("/workspace/raw?path=app/logo.png", { headers: { "if-none-match": `W/"stale"` } })).status).toBe(200);
     // No security floor: a former-secret file streams through like any other contained file.
     expect((await app.request("/workspace/raw?path=desired-state/.env")).status).toBe(200);
-    // Oversize is refused on the size check, before the bytes are loaded.
-    expect((await app.request("/workspace/raw?path=app/huge.png")).status).toBe(413);
+    // Past what the daemon would hold whole in memory, still served: the body streams, and it says its full length.
+    const huge = await app.request("/workspace/raw?path=app/huge.png");
+    expect(huge.status).toBe(200);
+    expect(huge.headers.get("content-length")).toBe(String(MAX_RAW_BYTES + 1));
+    await huge.body?.cancel();
     expect((await app.request("/workspace/raw?path=app/missing.png")).status).toBe(404);
     expect((await app.request("/workspace/raw?path=../../etc/passwd")).status).toBe(400);
 });
@@ -941,6 +944,29 @@ test("GET /diff/raw streams a diff side's bytes: blob for the index side, disk f
         expect((await app.request("/diff/raw?source=nonsense&repo=root&path=logo.png&which=before")).status).toBe(400);
         expect((await app.request("/diff/raw?source=working&repo=root&path=../../etc/passwd&side=unstaged&which=after")).status).toBe(400);
         expect((await app.request("/diff/raw?source=working&repo=nope&path=logo.png&side=unstaged&which=before")).status).toBe(404);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+// A changed scan or film past what the daemon would hold whole still compares: the side streams out of git as it is read.
+test("GET /diff/raw streams a side of any size", async () => {
+    const root = await mkdtemp(join(tmpdir(), "intentic-diff-raw-large-"));
+    const git = async (...args: string[]): Promise<void> => {
+        await promisify(execFile)("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-C", root, ...args]);
+    };
+    const large = Buffer.alloc(MAX_RAW_BYTES + 1, 7);
+    try {
+        await git("init", "-q");
+        await writeFile(join(root, "scan.pdf"), large);
+        await git("add", "-A");
+        await git("commit", "-q", "-m", "init");
+        const app = createApp(services({ workspace: workspacePaths(root) }));
+        const side = await app.request("/diff/raw?source=working&repo=root&path=scan.pdf&side=staged&which=before");
+        expect(side.status).toBe(200);
+        expect(side.headers.get("content-type")).toBe("application/pdf");
+        expect(side.headers.get("content-length")).toBe(String(large.byteLength));
+        expect(Buffer.from(await side.arrayBuffer()).equals(large)).toBe(true);
     } finally {
         await rm(root, { recursive: true, force: true });
     }

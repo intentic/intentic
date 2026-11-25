@@ -19,9 +19,6 @@ import { nodeStream, webStream } from "@intentic/base/web-stream";
 // One text window's cap, the daemon's own.
 export const MAX_TEXT_BYTES = 4 * 1024 * 1024;
 
-// One raw read's cap, the daemon's own: the browser holds the whole answer as a Blob.
-export const MAX_RAW_BYTES = 25 * 1024 * 1024;
-
 // One file's cap, a save's or a drop's, the daemon's own (MAX_UPLOAD_BYTES in the sandbox's workspace-files-upload.ts):
 // it stops a runaway body filling the disk. The editor's text saves are bounded far below it. _(2026-10-09) It was
 // 256 MiB, which refused every film in a folder dropped onto a window of this computer._

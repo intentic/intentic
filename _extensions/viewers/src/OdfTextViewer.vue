@@ -70,7 +70,8 @@ const render = async (source: Blob): Promise<void> => {
     });
 };
 
-// Parses on the main thread, bounded by the viewer's 25 MiB raw cap; a 750 KiB content.xml parses in about 20ms.
+// Parses on the main thread; a 750 KiB content.xml parses in about 20ms, and a file past the editor's BLOB_CONFIRM_BYTES
+// reaches it only on the reader's word.
 onMounted(() => void render(blob));
 watch(
     () => blob,

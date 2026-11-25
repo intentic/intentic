@@ -16,8 +16,11 @@ export interface FileResolution {
     readonly lang?: ShikiLang;
 }
 
-// Matches the daemon's MAX_RAW_BYTES; /workspace/raw 413s above it. Fetch kind decides the cap, not file type.
-export const RAW_MAX_BYTES = 25 * 1024 * 1024;
+// Past this, a viewer that reads the whole file into the tab (`fetch: "blob"`: a PDF, a picture, a document) waits for the
+// reader's word before it does. Nothing refuses a file for its size (/workspace/raw streams any), but holding a gigabyte
+// in a tab is the reader's choice, never the side effect of a click. Fetch kind decides, not file type: a streamed
+// recording never asks.
+export const BLOB_CONFIRM_BYTES = 256 * 1024 * 1024;
 // Above this, text opens windowed and read-only (BigTextView), not editable: not a refusal, a serving limit.
 export const TEXT_EDIT_MAX_BYTES = 2_000_000;
 

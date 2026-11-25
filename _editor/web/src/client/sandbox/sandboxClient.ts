@@ -85,6 +85,31 @@ export async function sandboxBlob(path: string, init?: RequestInit, at?: string)
     return response.blob();
 }
 
+// The same read, telling `onProgress` how many bytes have arrived so far, so a large file's wait can say how far along
+// it is. Counted as the bytes pass on their way into the Blob the browser builds itself (which may keep a large one on
+// disk), so counting never holds a second copy. Its total is the caller's to know: a compressed answer's length is not
+// the file's.
+export async function sandboxBlobProgress(path: string, onProgress: (loaded: number) => void, init?: RequestInit): Promise<Blob> {
+    const response = await requestTo(currentSandboxTarget(), path, init);
+    if (!response.ok) {
+        throw await sandboxError(response, { method: init?.method ?? `GET`, path });
+    }
+    if (response.body === null) {
+        return response.blob();
+    }
+    let loaded = 0;
+    const counted = response.body.pipeThrough(
+        new TransformStream<Uint8Array, Uint8Array>({
+            transform(chunk, controller) {
+                loaded += chunk.byteLength;
+                onProgress(loaded);
+                controller.enqueue(chunk);
+            },
+        }),
+    );
+    return new Response(counted, { headers: { "content-type": response.headers.get(`content-type`) ?? `` } }).blob();
+}
+
 // Aborts an upload with no progress this long, as stuck; raise it for legitimately slow multi-GB files.
 const UPLOAD_STALL_MS = 60_000;
 

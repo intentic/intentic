@@ -3,7 +3,8 @@ import { extname } from "node:path";
 import { Readable } from "node:stream";
 import { webStream } from "@intentic/base/web-stream";
 
-// Hard cap on a raw read; the browser holds the whole response as a Blob.
+// Hard cap on a file the daemon reads whole into its own memory (a diff side it compares, a page it rewrites before
+// serving). /workspace/raw and /workspace/media stream instead and have no cap.
 export const MAX_RAW_BYTES = 25 * 1024 * 1024;
 
 // Content-Type by extension for raw/media; audio/video need a real type or the element refuses to decode.

@@ -68,6 +68,14 @@ flowchart LR
   git changes, roles) answers its empty truth rather than a 404. The `/events` hello lists exactly the routes a
   window is served, with `surface: "folder"`, so the editor offers nothing else: no terminal or ZIP. A document's own
   window and a read-only one leave out the verbs they would only refuse.
+- **Files of any size.** `/workspace/raw` streams a file off disk whatever its size, as the daemon's does; how much a
+  window can hold is the editor's to judge. _(2026-11-25) It refused anything past 25 MiB, so a 30 MB PDF in a folder
+  on this computer would not open._ A recording plays from `GET /workspace/media` instead (`media.ts`), in the byte
+  ranges its player asks for, so a film costs a read buffer rather than the whole file held in the window. A player
+  cannot send the window's bearer, so the window mints a ticket for the one file first (`workspace.mediaTicket`) and
+  the player's address carries it. The ticket opens only that file, for the grant that minted it and only while that
+  grant lasts, and the path is resolved again on every read, so a link put in the file's place never leads out of the
+  folder. It is refused to any page but the app's own, like the bearer.
 - **New folder, rename, move, copy and delete** (`tree-verbs.ts`) keep the daemon's rules: a new folder is `mkdir -p`,
   nothing lands on a name that is taken (409), a copy keeps links as links, and a link is moved or deleted as itself.
   The folder itself, `.git` and `.intentic` are refused, as is all of it from a document's own window. **A delete is
