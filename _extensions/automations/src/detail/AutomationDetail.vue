@@ -73,9 +73,13 @@ const tallyWord = (outcome: keyof typeof TALLY_INK, count: number): string =>
 
         <!-- Settings beside the document with room, above it without: the column is what a reader scans, the document what they read. -->
         <div class="flex flex-col gap-6 @3xl:flex-row @3xl:gap-8">
-            <div class="@3xl:order-last @3xl:w-1/3 @3xl:shrink-0 @3xl:border-l border-line-subtle @3xl:pl-6">
-                <AutomationProperties :automation="automation" :trigger-label="triggerLabel" :target-phrase="targetPhrase" :spent="spent" />
-            </div>
+            <AutomationProperties
+                :automation="automation"
+                :trigger-label="triggerLabel"
+                :target-phrase="targetPhrase"
+                :spent="spent"
+                class="@3xl:order-last @3xl:w-1/3 @3xl:shrink-0 @3xl:border-l border-line-subtle @3xl:pl-6"
+            />
 
             <div class="flex min-w-0 flex-1 flex-col gap-6">
                 <InstructionsSection :automation="automation" />

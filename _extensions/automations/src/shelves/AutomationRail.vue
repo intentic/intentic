@@ -110,7 +110,7 @@ const options = computed<PickerOptions<string>>(() => [
         <template #footer>
             <span class="flex items-start gap-1.5 text-2xs text-subtle">
                 <Icon name="info-circle" class="shrink-0" />
-                <span>{{ t(`automationRail.howFiled`) }}</span>
+                {{ t(`automationRail.howFiled`) }}
             </span>
         </template>
     </NavRail>
