@@ -163,18 +163,16 @@ const TICK_CLASS: Record<RedlineEvent["kind"], string> = { changed: `bg-warning`
         <div class="relative min-h-0 flex-1">
             <div ref="host" class="docx-host h-full overflow-auto bg-muted/20"></div>
             <!-- Where each change sits down the whole document, one tick each, in the kind's colour; a press goes there. -->
-            <div v-if="ticks.length > 0" class="pointer-events-none absolute inset-y-0 right-0 w-2.5">
-                <button
-                    v-for="(tick, index) in ticks"
-                    :key="tick.id"
-                    type="button"
-                    class="pointer-events-auto absolute right-0 h-1 w-2.5 cursor-pointer rounded-l-sm opacity-80 hover:opacity-100"
-                    :class="TICK_CLASS[tick.kind]"
-                    :style="{ top: `${tick.at * 100}%` }"
-                    :aria-label="t(`docxCompare.${tick.kind}`, { count: 1 }, 1)"
-                    @click="go(index)"
-                ></button>
-            </div>
+            <button
+                v-for="(tick, index) in ticks"
+                :key="tick.id"
+                type="button"
+                class="absolute right-0 h-1 w-2.5 cursor-pointer rounded-l-sm opacity-80 hover:opacity-100"
+                :class="TICK_CLASS[tick.kind]"
+                :style="{ top: `${tick.at * 100}%` }"
+                :aria-label="t(`docxCompare.${tick.kind}`, { count: 1 }, 1)"
+                @click="go(index)"
+            ></button>
             <!-- No error state: a pair that fails is reported to the host, which offers the other readings instead. -->
             <ViewerStatus overlay :loading="loading" />
         </div>
