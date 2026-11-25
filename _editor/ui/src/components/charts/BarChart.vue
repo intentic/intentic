@@ -45,14 +45,13 @@ const tip = (item: BarItem): string => {
                     :class="item.muted === true ? `italic text-muted` : `text-content`"
                     >{{ item.label }}</span
                 >
-                <div class="min-w-0">
-                    <!-- 10px thick, 4px rounded data-end, square at the baseline it grows from. -->
-                    <div
-                        class="h-2.5 min-w-px rounded-r-xs"
-                        :class="{ 'ui-grow-x': grow }"
-                        :style="{ width: `${(item.value / max) * 100}%`, background: seriesColor(item.accent), '--ui-grow-i': index }"
-                    />
-                </div>
+                <!-- 10px thick, 4px rounded data-end, square at the baseline it grows from. The bar is the grid item: its
+                     width is a share of the middle column, and its own min-width keeps that column free to shrink. -->
+                <div
+                    class="h-2.5 min-w-px rounded-r-xs"
+                    :class="{ 'ui-grow-x': grow }"
+                    :style="{ width: `${(item.value / max) * 100}%`, background: seriesColor(item.accent), '--ui-grow-i': index }"
+                />
                 <!-- tabular-nums here and NOT on a stat tile's value: this is a column of numbers that must align vertically. -->
                 <span class="justify-self-end text-2xs tabular-nums text-muted">{{ tip(item) }}</span>
             </li>

@@ -139,20 +139,18 @@ const openPicker = (): void => {
             :size="size"
             v-bind="look"
             :disabled="disabled || loading"
-            :class="['rounded-l-none', quiet ? 'pl-1 pr-1.5' : 'px-1.5']"
+            :class="['rounded-l-none gap-1', quiet ? 'pl-1 pr-1.5' : 'px-1.5']"
             :aria-label="t(`ui.agentRunButton.configureStartRun`, { spend })"
             v-tooltip.top="caretHint"
             @click="openPicker"
         >
-            <!-- The deviation spelled out where a bare chevron would be. -->
-            <span class="flex items-center gap-1">
-                <template v-if="overridden">
-                    <Icon name="sparkles" class="shrink-0 text-2xs" />
-                    <span class="max-w-[9rem] truncate text-2xs">{{ modelLabel }}</span>
-                    <span v-if="picker.model.value.effortLabel !== undefined" class="shrink-0 text-2xs">· {{ picker.model.value.effortLabel }}</span>
-                </template>
-                <Icon name="chevron-down" class="shrink-0 text-2xs" />
-            </span>
+            <!-- The deviation spelled out where a bare chevron would be; `gap-1` pins the spacing at every size. -->
+            <template v-if="overridden">
+                <Icon name="sparkles" class="shrink-0 text-2xs" />
+                <span class="max-w-[9rem] truncate text-2xs">{{ modelLabel }}</span>
+                <span v-if="picker.model.value.effortLabel !== undefined" class="shrink-0 text-2xs">· {{ picker.model.value.effortLabel }}</span>
+            </template>
+            <Icon name="chevron-down" class="shrink-0 text-2xs" />
         </Button>
     </span>
 </template>
