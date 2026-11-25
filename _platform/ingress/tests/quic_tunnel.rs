@@ -173,6 +173,15 @@ async fn a_hello_without_a_valid_grant_is_refused_and_a_newer_connection_displac
         }
         other => panic!("the first connection ended otherwise: {other}"),
     }
+    // Admitting the second displaces the first at once, but carries nothing until its own first probe is answered.
+    wait_for("the second carrier", || {
+        door.running
+            .edge
+            .registry()
+            .lookup(SANDBOX_ID, Slot::Quic)
+            .is_some()
+    })
+    .await;
     let answer = get(door.running.port, &daemon_host(SANDBOX_ID), "/").await;
     assert!(answer.body.starts_with("second "), "{}", answer.body);
 }

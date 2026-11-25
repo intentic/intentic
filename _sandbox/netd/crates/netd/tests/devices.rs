@@ -65,6 +65,9 @@ async fn started(name: &str) -> (Harness, Ports) {
     (harness, ports)
 }
 
+// Returns once netd has taken the registration: it is read off netd's stdin on a task of its own, so a dial sent the
+// moment the line is written can reach the door before it, and be refused 401 for a token netd does not know yet. Every
+// registration netd applies is reported back with the device in it.
 async fn register(harness: &Harness, device: &str, token: &str) {
     harness
         .send(&FromNode::DeviceUplink {
@@ -72,6 +75,14 @@ async fn register(harness: &Harness, device: &str, token: &str) {
             token_sha256: sha256_hex(token),
         })
         .await;
+    let mut devices = harness.devices.clone();
+    tokio::time::timeout(
+        PATIENCE,
+        devices.wait_for(|(_, held)| held.iter().any(|state| state.device == device)),
+    )
+    .await
+    .unwrap_or_else(|_| panic!("netd never reported {device} registered"))
+    .unwrap();
 }
 
 // Lowercase hex SHA-256 of the token's UTF-8 bytes, as Node registers it.

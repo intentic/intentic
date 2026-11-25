@@ -729,13 +729,17 @@ async fn a_terminal_outlives_its_uplink_dropping_and_a_refused_or_withdrawn_upli
     sandbox.answer.send_replace(Answer::Accept);
     remoted.rewrite(&config(sandbox.port, 3, false));
     let uplink = sandbox.next_uplink().await;
+    // One wait for both: a status line is a whole snapshot written only on a change, and the terminal may end before the
+    // uplink is up again (the "up" line then already says none) or after it.
     remoted
-        .until("up at the generation the agent wrote", |status| {
-            status["uplinks"][0]["state"] == "up" && status["uplinks"][0]["generation"] == 3
-        })
-        .await;
-    remoted
-        .until("the terminal ended", |status| status["terminals"] == 0)
+        .until(
+            "up at the generation the agent wrote, with the terminal ended",
+            |status| {
+                status["uplinks"][0]["state"] == "up"
+                    && status["uplinks"][0]["generation"] == 3
+                    && status["terminals"] == 0
+            },
+        )
         .await;
     let (status, _) = uplink
         .call("POST", "/terminals", Some(json!({ "session": "t-no" })))
