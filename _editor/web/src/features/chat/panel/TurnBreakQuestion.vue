@@ -14,9 +14,9 @@ import { breakAnswers, effectivePolicy, sandboxPolicy } from "../../../models/co
 // a spent allowance, an outage or a stopped turn, ChatContinueStrip; the held line for low memory, ChatHeldMessages), so
 // the same question reads, moves and saves the same way wherever it is asked. The settings row asks it for the whole
 // sandbox (AgentRecovery), the board card's menu for one conversation (AgentSessionMenu), in the same words.
-// `inline` asks it inside the held line, beside the press it is the other way to: the answers alone, in their short
-// words, with neither "Next" before them nor a line after them. The picked pill says what it will do and each pill's
-// hover gives its whole name; as a second row of its own the question doubled the held line's height (2026-11-25).
+// `inline` asks it inside the held line, beside the press it is the other way to: the answers alone, with neither
+// "Next" before them nor a line after them, since the picked pill already says what it will do. Their words stay whole:
+// cut to "Wait" and "Auto-send" they no longer said what either does (2026-11-25).
 
 const props = defineProps<{
     ending: TurnBreak;
@@ -29,7 +29,7 @@ const props = defineProps<{
     disabled?: boolean;
     // Hung off the right edge, under a held message's line, rather than across a card of its own.
     end?: boolean;
-    // Among the held line's presses: short words, no "Next", no line after (above).
+    // Among the held line's presses: no "Next", no line after (above).
     inline?: boolean;
 }>();
 // Said once the answer is saved, for what only the asker can do about it (start watching for an outage's retry, move
@@ -44,7 +44,7 @@ const { agentById, setBreakPolicy } = useAgents();
 // Each pill's hover: its own name and the one consequence that tells it from the others.
 const options = computed(() =>
     breakAnswers(props.ending, props.account).map((answer) => ({
-        label: props.inline === true ? (answer.short ?? answer.label) : answer.label,
+        label: answer.label,
         value: answer.value,
         icon: answer.icon,
         title: { title: answer.label, note: answer.brief },

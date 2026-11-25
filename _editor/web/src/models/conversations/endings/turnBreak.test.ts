@@ -82,8 +82,4 @@ describe(`the memory wall`, () => {
         expect(breakAnswers(`memory`, `second@b.c`).map((answer) => answer.value)).toEqual([`wait`, `resend`]);
     });
 
-    // Asked inside the held line, beside Send anyway, where the whole names took a row of their own.
-    it(`names each answer in a word or two for the held line`, () => {
-        expect(breakAnswers(`memory`).map((answer) => answer.short)).toEqual([`Wait`, `Auto-send`]);
-    });
 });

@@ -71,8 +71,8 @@ const TRIAL_REFUSALS: ReadonlySet<string> = new Set([`trial-unavailable`, `trial
 const trialRefused = computed(() => reason.value === `refused` && TRIAL_REFUSALS.has(lastFailure.value?.code ?? ``));
 // The bubbles are the words that wait; a continuation (a Continue booked for later, let go and then held) has none.
 const bubbles = computed(() => waiting.value.filter((message) => message.continues !== true));
-// Each group stands in a column as wide as its widest message, and its line runs across that column (ChatHeldStatus): the
-// why from the messages' left edge, the presses to their right one. Over the quick bar's composer the card is the column.
+// Each group stands in a column as wide as its widest message, so its line breaks where the messages' own edge is and
+// keeps to their right edge (ChatHeldStatus). Over the quick bar's composer the card is the column.
 const column = (compact: boolean): string => (compact ? `flex flex-col gap-2` : `flex max-w-[85%] flex-col items-end gap-2`);
 const press = computed((): HeldPress => {
     switch (reason.value) {
@@ -100,7 +100,7 @@ const press = computed((): HeldPress => {
         <div v-if="held" :class="column(compact)">
             <ChatHeldBubble v-for="message in bubbles" :key="message.id" :message="message" :compact="compact" />
             <!-- Marked so the bar over the composer (ChatWaitingBar) repeats a memory hold only while this line is out of view. -->
-            <ChatHeldStatus :reason="reason" :detail="detail" :trial="trialRefused" v-bind="{ [HELD_PRESS_ATTR]: `` }">
+            <ChatHeldStatus :reason="reason" :detail="detail" :trial="trialRefused" :spread="compact" v-bind="{ [HELD_PRESS_ATTR]: `` }">
                 <!-- Only a hold that named its ceiling can be raised past (a stall names none), and never under a live turn, which the restart would kill. -->
                 <template #cause><MemoryRaise v-if="notice?.noticeAction === `sandboxMemory` && !streaming" /></template>
                 <!-- What happens next, asked as every wall asks it (a spent allowance's card, ChatContinueStrip), beside the

@@ -277,23 +277,19 @@ const armedAnswer = (element: HTMLElement): string | undefined =>
         .find((pill) => pill.getAttribute(`aria-selected`) === `true`)
         ?.textContent?.trim();
 
-// What happens next, asked as a spent allowance's card asks it (the same control), but on the held line itself, beside
-// the press it is the other way to: as a row of its own, with "Next" and a sentence after it, it doubled the line.
+// What happens next, asked as a spent allowance's card asks it (the same control, the same words), but on the held line
+// itself, beside the press it is the other way to: as a row of its own, with "Next" and a sentence after it, it doubled
+// the line.
 describe(`what happens next to a message held for low memory`, () => {
-    it(`asks it on the line in short words, sending once memory frees up unless the chat said to wait`, async () => {
+    it(`asks it on the line, sending once memory frees up unless the chat said to wait`, async () => {
         const element = mount(chatHolding({ items: [held()], paused: `refused` }));
         await nextTick();
 
         const line = element.querySelector(`[data-held-press]`)!;
         expect(answerPills(element).every((pill) => line.contains(pill))).toBe(true);
         expect(line.contains(pressNamed(element, `Send anyway`)[0]!)).toBe(true);
-        expect(answerPills(element).map((pill) => pill.textContent?.trim())).toEqual([`Wait`, `Auto-send`]);
-        // The whole name is still read out, and a hover away.
-        expect(answerPills(element).map((pill) => pill.getAttribute(`aria-label`))).toEqual([
-            `Wait · Wait for me, Nothing sent for you`,
-            `Auto-send · Send when memory frees, Sends once memory frees up`,
-        ]);
-        expect(armedAnswer(element)).toBe(`Auto-send`);
+        expect(answerPills(element).map((pill) => pill.textContent?.trim())).toEqual([`Wait for me`, `Send when memory frees`]);
+        expect(armedAnswer(element)).toBe(`Send when memory frees`);
         expect(element.textContent).not.toContain(`Next`);
         expect(element.textContent).not.toContain(`Goes by itself`);
         app?.unmount();
@@ -301,7 +297,7 @@ describe(`what happens next to a message held for low memory`, () => {
         memoryOverride.value = `wait`;
         const waiting = mount(chatHolding({ items: [held()], paused: `refused` }));
         await nextTick();
-        expect(armedAnswer(waiting)).toBe(`Wait`);
+        expect(armedAnswer(waiting)).toBe(`Wait for me`);
     });
 
     // The sandbox's own answer is no override: writing it clears the chat's, so the chat keeps following the sandbox.
@@ -310,13 +306,13 @@ describe(`what happens next to a message held for low memory`, () => {
         await nextTick();
 
         answerPills(element)
-            .find((pill) => pill.textContent?.trim() === `Wait`)!
+            .find((pill) => pill.textContent?.trim() === `Wait for me`)!
             .click();
         await settled();
         expect(setBreakPolicy).toHaveBeenLastCalledWith(`c1`, `memory`, `wait`);
 
         answerPills(element)
-            .find((pill) => pill.textContent?.trim() === `Auto-send`)!
+            .find((pill) => pill.textContent?.trim() === `Send when memory frees`)!
             .click();
         await settled();
         expect(setBreakPolicy).toHaveBeenLastCalledWith(`c1`, `memory`, null);

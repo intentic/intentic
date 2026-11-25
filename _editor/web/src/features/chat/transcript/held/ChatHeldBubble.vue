@@ -73,7 +73,7 @@ const queuedExact = computed(() => formatDateTime(props.message.queuedAt));
 
 <template>
     <!-- In the quick bar's row everything is in line, the door included, since no gutter stands beside a composer. The
-         column it stands in holds a prompt's 85% (ChatHeldMessages), so the line under it can run as wide as it. -->
+         column it stands in holds a prompt's 85% (ChatHeldMessages), so the line under it breaks at its edge. -->
     <div class="group relative flex gap-1.5" :class="compact ? `w-full items-center` : `max-w-full flex-col items-end`">
         <span v-if="from" class="text-2xs text-subtle">{{ from }}</span>
         <!-- Stacked above the words when they cannot sit beside them. -->

@@ -10,9 +10,9 @@ import { memoryTip } from "../../../../models/agent-status/memoryTip";
 
 /* The one line under a message that did not go out: that it did not, why in a few words, and the way on (the slot). A
    scheduled send reads as what it is instead, a message booked for later with the time it goes.
-   It runs across what it stands under (the messages over it, or the quick bar's card): the why from the left edge, the
-   presses to the right one, so a line that must break leaves both of its parts on an edge. Before 2026-11-25 it hung off
-   the right edge and wrapped there, and the question after it was a second row of its own, so no two left edges met. */
+   Under a prompt it keeps to the prompt's right edge, as the prompt does, its parts together: the why, then the presses,
+   which break onto a line of their own only once the prompt is too narrow for both. Pulled apart to the prompt's two
+   edges, the why and the presses read as two things that had drifted away from each other (2026-11-25). */
 
 const props = defineProps<{
     reason: HoldReason;
@@ -31,6 +31,9 @@ const props = defineProps<{
     retry?: QueuedTrialRetry | undefined;
     // Refused because the free trial could not answer it: said as that, since "refused" alone reads as the reader's fault.
     trial?: boolean | undefined;
+    // Why on the left and the way on at the right, across a card of its own (the quick bar), rather than kept to the
+    // right edge under a prompt.
+    spread?: boolean;
 }>();
 
 const t = useT();
@@ -84,7 +87,7 @@ const why = computed(() => {
 </script>
 
 <template>
-    <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 self-stretch text-2xs text-subtle">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 self-stretch text-2xs text-subtle" :class="spread ? `justify-between` : `justify-end`">
         <span class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
             <!-- Said once when it appears, which is the moment a message the reader just sent did not go out. -->
             <span role="status" class="flex min-w-0 items-center gap-1.5">

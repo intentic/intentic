@@ -25,7 +25,7 @@ import { modelsHref } from "../../../../lib/routes/modelsPath";
 
 const props = defineProps<{
     group: BookedGroup;
-    // The quick bar's composer: each message on one line (ChatHeldBubble).
+    // The quick bar's composer: each message on one line (ChatHeldBubble), the line spread across its card.
     compact?: boolean;
 }>();
 
@@ -140,7 +140,7 @@ const takeBack = (): void => {
     <template v-if="!group.continues">
         <ChatHeldBubble v-for="message in group.messages" :key="message.id" :message="message" :compact="compact" />
     </template>
-    <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :continues="group.continues" :retry="retry">
+    <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :spread="compact" :continues="group.continues" :retry="retry">
         <Button v-if="retry" :as="RouterLink" :to="modelsHref()" size="small" thumb tier="quiet">{{ t(`chat.words.connectAModel`) }}</Button>
         <span v-if="retimable" ref="changeAnchor" class="inline-flex">
             <Button size="small" thumb tier="quiet" :aria-expanded="changing" @click="changing = !changing">{{
