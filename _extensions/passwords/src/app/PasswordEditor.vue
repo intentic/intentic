@@ -110,16 +110,14 @@ const save = async (): Promise<void> => {
                     </button>
                 </span>
             </div>
-            <div class="flex gap-2">
-                <input
-                    :id="`${id}-place`"
-                    v-model="place"
-                    :class="ui.input(`flex-1`)"
-                    :placeholder="t(`app.edit.sitePlaceholder`)"
-                    autocomplete="off"
-                    @keydown.enter.prevent="addPlace()"
-                />
-            </div>
+            <input
+                :id="`${id}-place`"
+                v-model="place"
+                :class="ui.input()"
+                :placeholder="t(`app.edit.sitePlaceholder`)"
+                autocomplete="off"
+                @keydown.enter.prevent="addPlace()"
+            />
             <span v-if="placeError" class="text-2xs text-danger" role="alert">{{ placeError }}</span>
             <span v-else class="text-2xs text-subtle">{{ t(`app.edit.addPlaceHint`) }}</span>
         </div>

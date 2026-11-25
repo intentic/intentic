@@ -93,7 +93,7 @@ const answers = computed<readonly { readonly how: KeyringNeedAnswer; readonly la
                         :checked="(picked.get(request.id) ?? request.matches[0]) === name"
                         @change="picked.set(request.id, name)"
                     />
-                    <span>{{ titleOf(name) }}</span>
+                    {{ titleOf(name) }}
                     <span v-if="usernameOf(name)" class="text-xs text-muted">{{ usernameOf(name) }}</span>
                 </label>
             </fieldset>
