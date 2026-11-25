@@ -1,4 +1,4 @@
-<!-- THE GEEK METRICS, AWAY FROM THE BOARD: their gauges live in the Agents board's bottom-left corner (BoardMetrics.vue), and
+<!-- THE GEEK METRICS, AWAY FROM THE BOARD: their gauges live in the Agents board's header (BoardMetrics.vue), and
      anywhere else the rail says only that one of them is near its limit, with an amber dot on a tile that is there only
      while that lasts. A press opens the board with the full readout open, where the figure is. Nothing with the metrics
      off, since then nothing is measured (liveMetrics.ts). -->

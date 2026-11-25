@@ -688,9 +688,7 @@
             "stalled": "{percent} en espera",
             "swapFull": "swap lleno",
             "eventLoopAt": "bucle de eventos {percent}",
-            "moreStrained": "{count} más cerca de su límite | {count} más cerca de su límite",
-            "allFigures": "Todas las cifras",
-            "cornerLabel": "Sandbox"
+            "moreStrained": "{count} más cerca de su límite | {count} más cerca de su límite"
         },
         "boardNight": {
             "tipTitle": "Buenas noches",
@@ -12229,7 +12227,7 @@
                 "liveMetrics": "Métricas para geeks",
                 "liveMetricsHint": "Indicadores y costes en vivo en el tablero de agentes.",
                 "hint": {
-                    "corner": "CPU, memoria y disco en la esquina inferior izquierda del tablero.",
+                    "header": "CPU, memoria y disco en la cabecera del tablero.",
                     "cards": "En la tarjeta de cada agente: su parte y lo que costó.",
                     "rail": "En otras vistas, un icono en la barra solo cerca de un límite.",
                     "off": "Desactivado: no se mide nada."

@@ -5,7 +5,7 @@ import { rpcQuery } from "../../client/sandbox/rpcQuery";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { supportsRoute } from "../../client/sandbox/useDaemonRoutes";
 
-// The sandbox's opt-in CPU, memory and disk readout ("geek metrics"), in the board's bottom-left corner and on its cards. Off
+// The sandbox's opt-in CPU, memory and disk readout ("geek metrics"), in the board's header and on its cards. Off
 // means never asked for: the daemon measures only inside a request, so with the query disabled nothing anywhere is
 // collected, not merely hidden.
 

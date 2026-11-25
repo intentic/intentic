@@ -98,12 +98,6 @@ export const boardLayout = (narrow: boolean, underThree: boolean, quiet: QuietLa
     return { kind: underThree ? `paired` : `three` };
 };
 
-// The lane that ends the board's first column, whose foot is the board's bottom-left (metricsCorner.ts): Attention where it
-// holds the column, Active under it in the paired shape, the ledger's one lane spanning the board; none on a stacked board,
-// which has no columns.
-export const footOf = ({ kind, wide }: LaneLayout): FleetLane | undefined =>
-    kind === `stacked` ? undefined : kind === `ledger` ? wide : kind === `paired` ? `active` : `attention`;
-
 // Where each lane sits in the paired shape: Finished spans both rows of the second column, so the first column's rows
 // size to Attention and Active alone (`grid-rows-[auto_1fr]`: the second row takes whatever Finished needs past them).
 // That needs the rows sized by what they hold: held to the board's height (`h-full`) with the lanes allowed to shrink
@@ -191,7 +185,6 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
     };
     // The ledger's wide lane spans the board, so its cards take two columns of it rather than one line each.
     const spans = (lane: FleetLane): boolean => layout.value.kind === `ledger` && layout.value.wide === lane;
-    const foot = computed(() => footOf(layout.value));
     // An empty lane in a layout that gave its column away says so on its header's line, not on a line of its own; while a
     // card is in hand it keeps the full line, so the lane stays a target worth aiming at.
     const sayInHeader = (lane: FleetLane): boolean => placed.value && !dragging.value && !first.value && saysEmpty(lane);
@@ -210,5 +203,5 @@ export const useBoardGrid = ({ board, view, move, content, saysEmpty, filtering,
             lane.scrollIntoView({ block: `start` });
         }
     };
-    return { narrow, fit, placed, laneGrid, placeOf, spans, foot, sayInHeader, toggleFinished };
+    return { narrow, fit, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished };
 };

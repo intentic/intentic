@@ -16,7 +16,7 @@ import {
 } from "../../../models/sandbox/liveMetrics";
 
 // The board's geek metrics as the places that draw them read them: three gauges (CPU, memory, disk: the figures that run
-// out) for the board's corner and its one line, every other figure for the panel they open, and one conversation's
+// out) for the board header's one line, every other figure for the panel it opens, and one conversation's
 // share for its card and the panel's list of them. A figure near its limit is flagged, and what is running short is
 // regrouped by resource (`strains`), so the line can say it without the reader opening anything.
 

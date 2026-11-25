@@ -267,7 +267,7 @@ watch(
     (open) => open && showSection(),
 );
 
-// The geek metrics, read once here and handed down (LIVE_METRICS_KEY) to the board's corner and cards and to the rail's
+// The geek metrics, read once here and handed down (LIVE_METRICS_KEY) to the board's header and cards and to the rail's
 // near-a-limit tile, so one reading serves all three. Off, nothing is measured at all (liveMetrics.ts).
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
@@ -479,7 +479,7 @@ useGettingStarted();
     /* Floor is 0, not the stored width, which was clamped at drag time and could push past a shrunk window. */
     grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--side-width, 22rem));
     /* An explicit row, so a stray element landing in an implicit row can't starve 1fr to zero height. No status bar: what
-       the sandbox runs is the rail's foot (rail/tools/), its metrics the board's bottom-left corner (BoardMetrics.vue). */
+       the sandbox runs is the rail's foot (rail/tools/), its metrics the board's header (BoardMetrics.vue). */
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: "rail workspace side";
 }

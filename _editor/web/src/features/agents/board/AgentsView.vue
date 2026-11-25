@@ -63,7 +63,6 @@ import { useBoardCommands } from "./view/boardCommands";
 import { laneHeads, useBoardLanes } from "./view/boardLanes";
 import NoMatchesNote from "./NoMatchesNote.vue";
 import BoardMetrics from "../metrics/BoardMetrics.vue";
-import MetricsCorner from "../metrics/MetricsCorner.vue";
 import BoardNight from "../night/BoardNight.vue";
 import { LIVE_METRICS_KEY } from "../../../models/sandbox/liveMetrics";
 import { usePhoneLanes } from "./view/phoneLanes";
@@ -74,7 +73,6 @@ import { useBoardScope } from "../../../models/fleet/board/boardScope";
 import { useBoardView } from "./view/boardView";
 import { GRID_PAD, LANE_GLYPH, useBoardGrid } from "./view/boardGrid";
 import { useCornerFit } from "./view/cornerFit";
-import { useMetricsCorner } from "./view/metricsCorner";
 import { useCardMenu } from "./view/cardMenu";
 import { useFamilyArchive } from "./view/familyArchive";
 import { useCardFocus, useCardRing } from "./view/cardSelection";
@@ -92,9 +90,9 @@ const t = useT();
 const { withCorner = false } = defineProps<{ withCorner?: boolean }>(); // a `corner` slot to stand at Finished's foot (cornerFit.ts)
 const router = useRouter();
 const { mobile, coarse } = useDevice();
-// The geek metrics are the desktop's: its shell reads them once (ShellDesktop.vue) for this board's bottom-left corner and
-// its cards (liveMetrics.ts), undefined while they are off. A phone reads none, whatever Settings says: its board has no
-// foot to spare from the floating New agent.
+// The geek metrics are the desktop's: its shell reads them once (ShellDesktop.vue) for this board's header and its cards
+// (liveMetrics.ts), undefined while they are off. A phone reads none, whatever Settings says: its board has no foot to
+// spare from the floating New agent.
 const liveMetrics = inject(LIVE_METRICS_KEY, undefined);
 const agents = useAgents();
 const { archived, archiveLoading, archiveFailure, archive, restore, notice, dismissNotice } = agents;
@@ -297,7 +295,7 @@ const launching = useBoardLaunches(computed(() => view.value.archive));
 // A phone draws only the lanes with something in them (phoneLanes.ts).
 const { drawnLanes, bareLane, saysEmpty, content } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, launching, waiting });
 // The lanes' grid at the board's width and by which in-flight lanes are empty, and Finished's fold (boardGrid.ts).
-const { narrow, fit, placed, laneGrid, placeOf, spans, foot, sayInHeader, toggleFinished } = useBoardGrid({ board: boardEl, view, move, content, saysEmpty, filtering, first, waiting, dragging, anchored: computed(() => withCorner) });
+const { narrow, fit, placed, laneGrid, placeOf, spans, sayInHeader, toggleFinished } = useBoardGrid({ board: boardEl, view, move, content, saysEmpty, filtering, first, waiting, dragging, anchored: computed(() => withCorner) });
 // A slim board's header (boardGrid.ts `CardFit`): the owner filter a picker, the field a glyph that takes the row once open,
 // and only what still fits beside them; a sliver of a board keeps the field alone.
 const slim = computed(() => fit.value !== `full` && !mobile.value);
@@ -305,9 +303,6 @@ const sliver = computed(() => fit.value === `mini` || fit.value === `tile`);
 const searchOpen = ref(false);
 const searchRow = computed(() => slim.value && (searchOpen.value || query.value !== ``));
 const { scroller: scrollerEl, grid: gridEl, active: cornered, attach: attachCorner, lane: cornerLane, cards: cornerCards, earlier, tailed, crowded: cornerCrowded } = useCornerFit({ drawn: () => withCorner, narrow, view, filtering, hiddenFinished, tailRow: () => fit.value === `tile` });
-// The geek metrics stand at the board's bottom-left (metricsCorner.ts); a stacked board has no columns, so its header keeps them.
-const metricsFoot = computed(() => (mobile.value || liveMetrics?.value === undefined ? undefined : foot.value));
-const { fold: metricsFold } = useMetricsCorner({ scroller: scrollerEl, grid: gridEl, foot: () => metricsFoot.value });
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
@@ -335,15 +330,15 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
     <div ref="boardEl" class="agents-board relative flex h-full min-h-0 flex-col overflow-x-clip">
         <!-- The board's segment of the window's top bar (`.view-header`), blended: the wallpaper runs up under it (wallpapers.css
              paints `.agents-board`) with no line, and it is one row, never two, so its height meets the chat's.
-             Wide, three columns, the outer two of equal share, so the search sits in the middle of the board whatever stands
-             either side of it (the owner filters on the left, night and New agent on the right). Narrow, the
-             groups keep their controls' width and the search takes what is left. A phone has no such bar: there the search
-             takes a row of its own, at a finger's height. -->
-        <div
-            class="view-header view-header-blend items-center gap-2 px-3"
-            :class="mobile ? 'view-header-wrap flex flex-wrap gap-y-1 py-1' : narrow ? 'flex' : 'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'"
-        >
-            <div v-show="!searchRow" class="col-start-1 flex min-w-0 items-center gap-2" :class="mobile ? `flex-auto flex-wrap` : slim ? `min-w-0 flex-1` : narrow ? `shrink-0` : ``">
+             WHAT THE BOARD SHOWS ON THE LEFT, WHAT THE SANDBOX IS DOING AND WHAT TO DO ON THE RIGHT: the owner filters, the
+             project and the search, which all narrow the board, read as one group; the geek metrics, night and New agent
+             stand at the far end. The field grows into the room left up to its width and gives it up first, to its
+             least, before the metrics' line does. Until 2026-11-24 the search sat centred between two halves of equal
+             share, and the right half, holding the metrics beside night and New agent, ran out of room while the left
+             one stood empty. Narrow, the field takes all the room the groups leave. A phone has no such bar: there the
+             search takes a row of its own, at a finger's height. -->
+        <div class="view-header view-header-blend flex items-center gap-2 px-3" :class="mobile ? 'view-header-wrap flex-wrap gap-y-1 py-1' : ''">
+            <div v-show="!searchRow" class="flex min-w-0 items-center gap-2" :class="mobile ? `flex-auto flex-wrap` : slim ? `min-w-0 flex-1` : `shrink-0`">
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing, on a first run, with no sessions to split, and on a tile board, whose header holds the filter alone. -->
                 <BoardOwnerScope v-if="user !== null && sharedAccess && !first && fit !== `tile`" v-model="ownerScope" :options="ownerOptions" :folded="slim" :mobile="mobile" />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
@@ -360,16 +355,17 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                 :folds="slim"
                 :dense="!mobile"
                 :busy="searching"
-                :field-class="mobile ? 'order-last basis-full' : narrow ? 'min-w-24 flex-1' : 'col-start-2 mx-auto w-72 max-w-full shrink-0'"
+                :field-class="mobile ? 'order-last basis-full' : narrow ? 'min-w-24 flex-1' : 'min-w-24 max-w-72 flex-1'"
                 @enter="onFieldEnter"
             />
             <!-- One row, never two: what is here gives way inside it rather than pushing New agent under the rest. -->
-            <div v-show="!searchRow" class="col-start-3 flex min-w-0 items-center justify-end gap-2" :class="mobile ? 'flex-auto' : narrow ? 'shrink-0' : '@container/tools'">
+            <div v-show="!searchRow" class="flex min-w-0 items-center justify-end gap-2" :class="mobile ? 'flex-auto' : 'ml-auto'">
                 <!-- Filtering shows a searching state while lane counts are partial. -->
                 <span v-if="filtering && !sliver" class="shrink-0 text-2xs text-muted" :aria-busy="searchPartial">{{ matchTally }}</span>
-                <!-- The geek metrics, while the reader opted in, on a stacked board only: one line beside New agent, the full
-                     readout a popover off it (BoardMetrics.vue). A board with columns has them in its bottom-left corner. -->
-                <BoardMetrics v-if="!mobile && !sliver && liveMetrics !== undefined && metricsFoot === undefined" :metrics="liveMetrics" />
+                <!-- The geek metrics, while the reader opted in: one line beside night and New agent, three small meters or the
+                     one thing running short, the full readout a popover off it (BoardMetrics.vue). In the header, so they
+                     take none of the board's height; the one control here that shrinks, its notes giving way first. -->
+                <BoardMetrics v-if="!mobile && !sliver && liveMetrics !== undefined" :metrics="liveMetrics" />
                 <!-- Appears exactly when two or more chats sit side by side (the panes are the selection); opens a draft composed from their transcripts but not sent. -->
                 <Button
                     v-if="chatStrip.panes.length >= 2"
@@ -403,7 +399,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
         <div ref="scrollerEl" class="scrollbar-stable min-h-0 flex-1 overflow-auto">
             <!-- `content-start` keeps stacked rows from stretching to `h-full`; a phone's board ends with room for the floating New agent. -->
             <!-- NEVER SIDEWAYS (`overflow-x-clip`): wider than its fraction is a card spilling, which handed the board a horizontal scrollbar; a clip, so sticky headers still pin. -->
-            <div ref="gridEl" class="grid overflow-x-clip" :class="[GRID_PAD[fit], laneGrid, noMatches ? '' : placed || cornered || metricsFoot !== undefined ? 'min-h-full' : 'h-full', mobile ? 'pb-24' : '']">
+            <div ref="gridEl" class="grid overflow-x-clip" :class="[GRID_PAD[fit], laneGrid, noMatches ? '' : placed || cornered ? 'min-h-full' : 'h-full', mobile ? 'pb-24' : '']">
                 <section
                     v-for="lane in drawnLanes"
                     :key="lane.key"
@@ -411,7 +407,7 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                     :data-reveal-column="narrow ? undefined : ``"
                     :data-drop="lane.key === 'finished' && view.archive ? undefined : lane.key"
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
-                    :class="[!dragging && !narrow && !placed && metricsFoot === undefined ? 'min-h-0' : '', placeOf(lane.key), laneDropClass(lane.key), cornered && lane.key === 'finished' ? 'sticky self-start' : '', metricsFoot === lane.key ? 'self-stretch' : '']"
+                    :class="[!dragging && !narrow && !placed ? 'min-h-0' : '', placeOf(lane.key), laneDropClass(lane.key), cornered && lane.key === 'finished' ? 'sticky self-start' : '']"
                     :style="lane.key === 'finished' ? cornerLane : undefined"
                 >
                     <!-- Finished's header doubles as the archive's window, swapping its label and growing a way back; pinned while scrolling, unless a wallpaper shows through. -->
@@ -634,8 +630,6 @@ const { settled: boardDrawn } = useRowReveal(boardEl, { key: boardRows });
                         {{ archiveHidden }} {{ t(`agents.agentsView.more`) }}
                     </button>
                     </div>
-                    <!-- The bottom-left corner, the geek metrics, at the end of the lane that ends the first column (metricsCorner.ts). -->
-                    <MetricsCorner v-if="metricsFoot === lane.key && liveMetrics !== undefined" :metrics="liveMetrics" :fold="metricsFold" :half="spans(lane.key)" />
                     <!-- Its top padding is a breath above the corner, wider than the gap between cards, so the corner does not read as one more of them.
                          `crowded`: Finished scrolls past its window above it, so the corner may give it the height (cornerFit.ts). -->
                     <div v-if="withCorner && lane.key === 'finished'" class="mt-auto flex min-h-0 flex-col pt-6"><slot name="corner" :crowded="cornerCrowded" /></div>

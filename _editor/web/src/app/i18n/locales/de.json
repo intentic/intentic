@@ -688,9 +688,7 @@
             "stalled": "{percent} blockiert",
             "swapFull": "Swap voll",
             "eventLoopAt": "Event-Loop {percent}",
-            "moreStrained": "{count} weitere nahe am Limit | {count} weitere nahe am Limit",
-            "allFigures": "Alle Werte",
-            "cornerLabel": "Sandbox"
+            "moreStrained": "{count} weitere nahe am Limit | {count} weitere nahe am Limit"
         },
         "boardNight": {
             "tipTitle": "Gute Nacht",
@@ -12229,7 +12227,7 @@
                 "liveMetrics": "Geek-Metriken",
                 "liveMetricsHint": "Live-Anzeigen und Kosten auf dem Agenten-Board.",
                 "hint": {
-                    "corner": "CPU, Arbeitsspeicher und Festplatte unten links auf dem Board.",
+                    "header": "CPU, Arbeitsspeicher und Festplatte in der Kopfzeile des Boards.",
                     "cards": "Auf jeder Agentenkarte: Anteil und Kosten.",
                     "rail": "Anderswo eine Kachel in der Leiste, nur nahe am Limit.",
                     "off": "Aus: Es wird nichts gemessen."

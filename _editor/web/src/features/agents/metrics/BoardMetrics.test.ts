@@ -31,10 +31,10 @@ const GIB = 2 ** 30;
 
 let app: App | undefined;
 
-const mount = (props: { place?: `header` | `corner`; fold?: boolean } = {}, sandbox: Partial<SandboxMetrics[`sandbox`]> = {}): HTMLElement => {
+const mount = (sandbox: Partial<SandboxMetrics[`sandbox`]> = {}): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
-    app = createApp({ render: () => h(BoardMetrics, { metrics: reading(sandbox), ...props }) });
+    app = createApp({ render: () => h(BoardMetrics, { metrics: reading(sandbox) }) });
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
@@ -80,7 +80,7 @@ describe(`the board's metrics`, () => {
     });
 
     it(`trade the meters for one line once a figure nears its limit`, () => {
-        const element = mount({}, { diskBytes: 950 * GIB });
+        const element = mount({ diskBytes: 950 * GIB });
         expect(figures(element)).toEqual([]);
         expect(press(element).querySelector(`[data-verdict]`)?.textContent).toBe(`Disk950 / 1,000 GiB`);
     });
@@ -94,30 +94,6 @@ describe(`the board's metrics`, () => {
         press(element).click();
         await nextTick();
         expect(element.querySelector(`[data-overlay]`)).toBeNull();
-    });
-
-    it(`stand open in the board's corner, a row a gauge with its whole figure, all of it said in the one press's name`, () => {
-        const element = mount({ place: `corner` });
-        const corner = element.querySelector(`[data-board-metrics-corner]`)!;
-        expect([...corner.querySelectorAll(`[data-figure]`)].map((figure) => figure.textContent)).toEqual([
-            `CPU23% of 16 cores`,
-            `Memory5.5 GiB / 16 GiB`,
-            `Disk400 GiB / 1,000 GiB`,
-        ]);
-        expect(press(element).getAttribute(`aria-label`)).toBe(`Sandbox resources, CPU 23% of 16 cores, Memory 5.5 GiB / 16 GiB, Disk 400 GiB / 1,000 GiB`);
-    });
-
-    it(`say what else is wrong with a gauge under it in the corner, and fold to the one line when told to`, async () => {
-        const short = { swapBytes: 2 * GIB, swapLimitBytes: 2 * GIB, swapFull: true, pressure: { cpu: 0, memory: 30, io: 0 } };
-        const element = mount({ place: `corner` }, short);
-        const rows = [...element.querySelectorAll(`[data-board-metrics-corner] [data-figure]`)].map((figure) => figure.textContent);
-        expect(rows[1]).toBe(`Memory5.5 GiB / 16 GiBswap full · 30% stalled`);
-        app?.unmount();
-        const folded = mount({ place: `corner`, fold: true }, short);
-        expect(folded.querySelector(`[data-board-metrics-corner] [data-verdict]`)?.textContent).toBe(`Memory5.5 / 16 GiB· swap full · 30% stalled`);
-        press(folded).click();
-        await nextTick();
-        expect(folded.querySelector(`[data-overlay] h3`)?.textContent).toBe(`Sandbox resources`);
     });
 
     it(`open by themselves when the rail asked for them, and spend the ask`, async () => {

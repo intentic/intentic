@@ -688,9 +688,7 @@
             "stalled": "{percent} stalled",
             "swapFull": "swap full",
             "eventLoopAt": "event loop {percent}",
-            "moreStrained": "{count} more near its limit | {count} more near their limits",
-            "allFigures": "All figures",
-            "cornerLabel": "Sandbox"
+            "moreStrained": "{count} more near its limit | {count} more near their limits"
         },
         "boardNight": {
             "tipTitle": "Good night",
@@ -12229,7 +12227,7 @@
                 "liveMetrics": "Geek metrics",
                 "liveMetricsHint": "Live gauges and costs on the Agents board.",
                 "hint": {
-                    "corner": "CPU, memory and disk in the board’s bottom-left corner.",
+                    "header": "CPU, memory and disk in the board's header.",
                     "cards": "Each agent's card: its share and what it cost.",
                     "rail": "Elsewhere, a rail tile only near a limit.",
                     "off": "Off: nothing is measured."

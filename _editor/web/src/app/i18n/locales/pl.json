@@ -785,9 +785,7 @@
             "stalled": "{percent} w zastoju",
             "swapFull": "swap pełny",
             "eventLoopAt": "pętla zdarzeń {percent}",
-            "moreStrained": "jeszcze {count} blisko limitu | jeszcze {count} blisko limitu | jeszcze {count} blisko limitu",
-            "allFigures": "Wszystkie wartości",
-            "cornerLabel": "Sandbox"
+            "moreStrained": "jeszcze {count} blisko limitu | jeszcze {count} blisko limitu | jeszcze {count} blisko limitu"
         },
         "boardNight": {
             "tipTitle": "Dobranoc",
@@ -11568,7 +11566,7 @@
                 "liveMetrics": "Metryki dla geeków",
                 "liveMetricsHint": "Wskaźniki i koszty na żywo na tablicy agentów.",
                 "hint": {
-                    "corner": "CPU, pamięć i dysk w lewym dolnym rogu tablicy.",
+                    "header": "CPU, pamięć i dysk w nagłówku tablicy.",
                     "cards": "Na karcie każdego agenta: jego udział i koszt.",
                     "rail": "Gdzie indziej kafelek na pasku, tylko blisko limitu.",
                     "off": "Wyłączone: nic nie jest mierzone."

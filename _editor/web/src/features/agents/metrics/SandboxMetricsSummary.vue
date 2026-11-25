@@ -6,7 +6,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { GAUGE_GLYPH, useSandboxReadout } from "./sandboxFigures";
 
-// The geek metrics in one line (BoardMetrics.vue): the board's header on a stacked board, its bottom-left corner folded.
+// The geek metrics in one line, at the right of the board's header (BoardMetrics.vue).
 // At rest, three small gauges (CPU, memory, disk), each its glyph and its meter, and no figure: the question is only "is
 // anything running out?", which the meters answer, and "5.7 / 17 GiB" beside each one made the line ~400px of numbers
 // nobody read. The figures are the hover, the rest the popover a press opens. A screen reader still hears each one.
