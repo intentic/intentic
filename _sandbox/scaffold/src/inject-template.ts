@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { retry } from "@intentic/base/async";
+import { undefinedIfMissing } from "@intentic/base/errors";
 import { isAppDir, readTemplateManifest, type AppInstanceInput, type TemplateManifest } from "./template-manifest.js";
 
 const exec = promisify(execFile);
@@ -51,8 +52,8 @@ const copyAndRenameApp = async (
 
     // Rewrites the package name and stamps the template marker in the destination's package.json.
     const pkgPath = join(to, "package.json");
-    if (existsSync(pkgPath)) {
-        const raw = await readFile(pkgPath, "utf8");
+    const raw = await readFile(pkgPath, "utf8").catch(undefinedIfMissing);
+    if (raw !== undefined) {
         const pkg = JSON.parse(raw) as { name?: string; intentic?: { template?: string }; [k: string]: unknown };
         const templatePkg = basename(item); // e.g. "api"
         if (pkg.name === `${scope}${templatePkg}`) {
@@ -73,10 +74,10 @@ export const injectMonorepoShell = async (opts: { repoDir: string; sourceDir: st
 // Stamps the template key into an already-copied app's package.json; a no-op if the marker is already there.
 const stampTemplateMarker = async (repoDir: string, item: string, templateKey: string): Promise<void> => {
     const pkgPath = join(repoDir, item, "package.json");
-    if (!existsSync(pkgPath)) {
+    const raw = await readFile(pkgPath, "utf8").catch(undefinedIfMissing);
+    if (raw === undefined) {
         return;
     }
-    const raw = await readFile(pkgPath, "utf8");
     const pkg = JSON.parse(raw) as { intentic?: { template?: string }; [k: string]: unknown };
     if (pkg.intentic?.template === templateKey) {
         return; // already stamped

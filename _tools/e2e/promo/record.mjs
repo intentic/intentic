@@ -5,14 +5,17 @@
 import { insidePath, page as pages } from "@intentic/sandbox-contract/app-routes";
 import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeDroppedRepo } from "./dropped-repo.mjs";
 
 const HERE = import.meta.dirname;
 const DEMO = process.env.DEMO_URL ?? "http://127.0.0.1:47146/demo";
-const OUT = process.env.PROMO_OUT ?? "/tmp/intentic-promo";
-const DROP_SOURCE = "/tmp/promo-drop/checkout-worker";
+// Fresh folders of this run's own unless PROMO_OUT names one: a fixed name in the shared temp directory is one anyone
+// could make first, with links where this writes. The paths print at the end.
+const OUT = process.env.PROMO_OUT ?? mkdtempSync(join(tmpdir(), "intentic-promo-"));
+const DROP_SOURCE = join(mkdtempSync(join(tmpdir(), "promo-drop-")), "checkout-worker");
 
 // Capture size must equal VIEWPORT with device scale 1: any mismatch misplaces the picture in the canvas.
 const VIEWPORT = { width: 1760, height: 990 };

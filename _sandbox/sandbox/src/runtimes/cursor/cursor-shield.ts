@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { McpServerConfig, SDKCustomTool, SDKCustomToolResult, SDKJsonValue, ToolName } from "@cursor/sdk";
 import { undefinedIfMissing } from "@intentic/base/errors";
@@ -9,6 +9,7 @@ import { type Json, restoreStrings } from "../../privacy/gateway/protocols/walk.
 import { SHIELD_NOTE } from "../../privacy/gateway/request-shield.js";
 import type { TurnShield } from "../../privacy/privacy-shield.js";
 import { tokenPattern } from "../../privacy/tokens.js";
+import { withRegularFile } from "../../store/plain-files/regular-file.js";
 import type { CursorHookShield } from "./cursor-hooks.js";
 import type { CursorRunHandle, CursorSession } from "./cursor-host.js";
 
@@ -331,13 +332,13 @@ export const instructionRefusal = async (shield: TurnShield, root: string, label
     const holding: string[] = [];
     const kinds = new Set<PersonalDataClass>();
     for (const file of await ruleFilesUnder(root)) {
+        // Measured and read through one descriptor, so a file swapped in between (for one past the cap, or a pipe) is not read.
+        const reading = withRegularFile(file, {}, async (handle, info) => (info.size === 0 || info.size > MAX_RULE_BYTES ? undefined : await handle.readFile("utf8")));
         // allow(silent-catch): a file that cannot be read measures as empty and is skipped, as Cursor could not load it.
-        const size = await stat(file).then((info) => info.size).catch(() => 0);
-        if (size === 0 || size > MAX_RULE_BYTES) {
+        const text = await reading.catch(() => undefined);
+        if (text === undefined) {
             continue;
         }
-        // allow(silent-catch): read as empty, as above: nothing Cursor could load from it.
-        const text = await readFile(file, "utf8").catch(() => "");
         const found = await shield.refuses(text, "instructions", `the turn was refused: ${relative(root, file)}, which ${label} loads itself, holds personal data`);
         if (found.length > 0) {
             holding.push(relative(root, file));

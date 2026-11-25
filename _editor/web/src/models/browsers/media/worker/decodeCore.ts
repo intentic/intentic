@@ -185,7 +185,13 @@ export const decodeCore = (seams: DecodeSeams): DecodeCore => {
     };
 
     return {
-        // SAFETY: `handlers` holds one handler per message type, keyed by that type, so the one picked takes this message.
-        receive: (message) => (handlers[message.type] as (message: ToWorker) => void)(message),
+        // Only a type `handlers` itself holds is dispatched: a message naming anything else (`toString`, `constructor`) is
+        // dropped rather than calling what the prototype has under that name.
+        receive: (message) => {
+            if (Object.hasOwn(handlers, message.type)) {
+                // SAFETY: `handlers` holds one handler per message type, keyed by that type, so the one picked takes this message.
+                (handlers[message.type] as (message: ToWorker) => void)(message);
+            }
+        },
     };
 };

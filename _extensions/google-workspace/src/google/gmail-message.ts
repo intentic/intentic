@@ -107,6 +107,15 @@ export const attachmentsOf = (payload: MessagePart | undefined): ParsedAttachmen
     return found;
 };
 
+// The name an attachment is saved under. Its sender wrote `filename`, so it is read as a name and never as a path:
+// joined as it came, a `../../.bashrc` or `..\startup.bat` lands wherever the sender aimed it. Both platforms'
+// separators are cut, and a name left empty or made only of dots falls back to one built from the attachment id
+// (cut short: Gmail's ids run to hundreds of characters, past what a filesystem takes as one name).
+export const savedName = (attachment: ParsedAttachment): string => {
+    const name = (attachment.filename.split(/[/\\]/).pop() ?? "").trim();
+    return /^\.*$/.test(name) ? `attachment-${attachment.id.slice(0, 16)}` : name;
+};
+
 export const parseMessage = (message: GmailMessage): ParsedMessage => ({
     id: message.id,
     threadId: message.threadId ?? message.id,

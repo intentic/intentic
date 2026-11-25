@@ -20,7 +20,9 @@ const id = string().min(1).max(64);
 const host = string().min(1).max(253);
 
 /** keyring.ts's secret name, refusal code and capture outcome, as the extension sees them. */
-export const KeyringNativeNameSchema = string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/u);
+export const KeyringNativeNameSchema = string()
+    .regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/u)
+    .refine((key) => !(key in Object.prototype) && key !== "prototype");
 export const KeyringNativeRefusalCodeSchema = zEnum([
     "no-keyring",
     "locked",

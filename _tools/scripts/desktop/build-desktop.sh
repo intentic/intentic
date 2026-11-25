@@ -114,7 +114,18 @@ if [ -f "${CARGO_HOME:-$HOME/.cargo}/env" ]; then
 fi
 if [ "$ASSEMBLE" -eq 0 ] && ! command -v cargo >/dev/null 2>&1; then
     echo "==> installing rust"
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+    # rustup-init pinned by version and checksum, as in _tools/ci-desktop/Dockerfile — bump the two together.
+    case "$(uname -m)" in
+        x86_64) rustup_triple=x86_64-unknown-linux-gnu rustup_sha=b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55 ;;
+        aarch64) rustup_triple=aarch64-unknown-linux-gnu rustup_sha=9f608c142e0e38a78957d0661ba1dfaf0b6fb37184cfaa4b9a0aa57af6184282 ;;
+        *) echo "error: no pinned rustup-init for $(uname -m); install rust and re-run" >&2; exit 1 ;;
+    esac
+    rustup_init="$(mktemp -d)/rustup-init"
+    curl --proto '=https' --tlsv1.2 -fsSL "https://static.rust-lang.org/rustup/archive/1.29.3/$rustup_triple/rustup-init" -o "$rustup_init"
+    echo "$rustup_sha  $rustup_init" | sha256sum -c -
+    chmod +x "$rustup_init"
+    "$rustup_init" -y --default-toolchain stable --profile minimal
+    rm -rf "$(dirname "$rustup_init")"
     # shellcheck disable=SC1091
     source "${CARGO_HOME:-$HOME/.cargo}/env"
 fi

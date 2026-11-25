@@ -6,12 +6,13 @@
 //       [--scenarios start,fling,stream] [--runs 5] [--moving-runs 3] [--rows 2000] [--stream-ms 10000] [--rebuild-web]
 //       [--no-compile] [--out DIR]
 //
-// Install the arms first (README.md, Commands). Results print as tables and land in --out (default: the system temp
-// directory's intentic-android-spike/) as results-<time>.json, beside the traces and the web build.
+// Install the arms first (README.md, Commands). Results print as tables and land in --out (default: ~/.cache/
+// intentic-android-spike/, the user's own rather than the shared temp directory, since the trace_processor fetched into it
+// is run) as results-<time>.json, beside the traces and the web build.
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { repoRoot } from "../../../_tools/constants/src/node.mjs";
@@ -73,7 +74,7 @@ const streamMs = Number(option(`stream-ms`) ?? `10000`);
 const arms = ARMS.filter((arm) => (option(`arms`) ?? ARMS.map((known) => known.name).join(`,`)).split(`,`).includes(arm.name));
 const scenarios = (option(`scenarios`) ?? `start,fling,stream`).split(`,`);
 // Traces, the web build and results go outside the repository: a run leaves nothing in the tree.
-const out = option(`out`) ?? join(tmpdir(), `intentic-android-spike`);
+const out = option(`out`) ?? join(homedir(), `.cache`, `intentic-android-spike`);
 mkdirSync(out, { recursive: true });
 
 const [width, height] = (device.shell(`wm size`).match(/(\d+)x(\d+)/u) ?? []).slice(1).map(Number);

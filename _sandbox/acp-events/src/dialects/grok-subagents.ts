@@ -63,12 +63,38 @@ const STATUSES: ReadonlyMap<string, SubagentStatus> = new Map([
 ]);
 export const subagentStatus = (status: string | undefined): SubagentStatus | undefined => (status === undefined ? undefined : STATUSES.get(status));
 
-// The machine blocks Grok wraps a subagent's answer in for its own model; the words a person reads are the rest.
-const MACHINE_BLOCKS = /<subagent_(meta|result)>[\s\S]*?<\/subagent_\1>/gu;
+// The machine blocks Grok wraps a subagent's answer in for its own model; the words a person reads are the rest. Cut by
+// hand, not by one /<subagent_(meta|result)>[\s\S]*?<\/subagent_\1>/g: on an answer holding many openers and no closer
+// that pattern scans to the end from every one of them, which is quadratic in a text a subagent wrote. Here an opener
+// whose closer is missing marks its kind closed for good (no later opener of it can find one either), so every byte is
+// looked at a bounded number of times. What is cut is the same: an opener to the first closer of its own kind.
+const OPENER = /<subagent_(meta|result)>/gu;
+const withoutMachineBlocks = (answer: string): string => {
+    const opener = new RegExp(OPENER);
+    const unclosed = new Set<string>();
+    let kept = "";
+    let from = 0;
+    for (let open = opener.exec(answer); open !== null; open = opener.exec(answer)) {
+        const kind = open[1] ?? "";
+        if (unclosed.has(kind)) {
+            continue;
+        }
+        const closer = `</subagent_${kind}>`;
+        const close = answer.indexOf(closer, opener.lastIndex);
+        if (close === -1) {
+            unclosed.add(kind);
+            continue;
+        }
+        kept += answer.slice(from, open.index);
+        from = close + closer.length;
+        opener.lastIndex = from;
+    }
+    return kept + answer.slice(from);
+};
 // Enough of a report to read it by without opening the subagent, as the OpenCode loop keeps.
 const REPORT_KEPT = 4_000;
 export const reportOf = (output: string | null | undefined): string | undefined => {
-    const words = output?.replace(MACHINE_BLOCKS, "").trim().slice(0, REPORT_KEPT);
+    const words = output === null || output === undefined ? undefined : withoutMachineBlocks(output).trim().slice(0, REPORT_KEPT);
     return words === undefined || words === "" ? undefined : words;
 };
 

@@ -14,9 +14,14 @@ export const KeyringPublicKeySchema = z.string().regex(KEYRING_KEY_RE).describe(
 // One secret's name, the same shape a sandbox secret's name and a reference to it take (SECRET_KEY_RE), so a shared
 // entry is spent, typed and listed exactly like a sandbox-held one.
 export const KEYRING_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u;
+// A name that keys a plain object in the keyring's vault (entries by name, phones by device) is never one of
+// Object.prototype's members: `entries["constructor"]` would read the prototype's function instead of nothing, and an
+// assignment to `entries["__proto__"]` would swap the dictionary's prototype for a peer's value.
+export const isVaultKey = (key: string): boolean => !(key in Object.prototype) && key !== "prototype";
 export const KeyringSecretNameSchema = z
     .string()
     .regex(KEYRING_NAME_RE)
+    .refine(isVaultKey, "not a name Object.prototype already has (`constructor`, `__proto__`, `toString`, ...)")
     .describe("The secret's name, as a reference to it carries it: a letter or underscore, then letters, digits or `_`.");
 
 export const KeyringShareModeSchema = z
@@ -431,7 +436,7 @@ export type KeyringPendingNeed = z.infer<typeof KeyringPendingNeedSchema>;
 // way a Windows Hello signature is. Pairing is carried by a sandbox both are linked to, with both fingerprints shown.
 export const KeyringPhoneKeysSchema = z
     .object({
-        device: z.string().min(1).max(128).describe("The phone, by its device card."),
+        device: z.string().min(1).max(128).refine(isVaultKey, "not a name Object.prototype already has").describe("The phone, by its device card."),
         label: z.string().min(1).max(200).describe("The phone's name for people, `Pixel 8`."),
         seal: KeyringPublicKeySchema,
         presence: z.string().min(1).max(512).describe("The presence key, X.509 SubjectPublicKeyInfo DER, base64."),

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
@@ -258,12 +258,12 @@ const registerWindowsTask = async (spec: AutostartSpec, launcher: CliLauncher, s
     if (account === "") {
         throw new Error("this session names no user (USERNAME is unset), so a per-user logon task has nobody to run as");
     }
-    const xmlPath = join(tmpdir(), `${spec.id}-${process.pid}.xml`);
+    const xmlPath = join(await mkdtemp(join(tmpdir(), `${spec.id}-`)), "task.xml"); // a folder of its own, no name to plant
     try {
         await writeFile(xmlPath, Buffer.from(`\uFEFF${windowsTaskXml(spec, launcher, stub, account)}`, "utf16le"));
         register(schtasksExe(), windowsTaskCreateArgs(spec, xmlPath));
     } finally {
-        await rm(xmlPath, { force: true });
+        await rm(dirname(xmlPath), { recursive: true, force: true });
     }
     // Both would start an agent at logon, and the second would find the pidfile held and leave. Tidier to have one.
     clearWindowsRunValue(spec.windowsRunValue);
@@ -533,12 +533,12 @@ export const beforeSignIn = (spec: AutostartSpec, launcher: CliLauncher): Before
             if (windowsAccount() === "") {
                 throw new BeforeSignInRefused("this session names no user (USERNAME is unset), so the task has nobody to run as", false);
             }
-            const xmlPath = join(tmpdir(), `${spec.id}-before-sign-in-${process.pid}.xml`);
+            const xmlPath = join(await mkdtemp(join(tmpdir(), `${spec.id}-before-sign-in-`)), "task.xml");
             try {
                 await writeFile(xmlPath, Buffer.from(`\uFEFF${wanted()}`, "utf16le"));
                 runElevatedSchtasks(["/create", "/tn", name, "/xml", xmlPath, "/f"], "Registering the start before sign-in");
             } finally {
-                await rm(xmlPath, { force: true });
+                await rm(dirname(xmlPath), { recursive: true, force: true });
             }
         },
         disable: async () => {

@@ -1,4 +1,4 @@
-import { type GmailMessage, addressOf, attachmentsOf, bodyText, nameOf, parseMessage, replySubject, stripHtml } from "./gmail-message.js";
+import { type GmailMessage, addressOf, attachmentsOf, bodyText, nameOf, parseMessage, replySubject, savedName, stripHtml } from "./gmail-message.js";
 
 const b64 = (text: string): string => Buffer.from(text, "utf8").toString("base64url");
 
@@ -79,6 +79,25 @@ describe("attachmentsOf", () => {
                 ],
             }),
         ).toEqual([{ id: "a1", filename: "report.pdf", mimeType: "application/pdf", size: 4096 }]);
+    });
+});
+
+describe("savedName", () => {
+    const named = (filename: string) => savedName({ id: "ANGjdJ8x".repeat(40), filename, mimeType: "text/plain", size: 1 });
+
+    it("keeps an ordinary name as it is", () => {
+        expect(named("report Q3.pdf")).toBe("report Q3.pdf");
+    });
+
+    it("never lets a sender's name climb out of the download folder", () => {
+        expect(named("../../.bashrc")).toBe(".bashrc");
+        expect(named("/etc/cron.d/job")).toBe("job");
+        expect(named("..\\..\\AppData\\startup.bat")).toBe("startup.bat");
+    });
+
+    it("names an attachment whose name is all dots or nothing by its id, short enough to be a filename", () => {
+        expect(named("..")).toBe("attachment-ANGjdJ8xANGjdJ8x");
+        expect(named("docs/")).toBe("attachment-ANGjdJ8xANGjdJ8x");
     });
 });
 

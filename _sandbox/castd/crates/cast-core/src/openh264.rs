@@ -53,7 +53,8 @@ unsafe impl Send for Encoder {}
 /// Calls one of the encoder's vtable entries, which openh264 always fills.
 macro_rules! vcall {
     ($enc:expr, $f:ident ( $($arg:expr),* )) => {{
-        // SAFETY: `enc` is a live encoder WelsCreateSVCEncoder made; its vtable is openh264's own.
+        // SAFETY: `enc` is the non-null encoder WelsCreateSVCEncoder made (`new` refuses a null one), owned by the
+        // `Encoder` and destroyed only in its Drop; its vtable is openh264's own.
         let f = unsafe { (**$enc).$f }.ok_or(concat!("openh264 has no ", stringify!($f)))?;
         unsafe { f($enc, $($arg),*) }
     }};
@@ -235,6 +236,7 @@ fn collect(info: &sys::SFrameBSInfo, out: &mut Vec<u8>) {
             std::slice::from_raw_parts(layer.pNalLengthInByte, layer.iNalCount.max(0) as usize)
         };
         let size: usize = lens.iter().map(|&n| n.max(0) as usize).sum();
+        // SAFETY: as above: pBsBuf is non-null and holds the layer's NAL units, `size` bytes back to back.
         out.extend_from_slice(unsafe { std::slice::from_raw_parts(layer.pBsBuf, size) });
     }
 }

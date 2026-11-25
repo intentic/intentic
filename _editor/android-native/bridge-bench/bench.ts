@@ -4,12 +4,12 @@
 //   node _editor/android-native/bridge-bench/bench.ts --serial <adb serial> [--starts 10] [--call-runs 5]
 //       [--modes jni,jna-direct,jna-interface,uniffi] [--no-compile]
 //
-// Install the app first (README.md, Commands). The tables print as markdown, and every run lands in the system temp
-// directory's intentic-bridge-bench/results-<time>.json.
+// Install the app first (README.md, Commands). The tables print as markdown, and every run lands in the user's own
+// ~/.cache/intentic-bridge-bench/results-<time>.json (not the shared temp directory, where anyone could make that folder).
 
 import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -169,7 +169,7 @@ await rounds(callRuns, async (mode) => {
 });
 temperatures.push(temperature());
 
-const out = join(tmpdir(), `intentic-bridge-bench`);
+const out = join(homedir(), `.cache`, `intentic-bridge-bench`);
 mkdirSync(out, { recursive: true });
 const file = join(out, `results-${new Date().toISOString().replace(/[:.]/gu, `-`)}.json`);
 writeFileSync(

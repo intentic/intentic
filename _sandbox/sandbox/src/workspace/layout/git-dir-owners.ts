@@ -1,10 +1,11 @@
-import { cp, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
+import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import type { Logger } from "pino";
 import { repoGitDir } from "./git-layout.js";
 import { repointLinkedCheckouts } from "./worktree-links.js";
+import { readRegularFile } from "../../store/plain-files/regular-file.js";
 
 /* WHO A GIT DIR ON /history BELONGS TO. Every repo's real git dir sits at /history/gits/<its folder's path>, and the
    folder holds a `.git` pointer to it. That name is where the dir was made, not who uses it: a copied folder carries
@@ -53,12 +54,10 @@ const entryOf = (historyRoot: string, target: string): { entry: string; linked: 
 // Where a checkout's `.git` file leads, resolved against the checkout; undefined for an in-tree `.git` dir, a missing
 // one, or a file that names no dir.
 const pointerTarget = async (checkout: string): Promise<string | undefined> => {
-    const entry = join(checkout, ".git");
-    const stats = await lstat(entry).catch(undefinedIfMissing);
-    if (stats === undefined || !stats.isFile()) {
-        return undefined;
-    }
-    const named = (await readFile(entry, "utf8").catch(undefinedIfMissing))?.match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+    // Not following a link, and asked of the file as opened: a checkout is an agent's to write, and a name swapped after a
+    // check would be read as another file (or a pipe that holds the read).
+    const read = await readRegularFile(join(checkout, ".git"), { follow: false }).catch((error: Error) => (errnoCode(error) === "ELOOP" ? undefined : undefinedIfMissing(error)));
+    const named = read?.bytes.toString("utf8").match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
     return named === undefined || named === "" ? undefined : resolve(checkout, named);
 };
 

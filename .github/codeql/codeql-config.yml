@@ -1,0 +1,18 @@
+# What codeql.yml scans: everything except test files.
+#
+# Test files ship in no build a user runs, and they do on purpose what the security queries look for: fixed
+# names under os.tmpdir(), a fake page that echoes its query string, a shell line built from a fixture path.
+# 2026-11-24: 54 of the 223 open alerts were in test files and none was a defect; every real finding sat in a
+# list a reader had to clear by hand first. Rejected: dismissing them one by one as "used in tests", which
+# leaves the next test that writes to /tmp to raise the same alert again.
+#
+# The patterns are the suffixes the test runners load plus `tests/` folders, which hold only tests and their
+# fixtures. `*.testing.ts` is the fakes and harnesses tests share; bench/ imports one, and bench/ stays in.
+# So does everything else that runs on a developer machine or in CI (bench/, scripts/, _tools/): it does not
+# ship, but it runs next to credentials.
+paths-ignore:
+  - "**/*.test.ts"
+  - "**/*.test.mjs"
+  - "**/*.spec.ts"
+  - "**/*.testing.ts"
+  - "**/tests/**"

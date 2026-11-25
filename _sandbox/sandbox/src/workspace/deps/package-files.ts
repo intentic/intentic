@@ -1,7 +1,8 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
+import { readRegularFile } from "../../store/plain-files/regular-file.js";
 
 // The files under some of a repository's package directories, and a bounded read of each: what the dependency graph's
 // usage and a package's module graph are read from. Git lists them when the repository is one, tracked and untracked
@@ -52,18 +53,12 @@ export const readSources = async (repoDir: string, paths: readonly string[], vis
         while (next < paths.length) {
             const path = paths[next++]!;
             const file = join(repoDir, path);
+            // Measured and read through one descriptor: a name swapped between the two (for a pipe, which would hold the
+            // read, or a file past the bound) is never read.
             // allow(silent-catch): a file listed and then removed, or unreadable, has nothing to say about imports.
-            const size = await stat(file).then(
-                ({ size: bytes }) => bytes,
-                () => undefined,
-            );
-            if (size === undefined || size > MAX_SOURCE_BYTES) {
-                continue;
-            }
-            // allow(silent-catch): as above, for a file that went between the stat and the read.
-            const text = await readFile(file, "utf8").catch(() => undefined);
-            if (text !== undefined) {
-                visit(path, text);
+            const read = await readRegularFile(file, { maxBytes: MAX_SOURCE_BYTES }).catch(() => undefined);
+            if (read !== undefined) {
+                visit(path, read.bytes.toString("utf8"));
             }
         }
     };

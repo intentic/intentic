@@ -1,0 +1,18 @@
+# OSV/Scorecard triage only for advisories with no released fix to move to; recheck at ignoreUntil.
+# Remove entries when fixes ship or when the advisory stops matching (package gone from Cargo.lock, advisory withdrawn).
+# Do not suppress reachable, patchable vulnerabilities here.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+ignoreUntil = 2027-05-24
+reason = "zvariant is flagged unmaintained, not vulnerable. It is zbus's own D-Bus encoding crate; zbus 5.19 (the newest) depends on it and there is no replacement to move to."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+ignoreUntil = 2027-05-24
+reason = "zbus_names is flagged unmaintained, not vulnerable. It is part of zbus 5.19 (the newest), which depends on it; there is no replacement to move to."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+ignoreUntil = 2027-05-24
+reason = "zvariant_derive is flagged unmaintained, not vulnerable. It is part of zbus 5.19 (the newest), which depends on it; there is no replacement to move to."

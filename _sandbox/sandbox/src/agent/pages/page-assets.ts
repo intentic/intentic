@@ -1,11 +1,11 @@
-import { readFile, realpath, stat } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { undefinedIfMissing } from "@intentic/base/errors";
 import { readCappedBytes } from "@intentic/base/capped-read";
 import { isInside } from "@intentic/base/contained";
 import { withoutPageMedia } from "@intentic/sandbox-contract/text/pages";
 import { type MediaTally, mediaRecorder } from "./page-media.js";
 import { STREAMED_EXTENSIONS } from "../../workspace/files/stored/stored-page-media.js";
+import { readRegularFile } from "../../store/plain-files/regular-file.js";
 
 // A page carries everything it shows inside itself, since the chat draws it in a frame that can reach nothing: the
 // pictures, stylesheets and scripts it names on disk are read in as data, and the ones it names on a well-known
@@ -159,11 +159,10 @@ const carrierFor = (context: PageCarryContext) => {
                 if (real === undefined || !inside(real)) {
                     return undefined;
                 }
-                const info = await stat(real).catch(undefinedIfMissing);
-                if (info === undefined || !info.isFile() || info.size > MAX_FILE_BYTES) {
-                    return undefined;
-                }
-                return new Uint8Array(await readFile(real));
+                // Asked again of the file as opened: the name could be swapped for a link out between the check and the read.
+                // allow(silent-catch): as above, a file that cannot be opened (gone, or its last part now a link) is left out.
+                const read = await readRegularFile(real, { follow: false, roots: context.roots, maxBytes: MAX_FILE_BYTES }).catch(() => undefined);
+                return read === undefined ? undefined : new Uint8Array(read.bytes);
             })();
             reads.set(path, reading);
         }

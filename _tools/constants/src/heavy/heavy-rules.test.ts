@@ -492,8 +492,17 @@ describe("a project's declared heavy classes", () => {
         ["6 gb", 6144],
         ["huge", undefined],
         ["0", undefined],
+        ["  6G\t", 6144],
+        ["6 G", 6144],
+        ["6G x", undefined],
     ] as const)("memory %s reads as %p MiB", (text, mib) => {
         expect(memoryMibOf(text)).toBe(mib);
+    });
+
+    test("a memory of a digit and a long run of blanks answers at once", () => {
+        // No clock: the old pattern was quadratic on these, so a return of it runs past the test's own timeout.
+        expect(memoryMibOf(`0${"\t".repeat(100_000)}x`)).toBeUndefined();
+        expect(memoryMibOf(`1${" ".repeat(100_000)}`)).toBe(1);
     });
 
     test.each([

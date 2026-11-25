@@ -1,5 +1,6 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { isMissing } from "@intentic/base/errors";
 import { join } from "node:path";
 import { BROWSER_MEDIA_SOCKET_DIR } from "@intentic/sandbox-contract/browser-wire";
 
@@ -53,8 +54,15 @@ export interface MediaKey {
 export const ensureMediaKey = (dir: string = CAST_DIR): MediaKey => {
     const path = join(dir, KEY_FILE);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
-    // No file yet is the first castd of this boot.
-    const existing = existsSync(path) ? readFileSync(path) : undefined;
+    // No file yet is the first castd of this boot. Read, not asked about first, so nothing comes between the two.
+    let existing: Buffer | undefined;
+    try {
+        existing = readFileSync(path);
+    } catch (error) {
+        if (!isMissing(error)) {
+            throw error;
+        }
+    }
     if (existing !== undefined && existing.length >= KEY_BYTES) {
         return { key: existing, path };
     }

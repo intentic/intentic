@@ -48,7 +48,21 @@ export const sniffImage = (bytes: Uint8Array): ImageKind | undefined => {
     }
     // An SVG is text: skip a byte-order mark and whitespace, then an XML declaration or a comment may lead the <svg.
     const head = new TextDecoder().decode(bytes.subarray(0, 512)).replace(/^﻿/, "").trimStart();
-    return /^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE svg[^>]*>\s*)?<svg[\s>]/i.test(head) ? "svg" : undefined;
+    return leadsToSvg(head) ? "svg" : undefined;
+};
+
+// Comments are stepped over one `-->` at a time: `(<!--[\s\S]*?-->\s*)*` split a run of `--><!--` every way it could,
+// exponential in what a page served as its icon.
+const leadsToSvg = (head: string): boolean => {
+    let rest = head.replace(/^<\?xml[^>]*>\s*/i, "");
+    while (rest.startsWith("<!--")) {
+        const end = rest.indexOf("-->", 4);
+        if (end === -1) {
+            return false;
+        }
+        rest = rest.slice(end + 3).trimStart();
+    }
+    return /^(<!DOCTYPE svg[^>]*>\s*)?<svg[\s>]/i.test(rest);
 };
 
 // ===== PNG out =====

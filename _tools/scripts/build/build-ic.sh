@@ -45,8 +45,9 @@ if [ "$need_zigbuild" = 1 ] && ! command -v cargo-zigbuild >/dev/null 2>&1; then
 fi
 if [ "$need_zigbuild" = 1 ] && ! command -v zig >/dev/null 2>&1 && ! python3 -c 'import ziglang' 2>/dev/null; then
   echo "==> installing zig (via pip ziglang)"
-  pip3 install --quiet ziglang || pip3 install --quiet --break-system-packages ziglang || {
-    echo "error: zig is required for the linux/darwin cross-builds — install zig (or 'pip3 install ziglang') and re-run." >&2
+  zig_req="$(dirname "$0")/ziglang-requirements.txt"
+  pip3 install --quiet --require-hashes -r "$zig_req" || pip3 install --quiet --break-system-packages --require-hashes -r "$zig_req" || {
+    echo "error: zig is required for the linux/darwin cross-builds — install zig (or 'pip3 install --require-hashes -r _tools/scripts/build/ziglang-requirements.txt') and re-run." >&2
     exit 1
   }
 fi

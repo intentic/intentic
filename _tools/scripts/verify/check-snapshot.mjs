@@ -6,7 +6,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync } from "node:fs";
-import { constants as osConstants, tmpdir } from "node:os";
+import { constants as osConstants, homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { git } from "../lib/git.mjs";
 import { blindAtBase, findingCounts, problemLines } from "./turn-findings.mjs";
@@ -180,11 +180,15 @@ const guardSnapshots = () => {
    (one main already fails counts) checked the whole base commit out under the temp dir and deleted it again, and the
    reach typecheck could take a second: 14,107 files and 202 MB for this repository, about 237 MB written per run as
    measured on rog, and as much again trimmed when it went, for a base that is main's tip and moves a few files at a
-   time. So each repository keeps POOL_SLOTS checkouts under the temp dir, one per run at once, each held by a lock file
+   time. So each repository keeps POOL_SLOTS checkouts under POOL_ROOT, one per run at once, each held by a lock file
    while a run uses it; a run moves its slot to its base with a forced detached checkout, which writes only the files
    that differ, and `clean -ffdx` takes away whatever the last run's checks left. The neighbours and node_modules lent to
    it are taken back as before. With every slot held, or a slot git cannot move or make, the run takes a throwaway
    snapshot the old way. */
+// In this user's own cache, not the shared temp dir: a pool another account made first at its fixed name there would
+// hand a run a checkout of that account's choosing, and the checks run its code (CodeQL js/insecure-temporary-file,
+// 2026-11-25). The throwaway snapshots stay in the temp dir: mkdtemp names them past guessing.
+const POOL_ROOT = join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "intentic-verify");
 const POOL_PREFIX = "verify-base-";
 const POOL_SLOTS = 3;
 const LOCK_SUFFIX = ".lock";
@@ -197,7 +201,7 @@ export const snapshotPoolOf = (root) => {
     if (common === undefined || common === "" || !existsSync(common)) {
         return undefined;
     }
-    return join(tmpdir(), `${POOL_PREFIX}${createHash("sha256").update(realpathSync(common)).digest("hex").slice(0, 12)}`);
+    return join(POOL_ROOT, `${POOL_PREFIX}${createHash("sha256").update(realpathSync(common)).digest("hex").slice(0, 12)}`);
 };
 
 // A free slot's lock, made exclusively so two runs never share a checkout; `undefined` when every slot is held. A lock
@@ -206,7 +210,7 @@ const claimSlot = (pool, now = Date.now()) => {
     try {
         mkdirSync(pool, { recursive: true });
     } catch {
-        // allow(silent-catch): a temp dir that takes no folder means no pool; the throwaway snapshot is tried next and fails visibly
+        // allow(silent-catch): a cache dir that takes no folder means no pool; the throwaway snapshot is tried next and fails visibly
         return undefined;
     }
     for (let slot = 0; slot < POOL_SLOTS; slot += 1) {
@@ -241,7 +245,7 @@ const moveCheckout = (snapshot, rev) =>
     git(snapshot, "clean", "-ffdxq") !== undefined;
 
 // The slot's checkout made anew. Whatever stood there goes first, its registration too, even when its folder is gone
-// (a container made again empties the temp dir but not the repository's list): git would otherwise add a second entry
+// (a container made again can empty the cache but not the repository's list): git would otherwise add a second entry
 // for the same path beside the stale one. Forced twice for one a killed `worktree add` left locked "initializing".
 const makeCheckout = (root, snapshot, rev) => {
     git(root, "worktree", "remove", "--force", "--force", snapshot);

@@ -1,0 +1,15 @@
+# zig for cargo-zigbuild, the fallback build-ic.sh and build-remoted.sh install when zig is missing (CI bakes zig
+# 0.16.0 into _tools/ci-desktop). Installed with --require-hashes; hashes are every wheel PyPI serves for this version.
+ziglang==0.16.0 \
+    --hash=sha256:b61e5413c49508d9d62e5dcea543e3af491594154d74a00ff52f84ed508260cc \
+    --hash=sha256:18e14f6b25678d7b7c65708c82501ee6090fe39ed5c783477d56267af1fa5629 \
+    --hash=sha256:8b83661247430aa335b3cbc29569084900412dde5633b02c80a6d2ff734de3d2 \
+    --hash=sha256:9fcda73f62b851dd72a54b710ad40a209896db14cfb13649e62191243556342b \
+    --hash=sha256:e27d409812b11e0fb89ed0200cf2e55b6464d43f9461553104e4a4f9a94a1fd5 \
+    --hash=sha256:7249779f0f916cfd2d1a9d54eb7600f3901384dc8dcbe1eea226bd32a8237fb5 \
+    --hash=sha256:0fd671c599f6961638cc302cf1f9461486696385311d4c0276171dcf7d2b67f5 \
+    --hash=sha256:df0e6599e41d087c912b0d3d7cedef6c9cb1f0032465c8fc820e9986772d11e4 \
+    --hash=sha256:d4bd8197344fffe276e1d6446e4ef7bc38637d821b4685fe96a936503d4b0619 \
+    --hash=sha256:f978c12b5337cf418034964de00023b7ec5ec484383dc97c6a6585f4a9105840 \
+    --hash=sha256:089a16a4eb5a2f45151993342f8fabad24ff1a0723dc146642895c29208a3939 \
+    --hash=sha256:e44a5271f7b72f7980017bb615823ed52e765f96b6482d93a2fd338cd53101bf

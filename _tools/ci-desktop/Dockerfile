@@ -72,8 +72,20 @@ RUN apt-get update \
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-        | sh -s -- -y --no-modify-path --default-toolchain stable --profile minimal --component rustfmt,clippy \
+# rustup-init itself is version- and checksum-pinned (not curl|sh of sh.rustup.rs); the toolchain it installs stays `stable`.
+# Shasums from https://static.rust-lang.org/rustup/archive/<version>/<triple>/rustup-init.sha256 — bump
+# together with build-desktop.sh's fallback.
+RUN case "$(dpkg --print-architecture)" in \
+        amd64) rustup_triple=x86_64-unknown-linux-gnu rustup_sha=b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55 ;; \
+        arm64) rustup_triple=aarch64-unknown-linux-gnu rustup_sha=9f608c142e0e38a78957d0661ba1dfaf0b6fb37184cfaa4b9a0aa57af6184282 ;; \
+        *) echo "no rustup-init for $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac \
+    && curl --proto '=https' --tlsv1.2 -fsSL "https://static.rust-lang.org/rustup/archive/1.29.3/$rustup_triple/rustup-init" \
+        -o /tmp/rustup-init \
+    && echo "$rustup_sha  /tmp/rustup-init" | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y --no-modify-path --default-toolchain stable --profile minimal --component rustfmt,clippy \
+    && rm /tmp/rustup-init \
     && rustup target add x86_64-pc-windows-msvc \
         x86_64-unknown-linux-musl aarch64-unknown-linux-musl x86_64-apple-darwin aarch64-apple-darwin \
     && cargo install --locked cargo-xwin cargo-zigbuild \

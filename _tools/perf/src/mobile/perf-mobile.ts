@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
@@ -58,7 +58,9 @@ const rows = whole("--rows", 140);
 const replay = args.includes("--replay");
 const profiling = args.includes("--profile");
 const json = args.includes("--json");
-const scratch = join(tmpdir(), "intentic-perf-mobile");
+// This run's own folder: the build's config written there is then imported, so never a fixed name in the shared temp
+// directory, which anyone could make first. The build goes once the run is done; profiles stay, at the paths printed.
+const scratch = mkdtempSync(join(tmpdir(), "intentic-perf-mobile-"));
 const out = flag("--out") ?? join(scratch, "profiles");
 
 const repo = repoRoot(import.meta.dirname);
@@ -112,6 +114,7 @@ try {
 } finally {
     await browser.close();
     await server.close();
+    rmSync(join(scratch, "demo"), { recursive: true, force: true });
 }
 if (json) {
     process.stdout.write(`${JSON.stringify({ cpu, rows, replay, runs, results }, null, 2)}\n`);

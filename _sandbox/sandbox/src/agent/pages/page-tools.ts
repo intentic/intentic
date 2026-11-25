@@ -1,4 +1,3 @@
-import { readFile, stat } from "node:fs/promises";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { dirname, isAbsolute, resolve } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -9,6 +8,7 @@ import { z } from "zod";
 import { sdk } from "../../engines/claude-sdk.js";
 import type { ParkedCards } from "../../conversations/actor/parked-cards.js";
 import { inWorktree, type WorktreeMapping } from "../../workload/worktree-paths.js";
+import { withRegularFile } from "../../store/plain-files/regular-file.js";
 import { carryPage, type CarriedPage, PAGE_CDN_HOSTS } from "./page-assets.js";
 import { checkPage, type PageCheck } from "./page-check.js";
 import { ASK_PAGE_TOOL, SHOW_PAGE_TOOL } from "./page-names.js";
@@ -124,16 +124,20 @@ const sourceOf = async (args: PageArgs, deps: PageToolsDeps): Promise<{ html: st
     }
     const agentPath = isAbsolute(args.path!) ? args.path! : resolve(deps.cwd, args.path!);
     const file = inWorktree(agentPath, deps.placement);
-    const info = await stat(file).catch(undefinedIfMissing);
-    if (info === undefined || !info.isFile()) {
+    // Its type, its size and its text asked of one descriptor, so a name swapped in between cannot pass the checks for
+    // another file.
+    const read = await withRegularFile(file, {}, async (handle, info) =>
+        info.size > MAX_INLINE_CHARS * 2 ? { tooLarge: info.size } : { html: await handle.readFile("utf8") },
+    ).catch(undefinedIfMissing);
+    if (read === undefined) {
         return { refused: `There is no file at ${args.path}.` };
     }
-    if (info.size > MAX_INLINE_CHARS * 2) {
-        return { refused: `${args.path} is ${Math.round(info.size / 1024)} KB, too large to show as a page.` };
+    if ("tooLarge" in read) {
+        return { refused: `${args.path} is ${Math.round(read.tooLarge / 1024)} KB, too large to show as a page.` };
     }
     const source = insideRel(agentRoot, agentPath);
     return {
-        html: await readFile(file, "utf8"),
+        html: read.html,
         baseDir: dirname(file),
         ...(source === undefined ? {} : { source }),
     };

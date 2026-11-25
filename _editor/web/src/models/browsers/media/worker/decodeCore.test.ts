@@ -212,6 +212,16 @@ it("tells the page the socket opened, and measures the round trip off its own pi
     expect(posted.at(-1)).toMatchObject({ type: `stats`, stats: { rttMs: 12 } });
 });
 
+it("drops a message whose type names no handler of its own, rather than calling the prototype's", () => {
+    const { core, posted } = harness();
+    const before = posted.length;
+    for (const type of [`toString`, `constructor`, `__proto__`, `nothing`]) {
+        // A message from outside the wire's types, as it arrives off postMessage: untyped.
+        expect(() => core.receive(JSON.parse(JSON.stringify({ type })))).not.toThrow();
+    }
+    expect(posted.length).toBe(before);
+});
+
 it("draws a whole frame at the picture's own pixels, and acks it once with its decode time", () => {
     const { socket, canvas, decoders, posted, advance, hello } = harness();
     hello();

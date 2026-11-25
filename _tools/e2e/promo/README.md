@@ -18,9 +18,9 @@ flowchart LR
   sets the pace.
 - A headless browser draws no cursor, so `cursor.js` runs as an init script and draws the pointer, click ripples and
   the drag ghost for the dropped folder. `dropped-repo.mjs` writes that folder, a small Go service, to
-  `/tmp/promo-drop`.
-- Output lands in `PROMO_OUT` (default `/tmp/intentic-promo`): the master MP4, `shot-list.md` with each beat's
-  start time, and the raw capture. `DEMO_URL` points it at another demo server. Needs `ffmpeg` and `ffprobe`.
+  a fresh `promo-drop-*` folder in the temp directory.
+- Output lands in `PROMO_OUT` (default: a fresh `intentic-promo-*` folder in the temp directory, printed at the end):
+  the master MP4, `shot-list.md` with each beat's start time, and the raw capture. `DEMO_URL` points it at another demo server. Needs `ffmpeg` and `ffprobe`.
 
 ## Key files
 

@@ -370,7 +370,7 @@ export const createAgentWorktrees = (
                 logger.warn({ id, repo, trashed }, "agents: a checkout's .git no longer reached its repository, moved to trash");
             }
             if (fresh === undefined) {
-                await writeFile(stray, `gitdir: ${admin}\n`);
+                await writeFile(stray, `gitdir: ${admin}\n`, { flag: "wx" }); // wx: a link the agent put back at .git fails, never redirects
             } else {
                 // This one pair and nothing else: `git worktree repair` would also rewrite every checkout any other admin
                 // names, and one naming the shared checkout hijacked it (workspace/layout/worktree-links.ts).

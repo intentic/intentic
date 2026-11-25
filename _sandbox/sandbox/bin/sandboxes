@@ -25,7 +25,7 @@
 // end. Its answer streams one JSON object a line (sandboxes/sandboxes.routes.ts), progress then the outcome, since a
 // copy takes as long as the sandbox is big.
 
-import { lstatSync, readFileSync } from "node:fs";
+import { closeSync, constants as fsConstants, fstatSync, openSync, readFileSync } from "node:fs";
 import { request } from "node:http";
 import { basename, resolve } from "node:path";
 import { call as provenCall, EXIT_OPEN, parseArgs, refusalOf as needsRefusalOf } from "./needs-cli.mjs";
@@ -307,13 +307,26 @@ const move = (args) =>
 // which sends the turn's proof: the daemon routes only as the person a proven conversation acts for.
 const MAX_FILES = 20;
 const MAX_BYTES = 10 * 1024 * 1024;
+// Opened once, without following a link or waiting on a pipe, and judged and read through that one descriptor: a
+// name checked first and read after could be a different file by the read, and the size sent is what was read.
 const fileOf = (path) => {
     const full = resolve(path);
-    const stat = lstatSync(full, { throwIfNoEntry: false });
-    if (stat === undefined || !stat.isFile()) {
-        return die(`sandboxes: ${path} is not a regular file (a drop carries files, not folders or links)`);
+    const refused = `sandboxes: ${path} is not a regular file (a drop carries files, not folders or links)`;
+    let fd;
+    try {
+        fd = openSync(full, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+    } catch {
+        return die(refused);
     }
-    return { name: basename(full), data: readFileSync(full).toString("base64"), size: stat.size };
+    try {
+        if (!fstatSync(fd).isFile()) {
+            return die(refused);
+        }
+        const data = readFileSync(fd);
+        return { name: basename(full), data: data.toString("base64"), size: data.length };
+    } finally {
+        closeSync(fd);
+    }
 };
 
 const send = async (args) => {

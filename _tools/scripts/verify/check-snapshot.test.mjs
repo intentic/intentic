@@ -221,7 +221,7 @@ test("a lock left by a run killed outright is taken over once stale, and a fresh
     }
 });
 
-test("a kept checkout the temp dir lost is made again in its place, with one registration", () => {
+test("a kept checkout whose folder was lost is made again in its place, with one registration", () => {
     const { root, run, pool, done } = repo();
     try {
         withSnapshot(root, "HEAD", () => undefined);

@@ -24,11 +24,13 @@ export const normalizeProjectId = (raw: string): string | undefined => {
         text = text.replace(/^[^@/]*@/, "");
         text = text.replace(/^([^/:]+):\d+\//, "$1/");
     }
-    text = text
-        .replace(/[?#].*$/, "")
-        .replace(/\/+$/, "")
-        .replace(/\.git$/i, "")
+    // Cut at the first `?` or `#` and collapse slash runs before taking the trailing one: `/[?#].*$/` and `/\/+$/` retried
+    // from every `#` or `/` in a long remote, quadratic in its length.
+    const query = text.search(/[?#]/);
+    text = (query === -1 ? text : text.slice(0, query))
         .replace(/\/+/g, "/")
+        .replace(/\/$/, "")
+        .replace(/\.git$/i, "")
         .toLowerCase();
     return text.length <= PROJECT_ID_MAX && PROJECT_ID.test(text) ? text : undefined;
 };

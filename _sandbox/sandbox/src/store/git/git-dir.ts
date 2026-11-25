@@ -1,4 +1,5 @@
-import { readFile, realpath, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { open, readFile, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathExists } from "@intentic/base/fs";
 import { undefinedIfMissing } from "@intentic/base/errors";
@@ -11,15 +12,22 @@ import { undefinedIfMissing } from "@intentic/base/errors";
 // neither resolves to something on disk (not a repo, or a torn pointer whose repository is gone).
 export const gitDirOf = async (checkout: string): Promise<string | undefined> => {
     const entry = join(checkout, ".git");
-    const stats = await stat(entry).catch(undefinedIfMissing);
-    if (stats === undefined) {
+    // Asked and read through one descriptor, so the answer to "is it a directory" and the pointer read are of one entry,
+    // whatever replaces it meanwhile; opened without waiting, so a pipe standing in for it never holds the probe.
+    const handle = await open(entry, constants.O_RDONLY | constants.O_NONBLOCK).catch(undefinedIfMissing);
+    if (handle === undefined) {
         return undefined;
     }
-    if (stats.isDirectory()) {
-        return entry;
+    let named: string | undefined;
+    try {
+        if ((await handle.stat()).isDirectory()) {
+            return entry;
+        }
+        // allow(silent-catch): an unreadable pointer has always meant no usable checkout to this filesystem probe.
+        named = (await handle.readFile("utf8").catch(() => "")).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+    } finally {
+        await handle.close();
     }
-    // allow(silent-catch): an unreadable pointer has always meant no usable checkout to this filesystem probe.
-    const named = (await readFile(entry, "utf8").catch(() => "")).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
     const gitDir = named === undefined || named === "" ? undefined : resolve(checkout, named);
     return gitDir !== undefined && (await pathExists(gitDir)) ? gitDir : undefined;
 };

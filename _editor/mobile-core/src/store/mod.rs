@@ -112,11 +112,12 @@ impl Store {
 }
 
 fn migrate(connection: &mut Connection) -> Result<(), StoreError> {
-    let applied: usize = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    for (index, migration) in MIGRATIONS.iter().enumerate().skip(applied) {
+    // SQLite's user_version is a 32-bit integer; rusqlite has no usize conversions since 0.38.
+    let applied: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    for (version, migration) in (1u32..).zip(MIGRATIONS).skip(applied as usize) {
         let transaction = connection.transaction()?;
         transaction.execute_batch(migration)?;
-        transaction.pragma_update(None, "user_version", index + 1)?;
+        transaction.pragma_update(None, "user_version", version)?;
         transaction.commit()?;
     }
     Ok(())

@@ -1,9 +1,9 @@
-import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { readMcpAppData } from "@intentic/sandbox-contract/text/pages";
 import { SHOW_PAGE_TOOL } from "./page-names.js";
 import { PAGE_DRAWING, PAGES_DIR } from "../../workspace/files/stored/stored-pages.js";
+import { readRegularFile } from "../../store/plain-files/regular-file.js";
 
 // What a page's own scripts threw in a reader's chat, said to the agent that showed it: the chat's frame catches each
 // uncaught error over the bridge (sandbox-contract text/pages.ts) and the editor hands them here. The check the agent
@@ -48,14 +48,15 @@ export const reportPageErrors = async (
         return false;
     }
     const file = join(deps.workspaceRoot, input.page);
-    // Drawn by this turn: a page from an earlier one is not what the running turn is doing.
-    const info = await stat(file).catch(undefinedIfMissing);
-    if (info === undefined || info.mtimeMs < since) {
+    // Drawn by this turn: a page from an earlier one is not what the running turn is doing. Its time and its text are read
+    // through one descriptor, so the two describe the same file.
+    const read = await readRegularFile(file, {}).catch(undefinedIfMissing);
+    if (read === undefined || read.info.mtimeMs < since) {
         return false;
     }
     // An MCP server's app is that server's code, not the agent's to fix, and its text is not the agent's to be handed.
-    const html = await readFile(file, "utf8").catch(undefinedIfMissing);
-    if (html === undefined || readMcpAppData(html) !== undefined || told.has(input.page)) {
+    const html = read.bytes.toString("utf8");
+    if (readMcpAppData(html) !== undefined || told.has(input.page)) {
         return false;
     }
     // Taken before the words go, so a second window reporting the same drawing meanwhile finds it told.

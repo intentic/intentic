@@ -59,6 +59,14 @@ describe("a tab's icon, from what its address answered", () => {
         expect(sniffImage(Buffer.from("<!doctype html><title>Not found</title>"))).toBeUndefined();
     });
 
+    test("comments and a doctype may lead an SVG, and a run of them answers at once", () => {
+        expect(sniffImage(Buffer.from(`<?xml version="1.0"?>\n<!-- one --> <!----><!DOCTYPE svg PUBLIC "x">\n<svg>`))).toBe("svg");
+        expect(sniffImage(Buffer.from(`<!-- never closed <svg>`))).toBeUndefined();
+        expect(sniffImage(Buffer.from(`<!-- a --><html><svg>`))).toBeUndefined();
+        // No clock: the old pattern backtracked exponentially here, so a return of it runs past the test's own timeout.
+        expect(sniffImage(Buffer.from(`<!--${"--><!--".repeat(70)}x`))).toBeUndefined();
+    });
+
     test("a small image goes as it is, inline, under its own type", () => {
         const png = square(16);
         expect(iconDataUrl(png)).toBe(`data:image/png;base64,${png.toString("base64")}`);

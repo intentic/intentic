@@ -194,7 +194,8 @@ impl VideoEncoder for X264 {
                 return Err("x264_encoder_encode failed".into());
             }
             if size > 0 && !nals.is_null() {
-                // NAL payloads are contiguous in memory.
+                // SAFETY: `nals` is non-null and points at the `n` NALs x264 owns until the next call on `self.h`
+                // (x264.h); their payloads are sequential in memory, `size` bytes in all from the first's.
                 let first = &*nals;
                 out.extend_from_slice(std::slice::from_raw_parts(first.p_payload, size as usize));
             }
@@ -226,6 +227,7 @@ impl VideoEncoder for X264 {
             if size <= 0 || nals.is_null() {
                 return Vec::new();
             }
+            // SAFETY: as in `encode`: non-null, x264's until the next call, `size` sequential bytes from the first.
             std::slice::from_raw_parts((*nals).p_payload, size as usize).to_vec()
         }
     }

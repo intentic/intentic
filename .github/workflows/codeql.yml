@@ -63,6 +63,8 @@ jobs:
           # security-extended over the default suite: the default is tuned for a low false-positive rate in a
           # PR gate, and this is not a gate — it is the standing answer to "has anyone looked".
           queries: security-extended
+          # Test files are left out; the file says why.
+          config-file: ./.github/codeql/codeql-config.yml
 
       - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:

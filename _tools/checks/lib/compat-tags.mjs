@@ -32,7 +32,7 @@ export const tagFindings = (text, floors) => {
                 findings.push({ ...at, problem: `names no peer with a floor (${[...floors.keys()].join(", ")}): a far end joins once it has one` });
             } else if (compareReleases(version, floor) <= 0) {
                 findings.push({ ...at, problem: `dead: the ${peer} floor is ${floor}, so every ${peer} served has ${version}; delete this branch and keep the other` });
-            } else if (rest.replace(/(?:\*\/|-->)\s*$/u, "").trim() === "") {
+            } else if (rest.replace(/(?:\*\/|--!?>)\s*$/u, "").trim() === "") {
                 findings.push({ ...at, problem: `says no why: name what the older ${peer} lacks after the colon` });
             }
         }

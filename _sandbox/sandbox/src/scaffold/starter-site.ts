@@ -54,11 +54,11 @@ export const storePinLines = (workspaceYaml: string, storeDir: string | undefine
 
 const pinBakedStore = async (repo: string): Promise<void> => {
     const workspaceYaml = join(repo, WORKSPACE_MANIFEST);
-    if (!existsSync(workspaceYaml)) {
+    const current = await readFile(workspaceYaml, "utf8").catch(undefinedIfMissing);
+    if (current === undefined) {
         return;
     }
     const manifest = (await readFile(join(repo, MODULES_MANIFEST), "utf8").catch(undefinedIfMissing)) ?? "";
-    const current = await readFile(workspaceYaml, "utf8");
     const lines = storePinLines(current, bakedStoreDir(manifest));
     if (lines.length === 0) {
         return;

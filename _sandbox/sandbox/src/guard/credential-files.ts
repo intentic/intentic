@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { constants, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { isMissing } from "@intentic/base/errors";
 import { holdsCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
@@ -46,9 +46,13 @@ const judge = (file: string): boolean | undefined => {
         if (!stats.isFile() || stats.size > MAX_BYTES) {
             return undefined;
         }
-        const text = readFileSync(file, "utf8");
+        // Opened without waiting: a file swapped for a pipe after the stat ends this read at once instead of holding the
+        // daemon on it. One swapped for a bigger file is caught by the length below. Measuring and reading through one
+        // descriptor would close that window too, but it costs two more sync calls on the daemon's loop and buys nothing
+        // here: the command this judges runs later, so the file can change after the judgement whatever is done inside it.
+        const text = readFileSync(file, { encoding: "utf8", flag: constants.O_RDONLY | constants.O_NONBLOCK });
         // A NUL byte means this isn't a text config file (a DER key, a database); not judged rather than cleared.
-        return text.includes("\0") ? undefined : holdsCredentialMaterial(text);
+        return text.includes("\0") || text.length > MAX_BYTES ? undefined : holdsCredentialMaterial(text);
     } catch (error) {
         // Absence is the one failure that's an answer: no file, so no credential; every other failure stays undefined.
         return isMissing(error) ? false : undefined;

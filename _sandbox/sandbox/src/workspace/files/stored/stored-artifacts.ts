@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { link, lstat, mkdir, open, readdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, open, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import { stateRelPath } from "../../../state-paths.js";
 import { isUnder, resolveRealWithin, resolveWithin } from "../workspace-files-paths.js";
+import { withRegularFile } from "../../../store/plain-files/regular-file.js";
 
 // The files agents leave in the artifacts folder (a screenshot, a generated picture), as a runner's relay brings one a
 // turn there showed (runners/held-turns/runner-pictures.ts) and a runner serves one: kept here, below the runners, as
@@ -152,16 +153,16 @@ export const readArtifact = async (workspaceRoot: string, path: string): Promise
 };
 
 /** The whole regular file at `real` (already resolved), refused past what one socket frame carries. */
+// Asked of one descriptor, opened without following a link and still in the folder the name resolved to: the folder may
+// be an agent's to write, and a name swapped between a check and the read would hand back another file's bytes.
 export const readWholeFile = async (file: string): Promise<ArtifactRead> => {
-    const info = await stat(file).catch(undefinedIfMissing);
-    if (info === undefined || !info.isFile()) {
+    const read = await withRegularFile(file, { follow: false, roots: [dirname(file)] }, async (handle, info) =>
+        info.size > ARTIFACT_MAX_BYTES ? ("too-large" as const) : await handle.readFile(),
+    ).catch((error: Error) => (errnoCode(error) === "ELOOP" ? undefined : undefinedIfMissing(error)));
+    if (read === undefined) {
         return { kind: "none" };
     }
-    if (info.size > ARTIFACT_MAX_BYTES) {
-        return { kind: "too-large" };
-    }
-    const bytes = await readFile(file).catch(undefinedIfMissing);
-    return bytes === undefined ? { kind: "none" } : { kind: "file", bytes };
+    return read === "too-large" ? { kind: "too-large" } : { kind: "file", bytes: read };
 };
 
 // The sha256 of the artifact this workspace holds at `path`, undefined when it holds none (or one past the cap for a file

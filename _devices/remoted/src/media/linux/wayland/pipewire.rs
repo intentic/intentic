@@ -696,9 +696,13 @@ unsafe extern "C" fn on_process(data: *mut c_void) {
     if newest.is_null() {
         return;
     }
-    // SAFETY: a dequeued buffer is ours until queued back; its spa_buffer, metas and datas are PipeWire's arrays.
+    // SAFETY: `newest` is non-null, a dequeued buffer that is ours until queued back below; its spa_buffer (checked
+    // for null too), metas and datas are PipeWire's arrays, alive for as long.
     unsafe {
-        take(l, &*(*newest).buffer);
+        let spa = (*newest).buffer;
+        if !spa.is_null() {
+            take(l, &*spa);
+        }
         (pw.stream_queue_buffer)(stream, newest);
     }
 }

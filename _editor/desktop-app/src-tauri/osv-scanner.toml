@@ -10,3 +10,35 @@
 id = "RUSTSEC-2024-0370"
 ignoreUntil = 2027-02-01
 reason = "proc-macro-error unmaintained; build-time only, via glib-macros/gtk3-macros, not present in the shipped binary."
+
+# glib itself: the backport above fixes it, but osv-scanner matches the patched crate by its version (0.18.5,
+# inside the advisory's range) and Scorecard kept reporting it. The fixed release, 0.20, belongs to gtk4-rs;
+# gtk3-rs stopped at 0.18. It leaves with the [patch] in Cargo.toml.
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+ignoreUntil = 2027-02-01
+reason = "glib 0.18.5 here is the gtk-rs-core git rev in Cargo.toml's [patch], which carries the VariantStrIter fix (gtk-rs-core#2009); the version still falls in the advisory's range."
+
+# --- zbus, through the Linux plugins --------------------------------------------------------------------
+# tauri-plugin-opener and tauri-plugin-single-instance reach D-Bus through zbus 5, the newest. Its own encoding
+# crates are marked unmaintained with no successor named; nothing to move to until zbus replaces them.
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+ignoreUntil = 2027-05-24
+reason = "zvariant unmaintained; part of zbus 5 (newest) via tauri-plugin-opener/single-instance, no fixed or replacement release."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+ignoreUntil = 2027-05-24
+reason = "zbus_names unmaintained; part of zbus 5 (newest) via tauri-plugin-opener/single-instance, no fixed or replacement release."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+ignoreUntil = 2027-05-24
+reason = "zvariant_derive unmaintained; build-time proc macro of zbus 5 (newest), no fixed or replacement release."
+
+# --- chrono, through trash -------------------------------------------------------------------------------
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-05-24
+reason = "chrono flagged unmaintained, not vulnerable; arrives through trash 5.2's default features (bin timestamps), not the app's own code."

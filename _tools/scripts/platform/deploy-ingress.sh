@@ -52,8 +52,21 @@ HEALTH_URL="${INGRESS_HEALTH_URL:-https://ingress.sbx.intentic.dev/health}"
 export FLYCTL_INSTALL="${FLYCTL_INSTALL:-/ci-cache/flyctl}"
 export PATH="$FLYCTL_INSTALL/bin:$PATH"
 if ! command -v flyctl >/dev/null 2>&1; then
-    echo "installing flyctl into $FLYCTL_INSTALL"
-    curl -fsSL https://fly.io/install.sh | sh >/dev/null
+    # A pinned release checked against its sha256 (flyctl_<version>_checksums.txt on the GitHub release), not
+    # fly.io/install.sh, which fetches whatever is latest. The cache above keeps the first install anyway.
+    flyctl_version=0.5.16
+    case "$(uname -m)" in
+        x86_64) flyctl_arch=x86_64 flyctl_sha=1bf25e16981d7b782b9db6ee499c1addd90046b3f977c5091382c078004cd5f6 ;;
+        aarch64) flyctl_arch=arm64 flyctl_sha=e220d6d716a1e4ba379420061d731d3e0d4db733fb8511791508a6288b373419 ;;
+        *) echo "error: no pinned flyctl for $(uname -m)" >&2; exit 1 ;;
+    esac
+    echo "installing flyctl $flyctl_version into $FLYCTL_INSTALL"
+    flyctl_tar="$(mktemp)"
+    curl -fsSL "https://github.com/superfly/flyctl/releases/download/v$flyctl_version/flyctl_${flyctl_version}_Linux_$flyctl_arch.tar.gz" -o "$flyctl_tar"
+    echo "$flyctl_sha  $flyctl_tar" | sha256sum -c - >/dev/null
+    mkdir -p "$FLYCTL_INSTALL/bin"
+    tar -xzf "$flyctl_tar" -C "$FLYCTL_INSTALL/bin" flyctl
+    rm -f "$flyctl_tar"
 fi
 
 # WHAT THE RUNNING EDGE MUST SAY ABOUT ITSELF AFTERWARDS, read out of the image rather than recomputed here.

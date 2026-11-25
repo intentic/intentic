@@ -7,6 +7,7 @@ import { SHARE_DIR, SHARE_VIEWER_DIR } from "@intentic/sandbox-contract/share-pa
 import { publicRoot } from "../public/public-files.js";
 import { stateRelPath } from "../state-paths.js";
 import { resolveRealWithin, resolveWithin, resolveWorkspacePath } from "../workspace/files/workspace-files-paths.js";
+import { readRegularFile } from "../store/plain-files/regular-file.js";
 import { sharePage } from "./share-page.js";
 import { redactSecrets, type SharePage, type SharePicture } from "./share-payload.js";
 
@@ -66,17 +67,15 @@ const copyPictures = async (workspaceRoot: string, dir: string, pictures: readon
         if (source === undefined) {
             continue;
         }
-        const info = await stat(source).catch(() => undefined);
-        if (info === undefined || !info.isFile() || info.size > MAX_PICTURE_BYTES) {
+        // Read through one descriptor that must still be a regular file inside where the source resolved: the name could be
+        // swapped for a link out of the workspace between resolving it and copying, and this copy is public.
+        // allow(silent-catch): a picture that cannot be read is skipped, as one that cannot be copied always was.
+        const read = await readRegularFile(source, { follow: false, roots: [dirname(source)], maxBytes: MAX_PICTURE_BYTES }).catch(() => undefined);
+        if (read === undefined) {
             continue;
         }
         const target = join(dir, picture.published);
-        if (filter === undefined) {
-            await mkdir(dirname(target), { recursive: true });
-            await cp(source, target, { force: true });
-            continue;
-        }
-        const published = await filter(await readFile(source));
+        const published = filter === undefined ? read.bytes : await filter(read.bytes);
         if (published !== undefined) {
             await mkdir(dirname(target), { recursive: true });
             await writeFile(target, published);
@@ -93,14 +92,15 @@ const MAX_PAGE_BYTES = 25 * 1024 * 1024;
 const copyPages = async (workspaceRoot: string, dir: string, pages: readonly SharePage[]): Promise<void> => {
     for (const page of pages) {
         const source = await shareSource(workspaceRoot, page.source);
+        // Read through one descriptor, as a picture is (copyPictures).
         // allow(silent-catch): a page that cannot be read is left out of the share, as this function's comment says.
-        const info = source === undefined ? undefined : await stat(source).catch(() => undefined);
-        if (source === undefined || info === undefined || !info.isFile() || info.size > MAX_PAGE_BYTES) {
+        const read = source === undefined ? undefined : await readRegularFile(source, { follow: false, roots: [dirname(source)], maxBytes: MAX_PAGE_BYTES }).catch(() => undefined);
+        if (read === undefined) {
             continue;
         }
         const target = join(dir, page.published);
         await mkdir(dirname(target), { recursive: true });
-        await writeFile(target, publishedPage(redactSecrets(await readFile(source, "utf8"))));
+        await writeFile(target, publishedPage(redactSecrets(read.bytes.toString("utf8"))));
     }
 };
 

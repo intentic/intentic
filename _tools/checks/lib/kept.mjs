@@ -1,13 +1,14 @@
 // AN ANSWER KEPT ACROSS RUNS, for work that is a pure function of what it reads and is asked again after every edit with
 // the same inputs: the per-edit linter's verdict on a file as HEAD holds it, vue-i18n's verdict on a catalog. Kept by a
-// hash of every input, so a changed input is a new answer rather than a stale one, in the temporary directory, one small
-// JSON file per answer.
+// hash of every input, so a changed input is a new answer rather than a stale one, in the user's own cache directory, one
+// small JSON file per answer. Not the shared temp directory: anyone can make a folder there under a name worked out in
+// advance, and fill it with answers this would trust.
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
-const KEPT = join(tmpdir(), `intentic-kept-${process.getuid?.() ?? `user`}`);
+const KEPT = join(process.env.XDG_CACHE_HOME || join(homedir(), `.cache`), `intentic-kept`);
 // Past this many answers, those nobody read for a day go.
 const KEPT_MOST = 2_000;
 const DAY_MS = 86_400_000;

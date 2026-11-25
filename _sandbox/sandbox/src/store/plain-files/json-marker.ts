@@ -1,4 +1,4 @@
-import { closeSync, fstatSync, openSync, readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import type { z } from "zod";
 
@@ -30,9 +30,11 @@ const parsedWith = <T>(schema: z.ZodType<T>, bytes: Buffer | undefined): T | und
 };
 
 // The size is checked on the open file before anything is read, so a huge file costs a stat; the length is checked
-// again after, for one that grew in between.
+// again after, for one that grew in between. Opened without waiting: some markers sit where others can write (the
+// command queue's folder in /tmp), and a pipe planted at the name would otherwise hold the open, a boot with it; a
+// pipe reads as empty here, which parses as nothing said.
 const cappedBytes = async (path: string, maxBytes: number): Promise<Buffer | undefined> => {
-    const handle = await open(path, "r");
+    const handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
     try {
         if ((await handle.stat()).size > maxBytes) {
             return undefined;
@@ -45,7 +47,7 @@ const cappedBytes = async (path: string, maxBytes: number): Promise<Buffer | und
 };
 
 const cappedBytesSync = (path: string, maxBytes: number): Buffer | undefined => {
-    const fd = openSync(path, "r");
+    const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
     try {
         if (fstatSync(fd).size > maxBytes) {
             return undefined;

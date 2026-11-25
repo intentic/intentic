@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readdir, readFile, stat, utimes, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { cachedAsync } from "@intentic/base/held";
@@ -15,7 +14,7 @@ const execFileAsync = promisify(execFile);
 // agree.
 // - apt: read from dpkg.log's exact package names and timestamps, since dpkg's own archive mtimes are useless for a
 //   time comparison.
-// - everything else: an mtime sweep over known install prefixes against a sentinel stamped with the container's birth
+// - everything else: an mtime sweep over known install prefixes against the container's birth
 //   (PID 1's start time, from /proc/1/stat).
 
 // USER_HZ for /proc's starttime; always 100 on this image's Linux, cheaper than spawning getconf for it.
@@ -119,9 +118,6 @@ export const collapseDriftPaths = (paths: readonly string[], limit = MAX_PATHS):
     return out.length > limit ? [...out.slice(0, limit), `… and ${out.length - limit} more`] : out;
 };
 
-// Sentinel `find -newer` compares against, stamped with the container's birth; lives under tmpdir, dies with the
-// container.
-const sentinelPath = (): string => join(tmpdir(), ".intentic-drift-born");
 
 /* HOW LONG THE WALK MAY TAKE (2026-11-06). It stats every file under the roots, about 150,000 on a sandbox measured, most
    of them SDKs and installs baked into /opt, and on a machine short of memory those inodes are read from disk again
@@ -147,15 +143,15 @@ const RanOutSchema = z.object({ killed: z.literal(true) });
 const PartialWalkSchema = z.object({ code: z.number(), stdout: z.string() });
 
 const pathDrift = async (bornAtMs: number): Promise<string[]> => {
-    const sentinel = sentinelPath();
-    await writeFile(sentinel, "");
-    await utimes(sentinel, bornAtMs / 1000, bornAtMs / 1000);
+    // Compared against the birth time itself (GNU find's `-newermt @<seconds>`), not a sentinel file stamped with it: that
+    // file sat at a fixed name in /tmp, which the agents share, and a link planted there turned its write into root's.
+    const bornAt = `@${(bornAtMs / 1000).toFixed(3)}`;
     const roots = DRIFT_ROOTS.filter((root) => existsSync(root));
     if (roots.length === 0) {
         return [];
     }
     const started = Date.now();
-    const stdout = await execFileAsync("find", [...roots, "-xdev", "-newer", sentinel, "-not", "-type", "d", "-print"], {
+    const stdout = await execFileAsync("find", [...roots, "-xdev", "-newermt", bornAt, "-not", "-type", "d", "-print"], {
         timeout: walkLimitMs,
         maxBuffer: 32 * 1024 * 1024,
     }).then(

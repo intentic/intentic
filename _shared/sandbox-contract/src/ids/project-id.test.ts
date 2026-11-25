@@ -23,4 +23,18 @@ describe("project id", () => {
             expect(normalizeProjectId(text)).toBeUndefined();
         }
     });
+
+    it("drops a query, a fragment and trailing slashes as before", () => {
+        expect(normalizeProjectId("https://github.com/acme/app.git//?ref=main#readme")).toBe("github.com/acme/app");
+        expect(normalizeProjectId("https://github.com//acme///app///")).toBe("github.com/acme/app");
+        expect(normalizeProjectId("https://github.com/acme/app#x?y")).toBe("github.com/acme/app");
+        expect(normalizeProjectId("github.com/acme/.git")).toBeUndefined();
+    });
+
+    it("answers at once for a long run of `#` or `/`", () => {
+        // No clock: the old patterns were quadratic on these, so a return of them runs past the test's own timeout.
+        expect(normalizeProjectId(`#${"#".repeat(100_000)}`)).toBeUndefined();
+        expect(normalizeProjectId(`a${"/".repeat(100_000)}b?`)).toBeUndefined();
+        expect(normalizeProjectId(`github.com${"/".repeat(100_000)}acme/app${"/".repeat(100_000)}`)).toBe("github.com/acme/app");
+    });
 });

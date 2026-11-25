@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
+import { errnoCode, errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { sizeLabel } from "@intentic/base/format";
 import { writeFileAtomicSync } from "@intentic/base/fs";
 import { type RestartIntent, RestartIntentSchema } from "@intentic/sandbox-contract/schemas/restart-intent";
@@ -284,10 +284,14 @@ export const claimBootMarker = (
     // Read above; past this boot only the newest are worth their room.
     pruneDiagnosticReports(logsDir);
     try {
-        writeFileSync(tmpMarker, String(process.pid));
+        // Only that it is there is ever read (tmpCleared), so one the previous run left stands as it is. Made exclusively:
+        // /tmp is the agents' too, and a link planted at the name fails this write instead of aiming root's write elsewhere.
+        writeFileSync(tmpMarker, String(process.pid), { flag: "wx", mode: 0o644 });
     } catch (error) {
         // Without it the next boot cannot tell whether /tmp was emptied, and says nothing about it.
-        logger.debug({ reason: errorMessage(error), tmpMarker }, "boot: the /tmp marker could not be written");
+        if (errnoCode(error) !== "EEXIST") {
+            logger.debug({ reason: errorMessage(error), tmpMarker }, "boot: the /tmp marker could not be written");
+        }
     }
     const write = (marker: ExitMarker): void => {
         try {

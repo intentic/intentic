@@ -19,7 +19,7 @@ pulldown-cmark = { version = "0.13", default-features = false }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "json", "stream", "http2", "charset"] }
 # Already in the tree for rustls; its AEAD seals the secrets the store keeps.
 ring = "0.17"
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.43", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Oniguruma (built from C by cc), not the pure-Rust engine: the first fenced block of a language compiles its

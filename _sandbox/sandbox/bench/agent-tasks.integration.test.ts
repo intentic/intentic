@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { countWord, stripComments, taskFor } from "./agent-tasks.js";
+import { ARC_CACHE, countWord, stripComments, taskFor } from "./agent-tasks.js";
 
 // The bench's grading must be right, since a wrong scorer turns every printed number into a lie; nothing here spawns an
 // agent or touches the network (ARC is served from its on-disk cache).
@@ -77,7 +77,7 @@ test("sweep's fixture is a copy that carries no test files and no answer", async
 test("arc hides the expected grid from the workspace and grades an exact match", async () => {
     // Served from the cache fetchArcTask checks first, so this never reaches the network.
     const id = `benchtest0`;
-    const cache = join(tmpdir(), `intentic-arc-agi-2`);
+    const cache = ARC_CACHE;
     await mkdir(cache, { recursive: true });
     await writeFile(
         join(cache, `${id}.json`),

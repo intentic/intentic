@@ -172,9 +172,10 @@ const sameRule = (left, right) => RULE_KEYS.every((key) => left[key] === right[k
 // words (`npm run e2e`). A class shares its pool with the classes naming the same `group`, at the lowest limit any of
 // them gives, and is priced at its own `memory`.
 
-// `6G`, `512M`, `1.5GiB`, or a bare number of MiB, as MiB; undefined for anything else.
+// `6G`, `512M`, `1.5GiB`, or a bare number of MiB, as MiB; undefined for anything else. Trimmed before the pattern, so
+// no two `\s*` sit side by side: they split a run of blanks every way, quadratic in a repository's own heavy.json.
 const memoryMibOf = (text) => {
-    const parsed = /^\s*(\d+(?:\.\d+)?)\s*(?:([mg])(?:i?b)?)?\s*$/iu.exec(String(text ?? ""));
+    const parsed = /^(\d+(?:\.\d+)?)\s*(?:([mg])(?:i?b)?)?$/iu.exec(String(text ?? "").trim());
     if (parsed === null) {
         return undefined;
     }

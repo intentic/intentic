@@ -64,6 +64,13 @@ packageExtensions:
   cosmiconfig@9.0.2:
     dependencies:
       "@typescript/typescript6": 6.0.2
+  # astro check's TSX converter pins @emnapi/core 1.11.3 but leaves the matching runtime to its wasm loader's
+  # peer range, which also admits 2.0.0-beta. Since astro 7.4 brought rolldown 1.3 (whose wasm binding pins the
+  # beta), that peer resolved to 2.0.0-beta.2 and @astrojs/check died loading it (`bridge.setLastError is not a
+  # function`). Supply the runtime that matches its core.
+  "@astrojs/astro2tsx@0.1.3":
+    dependencies:
+      "@emnapi/runtime": 1.11.3
 
 overrides:
   # The official legacy API wrapper uses an alias with a ^6 range. Keep its implementation aligned with
@@ -116,6 +123,9 @@ overrides:
   # breaks are deep-Map merging plus two type renames, neither of which either consumer touches — both merge
   # plain option objects.
   deepmerge-ts: 8.0.2
+  # @prisma/config pins effect exactly (3.20.0 through 7.10.1, the newest prisma), and 3.20.0 is
+  # GHSA-7589-6fvf-x4pw, fixed in 3.22.1. Same major; drop this once @prisma/config's own pin moves past it.
+  "@prisma/config>effect": 3.22.5
   # miniflare (wrangler's local runtime) pins sharp and ws exactly, a patch or minor behind what the rest of the
   # tree resolves, so without these it carries a second copy of each, one of them a native image library. Same
   # majors; drop them once miniflare's own pins catch up with the catalog.
@@ -248,7 +258,7 @@ catalog:
   "@cursor/sdk": 1.4.2
   "@dagrejs/dagre": 3.1.1
   "@discordjs/voice": 0.19.2
-  "@hono/node-server": 2.1.3
+  "@hono/node-server": 2.1.11
   "@hono/otel": 1.2.0
   "@huggingface/hub": 2.17.5
   "@huggingface/transformers": 4.3.0
@@ -320,7 +330,7 @@ catalog:
   "@xterm/addon-webgl": 0.19.0
   "@xterm/headless": 6.0.0
   "@xterm/xterm": 6.0.0
-  astro: 7.3.5
+  astro: 7.4.7
   # The WhatsApp gateway's protocol library. Its `latest` tag is a release candidate — 7.0.0 has been in rc for
   # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.
   baileys: 7.0.0-rc14
@@ -338,7 +348,7 @@ catalog:
   # fileq's zip surgeon: pptx slide parts out, binary test fixtures built in code.
   fflate: 0.8.3
   file-type: 22.2.0
-  hono: 4.13.13
+  hono: 4.13.20
   idb-keyval: 6.3.0
   # fileq's image dimensions, header-only (no pixel decode, no native code).
   image-size: 2.0.4
@@ -396,7 +406,7 @@ catalog:
   semantic-release: 25.0.9
   semver: 7.8.5
   # astro:assets' default image service loads `sharp` from the PROJECT, not from astro's own tree — so the
-  # site has to declare it even though astro carries the same optional dependency. astro 7.3 asks for ^0.35.4,
+  # site has to declare it even though astro carries the same optional dependency. astro 7.4 asks for ^0.35.4,
   # so the two share one copy without an override.
   sharp: 0.35.5
   # The daemon's local speech-to-text (_sandbox/speech): k2-fsa's prebuilt N-API addon over its own ONNX Runtime,

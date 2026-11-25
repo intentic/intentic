@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 
 // Tasks agent-bench runs and grades mechanically (exact grid or integer, never an LLM judge). Two tasks:
@@ -54,8 +54,9 @@ interface ArcTask {
 }
 
 const ARC_BASE = "https://raw.githubusercontent.com/arcprize/ARC-AGI-2/main/data/evaluation";
-// Cached outside the repo: public but not ours to vendor; re-downloading every run would fail offline.
-const ARC_CACHE = join(tmpdir(), "intentic-arc-agi-2");
+// Cached outside the repo: public but not ours to vendor; re-downloading every run would fail offline. In the user's own
+// cache, not the shared temp directory: what is cached there is trusted as the task and its answer.
+export const ARC_CACHE = join(homedir(), ".cache", "intentic-arc-agi-2");
 
 const fetchArcTask = async (id: string): Promise<ArcTask> => {
     const cached = join(ARC_CACHE, `${id}.json`);

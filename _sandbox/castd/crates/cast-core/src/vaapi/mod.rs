@@ -991,7 +991,8 @@ impl VideoEncoder for Vaapi {
             va!(d.va, vaMapBuffer(d.dpy, self.coded, &mut seg))?;
             let start = out.len();
             while !seg.is_null() {
-                // SAFETY: the mapped coded buffer is a list of segments, each `size` bytes at `buf`.
+                // SAFETY: `seg` is non-null and mapped until the vaUnmapBuffer below; the coded buffer is a list of segments,
+                // each `size` bytes at `buf`, ended by a null `next`.
                 let s = unsafe { &*(seg as *const VACodedBufferSegment) };
                 if !s.buf.is_null() && s.size > 0 {
                     out.extend_from_slice(unsafe {

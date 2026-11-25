@@ -1,4 +1,4 @@
-import { chmod, chown, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, chown, constants, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { posix as path } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { shellQuote } from "@intentic/sandbox-run/quote";
@@ -524,9 +524,9 @@ const makeDirectory = async (value: string, uid = 0, mode = 0o700): Promise<void
     await chmod(value, mode);
 };
 const trustedFile = async (value: string): Promise<string> => {
-    const entry = await lstat(value);
-    if (await kindOf(value) !== "file" || !entry.isFile() || entry.uid !== 0 || entry.nlink !== 1 || (entry.mode & 0o022) !== 0 || entry.size > 16384) { return fail(`unsafe Git pointer/config: ${value}`); }
-    return readFile(value, "utf8");
+    // Asked again of the file as opened (no link, no wait on a pipe) and read from it: a name swapped after kindOf is never read.
+    const handle = await kindOf(value) === "file" ? await open(value, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK) : fail(`unsafe Git pointer/config: ${value}`);
+    try { const entry = await handle.stat(); if (!entry.isFile() || entry.uid !== 0 || entry.nlink !== 1 || (entry.mode & 0o022) !== 0 || entry.size > 16384 || await realpath(`/proc/self/fd/${String(handle.fd)}`) !== value) { return fail(`unsafe Git pointer/config: ${value}`); } return await handle.readFile("utf8"); } finally { await handle.close(); }
 };
 
 // Parse files, never invoke Git: root Git must not read an attacker-selected config or hook during discovery.
