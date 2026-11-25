@@ -363,7 +363,9 @@ pub fn reveal_log(app: AppHandle, path: String) -> CommandResult<()> {
 pub fn open_url(app: AppHandle, url: String) -> CommandResult<()> {
     use tauri_plugin_opener::OpenerExt;
     if !crate::windows::hosted::openable(&url) {
-        return Err(format!("{url} is not a web, mail or phone link, so it is not opened"));
+        return Err(format!(
+            "{url} is not a web, mail or phone link, so it is not opened"
+        ));
     }
     app.opener()
         .open_url(url, None::<&str>)
