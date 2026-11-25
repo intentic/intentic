@@ -386,3 +386,11 @@ export const SecretInventorySchema = z.object({
         .array(SecretInventoryEntrySchema)
         .describe("One entry per secret this sandbox knows about, from every place they live. No values, ever."),
 });
+
+// (2026-11-25) A keyed mark of each named value: an HMAC under a key this sandbox keeps in its auth root, never a plain
+// hash, so a mark says nothing about the value to anyone without that key. A managed deploy answers the marks of the
+// values it filled (device-stacks.ts); comparing them later with these tells the Deployments extension that a stack's
+// secret changed in the store, without it ever holding one. A name nothing holds answers no mark.
+export const SecretMarksRequestSchema = z.object({ names: z.array(secretKey).min(1).max(200) });
+export const SecretMarksResponseSchema = z.object({ marks: z.record(z.string(), z.string()) });
+export type SecretMarksResponse = z.infer<typeof SecretMarksResponseSchema>;

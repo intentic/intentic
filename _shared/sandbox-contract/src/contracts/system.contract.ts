@@ -10,17 +10,8 @@ import {
     DeviceSandboxFlowInputSchema,
     DevicesListSchema,
 } from "../schemas/devices.js";
-import {
-    DeviceStackDeployInputSchema,
-    DeviceStackDeployResultSchema,
-    DeviceStackLogsInputSchema,
-    DeviceStackOpInputSchema,
-    DeviceStacksInputSchema,
-    DeviceStacksSchema,
-    StackLogsSchema,
-    StackOpResultSchema,
-} from "../schemas/device-stacks.js";
 import { deviceCiRunnerRoutes } from "./device-ci-runners.contract.js";
+import { deviceStackRoutes } from "./device-stacks.contract.js";
 import { EgressOwnerKeysReadSchema } from "../schemas/egress.js";
 import { SandboxReachSchema } from "../schemas/sandbox-reach.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
@@ -529,55 +520,8 @@ export const systemContract = {
         })
         .input(DeviceAgentFlowInputSchema)
         .output(streamOf(DeviceFlowLineSchema)),
-    // Docker compose stacks on a connected computer (schemas/device-stacks.ts): what the Deployments board reads and
-    // drives where no Komodo stands between. Relayed to the machine's own tools, which check its switches; the daemon
-    // adds no opinion beyond the floor, so a refusal arrives in the machine's words, naming the switch to flip.
-    deviceStacks: systemRoute
-        .route({
-            method: "GET",
-            path: "/system/devices/{id}/stacks",
-            summary: "The Docker compose stacks on one of your devices",
-            description:
-                "Every Docker compose project on a computer you connected, with each service's container, image and state, and the folder this sandbox deploys stacks into there. Intentic's own sandboxes are marked rather than left out. Needs that computer's \"Run commands\" switch.",
-        })
-        .meta({ floor: "maintainer", panel: false })
-        .input(DeviceStacksInputSchema)
-        .output(DeviceStacksSchema),
-    // Up, restart, start, stop, or pull-then-up; nothing here removes a stack or a volume.
-    deviceStackOp: systemRoute
-        .route({
-            method: "POST",
-            path: "/system/devices/{id}/stacks/{name}/ops/{op}",
-            summary: "Start, stop, restart or update a stack on one of your devices",
-            description:
-                "Runs `docker compose` for one stack on a computer you connected: `up` applies its files, `pull` fetches newer images and then applies, and `restart`, `start` and `stop` do what they say. Nothing here removes a stack or its volumes. Needs that computer's \"Run commands\" switch.",
-        })
-        .meta({ panel: false })
-        .input(DeviceStackOpInputSchema)
-        .output(StackOpResultSchema),
-    // Floored like the actions, though it only reads: a log can hold anything the service printed.
-    deviceStackLogs: systemRoute
-        .route({
-            method: "GET",
-            path: "/system/devices/{id}/stacks/{name}/logs",
-            summary: "The recent log of a stack on one of your devices",
-            description: "The last lines every service of one compose stack printed, oldest first, as `docker compose logs` gives them.",
-        })
-        .meta({ floor: "maintainer", panel: false })
-        .input(DeviceStackLogsInputSchema)
-        .output(StackLogsSchema),
-    // The repository's committed tree, packed here, carried over the device link and brought up there with `--build`.
-    deployDeviceStack: systemRoute
-        .route({
-            method: "POST",
-            path: "/system/devices/{id}/stacks/{name}/deploy",
-            summary: "Deploy a workspace repository to one of your devices",
-            description:
-                "Packs the committed tree (HEAD) of a workspace repository, carries it to a computer you connected and runs it there as a Docker compose stack of the given name, building its images on that computer. Uncommitted changes are not deployed. A `.env` already in the stack's folder there is kept: secrets are placed into it by an agent, never sent with a deploy. Needs that computer's \"Run commands\" and \"Run programs this sandbox sends\" switches.",
-        })
-        .meta({ panel: false })
-        .input(DeviceStackDeployInputSchema)
-        .output(DeviceStackDeployResultSchema),
+    // Docker compose stacks on a connected computer (device-stacks.contract.ts).
+    ...deviceStackRoutes,
     // The self-hosted CI runners on a connected computer, for the Pipelines view (device-ci-runners.contract.ts).
     ...deviceCiRunnerRoutes,
 };

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { KeyringShareModeSchema } from "./keyring.js";
 import { NeedKindSchema } from "./need-kinds.js";
 import { AutomationSchema } from "./automations.js";
-import { DeployNeedAskSchema, DeployNeedSchema } from "./deploys.js";
+import { DeployNeedAskSchema, DeployNeedSchema } from "./stack-grants.js";
 import { HostPowerFindingSchema } from "./host-power.js";
 import { entryId } from "./internal.js";
 import { PASS_SCOPES } from "../protocol/doors/pass-scopes.js";

@@ -18,7 +18,6 @@ import { browserContract } from "./contracts/browser.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
-import { deploysContract } from "./contracts/deploys.contract.js";
 import { complianceContract } from "./contracts/compliance.contract.js";
 import { diffContract } from "./contracts/diff.contract.js";
 import { endpointsContract } from "./contracts/endpoints.contract.js";
@@ -53,6 +52,7 @@ import { sessionsContract } from "./contracts/sessions.contract.js";
 import { settingsContract } from "./contracts/settings.contract.js";
 import { shareContract } from "./contracts/share.contract.js";
 import { skillsContract } from "./contracts/skills.contract.js";
+import { stackGrantsContract } from "./contracts/stack-grants.contract.js";
 import { systemContract } from "./contracts/system.contract.js";
 import { translatorContract } from "./contracts/translator.contract.js";
 import { usageContract } from "./contracts/usage.contract.js";
@@ -81,7 +81,6 @@ export const sandboxContract: {
     capabilities: typeof capabilitiesContract;
     chores: typeof choresContract;
     ci: typeof ciContract;
-    deploys: typeof deploysContract;
     compliance: typeof complianceContract;
     diff: typeof diffContract;
     endpoints: typeof endpointsContract;
@@ -116,6 +115,7 @@ export const sandboxContract: {
     settings: typeof settingsContract;
     share: typeof shareContract;
     skills: typeof skillsContract;
+    stackGrants: typeof stackGrantsContract;
     system: typeof systemContract;
     translator: typeof translatorContract;
     usage: typeof usageContract;
@@ -138,7 +138,6 @@ export const sandboxContract: {
     capabilities: capabilitiesContract,
     chores: choresContract,
     ci: ciContract,
-    deploys: deploysContract,
     compliance: complianceContract,
     diff: diffContract,
     endpoints: endpointsContract,
@@ -173,6 +172,7 @@ export const sandboxContract: {
     settings: settingsContract,
     share: shareContract,
     skills: skillsContract,
+    stackGrants: stackGrantsContract,
     system: systemContract,
     translator: translatorContract,
     usage: usageContract,

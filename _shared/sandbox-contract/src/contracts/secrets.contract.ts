@@ -12,6 +12,8 @@ import {
     SecretGeneratedSchema,
     SecretGenerateSchema,
     SecretImportSchema,
+    SecretMarksRequestSchema,
+    SecretMarksResponseSchema,
     SecretRegenerateSchema,
     SecretHostGuardSetResultSchema,
     SecretHostGuardSetSchema,
@@ -76,6 +78,18 @@ export const secretsContract = {
         .meta({ agent: true, panel: false })
         .input(SecretImportSchema)
         .output(SecretGeneratedSchema),
+    // (2026-11-25) Keyed marks of named values (schemas/secrets.ts), never the values: how the Deployments extension tells
+    // that a secret a stack received changed since. An extension reaches it by declaring it; not the agent, not a panel.
+    marks: procedure
+        .route({
+            method: "POST",
+            path: "/secrets/marks",
+            summary: "A keyed mark of each named secret's value",
+            description: "An HMAC of each value under a key only this sandbox holds, so two marks compare equal exactly when the value is unchanged. Never the value.",
+        })
+        .meta({ floor: "maintainer", control: "never", panel: false })
+        .input(SecretMarksRequestSchema)
+        .output(SecretMarksResponseSchema),
     regenerate: secretRoute
         .route({
             method: "POST",

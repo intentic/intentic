@@ -1,5 +1,7 @@
 import { procedure } from "../protocol/route-meta.js";
 import {
+    CiDeploymentAnswerSchema,
+    CiDeploymentReportSchema,
     CiFixParamSchema,
     CiFixResponseSchema,
     CiForgetParamSchema,
@@ -94,4 +96,17 @@ export const ciContract = {
         })
         .input(CiFixParamSchema)
         .output(CiFixResponseSchema),
+    // (2026-11-25) A deployment told to the repository's forge (schemas/ci.ts CiDeploymentReportSchema): how the
+    // Deployments extension shows a managed stack's deploys on GitHub or GitLab, through the CI board's own connection.
+    reportDeployment: procedure
+        .route({
+            method: "POST",
+            path: "/ci/deployments",
+            summary: "Tell the forge a commit was deployed",
+            description:
+                "Shows on the repository's forge that a commit went to an environment and how it is going: a Deployment and its statuses on GitHub, a `deploy/<environment>` commit status on GitLab. A token without the scope is refused in the forge's own words.",
+        })
+        .meta({ control: "never", panel: false })
+        .input(CiDeploymentReportSchema)
+        .output(CiDeploymentAnswerSchema),
 };

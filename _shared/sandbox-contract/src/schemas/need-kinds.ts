@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // What a need asks for (needs.ts), one word per kind; each kind's subject and ask live in needs.ts, and the deploy
-// need's in deploys.ts. Its own module so the list can grow without pushing needs.ts past its size.
+// need's in stack-grants.ts. Its own module so the list can grow without pushing needs.ts past its size.
 
 const FIRST_KINDS = ["capability", "secret", "grant", "release", "environment", "automation", "instruction", "host-power"] as const;
 export const NEED_KINDS = [...FIRST_KINDS, "claim", "route", "redirect", "deploy"] as const;

@@ -103,9 +103,9 @@ export type DeviceStackLogsInput = z.infer<typeof DeviceStackLogsInputSchema>;
 
 // Deploy a workspace repository's COMMITTED tree (its HEAD, never the uncommitted edits around it) to a device as a
 // compose stack: the daemon packs it, carries it over the device link, and the machine copies it into `<root>/<name>`
-// and brings it up with `--build`. A `.env` already in that folder is kept and never overwritten or sent. A stack a
-// repository declares in its stacks manifest (STACKS_MANIFEST_PATH) is deployed through the deploys engine instead (schemas/deploys.ts),
-// which renders its `.env` from the sandbox's secrets under that stack's own grants.
+// and brings it up with `--build`. A `.env` already in that folder is kept and never overwritten or sent. A managed
+// deploy (DeviceStackManagedDeployInputSchema below) is how the Deployments extension deploys a stack a repository
+// declares, its `.env` filled from the sandbox's secrets under that stack's grant (stack-grants.ts).
 export const DeviceStackDeployInputSchema = z.object({
     id: DeviceIdSchema,
     name: StackNameSchema,
@@ -127,8 +127,8 @@ export const DeviceStackDeployResultSchema = z.object({
 });
 export type DeviceStackDeployResult = z.infer<typeof DeviceStackDeployResultSchema>;
 
-// (2026-11-25) MANAGED DEPLOYS: what a stack declared in a repository's stacks manifest (schemas/deploys.ts) adds to a deploy
-// (schemas/deploys.ts). The daemon renders every `{{secret:…}}` before sending, so these fields carry values, over the
+// (2026-11-25) MANAGED DEPLOYS: what a managed deploy (DeviceStackManagedDeployInputSchema) adds to the machine's deploy
+// tool. The daemon renders every `{{secret:…}}` before sending, so these fields carry values, over the
 // device link only, and the machine writes them where compose and docker read them and nowhere else. Sent only to an
 // agent advertising `stacks-managed` (hosts.ts): the args are strict, and an older agent rejects a field it lacks.
 
@@ -221,3 +221,65 @@ export const DeployStackToolResultSchema = z.object({
     healthySeconds: z.number().optional(),
 });
 export type DeployStackToolResult = z.infer<typeof DeployStackToolResultSchema>;
+
+// ---- (2026-11-25) the managed deploy route: the core primitive the Deployments extension's engine stands on ----------
+// The extension holds the policy (its stacks manifest, queue, history, triggers, rollback); the daemon holds what no
+// extension may: secret VALUES. The extension sends `env` and registry passwords with `{{secret:NAME}}` references in
+// them (its own placeholders already filled); the daemon checks the stack's grant (stack-grants.ts), fills the
+// references from its own secret store, logs each use, packs the repository at the commit, carries it to the computer
+// and relays `deploy_stack`. No value reaches the extension: not in the answer, not in an error.
+export const DeviceStackManagedDeployInputSchema = z
+    .object({
+        id: DeviceIdSchema,
+        name: StackNameSchema,
+        repo: z.string().min(1).max(500),
+        // A full or abbreviated commit, fetched from the repository's remote when the checkout lacks it. Absent: HEAD.
+        commit: z
+            .string()
+            .regex(/^[0-9a-f]{7,64}$/)
+            .optional(),
+        composeFile: ComposeFilePathSchema.optional(),
+        mode: StackDeployModeSchema,
+        // Variable → value; a value may hold `{{secret:NAME}}` references, filled here and nowhere else.
+        env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/), z.string().max(64 * 1024)).optional(),
+        // `password` is normally a `{{secret:NAME}}` reference; `host` and `username` are never filled.
+        registries: z.array(StackRegistryLoginSchema).max(10).optional(),
+        hooks: StackHooksSchema.optional(),
+        health: StackHealthSchema.optional(),
+        pins: StackImagePinsSchema.optional(),
+        adopt: z.boolean().optional(),
+        // One line for the secret-use log: what started it ("CI job images-platform", "by a@b.c").
+        reason: z.string().max(200).optional(),
+    })
+    .strict();
+export type DeviceStackManagedDeployInput = z.infer<typeof DeviceStackManagedDeployInputSchema>;
+
+export const DeviceStackManagedDeployResultSchema = DeployStackToolResultSchema.extend({
+    stack: StackNameSchema,
+    // The full commit that went.
+    commit: z.string(),
+    // The secret names filled in (never a value), and a keyed mark of each value as it went (secrets.ts
+    // SecretMarksResponseSchema): what lets the extension tell later that one changed in the store, never holding it.
+    secretNames: z.array(z.string()),
+    secretMarks: z.record(z.string(), z.string()),
+});
+export type DeviceStackManagedDeployResult = z.infer<typeof DeviceStackManagedDeployResultSchema>;
+
+// What `host_stats` answers (device feature `host-stats`), relayed by `GET /system/devices/{id}/host-stats`.
+export const HostStatsSchema = z.object({
+    disks: z.array(
+        z.object({
+            // What the path is: Docker's data root, the stacks folder.
+            role: z.enum(["docker", "stacks"]),
+            path: z.string(),
+            totalBytes: z.number(),
+            freeBytes: z.number(),
+        }),
+    ),
+    memory: z.object({ totalBytes: z.number(), availableBytes: z.number() }),
+    // 1, 5 and 15 minute load averages; zeros where the OS keeps none (Windows).
+    load: z.tuple([z.number(), z.number(), z.number()]),
+    cpus: z.number(),
+});
+export type HostStats = z.infer<typeof HostStatsSchema>;
+export const DeviceHostStatsInputSchema = z.object({ id: DeviceIdSchema });

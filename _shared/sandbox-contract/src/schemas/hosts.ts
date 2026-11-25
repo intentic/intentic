@@ -232,11 +232,11 @@ export const DeviceFeatureSchema = z.enum([
     // (2026-11-25) `deploy_stack`'s managed fields (schemas/device-stacks.ts DeployStackToolArgsSchema): a daemon-rendered
     // `.env`, `images` mode (pull, never build), registry logins kept in the stack's own docker config, pre/post-deploy
     // hooks, a health wait, image pins and adopting a stopped project; and every stack recording the sandbox that
-    // deployed it, with ops, logs and deploys from any other sandbox refused (schemas/deploys.ts). An agent without it
+    // deployed it, with ops, logs and deploys from any other sandbox refused (stack-grants.ts, and the Deployments extension that owns managed stacks). An agent without it
     // rejects those fields, so the daemon sends them only to one that advertises this.
     "stacks-managed",
     // (2026-11-25) `host_stats`: disk free under Docker's root and the stacks folder, memory and load, for the deploys
-    // monitor's low-disk and low-memory alerts (HostStatsSchema in schemas/deploys.ts).
+    // monitor's low-disk and low-memory alerts (HostStatsSchema in schemas/device-stacks.ts).
     "host-stats",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;

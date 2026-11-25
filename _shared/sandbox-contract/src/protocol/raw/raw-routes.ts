@@ -236,6 +236,9 @@ export const RAW_ROUTES = {
     "GET /extension/events": { floor: "maintainer", panel: false, control: "never", stream: true },
     // The CI webhook receiver, gated by the per-sandbox webhook secret.
     "POST /ci/webhook/{host}": { auth: "door" },
+    // (2026-11-25) What the forges said, as it is heard, for a program (schemas/ci.ts CiFeedEventSchema): Server-Sent
+    // Events. An extension reaches it by declaring it in `permissions.daemon`; no agent or panel token does.
+    "GET /ci/feed": { floor: "maintainer", panel: false, control: "never", stream: true },
     // Where an MCP server's authorization server sends the browser back (capabilities/mcp-oauth/): gated by the state of
     // a sign-in this daemon started, and worth nothing without the PKCE verifier only the daemon holds.
     "GET /oauth/mcp/callback": { auth: "door", control: "never" },
