@@ -7,11 +7,11 @@ import type { ClaimNeed, Need } from "@intentic/sandbox-contract/schemas/needs";
 import { Notice } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import ChatDecisionButton from "../../components/ChatDecisionButton.vue";
-import { useSandbox } from "../../client/sandbox/useSandbox";
-import { apiClient } from "../../lib/useApi";
-import { useNeedAnswer } from "./needAnswer";
-import { useNeeds } from "../../models/needs/useNeeds";
+import ChatDecisionButton from "../../../components/ChatDecisionButton.vue";
+import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { apiClient } from "../../../lib/useApi";
+import { useNeedAnswer } from "../needAnswer";
+import { useNeeds } from "../../../models/needs/useNeeds";
 
 const t = useT();
 

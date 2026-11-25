@@ -15,11 +15,11 @@ const claim = jest.fn(async (_input: { sandboxId: string; project: string }): Pr
     return { claims: [] };
 });
 const active = ref<{ id: string; tier: string } | undefined>({ id: `sbx-1`, tier: `owner` });
-jest.mock(`../../models/needs/useNeeds`, () => ({ useNeeds: () => ({ answer }) }));
-jest.mock(`../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
-jest.mock(`../../lib/useApi`, () => ({ apiClient: { projects: { claim } } }));
+jest.mock(`../../../models/needs/useNeeds`, () => ({ useNeeds: () => ({ answer }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
+jest.mock(`../../../lib/useApi`, () => ({ apiClient: { projects: { claim } } }));
 // The need's answer runs its task, as the operations ledger would.
-jest.mock(`./needAnswer`, () => ({
+jest.mock(`../needAnswer`, () => ({
     useNeedAnswer: () => ({
         busy: ref(false),
         notice: ref(undefined),
@@ -30,7 +30,7 @@ jest.mock(`./needAnswer`, () => ({
     }),
 }));
 jest.mock(`@intentic/ui`, () => ({ Notice: defineComponent({ setup: () => () => h(`div`) }) }));
-jest.mock(`../../components/ChatDecisionButton.vue`, () => ({
+jest.mock(`../../../components/ChatDecisionButton.vue`, () => ({
     default: defineComponent({
         props: { disabled: Boolean },
         emits: [`click`],

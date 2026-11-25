@@ -14140,7 +14140,9 @@
         "status": {
             "met": "Gotowe",
             "declined": "Odrzucone",
-            "withdrawn": "Wycofane"
+            "withdrawn": "Wycofane",
+            "sent": "Przesłano dalej",
+            "keptHere": "Zostaje tutaj"
         },
         "card": {
             "unattended": "Zapytał o to przebieg, którego nikt nie obserwował, więc poczekał na Ciebie.",
@@ -14277,6 +14279,16 @@
                 "read": "czytać to, co możesz czytać",
                 "task": "zaczynać pracę jako ty"
             }
+        },
+        "redirect": {
+            "lead": "To wygląda na wiadomość dla {target}. Wysłanie otworzy tam czat z twoją wiadomością, słowo w słowo:",
+            "leadProject": "{target} ma przypisany projekt {project}, którego to chyba dotyczy. Wysłanie otworzy tam czat z twoją wiadomością, słowo w słowo:",
+            "approve": "Wyślij do {target}",
+            "keep": "Zostaw tutaj",
+            "attachments": "Załączony plik zostaje tutaj. | {count} załączone pliki zostają tutaj. | {count} załączonych plików zostaje tutaj.",
+            "clipped": "Z tak długiej wiadomości idzie tylko początek.",
+            "personOnly": "Czeka na {person}: tylko ta osoba może przesłać swoją wiadomość dalej.",
+            "unreachable": "{target} nie ma wśród twoich piaskownic w tym edytorze: otwórz ją raz, a potem wyślij to stąd."
         },
         "instruction": {
             "approve": "Dodaj do {file}",

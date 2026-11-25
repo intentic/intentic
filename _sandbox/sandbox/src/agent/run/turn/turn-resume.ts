@@ -273,7 +273,8 @@ export const startConversationTurn = async (
     }
     if (run !== "archived" && run !== "busy") {
         // Whoever supervises this conversation hears that it is busy, and why (a spawned child's parent, children.ts).
-        services.events.publish("run.started", { conversationId, speaker: turn.speaker, prompt, resume: turn.resume, errand: turn.errand });
+        const started = { conversationId, speaker: turn.speaker, prompt, resume: turn.resume, errand: turn.errand };
+        services.events.publish("run.started", { ...started, ...opt("attachments", turn.attachments?.length) });
     }
     return run;
 };

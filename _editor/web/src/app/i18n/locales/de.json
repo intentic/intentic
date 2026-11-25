@@ -6457,7 +6457,9 @@
         "status": {
             "met": "Erledigt",
             "declined": "Abgelehnt",
-            "withdrawn": "Zurückgezogen"
+            "withdrawn": "Zurückgezogen",
+            "sent": "Weitergesendet",
+            "keptHere": "Hier behalten"
         },
         "card": {
             "unattended": "Von einem unbeaufsichtigten Lauf angefragt, daher hat er auf Sie gewartet.",
@@ -6594,6 +6596,16 @@
                 "read": "lesen, was du lesen darfst",
                 "task": "Arbeit als du starten"
             }
+        },
+        "redirect": {
+            "lead": "Das scheint für {target} gedacht zu sein. Beim Senden öffnet sich dort ein Chat mit deiner Nachricht, genau so, wie du sie geschrieben hast:",
+            "leadProject": "{target} beansprucht {project}, worum es hier zu gehen scheint. Beim Senden öffnet sich dort ein Chat mit deiner Nachricht, genau so, wie du sie geschrieben hast:",
+            "approve": "An {target} senden",
+            "keep": "Hier behalten",
+            "attachments": "Die angehängte Datei bleibt hier. | Die {count} angehängten Dateien bleiben hier.",
+            "clipped": "Von einer so langen Nachricht geht nur der Anfang mit.",
+            "personOnly": "Wartet auf {person}: nur diese Person kann ihre Nachricht weitersenden.",
+            "unreachable": "{target} ist in diesem Editor nicht unter deinen Sandboxes: öffne sie einmal und sende es dann von hier."
         },
         "instruction": {
             "approve": "Zu {file} hinzufügen",

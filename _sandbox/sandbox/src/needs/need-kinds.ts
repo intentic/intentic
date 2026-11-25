@@ -87,6 +87,12 @@ export interface NeedKindHandler {
     // never the agent's to ask or to take back. Its card, its push and the board's badge are as any need's. Absent: the
     // agent is told, as it is of every need it asked.
     readonly tellsAgent?: false;
+    // (2026-11-25) The outcome that sets the conversation going again when no call is holding for it, where it is not a
+    // met need's: `declined` wakes it for a no (steered into a live turn, else a turn of its own) and tells it nothing of a
+    // yes. A redirect is this way round: sent on to another sandbox, nothing is left to do here and a woken turn would
+    // spend an allowance to say so; kept here, the person is asking the agent to get on with it. Absent: a yes wakes it, a
+    // no reaches only a live turn.
+    readonly wakesOn?: "declined";
 }
 
 // Whether the conversation's agent hears of this need at all (`tellsAgent`). Pure.

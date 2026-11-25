@@ -24,11 +24,11 @@ const sandboxes = ref([
     { id: `sbx-here`, name: `ops`, daemonUrl: `https://sandbox-aaaaaaaaaaaa.sbx.test` },
     { id: `sbx-far`, name: `app`, daemonUrl: `https://sandbox-bbbbbbbbbbbb.sbx.test` },
 ]);
-jest.mock(`../../models/needs/useNeeds`, () => ({ useNeeds: () => ({ answer }) }));
-jest.mock(`../../client/auth/useAuth`, () => ({ useAuth: () => ({ user }) }));
-jest.mock(`../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active, sandboxes }) }));
-jest.mock(`../../client/sandbox/sandboxClient`, () => ({ sandboxJson, sandboxJsonAt }));
-jest.mock(`./needAnswer`, () => ({
+jest.mock(`../../../models/needs/useNeeds`, () => ({ useNeeds: () => ({ answer }) }));
+jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user }) }));
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active, sandboxes }) }));
+jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson, sandboxJsonAt }));
+jest.mock(`../needAnswer`, () => ({
     useNeedAnswer: () => ({
         busy: ref(false),
         notice: ref(undefined),
@@ -39,7 +39,7 @@ jest.mock(`./needAnswer`, () => ({
     }),
 }));
 jest.mock(`@intentic/ui`, () => ({ Notice: defineComponent({ setup: () => () => h(`div`) }) }));
-jest.mock(`../../components/ChatDecisionButton.vue`, () => ({
+jest.mock(`../../../components/ChatDecisionButton.vue`, () => ({
     default: defineComponent({
         props: { disabled: Boolean },
         emits: [`click`],

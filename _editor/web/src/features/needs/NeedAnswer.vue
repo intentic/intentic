@@ -7,8 +7,9 @@ import { useT } from "@intentic/ui/i18n";
 import { ref } from "vue";
 import NeedAutomationBody from "./NeedAutomationBody.vue";
 import NeedCapabilityBody from "./NeedCapabilityBody.vue";
-import NeedClaimBody from "./NeedClaimBody.vue";
-import NeedRouteBody from "./NeedRouteBody.vue";
+import NeedClaimBody from "./routing/NeedClaimBody.vue";
+import NeedRouteBody from "./routing/NeedRouteBody.vue";
+import NeedRedirectBody from "./routing/NeedRedirectBody.vue";
 import NeedDecline from "./NeedDecline.vue";
 import NeedEnvironmentBody from "./NeedEnvironmentBody.vue";
 import NeedGrantBody from "./NeedGrantBody.vue";
@@ -71,6 +72,10 @@ const decline = async (): Promise<void> => {
     <NeedRouteBody v-else-if="need.subject.kind === `route`" :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedRouteBody>
+    <!-- Keeping a message here is a choice, not a refusal to explain: one press, and the agent is woken to get on with it. -->
+    <NeedRedirectBody v-else-if="need.subject.kind === `redirect`" :need="need" :subject="need.subject">
+        <template #decline><NeedDecline :busy="busy" :declining="false" :label="t(`needs.redirect.keep`)" @open="decline" /></template>
+    </NeedRedirectBody>
     <NeedEnvironmentBody v-else :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedEnvironmentBody>

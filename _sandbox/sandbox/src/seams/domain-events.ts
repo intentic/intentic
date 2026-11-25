@@ -44,6 +44,8 @@ export interface DomainEventMap {
         readonly resume: ResumeReason | undefined;
         // What composed words are for, when the sandbox composed them.
         readonly errand: TurnErrand | undefined;
+        // How many files went with the words (account-routing/person-opening.ts).
+        readonly attachments?: number;
     };
     // A turn begun through the port's `start` parked on its person; may happen several times a turn. `requestId` is the
     // card it parked on, which the push announcing it reads by (push/awaiting-detail.ts).

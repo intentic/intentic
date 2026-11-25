@@ -29,6 +29,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
+import { die as dieAsked, parseArgs as parseNeedArgs, raise } from "./needs-cli.mjs";
 
 // Overridable only so a suite can stand the command up against a stub daemon (fleet-cli.integration.test.ts).
 const TOKEN_PATH = process.env.INTENTIC_AGENT_TOKEN_FILE ?? "/run/intentic/agent.token";
@@ -188,6 +189,14 @@ SPAWN AND SUPERVISE
                                        is in, as them, with no link: it runs there with their access and
                                        their accounts, and they read it there. The first time, a card asks
                                        them to allow it (exit 3: carry on, ask again once they have)
+  agents redirect <sandbox> | --project <repo> --why "…" [--wait <seconds>]
+                                       the person's message belongs in another of their sandboxes (it names a
+                                       project this workspace lacks, say): a card offers THEIR OWN words, as
+                                       they typed them, to that sandbox, found by its name or by the claim on
+                                       <repo>. Only their press sends it, from their editor, into a new chat
+                                       there. Do not act on the message while it waits. Exit 0: sent on,
+                                       nothing is left here. 1: kept here (carry on with it), or refused (why
+                                       is printed). 3: still waiting: end your turn; keeping it wakes you
   agents wait [<id>] [--until blocked|finished] [--timeout <seconds>]
                                        block until a subagent needs input or finishes (default: either,
                                        whichever comes first); no id means whichever subagent moves first.
@@ -1095,6 +1104,27 @@ const delegate = async (argv) => {
     process.stderr.write(`${typeof note === "string" && note !== "" ? note : `Handed over. Follow it with: agents wait ${id}`}\n`);
 };
 
+// A person's message that belongs in another of their sandboxes: the card offers their own words on, and only their
+// press sends them (needs/kinds/redirect-need.ts). The agent names where, never the words. What each answer means for
+// the turn rides after the daemon's sentence, since a redirect, unlike other asks, is about the message itself.
+const REDIRECT_MEANS = {
+    open: "Do not act on their message while the card waits: end your turn now. Kept here, you are woken to carry on with it; sent on, nothing is left to do here.",
+    met: "It runs there now: do not act on it here.",
+    declined: "They keep it here: carry on with their message.",
+};
+const redirect = async (argv) => {
+    const { flags, rest: places } = parseNeedArgs("agents", argv, { values: ["project", "why", "wait"] });
+    const { project, ...raising } = flags;
+    const [target, ...extra] = places;
+    if (extra.length > 0 || (target === undefined) === (project === undefined)) {
+        // Exit 2, as every asking command's own mistakes are: 1 is a verdict, kept here or refused.
+        return dieAsked("agents", `redirect takes one place, a sandbox or --project <repo>\n\n${usageOf("redirect")}`);
+    }
+    await raise("agents", target === undefined ? { kind: "redirect", project } : { kind: "redirect", target }, raising, (answer) =>
+        answer.state === "refused" ? (answer.need?.status === "declined" ? REDIRECT_MEANS.declined : "") : REDIRECT_MEANS[answer.state],
+    );
+};
+
 const wait = async (argv) => {
     const { flags, positional } = parseFlags(argv, ["until", "timeout"]);
     const body = JSON.stringify({
@@ -1406,7 +1436,7 @@ const [command, ...rest] = process.argv.slice(2);
 const main = async () => {
     // Before any verb runs, so `agents list --help` is the usage and not the list.
     if (rest.includes("--help") || rest.includes("-h")) {
-        process.stdout.write(`${["find", "message", "bundle", "ci", "loop", "continue"].includes(command) ? usageOf(command) : USAGE}\n`);
+        process.stdout.write(`${["find", "message", "bundle", "ci", "loop", "continue", "redirect"].includes(command) ? usageOf(command) : USAGE}\n`);
         return;
     }
     if (command === "show") return show(rest);
@@ -1417,6 +1447,7 @@ const main = async () => {
     if (command === "providers") return providers(rest);
     if (command === "spawn") return spawn(rest);
     if (command === "delegate") return delegate(rest);
+    if (command === "redirect") return redirect(rest);
     if (command === "links") return links();
     if (command === "wait") return wait(rest);
     if (command === "send") return send(rest);

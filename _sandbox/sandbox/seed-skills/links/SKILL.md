@@ -1,6 +1,6 @@
 ---
 name: links
-description: Hand a task to another of the owner's sandboxes that is linked to this one (`mcp__<sandbox>__delegate`, or `agents delegate` from a shell), or to a sandbox the person you work for is in, as them (`delegate(to)`, `agents delegate --to`), and supervise it like a subagent, read its records, or operate it directly (`mcp__<sandbox>__run_command`, `read_file`, `write_file`) to look into or repair that sandbox itself. Use when the work needs what only that sandbox has (its credentials, its repos, its devices, its role) or is that sandbox's own state, not for more hands on this sandbox's own work, which is `spawn`.
+description: Hand a task to another of the owner's sandboxes that is linked to this one (`mcp__<sandbox>__delegate`, or `agents delegate` from a shell), or to a sandbox the person you work for is in, as them (`delegate(to)`, `agents delegate --to`), and supervise it like a subagent, read its records, or operate it directly (`mcp__<sandbox>__run_command`, `read_file`, `write_file`) to look into or repair that sandbox itself. Use when the work needs what only that sandbox has (its credentials, its repos, its devices, its role) or is that sandbox's own state, or when a person's message was meant for another of their sandboxes (`agents redirect`), not for more hands on this sandbox's own work, which is `spawn`.
 ---
 
 # Linked sandboxes
@@ -135,8 +135,23 @@ To hand a note and files to another sandbox the person you act for is in, use a 
 `--wake <conversation>` also says the note into that person's own conversation there, only while a turn of it runs. Like
 a read as the person, it needs their leave once, on a card (exit 3 while it waits).
 
+## A message that was meant for another sandbox
+
+When the person's message plainly belongs in another of their sandboxes (it names a project or repository this workspace
+does not have), do not hand it over as a task and do not work around it here. Offer it back to them:
+`agents redirect <sandbox> --why "…"`, or `agents redirect --project <repo> --why "…"` to find the sandbox that claims it.
+A card shows them their own words, exactly as they typed them, and one press sends those words from their editor into a
+new chat in that sandbox, as them. You name only where it goes. The words are the sandbox's copy of their message, never
+yours.
+
+- Do not act on the message while the card waits. Exit 3: end your turn. If they keep it here, you are woken to carry on
+  with it. If they send it on, nothing is left to do here and nobody wakes you.
+- Exit 0: sent on. Exit 1: kept here (carry on with it), or refused with why (no such sandbox, a name two of their
+  sandboxes share, a project this sandbox claims itself). Exit 2: the command was wrong.
+- Files attached to their message stay here; the card says so.
+
 So: a report for a problem the owning project must fix, a drop for material someone over there will work on, a link task
-for work that needs what only that sandbox has.
+for work that needs what only that sandbox has, and a redirect for a person's own message that went to the wrong place.
 
 ## When there is no link
 

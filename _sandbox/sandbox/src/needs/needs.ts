@@ -221,6 +221,14 @@ const agentsWord = (need: Need, kinds: NeedKinds, how: string): string => {
     return `The agent confirmed it works: ${how.trim().replace(/\s+/g, " ").slice(0, 280)}`;
 };
 
+// How a no reaches the conversation: steered into a live turn, or, for a kind that wakes on one, a turn of its own if none is.
+const tellDecline = async (deps: Pick<NeedsDeps, "kinds" | "wake" | "steer">, need: Need, prompt: string): Promise<NeedTold | undefined> => {
+    if (deps.kinds[need.subject.kind].wakesOn === "declined") {
+        return deps.wake(need.conversationId, prompt);
+    }
+    return (await deps.steer(need.conversationId, prompt)) ? "turn" : undefined;
+};
+
 export const createNeeds = (deps: NeedsDeps): Needs => {
     const now = deps.now ?? Date.now;
     const newId = deps.newId ?? ((): string => `need-${randomInt(ID_SPAN).toString(36).padStart(5, "0")}`);
@@ -261,11 +269,10 @@ export const createNeeds = (deps: NeedsDeps): Needs => {
             return;
         }
         if (need.status === "declined") {
-            const steered = await deps.steer(need.conversationId, promptOf(need, "declined", undefined));
-            await told(need, steered ? "turn" : undefined);
+            await told(need, await tellDecline(deps, need, promptOf(need, "declined", undefined)));
             return;
         }
-        if (need.status !== "met") {
+        if (need.status !== "met" || deps.kinds[need.subject.kind].wakesOn === "declined") {
             return;
         }
         if (!(await deps.continueWhenMet())) {

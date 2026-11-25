@@ -288,6 +288,27 @@ describe("the asking commands speak the needs contract", () => {
         expect(server.seen).toEqual([]);
     });
 
+    // A message that belongs in another of the person's sandboxes: the command names only where, never the words, and
+    // says after the daemon's sentence what each answer means for the turn.
+    it("agents redirect asks for the place named, a sandbox or a project, and says what the answer means for the message", async () => {
+        server.answer = raised({ state: "open", message: "Asked.", need: OPEN_NEED });
+        const asked = await run(server.port, "agents", ["redirect", "ops", "--why", "it is about acme/app, which lives in ops"]);
+        expect(asked.code).toBe(3);
+        expect(asked.stdout).toContain("end your turn now");
+        await run(server.port, "agents", ["redirect", "--project", "github.com/acme/app"]);
+        expect(server.seen.map((seen) => NeedRaiseSchema.parse(seen.body))).toEqual([
+            { ask: { kind: "redirect", target: "ops" }, why: "it is about acme/app, which lives in ops" },
+            { ask: { kind: "redirect", project: "github.com/acme/app" } },
+        ]);
+        server.answer = raised({ state: "refused", message: "Need declined.", need: { ...OPEN_NEED, status: "declined" } });
+        const kept = await run(server.port, "agents", ["redirect", "ops"]);
+        expect(kept).toMatchObject({ code: 1, stdout: "Need declined.\nThey keep it here: carry on with their message.\n" });
+        server.seen.length = 0;
+        expect((await run(server.port, "agents", ["redirect"])).code).toBe(2);
+        expect((await run(server.port, "agents", ["redirect", "ops", "--project", "github.com/acme/app"])).code).toBe(2);
+        expect(server.seen).toEqual([]);
+    });
+
     // A rule the owner stated, named the way the workspace names its file wherever the shell stands: the shared tree, or a
     // conversation's own checkout under the worktrees root.
     it("instructions propose asks for the rule in the workspace's AGENTS.md, a repository's by its folder, from either tree", async () => {

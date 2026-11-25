@@ -128,7 +128,9 @@ const waitOf = (command, raw) => {
 };
 
 // Raises one ask and exits by how it came back: prints the daemon's sentence, and the need's id when one is open.
-export const raise = async (command, ask, flags) => {
+// `follow`, where a command has more to say about what the answer means for it, gives one more line for the answer
+// (the empty string for none).
+export const raise = async (command, ask, flags, follow = () => "") => {
     const why = flags.why === undefined || flags.why === "" ? {} : { why: flags.why };
     const wait = waitOf(command, flags.wait);
     const { status, text } = await call(command, "POST", "/needs/ask", JSON.stringify({ ask, ...why, ...(wait === undefined ? {} : { wait }) }));
@@ -140,5 +142,9 @@ export const raise = async (command, ask, flags) => {
         return die(command, "unreadable answer from the daemon: expected a need verdict and message");
     }
     process.stdout.write(`${answer.message}\n`);
+    const more = follow(answer);
+    if (more !== "") {
+        process.stdout.write(`${more}\n`);
+    }
     process.exit(answer.state === "met" ? 0 : answer.state === "open" ? EXIT_OPEN : 1);
 };

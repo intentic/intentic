@@ -6457,7 +6457,9 @@
         "status": {
             "met": "Hecho",
             "declined": "Rechazado",
-            "withdrawn": "Retirado"
+            "withdrawn": "Retirado",
+            "sent": "Reenviado",
+            "keptHere": "Se queda aquí"
         },
         "card": {
             "unattended": "Lo pidió una ejecución que nadie estaba vigilando, así que te esperó.",
@@ -6594,6 +6596,16 @@
                 "read": "leer lo que puedes leer",
                 "task": "iniciar trabajo como tú"
             }
+        },
+        "redirect": {
+            "lead": "Esto parece ser para {target}. Al enviarlo se abre allí un chat con tu mensaje, tal como lo escribiste:",
+            "leadProject": "{target} reclama {project}, que parece ser el tema de esto. Al enviarlo se abre allí un chat con tu mensaje, tal como lo escribiste:",
+            "approve": "Enviar a {target}",
+            "keep": "Dejarlo aquí",
+            "attachments": "El archivo adjunto se queda aquí. | Los {count} archivos adjuntos se quedan aquí.",
+            "clipped": "De un mensaje tan largo solo se envía el comienzo.",
+            "personOnly": "Esperando a {person}: solo esa persona puede reenviar su mensaje.",
+            "unreachable": "{target} no está entre tus sandboxes en este editor: ábrelo una vez y luego envíalo desde aquí."
         },
         "instruction": {
             "approve": "Añadir a {file}",

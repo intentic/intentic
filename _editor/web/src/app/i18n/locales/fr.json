@@ -6457,7 +6457,9 @@
         "status": {
             "met": "Fait",
             "declined": "Refusé",
-            "withdrawn": "Retiré"
+            "withdrawn": "Retiré",
+            "sent": "Transmis",
+            "keptHere": "Gardé ici"
         },
         "card": {
             "unattended": "Demandé par une exécution que personne ne surveillait : elle vous a donc attendu.",
@@ -6594,6 +6596,16 @@
                 "read": "lire ce que tu peux lire",
                 "task": "lancer du travail en ton nom"
             }
+        },
+        "redirect": {
+            "lead": "Ceci semble destiné à {target}. L'envoyer ouvre là-bas une discussion avec ton message, tel que tu l'as écrit :",
+            "leadProject": "{target} revendique {project}, dont ceci semble parler. L'envoyer ouvre là-bas une discussion avec ton message, tel que tu l'as écrit :",
+            "approve": "Envoyer à {target}",
+            "keep": "Le garder ici",
+            "attachments": "Le fichier joint reste ici. | Les {count} fichiers joints restent ici.",
+            "clipped": "D'un message aussi long, seul le début est envoyé.",
+            "personOnly": "En attente de {person} : seule cette personne peut transmettre son message.",
+            "unreachable": "{target} ne figure pas parmi tes sandboxes dans cet éditeur : ouvre-la une fois, puis envoie ceci d'ici."
         },
         "instruction": {
             "approve": "Ajouter à {file}",

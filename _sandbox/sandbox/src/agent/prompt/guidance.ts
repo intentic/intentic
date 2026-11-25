@@ -343,6 +343,17 @@ const ENTRIES: readonly GuidanceEntry[] = [
             `searching \`${HISTORY_ROOT}\` by hand; \`agents --help\` has the rest.`,
     },
     {
+        id: "redirect",
+        // (2026-11-25) A message sent to the wrong one of a person's sandboxes is offered on, on a card, rather than worked
+        // around (account-routing.md). The owner chose a line in every turn over the skill alone: unprompted, an agent
+        // that cannot find what a message names searches harder instead of asking whether it is in the wrong place.
+        text:
+            "When a person's message plainly belongs in another of their sandboxes (it names a project or repository this " +
+            "workspace lacks), offer it there instead of working around it: `agents redirect <sandbox>` or " +
+            '`agents redirect --project <repo>`, with `--why "…"`, puts their own words on a card that sends them there. ' +
+            "Do not act on the message while it waits.",
+    },
+    {
         id: "secrets",
         // Where a reference resolves in the shell (AgentCapabilities.secrets); a loop that leaves it as text is not told to write one.
         when: (facts) => facts.runtime.secretRefs,

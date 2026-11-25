@@ -22,15 +22,19 @@ export const NEED_ICONS: Readonly<Record<NeedKind, IconName>> = {
     claim: `folder`,
     // A person's leave for this sandbox to act as them in another: the glyph linked sandboxes wear.
     route: `link`,
+    // A person's message sent on to the sandbox it was meant for.
+    redirect: `send`,
 };
 
 // The header chip of a need that is no longer waiting; undefined while it is, since the card's own buttons say that.
-export const needStatus = (need: Pick<Need, "status">): CardStatus | undefined => {
+// A redirect's yes and no are where the message went, not a thing done or turned down.
+export const needStatus = (need: Pick<Need, "status" | "subject">): CardStatus | undefined => {
+    const redirect = need.subject.kind === `redirect`;
     switch (need.status) {
         case `met`:
-            return { label: t(`needs.status.met`), tone: `done` };
+            return { label: redirect ? t(`needs.status.sent`) : t(`needs.status.met`), tone: `done` };
         case `declined`:
-            return { label: t(`needs.status.declined`), tone: `gone` };
+            return { label: redirect ? t(`needs.status.keptHere`) : t(`needs.status.declined`), tone: `gone` };
         case `cancelled`:
             return { label: t(`needs.status.withdrawn`), tone: `gone` };
         case `open`:

@@ -62,14 +62,18 @@ const openingBooking = (conversation: Conversation): TurnBooking | undefined => 
 // itself (a session opened by voice from across the room does not, unless the reader says so on its card), and the files
 // staged with it (a composer's Cmd/Ctrl+Enter carrying its chips into the new agent), and whether it works in the owner's
 // own tree rather than a worktree of its own (`shared`: a fix to that tree's git state, agentFix.ts), which then
-// proposes its plan first as every turn on the shared tree does (startingMode).
+// proposes its plan first as every turn on the shared tree does (startingMode). `box` opens it in another of the reader's
+// sandboxes instead (a redirect card sending a message where it was meant to go), where this one's open project means nothing.
 export const startAgent = (
     prompt?: string,
     actsAs?: string,
     run?: AgentRunChoice,
-    opening?: { readonly autoLand?: boolean; readonly files?: readonly ChatAttachment[]; readonly shared?: boolean },
+    opening?: { readonly autoLand?: boolean; readonly files?: readonly ChatAttachment[]; readonly shared?: boolean; readonly box?: string },
 ): string => {
     const conversation = draftConversation();
+    if (opening?.box !== undefined) {
+        conversation.box.value = opening.box;
+    }
     if (run !== undefined) {
         wearRunChoice(conversation, run);
     }
@@ -86,7 +90,7 @@ export const startAgent = (
     // A conversation started while a project is open belongs to it: opened there, and, when no role was named,
     // wearing the project's own (projectRole.ts), which fences it to the project rather than only starting it
     // there. A named role is the caller's choice and stands.
-    const project = projectScope.value;
+    const project = opening?.box === undefined ? projectScope.value : undefined;
     const fitted = actsAs === undefined && project !== undefined ? ensureProjectRole(project) : undefined;
     conversation.selection.apply({
         kind: `set`,

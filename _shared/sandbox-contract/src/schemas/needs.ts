@@ -10,11 +10,11 @@ import { PASS_SCOPES } from "../protocol/doors/pass-scopes.js";
 // it until someone answers, draws it wherever it is waiting, and wakes the conversation when it is met
 // (docs/architecture/needs.md). Every word on a need is the daemon's except `why`, the agent's own case.
 
-export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation", "instruction", "host-power", "claim", "route"] as const;
+export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation", "instruction", "host-power", "claim", "route", "redirect"] as const;
 export const NeedKindSchema = z
     .enum(NEED_KINDS)
     .describe(
-        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, an automation to run unattended, a standing rule written into an AGENTS.md, power settings changed on the computer this sandbox runs on, a project claimed for this sandbox so the owner's other sandboxes report its problems here, or a person's leave for this sandbox to act as them in another.",
+        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, an automation to run unattended, a standing rule written into an AGENTS.md, power settings changed on the computer this sandbox runs on, a project claimed for this sandbox so the owner's other sandboxes report its problems here, a person's leave for this sandbox to act as them in another, or a person's message sent on to the sandbox it was meant for.",
     );
 export type NeedKind = z.infer<typeof NeedKindSchema>;
 
@@ -233,6 +233,24 @@ export const RouteNeedSchema = z.object({
 });
 export type RouteNeed = z.infer<typeof RouteNeedSchema>;
 
+// A person's message that reached the wrong sandbox, offered to the one it was meant for (account-routing.md, 2026-11-25).
+// The words are the daemon's copy of what the person opened a turn with, never the agent's retelling, and only that
+// person can press it: their editor, signed in to both, opens a chat in the target and sends the words there as they
+// would by hand. No pass and no pairing travel. The platform only found the target among the sandboxes they are in.
+export const REDIRECT_WORDS_MAX = 20_000;
+export const RedirectNeedSchema = z.object({
+    kind: z.literal("redirect"),
+    target: z.string().min(1).max(40).describe("The target sandbox's tunnel id."),
+    targetName: z.string().max(120).describe("Its name, as the platform gave it."),
+    address: z.string().max(400).optional().describe("The target's address, as the platform gave it, which the card finds it by."),
+    person: z.string().min(1).max(254).describe("Whose words they are, and the only one who can send them on."),
+    words: z.string().max(REDIRECT_WORDS_MAX).describe("The message, exactly as the person sent it here."),
+    clipped: z.boolean().optional().describe("The message was longer than the card carries, so only its head goes."),
+    attachments: z.number().int().min(0).optional().describe("How many files went with it, which stay here."),
+    project: z.string().max(400).optional().describe("The project the target was found by, when it was found by its claim."),
+});
+export type RedirectNeed = z.infer<typeof RedirectNeedSchema>;
+
 export const NeedSubjectSchema = z
     .discriminatedUnion("kind", [
         CapabilityNeedSchema,
@@ -245,6 +263,7 @@ export const NeedSubjectSchema = z
         HostPowerNeedSchema,
         ClaimNeedSchema,
         RouteNeedSchema,
+        RedirectNeedSchema,
     ])
     .describe("What exactly is asked for.");
 export type NeedSubject = z.infer<typeof NeedSubjectSchema>;
@@ -319,6 +338,13 @@ export const NeedAskSchema = z.discriminatedUnion("kind", [
             .min(1)
             .optional()
             .describe("What it is for: drop, read or task (all three when left out)."),
+    }),
+    // Where the person's message belongs, as the agent has it: a sandbox by name or id, or a project whose claim finds it.
+    // The words and the person are the daemon's, never named here.
+    z.object({
+        kind: z.literal("redirect"),
+        target: z.string().trim().min(1).max(120).optional().describe("The sandbox the message belongs in, by its name or id."),
+        project: z.string().trim().min(1).max(400).optional().describe("Or the project it is about: the sandbox claiming it is the target."),
     }),
 ]);
 export type NeedAsk = z.infer<typeof NeedAskSchema>;

@@ -10,6 +10,7 @@ import {
     personTaskDepsOf,
     startUnstartedPersonTasks,
 } from "../links/person-tasks.js";
+import { notePersonOpening } from "../account-routing/person-opening.js";
 import { childLandingWords, reportChildLanded } from "../conversations/land/child-lands.js";
 import { afterLanded } from "../agent/subagents/starting/child-after.js";
 import { capacityNoticer } from "../agent/subagents/capacity-reopened.js";
@@ -184,6 +185,8 @@ const startLinks = ({ role, services, logger, shutdown }: Pick<BootPhase, "role"
     shutdown.push(services.events.subscribe("run.settled", (settled) => notePersonTurnSettled(routed, settled)));
     shutdown.push(services.events.subscribe("run.started", (started) => notePersonTurnStarted(routed, started)));
     shutdown.push(services.events.subscribe("turn.awaiting", notePersonTurnAwaiting));
+    // The words a person opened a turn with, which a redirect card offers on to the sandbox they were meant for.
+    shutdown.push(services.events.subscribe("run.started", (started) => notePersonOpening(services.conversations, started)));
     shutdown.push(() => services.linkedChildren.close());
     if (role.container) {
         void services.linkedChildren.resume().catch((error: Error) => logger.warn({ err: error }, "linked tasks: not followed again"));

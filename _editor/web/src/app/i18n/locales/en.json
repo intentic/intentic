@@ -6457,7 +6457,9 @@
         "status": {
             "met": "Done",
             "declined": "Declined",
-            "withdrawn": "Withdrawn"
+            "withdrawn": "Withdrawn",
+            "sent": "Sent on",
+            "keptHere": "Kept here"
         },
         "card": {
             "unattended": "Asked by a run nobody was watching, so it waited for you.",
@@ -6594,6 +6596,16 @@
                 "read": "read what you may read",
                 "task": "start work as you"
             }
+        },
+        "redirect": {
+            "lead": "This looks like it's for {target}. Sending it opens a chat there with your message, exactly as you wrote it:",
+            "leadProject": "{target} claims {project}, which this looks like it's about. Sending it opens a chat there with your message, exactly as you wrote it:",
+            "approve": "Send to {target}",
+            "keep": "Keep it here",
+            "attachments": "The file attached to it stays here. | The {count} files attached to it stay here.",
+            "clipped": "Only the start of a message this long goes.",
+            "personOnly": "Waiting for {person}: only they can send their message on.",
+            "unreachable": "{target} is not among your sandboxes in this editor: open it once, then send this from here."
         },
         "instruction": {
             "approve": "Add to {file}",

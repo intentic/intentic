@@ -86,6 +86,7 @@ const harness = (): Harness => {
         "host-power": { ...handler, tellsAgent: false },
         claim: handler,
         route: handler,
+        redirect: { ...handler, wakesOn: "declined" },
     };
     let next = 0;
     const deps: NeedsDeps = {
@@ -608,5 +609,39 @@ describe("a need the agent never hears of", () => {
         await expect(needs.withdraw(card.id, "conv-1")).rejects.toThrow("not one this conversation asked");
         await expect(needs.done(card.id, "conv-1", "it works")).rejects.toThrow("not one this conversation asked");
         expect((await deps.store.get(card.id))?.status).toBe("open");
+    });
+});
+
+// (2026-11-25) A need whose no is what sets the conversation going (`wakesOn: "declined"`, a redirect): kept here, the
+// person wants the agent to get on with their message, so a finished conversation is woken for it; sent on to another
+// sandbox, nothing is left to do here, so a yes wakes nothing, at the answer or at boot.
+describe("a need that wakes on a decline", () => {
+    const REDIRECT: NeedSubject = { kind: "redirect", target: "bbbbbbbbbbbb", targetName: "ops", person: "ada@acme.test", words: "fix the login bug" };
+
+    it("wakes the conversation for a no, live turn or not, with the decline's words", async () => {
+        const { deps, woken, steered, settings } = harness();
+        settings.live = false;
+        const needs = createNeeds(deps);
+        const kept = await needs.observe("conv-1", REDIRECT, "Send this message on to ops");
+        await needs.answer(kept.id, { kind: "decline", note: "do it here" }, { email: "ada@acme.test" });
+        expect(steered).toEqual([]);
+        expect(woken).toHaveLength(1);
+        expect(woken[0]?.prompt).toContain("Need declined");
+        expect(woken[0]?.prompt).toContain("They said: do it here");
+        expect((await deps.store.get(kept.id))?.told).toBe("queued");
+    });
+
+    it("wakes nothing for a yes, and passes it over at boot", async () => {
+        const { deps, woken, steered } = harness();
+        const needs = createNeeds(deps);
+        const sent = await needs.observe("conv-1", REDIRECT, "Send this message on to ops");
+        await needs.answer(sent.id, { kind: "approve" }, { email: "ada@acme.test" });
+        expect((await deps.store.get(sent.id))?.status).toBe("met");
+        await deps.store.put({ id: "need-9", conversationId: "conv-2", subject: REDIRECT, title: "Send this message on to ops", status: "met", createdAt: 1, updatedAt: 2 });
+        const stop = createNeeds(deps).start();
+        await settleSoon();
+        expect(woken).toEqual([]);
+        expect(steered).toEqual([]);
+        stop();
     });
 });
