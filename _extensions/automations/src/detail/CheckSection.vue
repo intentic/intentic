@@ -97,18 +97,17 @@ const foot = computed<{ text: string; tone: string } | undefined>(() => {
             <template v-else>
                 <!-- The block a command is read in, with a caret: the same ground and rim as a code block at rest, the field's
                      own rim colour under a pointer or a caret. -->
-                <div class="rounded-md border border-line bg-canvas transition-colors hover:border-line-strong focus-within:border-line-strong">
-                    <CodeField
-                        v-model="draft"
-                        lang="bash"
-                        rows="1"
-                        :placeholder="t(`automationFields.conditionCaption.none`)"
-                        :aria-label="t(`checkSection.check`)"
-                        @blur="save"
-                        @keydown.enter="enter"
-                        @keydown.esc="revert"
-                    />
-                </div>
+                <CodeField
+                    v-model="draft"
+                    class="rounded-md border border-line bg-canvas transition-colors hover:border-line-strong focus-within:border-line-strong"
+                    lang="bash"
+                    rows="1"
+                    :placeholder="t(`automationFields.conditionCaption.none`)"
+                    :aria-label="t(`checkSection.check`)"
+                    @blur="save"
+                    @keydown.enter="enter"
+                    @keydown.esc="revert"
+                />
                 <p v-if="foot" class="text-xs break-words" :class="foot.tone">{{ foot.text }}</p>
             </template>
 

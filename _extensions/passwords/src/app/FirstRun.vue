@@ -175,9 +175,7 @@ const notNow = (): Promise<void> =>
                 <h2 class="text-lg font-semibold text-content">{{ t(`app.first.importTitle`) }}</h2>
                 <p class="text-sm text-muted">{{ t(`app.first.importHelp`) }}</p>
                 <ImportPanel :port="port" />
-                <div class="flex justify-end gap-2">
-                    <Button tier="accent" :label="t(`app.first.finish`)" @click="emit(`done`)" />
-                </div>
+                <Button tier="accent" class="self-end" :label="t(`app.first.finish`)" @click="emit(`done`)" />
             </section>
         </div>
     </div>

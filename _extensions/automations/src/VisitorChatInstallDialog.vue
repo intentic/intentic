@@ -85,10 +85,8 @@ const allowOrigin = async (origin: string): Promise<void> => {
 
                 <!-- A real state, not empty: it says what to do to change it, the only useful thing while nothing has happened yet. -->
                 <Notice v-else-if="installs.length === 0" icon="clock">
-                    <span v-if="isLoading">{{ t(`visitorChatInstallDialog.checking`) }}</span>
-                    <span v-else>
-                        {{ t(`visitorChatInstallDialog.noBrowserLoadedWidget`) }}
-                    </span>
+                    <template v-if="isLoading">{{ t(`visitorChatInstallDialog.checking`) }}</template>
+                    <template v-else>{{ t(`visitorChatInstallDialog.noBrowserLoadedWidget`) }}</template>
                 </Notice>
 
                 <template v-else>

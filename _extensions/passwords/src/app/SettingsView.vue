@@ -157,11 +157,9 @@ const forget = (origin: KeyringOrigin): Promise<void> =>
 
         <Notice v-if="error" tone="danger" size="sm" @dismiss="error = undefined">{{ error }}</Notice>
 
-        <section class="flex flex-col gap-3">
-            <Section :label="t(`app.settings.remember`)" :heading="3">
-                <p class="text-xs text-muted">{{ t(`app.settings.rememberHelp`) }}</p>
-            </Section>
-            <div class="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
+        <Section :label="t(`app.settings.remember`)" :heading="3">
+            <p class="text-xs text-muted">{{ t(`app.settings.rememberHelp`) }}</p>
+            <div class="mt-3 flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
                 <div v-for="source in sources" :key="source.source" class="flex items-center gap-3 px-4 py-3">
                     <div class="flex min-w-0 flex-1 flex-col">
                         <span class="text-sm text-content">
@@ -187,78 +185,76 @@ const forget = (origin: KeyringOrigin): Promise<void> =>
                     />
                 </div>
             </div>
-        </section>
+        </Section>
 
         <Section v-if="settings" :label="t(`app.settings.unlock`)" :heading="3">
-            <div class="flex flex-col gap-3">
-                <p class="text-xs text-muted">{{ unlockNote }}</p>
-                <div class="flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
-                    <div v-if="helloAddable && port.addHello" class="flex items-center gap-3 px-4 py-3">
-                        <div class="flex min-w-0 flex-1 flex-col">
-                            <span class="text-sm text-content">{{ t(`app.settings.helloOff`) }}</span>
-                            <span class="text-2xs text-subtle">{{ t(`app.settings.helloOffHelp`) }}</span>
-                        </div>
-                        <Button tier="accent" size="small" :label="t(`app.hello.turnOn`)" :loading="waiting === `hello`" :disabled="waiting !== undefined" @click="addHello()" />
+            <p class="text-xs text-muted">{{ unlockNote }}</p>
+            <div class="mt-3 flex flex-col divide-y divide-line-subtle rounded-xl border border-line-subtle bg-card">
+                <div v-if="helloAddable && port.addHello" class="flex items-center gap-3 px-4 py-3">
+                    <div class="flex min-w-0 flex-1 flex-col">
+                        <span class="text-sm text-content">{{ t(`app.settings.helloOff`) }}</span>
+                        <span class="text-2xs text-subtle">{{ t(`app.settings.helloOffHelp`) }}</span>
                     </div>
-                    <div v-if="masterPassword === undefined && keyringUpdate" class="flex items-center gap-3 px-4 py-3">
+                    <Button tier="accent" size="small" :label="t(`app.hello.turnOn`)" :loading="waiting === `hello`" :disabled="waiting !== undefined" @click="addHello()" />
+                </div>
+                <div v-if="masterPassword === undefined && keyringUpdate" class="flex items-center gap-3 px-4 py-3">
+                    <div class="flex min-w-0 flex-1 flex-col">
+                        <span class="text-sm text-content">{{ t(`app.settings.passphraseTitle`) }}</span>
+                        <span class="text-2xs" :class="waiting === `update` ? `text-info` : `text-warning`">
+                            {{ (waiting === `update` ? updateStep : undefined) ?? t(`app.settings.passphraseNeedsUpdate`, { version: keyringUpdate.version }) }}
+                        </span>
+                    </div>
+                    <Button
+                        tier="accent"
+                        size="small"
+                        :label="keyringUpdate.fix.label"
+                        :loading="waiting === `update`"
+                        :disabled="waiting !== undefined"
+                        @click="runUpdate(keyringUpdate.fix)"
+                    />
+                </div>
+                <div v-if="canPassphrase" class="flex flex-col gap-3 px-4 py-3">
+                    <div class="flex items-center gap-3">
                         <div class="flex min-w-0 flex-1 flex-col">
                             <span class="text-sm text-content">{{ t(`app.settings.passphraseTitle`) }}</span>
-                            <span class="text-2xs" :class="waiting === `update` ? `text-info` : `text-warning`">
-                                {{ (waiting === `update` ? updateStep : undefined) ?? t(`app.settings.passphraseNeedsUpdate`, { version: keyringUpdate.version }) }}
+                            <span class="text-2xs" :class="masterPassword ? `text-subtle` : `text-warning`">
+                                {{ masterPassword ? t(`app.settings.passphraseOn`) : t(`app.settings.passphraseOff`) }}
                             </span>
                         </div>
                         <Button
-                            tier="accent"
+                            v-if="!passphraseOpen"
+                            :tier="masterPassword ? `boring` : `accent`"
                             size="small"
-                            :label="keyringUpdate.fix.label"
-                            :loading="waiting === `update`"
+                            :label="masterPassword ? t(`app.settings.passphraseChange`) : t(`app.settings.passphraseSet`)"
                             :disabled="waiting !== undefined"
-                            @click="runUpdate(keyringUpdate.fix)"
+                            @click="passphraseOpen = true"
                         />
                     </div>
-                    <div v-if="canPassphrase" class="flex flex-col gap-3 px-4 py-3">
-                        <div class="flex items-center gap-3">
-                            <div class="flex min-w-0 flex-1 flex-col">
-                                <span class="text-sm text-content">{{ t(`app.settings.passphraseTitle`) }}</span>
-                                <span class="text-2xs" :class="masterPassword ? `text-subtle` : `text-warning`">
-                                    {{ masterPassword ? t(`app.settings.passphraseOn`) : t(`app.settings.passphraseOff`) }}
-                                </span>
-                            </div>
-                            <Button
-                                v-if="!passphraseOpen"
-                                :tier="masterPassword ? `boring` : `accent`"
-                                size="small"
-                                :label="masterPassword ? t(`app.settings.passphraseChange`) : t(`app.settings.passphraseSet`)"
-                                :disabled="waiting !== undefined"
-                                @click="passphraseOpen = true"
-                            />
-                        </div>
-                        <PassphraseForm
-                            v-if="passphraseOpen"
-                            :submit-label="t(`app.save`)"
-                            :busy="waiting === `passphrase`"
-                            :disabled="waiting !== undefined"
-                            :help="t(`app.settings.passphraseHelp`)"
-                            cancellable
-                            @submit="savePassphrase"
-                            @cancel="passphraseOpen = false"
-                        />
-                    </div>
-                    <label class="flex items-center gap-3 px-4 py-3">
-                        <span class="flex-1 text-sm text-content">{{ t(`app.settings.autoLock`) }}</span>
-                        <select :class="ui.input({ size: `sm` }, `w-auto`)" :value="settings.autoLockMinutes" :disabled="waiting !== undefined" @change="onLockMinutes">
-                            <option v-for="option in lockOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                        </select>
-                    </label>
-                    <label class="flex items-center gap-3 px-4 py-3">
-                        <span class="flex-1 text-sm text-content">{{ t(`app.settings.lockOnSleep`) }}</span>
-                        <ToggleSwitch
-                            :model-value="settings.lockOnSleep"
-                            :disabled="waiting !== undefined"
-                            @update:model-value="(on: boolean) => update(`sleep`, { lockOnSleep: on })"
-                        />
-                    </label>
+                    <PassphraseForm
+                        v-if="passphraseOpen"
+                        :submit-label="t(`app.save`)"
+                        :busy="waiting === `passphrase`"
+                        :disabled="waiting !== undefined"
+                        :help="t(`app.settings.passphraseHelp`)"
+                        cancellable
+                        @submit="savePassphrase"
+                        @cancel="passphraseOpen = false"
+                    />
                 </div>
+                <label class="flex items-center gap-3 px-4 py-3">
+                    <span class="flex-1 text-sm text-content">{{ t(`app.settings.autoLock`) }}</span>
+                    <select :class="ui.input({ size: `sm` }, `w-auto`)" :value="settings.autoLockMinutes" :disabled="waiting !== undefined" @change="onLockMinutes">
+                        <option v-for="option in lockOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                    </select>
+                </label>
+                <label class="flex items-center gap-3 px-4 py-3">
+                    <span class="flex-1 text-sm text-content">{{ t(`app.settings.lockOnSleep`) }}</span>
+                    <ToggleSwitch
+                        :model-value="settings.lockOnSleep"
+                        :disabled="waiting !== undefined"
+                        @update:model-value="(on: boolean) => update(`sleep`, { lockOnSleep: on })"
+                    />
+                </label>
             </div>
         </Section>
 
@@ -285,10 +281,8 @@ const forget = (origin: KeyringOrigin): Promise<void> =>
         </Section>
 
         <Section :label="t(`app.settings.import`)" :heading="3">
-            <div class="flex flex-col gap-2">
-                <p class="text-xs text-muted">{{ t(`app.settings.importHelp`) }}</p>
-                <ImportPanel :port="port" @imported="emit(`changed`)" />
-            </div>
+            <p class="text-xs text-muted">{{ t(`app.settings.importHelp`) }}</p>
+            <ImportPanel class="mt-2" :port="port" @imported="emit(`changed`)" />
         </Section>
     </section>
 </template>

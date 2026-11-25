@@ -129,11 +129,9 @@ const toggleDay = (day: number): void => {
             <ZonePicker v-model="tz" :sandbox-zone="sandboxZone" />
         </div>
         <!-- Proof the cron does what it says: when it will actually fire next, on the reader's own clock. -->
-        <p v-if="preview" class="text-xs">
-            <span :class="'error' in preview ? 'text-danger' : 'text-muted'">
-                <template v-if="'runs' in preview">{{ t(`automationFields.nextRuns`, { runs: preview.runs.map(formatDateTime).join(" · ") }) }}</template>
-                <template v-else>{{ preview.error }}</template>
-            </span>
+        <p v-if="preview" class="text-xs" :class="'error' in preview ? 'text-danger' : 'text-muted'">
+            <template v-if="'runs' in preview">{{ t(`automationFields.nextRuns`, { runs: preview.runs.map(formatDateTime).join(" · ") }) }}</template>
+            <template v-else>{{ preview.error }}</template>
             <!-- Only for a reader on a different clock from the rule, for whom the runs above read as another hour. -->
             <span v-if="previewZoneNote && 'runs' in preview" class="block text-2xs text-subtle">
                 {{ t(`automationFields.shownInYourClock`, { zone: previewZoneNote }) }}
