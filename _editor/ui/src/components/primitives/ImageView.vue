@@ -334,9 +334,8 @@ const showDimensions = computed(() => natural.value !== undefined && box.value.w
         <img :src="src" alt="" draggable="false" class="absolute left-0 top-0 max-w-none origin-top-left" :style="imageStyle" @load="onLoad" />
 
         <!-- Dimmed until the pointer is in the pane, so the controls never compete with the picture. -->
-        <div class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-2">
+        <div v-if="natural" class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-2">
             <div
-                v-if="natural"
                 class="pointer-events-auto flex items-center gap-0.5 rounded-lg border border-line bg-card/90 px-1 py-0.5 text-2xs text-muted opacity-60 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
                 @pointerdown.stop
                 @dblclick.stop
