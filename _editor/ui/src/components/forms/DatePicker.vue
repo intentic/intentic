@@ -148,11 +148,10 @@ const dayClass = (cell: MonthDay): string => {
                         :aria-label="formatDayLong(cell.day)"
                         :aria-current="cell.today ? `date` : undefined"
                         class="relative flex size-8 cursor-pointer items-center justify-center rounded-full text-xs leading-none tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 max-md:size-10 max-md:text-sm"
-                        :class="dayClass(cell)"
+                        :class="[dayClass(cell), cell.today && `after:absolute after:bottom-1 after:size-1 after:rounded-full after:bg-current`]"
                         @click="pick(cell)"
                     >
                         {{ cell.date }}
-                        <span v-if="cell.today" class="absolute bottom-1 size-1 rounded-full bg-current" aria-hidden="true" />
                     </button>
                 </span>
             </div>
