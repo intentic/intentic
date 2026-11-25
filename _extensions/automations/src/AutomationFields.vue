@@ -320,15 +320,15 @@ const roleShown = computed(() => needsModels.value || form.condition === `guard`
 
                 <!-- HOW IT ENDS, so a watch never outlives what it was for: as it fires, or at a date. A one-time wake
                      already ends as it fires, so neither is offered there. -->
-                <div v-if="retireOffered" class="border-t border-line-subtle pt-3">
-                    <EndsFields
-                        v-model:stop-after-first="form.stopAfterFirst"
-                        v-model:expires-at="form.expiresAt"
-                        :at="expiresAt"
-                        :error="touched.has(`expiresAt`) ? expiresError : undefined"
-                        @update:expires-at="markTouched(`expiresAt`)"
-                    />
-                </div>
+                <EndsFields
+                    v-if="retireOffered"
+                    v-model:stop-after-first="form.stopAfterFirst"
+                    v-model:expires-at="form.expiresAt"
+                    :at="expiresAt"
+                    :error="touched.has(`expiresAt`) ? expiresError : undefined"
+                    class="border-t border-line-subtle pt-3"
+                    @update:expires-at="markTouched(`expiresAt`)"
+                />
             </div>
         </section>
 
@@ -338,9 +338,8 @@ const roleShown = computed(() => needsModels.value || form.condition === `guard`
                 <SectionHeader :label="t(`automationFields.if`)" />
                 <span class="text-2xs text-subtle">{{ t(`automationFields.whatHasToBeTrue`) }}</span>
             </div>
-            <div class="flex min-w-0 flex-1 flex-col gap-3">
-                <ConditionFields :state="state" />
-            </div>
+            <!-- Its own root is the column, so it takes the column's sizing here instead of sitting in a wrapper. -->
+            <ConditionFields :state="state" class="min-w-0 flex-1" />
         </section>
 
         <!-- THEN -->
