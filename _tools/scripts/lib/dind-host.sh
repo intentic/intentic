@@ -6,6 +6,9 @@
 # without -v that anonymous volume, the pulled sandbox image's 8 GB, stays on the runner's disk (omen, 2026-11-12: three
 # of them, 24 GB, in half an hour).
 
+set -o pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/image-pull.sh"
+
 # Start one and wait for its daemon. `$1` is the container name — chosen by the caller, because two tiers
 # running at once on the same runner must not claim each other's.
 #
@@ -19,9 +22,11 @@ start_dind_host() {
     if [ -z "$image" ]; then
         image="intentic-dind-host:local"
         docker build -q -t "$image" "$(repo_root)/_tools/dind-host" >/dev/null
+    elif ! docker image inspect "$image" >/dev/null 2>&1; then
+        image_pull "$image" || return "$?"
     fi
     # --privileged + empty DOCKER_TLS_CERTDIR: the dind entrypoint's own contract (see _tools/dind-host).
-    docker run -d --rm --name "$DIND_CONTAINER" --privileged -e DOCKER_TLS_CERTDIR="" "$image" >/dev/null
+    docker run --pull=never -d --rm --name "$DIND_CONTAINER" --privileged -e DOCKER_TLS_CERTDIR="" "$image" >/dev/null
 
     echo -n "    waiting for the daemon"
     local _
