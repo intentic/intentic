@@ -81,7 +81,7 @@ const rows: readonly Row[] = [
         to: {
             ...idleConversation(),
             phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: NOW, promptToFile: OPENING.prompt },
+            turn: { ...freshRuntime(), lastAt: NOW, endingBefore: { kind: "idle" }, promptToFile: OPENING.prompt },
             land: { held: 2 },
         },
         effects: [
@@ -100,7 +100,7 @@ const rows: readonly Row[] = [
         to: {
             ...idleConversation(),
             phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: NOW },
+            turn: { ...freshRuntime(), lastAt: NOW, endingBefore: { kind: "idle" } },
         },
         effects: [
             { kind: "entry-opened", turn: OPENING },
@@ -119,7 +119,7 @@ const rows: readonly Row[] = [
         to: {
             ...idleConversation(),
             phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: NOW },
+            turn: { ...freshRuntime(), lastAt: NOW, endingBefore: { kind: "idle" } },
             journal: { run: "run-1", entry: IN_FLIGHT, written: true },
         },
         effects: [
@@ -236,7 +236,7 @@ const rows: readonly Row[] = [
         to: {
             ...idleConversation(),
             phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: NOW, promptToFile: UNATTENDED.prompt },
+            turn: { ...freshRuntime(), lastAt: NOW, endingBefore: { kind: "idle" }, promptToFile: UNATTENDED.prompt },
         },
         effects: [
             { kind: "entry-opened", turn: UNATTENDED },
@@ -570,7 +570,7 @@ const rows: readonly Row[] = [
         to: {
             ...idleConversation(),
             phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: NOW },
+            turn: { ...freshRuntime(), lastAt: NOW, endingBefore: { kind: "idle" } },
         },
         effects: [
             { kind: "entry-opened", turn: OPENING },
@@ -874,7 +874,7 @@ const rows: readonly Row[] = [
         to: {
             ...idleConversation(WAITING),
             phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: NOW, promptToFile: OPENING.prompt },
+            turn: { ...freshRuntime(), lastAt: NOW, endingBefore: { kind: "idle" }, promptToFile: OPENING.prompt },
         },
         effects: [
             { kind: "entry-opened", turn: OPENING },
@@ -901,7 +901,7 @@ const rows: readonly Row[] = [
         to: {
             ...idleConversation(),
             phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: NOW, promptToFile: OPENING.prompt, keptWarm: { forMs: NOW - 1_000, refreshes: 3 } },
+            turn: { ...freshRuntime(), lastAt: NOW, endingBefore: { kind: "idle" }, promptToFile: OPENING.prompt, keptWarm: { forMs: NOW - 1_000, refreshes: 3 } },
         },
         effects: [
             { kind: "entry-opened", turn: OPENING },
@@ -919,7 +919,7 @@ const rows: readonly Row[] = [
         to: {
             ...idleConversation(),
             phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
-            turn: { ...freshRuntime(), lastAt: NOW, promptToFile: OPENING.prompt },
+            turn: { ...freshRuntime(), lastAt: NOW, endingBefore: { kind: "idle" }, promptToFile: OPENING.prompt },
         },
         effects: [
             { kind: "entry-opened", turn: OPENING },

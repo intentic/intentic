@@ -29,7 +29,7 @@ import { type ConversationActors, type ConversationBooks, createConversationActo
 import { activateLoadedFleet } from "./fleet-activation.js";
 import { type LandMarkBooks, type LandMarks, landMarksAmender, markedOnLand } from "./land-marks.js";
 import type { BeginTurn, SettleFlush } from "../actor/conversation-decide.js";
-import { repeatedFailure } from "../actor/turn-failure.js";
+import { repeatedFailure, turnedAwayEntry, withdrawnEntry } from "../actor/turn-failure.js";
 import { unfinishedOf } from "./unfinished-work.js";
 import { identityOf, peopleOfConversation, servicesOfConversation } from "../actor/identity-latch.js";
 import { activityLive, NO_USAGE } from "../actor/conversation-state.js";
@@ -218,6 +218,18 @@ const withoutStranded = (reach: TurnReach, dir: string): TurnReach | undefined =
     const next = { ...rest, ...opt("stranded", left.length > 0 ? left : undefined) };
     return Object.keys(next).length === 0 ? undefined : next;
 };
+
+// An entry rewritten by `change`, over the fleet's own reader and writer; nothing for one that is gone, or that the
+// change leaves as it was.
+const rewriteIn =
+    (entryOf: (id: string) => PersistedAgent | undefined, replace: (entry: PersistedAgent) => void) =>
+    (id: string, change: (entry: PersistedAgent) => PersistedAgent): void => {
+        const entry = entryOf(id);
+        const changed = entry === undefined ? undefined : change(entry);
+        if (changed !== undefined && changed !== entry) {
+            replace(changed);
+        }
+    };
 
 // The books' `book`, over the fleet's own reader and writer.
 const bookInto =
@@ -587,6 +599,7 @@ export const createFleet = (
         dirty.add(next.id);
         return next;
     };
+    const rewrite = rewriteIn(entryOf, replace);
     // `replace` for entries of distinct ids, in one pass: the roster as replacing them in this order would leave it. One
     // pass per entry made marking all seen quadratic in the archive (5,500 here: 30 million copies a press; 2026-11-24).
     const replaceMany = (changed: readonly PersistedAgent[]): void => {
@@ -745,19 +758,11 @@ export const createFleet = (
             }
         },
         book: bookInto(entryOf, replace),
-        settle: (id, flush, now) => {
-            const entry = entryOf(id);
-            if (entry !== undefined) {
-                replace(settledEntry(entry, flush, now));
-            }
-        },
+        settle: (id, flush, now) => rewrite(id, (entry) => settledEntry(entry, flush, now)),
         // The daemon's own sentence about a resume that never came; the original failure's classification goes with it.
-        abandon: (id, failure, now) => {
-            const entry = entryOf(id);
-            if (entry !== undefined) {
-                replace({ ...entry, ending: { kind: "failed", ...opt("failure", failure), own: true }, updatedAt: now });
-            }
-        },
+        abandon: (id, failure, now) => rewrite(id, (entry) => ({ ...entry, ending: { kind: "failed", ...opt("failure", failure), own: true }, updatedAt: now })),
+        turnedAway: (id, over) => rewrite(id, (entry) => turnedAwayEntry(entry, over)),
+        withdrawRefusal: (id) => rewrite(id, withdrawnEntry),
         // Written through at once, not only at the settle: a daemon killed mid-turn otherwise loses the only key into the
         // provider's session store. Fire-and-forget.
         bindSession: (id, sessionId, account) => {

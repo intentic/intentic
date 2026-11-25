@@ -487,6 +487,11 @@ flowchart LR
   ending and re-synced every beat, a memory hold's send was never on the card, and each surface rebuilt "does it go by
   itself" from its own subset of fields, so a card said "sends when memory frees" in its corner while waiting in
   Attention. The pass still withdraws a "resuming" whose answer is now to wait (`agent/run/turn/holds/held-standing.ts`).
+- A turn turned away at the door that handed a person's words back to the queue ran nothing, so its refusal stands only
+  for those words (`conversations/actor/turn-failure.ts`). Its ending keeps the one its `begin` replaced (`over`), and it
+  is not counted as a turn. Once none of its words wait (taken back, or booked for later, where the booking speaks), the
+  card goes back to that ending. (2026-11-24) The refusal used to replace the ending for good: a person took back the
+  one follow-up a memory refusal held, and the card sat in Attention as Held, holding nothing, its work long landed.
 - When and where a spent allowance's held turn goes is derived, never kept (`agent/run/turn/holds/held-verdict.ts`
   `heldVerdict`). The hold stores only its intent: the provider, model and account it was refused on, the owner's
   booked move and whether it carries the session, a person's pick, and the refusal's own reopen as evidence. Every

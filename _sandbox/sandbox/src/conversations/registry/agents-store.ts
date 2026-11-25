@@ -153,32 +153,46 @@ export const profileOn = (profile: StoredProfile, account: string, pin?: { reado
 
 // How the last turn ended, not a live state (rebuilt from frames) or a land verdict (git answers that live).
 // `interrupted` is what a daemon killed mid-turn leaves. A spent allowance is its own kind, the only one with limit facts.
+const IdleEndingSchema = z.object({ kind: z.literal("idle") });
+const InterruptedEndingSchema = z.object({ kind: z.literal("interrupted") });
+const StoppedEndingSchema = z.object({ kind: z.literal("stopped") });
+// `own`: the failure is the sandbox's own sentence (the error frame's `own`); absent for the provider's words, and in rows
+// written before it was kept.
+// `repeats`: how many turns in a row ended on this same failure before the provider answered (failure-codes.ts
+// failureFingerprint), counted from one; absent for a failure the provider had answered before, which a retry may get past.
+const FailedEndingSchema = z.object({
+    kind: z.literal("failed"),
+    failure: z.string().optional(),
+    code: z.string().optional(),
+    own: z.literal(true).optional(),
+    repeats: z.number().int().positive().optional(),
+});
+const LimitedEndingSchema = z.object({
+    kind: z.literal("limited"),
+    failure: z.string().optional(),
+    // Epoch seconds the allowance reopens; absent when the provider publishes no instant.
+    resetsAt: z.number().optional(),
+    // Held whole for a press: the registry clears it on load unless the entry kept the held turn itself (`limitHold`),
+    // which the boot puts back on its actor. Whether and when it goes again is never kept: the card derives it from the
+    // hold (conversation-next.ts). Rows written before 2026-10-20 also carry `scheduled`, `moving` and `nextAt`, a copy
+    // of that derivation, which the parse drops.
+    held: z.boolean(),
+});
+
+// The ending a refusal at the door set aside (`over` below): any ending but such a refusal itself, so it never nests.
+const PriorEndingSchema = z.discriminatedUnion("kind", [IdleEndingSchema, InterruptedEndingSchema, StoppedEndingSchema, FailedEndingSchema, LimitedEndingSchema]);
+export type PriorEnding = z.infer<typeof PriorEndingSchema>;
+
 const EndingSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("idle") }),
-    z.object({ kind: z.literal("interrupted") }),
-    z.object({ kind: z.literal("stopped") }),
-    // `own`: the failure is the sandbox's own sentence (the error frame's `own`); absent for the provider's words, and in rows
-    // written before it was kept.
-    // `repeats`: how many turns in a row ended on this same failure before the provider answered (failure-codes.ts
-    // failureFingerprint), counted from one; absent for a failure the provider had answered before, which a retry may get past.
-    z.object({
-        kind: z.literal("failed"),
-        failure: z.string().optional(),
-        code: z.string().optional(),
-        own: z.literal(true).optional(),
-        repeats: z.number().int().positive().optional(),
-    }),
-    z.object({
-        kind: z.literal("limited"),
-        failure: z.string().optional(),
-        // Epoch seconds the allowance reopens; absent when the provider publishes no instant.
-        resetsAt: z.number().optional(),
-        // Held whole for a press: the registry clears it on load unless the entry kept the held turn itself (`limitHold`),
-        // which the boot puts back on its actor. Whether and when it goes again is never kept: the card derives it from the
-        // hold (conversation-next.ts). Rows written before 2026-10-20 also carry `scheduled`, `moving` and `nextAt`, a copy
-        // of that derivation, which the parse drops.
-        held: z.boolean(),
-    }),
+    IdleEndingSchema,
+    InterruptedEndingSchema,
+    StoppedEndingSchema,
+    // Added 2026-11-24, optional: `over`, on a turn turned away at the door with a person's words handed back to the queue
+    // (turn-admission.ts handBack), is the ending that turn's `begin` replaced. Nothing ran, so the refusal stands only
+    // for the words it holds, and once none of them wait the card goes back to `over` (turn-failure.ts
+    // withdrawRefusal). Absent on every other failure, and on a refusal filed before it.
+    FailedEndingSchema.extend({ over: PriorEndingSchema.optional() }),
+    LimitedEndingSchema,
 ]);
 export type Ending = z.infer<typeof EndingSchema>;
 export type FailedEnding = Extract<Ending, { kind: "failed" | "limited" }>;

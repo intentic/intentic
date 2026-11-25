@@ -2,7 +2,7 @@ import { keyedLock } from "@intentic/base/async";
 import type { ActiveTurn } from "../../agent/checkpoints/agent-steering.js";
 import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import { recordConversationPrompt, recordPrompt } from "../../sessions/search/transcript-search.js";
-import type { PersistedAgent } from "../registry/agents-store.js";
+import type { PersistedAgent, PriorEnding } from "../registry/agents-store.js";
 import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, refusesArchived, type ReplyOf, type SettleFlush } from "./conversation-decide.js";
 import { createHoldingsIndex, type Holding, type Holdings, type Share, STEER_HEARD, turnsArrive } from "./conversation-holdings.js";
 import { type Booking, bookingOfItem, holdOf, NO_QUEUE, type TurnQueue, waitingOf } from "./conversation-queue.js";
@@ -23,6 +23,10 @@ export interface ConversationBooks {
     readonly book: (turn: BeginTurn, now: number) => void;
     readonly settle: (id: string, flush: SettleFlush, now: number) => void;
     readonly abandon: (id: string, failure: string | undefined, now: number) => void;
+    // The settled turn was turned away at the door, its words handed back (turn-failure.ts turnedAwayEntry).
+    readonly turnedAway: (id: string, over: PriorEnding) => void;
+    // None of the words that refusal held wait any more: the entry goes back to the ending it set aside.
+    readonly withdrawRefusal: (id: string) => void;
     readonly bindSession: (id: string, sessionId: string, account: string | undefined) => void;
     readonly dropSession: (id: string) => void;
     readonly planTitle: (id: string, text: string) => void;
@@ -153,6 +157,8 @@ const effectsOn = (books: ConversationBooks): { readonly [K in ConversationEffec
     "journal-cleared": (id) => books.unjournal(id),
     "entry-settled": (id, effect, now) => books.settle(id, effect.flush, now),
     "entry-abandoned": (id, effect, now) => books.abandon(id, effect.failure, now),
+    "entry-turned-away": (id, effect) => books.turnedAway(id, effect.over),
+    "refusal-withdrawn": (id) => books.withdrawRefusal(id),
     "session-bound": (id, effect) => books.bindSession(id, effect.sessionId, effect.account),
     "session-dropped": (id) => books.dropSession(id),
     "title-planned": (id, effect) => books.planTitle(id, effect.text),

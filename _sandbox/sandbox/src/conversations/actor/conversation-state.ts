@@ -7,7 +7,7 @@ import { localZone, nextDayStartIn, type Zone } from "@intentic/sandbox-contract
 import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
 import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/holds/held-turn.js";
-import type { FailedEnding } from "../registry/agents-store.js";
+import type { FailedEnding, PriorEnding } from "../registry/agents-store.js";
 import { holdOf, NO_QUEUE, type TurnQueue, waitingOf } from "./conversation-queue.js";
 import { type HeldReading, heldReopen, sendableAt } from "./limit-booking.js";
 
@@ -94,6 +94,9 @@ export interface TurnRuntime {
     readonly resuming: boolean;
     // What the card shows of the land lease; `begin` hides it, the next acquisition shows it again.
     readonly landing: boolean;
+    // The ending this turn's `begin` replaced (turn-failure.ts endingSetAside), kept for a refusal at the door to go back
+    // to once none of its words wait; spent once the words come back. Undefined before any turn began here since boot.
+    readonly endingBefore: PriorEnding | undefined;
 }
 
 // The land lease's holders, the running land and those queued behind it; a count, so it outlives any one turn.
@@ -214,6 +217,7 @@ export const freshRuntime = (): TurnRuntime => ({
     review: undefined,
     resuming: false,
     landing: false,
+    endingBefore: undefined,
 });
 
 // Where a conversation this daemon has not heard from yet starts: after a boot, every one of them, holding whatever its

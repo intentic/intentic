@@ -12,11 +12,11 @@ import type { TurnCheckpoint } from "../../store/journals/turn-checkpoints.js";
 import type { JournalledTurn } from "../../store/journals/turn-journal.js";
 import type { HeldTurn } from "../../agent/run/turn/holds/held-turn.js";
 import { opt } from "../../opt.js";
-import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
+import type { FailedEnding, PersistedAgent, PriorEnding } from "../registry/agents-store.js";
 import { keptHold, type StoredLimitHold, storedLimitHold } from "./limit-hold.js";
 import type { HeldReading } from "./limit-booking.js";
-import { comingBackNow, failureOf, sanitizeFailure } from "./turn-failure.js";
-import { BROADCAST, unchanged, withResume } from "./decision-parts.js";
+import { comingBackNow, endingSetAside, failureOf, onReturned, sanitizeFailure, withdrawRefusal } from "./turn-failure.js";
+import { BROADCAST, queueWrites, unchanged, withQueue, withResume } from "./decision-parts.js";
 import { onHandoffChosen, onHeldRead, onHeldRepointed, onKeepWarmArmed, onKeepWarmEnded, onKeepWarmRefreshed } from "./held-decide.js";
 import {
     type Booking,
@@ -29,7 +29,6 @@ import {
     removed,
     rerouted,
     rescheduled,
-    returned,
     scheduled,
     superseded,
     taken,
@@ -253,6 +252,11 @@ export type ConversationEffect =
     | { readonly kind: "journal-cleared" }
     | { readonly kind: "entry-settled"; readonly flush: SettleFlush }
     | { readonly kind: "entry-abandoned"; readonly failure: string | undefined }
+    // The settled turn was turned away at the door, its words handed back: its refusal keeps `over`, the ending its
+    // `begin` replaced, and it is not counted as a turn (turn-failure.ts turnedAwayEntry).
+    | { readonly kind: "entry-turned-away"; readonly over: PriorEnding }
+    // None of the words a refusal at the door held wait any more: the entry goes back to the ending it set aside.
+    | { readonly kind: "refusal-withdrawn" }
     // The session and the account that minted it, written through at once, fire-and-forget.
     | { readonly kind: "session-bound"; readonly sessionId: string; readonly account: string | undefined }
     | { readonly kind: "session-dropped" }
@@ -298,15 +302,6 @@ export interface Decision<R> {
 // Half a pair names no deadline, so the frame is read only whole; a frame carrying neither leaves the last one standing.
 const promptCacheOf = (event: Extract<AgentEvent, { kind: "context_usage" }>, last: TurnRuntime["promptCache"]): TurnRuntime["promptCache"] =>
     event.cachedAt !== undefined && event.cacheTtlMs !== undefined ? { at: event.cachedAt, ttlMs: event.cacheTtlMs } : last;
-
-// A queue that moved is written onto the entry, persisted, and shown, in that order; one that did not writes nothing.
-const queueWrites = (before: TurnQueue, after: TurnQueue): readonly ConversationEffect[] =>
-    before === after ? [] : [{ kind: "queue-written", queue: after }, { kind: "persist" }];
-
-const withQueue = <R>(state: ConversationState, queue: TurnQueue, reply: R): Decision<R> =>
-    queue === state.queue
-        ? unchanged(state, reply)
-        : { state: { ...state, queue }, effects: [...queueWrites(state.queue, queue), ...BROADCAST], reply };
 
 const PROGRESS: readonly ConversationEffect[] = [{ kind: "progress" }];
 
@@ -489,6 +484,7 @@ const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: 
                 ...freshRuntime(),
                 lastAt: now,
                 promptToFile: session === undefined ? turn.prompt : undefined,
+                endingBefore: endingSetAside(entry?.ending),
                 keptWarm: kept === undefined || kept.ended !== undefined ? undefined : { forMs: now - kept.since, refreshes: kept.refreshes },
             },
             journal: staged === undefined ? state.journal : { ...staged, written: true },
@@ -765,7 +761,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
         return withQueue(state, queue, queue.items.length > 0);
     },
     "queue-taken": (state, event) => withQueue(state, taken(state.queue, event.ids), undefined),
-    "queue-returned": (state, event) => withQueue(state, returned(state.queue, event.items), undefined),
+    "queue-returned": (state, event) => onReturned(state, event.items),
     "queue-removed": (state, event) => {
         const { queue, change } = removed(state.queue, event.id, event.revision);
         return withQueue(state, queue, change);
@@ -818,12 +814,16 @@ export const decide = <E extends ConversationEvent>(
     now: number,
     entry: PersistedAgent | undefined,
 ): Decision<ReplyOf<E>> =>
-    keepLimitHold(
+    withdrawRefusal(
         state,
-        (HANDLERS[event.kind] as unknown as (state: ConversationState, event: E, now: number, entry: PersistedAgent | undefined) => Decision<ReplyOf<E>>)(
+        keepLimitHold(
             state,
-            event,
-            now,
-            entry,
+            (HANDLERS[event.kind] as unknown as (state: ConversationState, event: E, now: number, entry: PersistedAgent | undefined) => Decision<ReplyOf<E>>)(
+                state,
+                event,
+                now,
+                entry,
+            ),
         ),
+        entry,
     );

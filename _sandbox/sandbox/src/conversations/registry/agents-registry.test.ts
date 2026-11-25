@@ -3,6 +3,8 @@ import { IN_MEMORY } from "@intentic/base/sqlite";
 import { waitFor } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { laneOf } from "@intentic/sandbox-contract/models/agent-lanes";
+import { memoryHeld } from "@intentic/sandbox-contract/models/agent-standing";
 import type { AgentSummary, LandConflictReason } from "@intentic/sandbox-contract/schemas/agents";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { ProgramAsk } from "@intentic/sandbox-contract/events/requests";
@@ -3353,5 +3355,147 @@ describe("the role a conversation speaks as", () => {
         expect([registry.get("c1")?.actsAs, registry.get("c1")?.lastActsAs]).toEqual(["support", "sales"]);
         await ran(undefined, 3_000);
         expect([registry.get("c1")?.actsAs, registry.get("c1")?.lastActsAs]).toEqual(["support", undefined]);
+    });
+});
+
+/* A REFUSAL AT THE DOOR STANDS FOR THE WORDS IT HOLDS (door-refusal.ts, turn-failure.ts). On 2026-11-24 a person took back
+   the one follow-up a memory refusal held (pollen-djsk), and the card sat in Attention as Held, holding nothing, its work
+   long landed: the refusal had replaced the conversation's ending, and nothing put it back. */
+
+const DOOR_NOW = 1_800_000_000_000;
+const MEMORY_REFUSAL: AgentEvent = { kind: "error", code: "sandbox-memory-low", message: "The sandbox is short of memory." };
+const heldWords = (id: string, prompt: string) => ({ id, voice: "person" as const, queuedAt: DOOR_NOW, turn: { conversationId: "c1", prompt, agent: "claude", harness: "native" as const } });
+
+const doorFleet = async (store: FleetStore = memoryStore()) => {
+    const land = standings();
+    const { agents, conversations } = createFleet(store, land, noPresences());
+    await agents.init();
+    const card = () => agents.list().find((agent) => agent.id === "c1");
+    // A turn that runs to its own end, with any frames it says on the way.
+    const ran = async (prompt: string, at: number, ...frames: AgentEvent[]) => {
+        await beginTurn(conversations, turn({ prompt }), at);
+        for (const frame of frames) {
+            conversations.send("c1", { kind: "frame", frame }, at);
+        }
+        await conversations.send("c1", { kind: "settle" }, at + 1_000).settled;
+    };
+    // A person's words turned away at the door for memory and handed back to the queue's head, as admission hands them.
+    const turnedAway = async (at: number, ...items: ReturnType<typeof heldWords>[]) => {
+        await ran(items.map((item) => item.turn.prompt).join("\n\n"), at, MEMORY_REFUSAL);
+        await conversations.send("c1", { kind: "queue-returned", items }, at + 1_000).settled;
+    };
+    const takeBack = async (id: string) => {
+        const item = conversations.queued("c1").items.find((waiting) => waiting.id === id);
+        expect(item).toMatchObject({ id });
+        return conversations.send("c1", { kind: "queue-removed", id, revision: item?.revision ?? -1 }).settled;
+    };
+    return { agents, conversations, land, store, card, ran, turnedAway, takeBack };
+};
+
+describe("a refusal at the door that held a person's words", () => {
+    it("calls the person as Held while the words wait, and goes back to Finished once they are taken back", async () => {
+        const { agents, land, card, ran, turnedAway, takeBack } = await doorFleet();
+        await ran("Add GitHub stars to the site", DOOR_NOW);
+        land.set("c1", "landed");
+        expect(card()).toMatchObject({ status: "landed", turns: 1 });
+
+        await turnedAway(DOOR_NOW + 60_000, heldWords("m-1", "Also show forks"));
+        const held = card();
+        expect(held).toMatchObject({ status: "error", failureCode: "sandbox-memory-low" });
+        expect(held !== undefined && memoryHeld(held)).toBe(true);
+        // Nothing ran: the turn it turned away is not counted.
+        expect(held?.turns).toBe(1);
+
+        expect(await takeBack("m-1")).toBe("done");
+        const after = card();
+        expect(after).toMatchObject({ status: "landed", turns: 1 });
+        expect(after?.failureCode).toBeUndefined();
+        expect(after?.failure).toBeUndefined();
+        expect(after === undefined ? undefined : laneOf(after)).toBe("finished");
+        expect(agents.entry("c1")?.ending).toEqual({ kind: "idle" });
+    });
+
+    it("goes back to the failure it set aside, not to a finish the conversation never had", async () => {
+        const { card, ran, turnedAway, takeBack } = await doorFleet();
+        await ran("Fix the login bug", DOOR_NOW, { kind: "error", message: "the CLI died" });
+        await turnedAway(DOOR_NOW + 60_000, heldWords("m-1", "Try again"));
+        expect(card()).toMatchObject({ failureCode: "sandbox-memory-low" });
+
+        await takeBack("m-1");
+        expect(card()).toMatchObject({ status: "error", failure: "the CLI died" });
+        expect(card()?.failureCode).toBeUndefined();
+    });
+
+    it("stays Held while any of its words still wait", async () => {
+        const { card, turnedAway, takeBack } = await doorFleet();
+        await turnedAway(DOOR_NOW, heldWords("m-1", "One"), heldWords("m-2", "Two"));
+
+        await takeBack("m-1");
+        expect(card()).toMatchObject({ status: "error", failureCode: "sandbox-memory-low" });
+        await takeBack("m-2");
+        expect(card()?.failureCode).toBeUndefined();
+    });
+
+    it("goes back to where the conversation stood before the first of several refusals in a row", async () => {
+        const { conversations, agents, land, card, ran, turnedAway, takeBack } = await doorFleet();
+        await ran("Add GitHub stars to the site", DOOR_NOW);
+        land.set("c1", "ready");
+        await turnedAway(DOOR_NOW + 60_000, heldWords("m-1", "Also show forks"));
+        // Pressed Send again into memory still short: the words go out, and come back again.
+        conversations.send("c1", { kind: "queue-released" });
+        await beginTurn(conversations, turn({ prompt: "Also show forks" }), DOOR_NOW + 120_000);
+        conversations.send("c1", { kind: "queue-taken", ids: ["m-1"] });
+        conversations.send("c1", { kind: "frame", frame: MEMORY_REFUSAL });
+        await conversations.send("c1", { kind: "settle" }, DOOR_NOW + 121_000).settled;
+        await conversations.send("c1", { kind: "queue-returned", items: [heldWords("m-1", "Also show forks")] }).settled;
+        expect(card()).toMatchObject({ status: "error", turns: 1 });
+
+        await takeBack("m-1");
+        expect(card()).toMatchObject({ status: "ready", turns: 1 });
+        expect(agents.entry("c1")?.ending).toEqual({ kind: "idle" });
+    });
+
+    it("no longer holds words booked for later, which go by their own booking", async () => {
+        const { conversations, card, ran, land, turnedAway } = await doorFleet();
+        await ran("Add GitHub stars to the site", DOOR_NOW);
+        land.set("c1", "landed");
+        await turnedAway(DOOR_NOW + 60_000, heldWords("m-1", "Also show forks"));
+
+        conversations.send("c1", { kind: "queue-rescheduled", booking: { until: DOOR_NOW + 3_600_000 } });
+        const booked = card();
+        expect(booked).toMatchObject({ status: "landed", next: { kind: "send", at: DOOR_NOW + 3_600_000 } });
+        expect(booked === undefined ? undefined : laneOf(booked)).toBe("active");
+    });
+
+    it("leaves a conversation it opened as never run once its words are taken back", async () => {
+        const { agents, turnedAway, takeBack } = await doorFleet();
+        await turnedAway(DOOR_NOW, heldWords("m-1", "Let's display GitHub stars"));
+        expect(agents.entry("c1")).toMatchObject({ ending: { kind: "failed", code: "sandbox-memory-low" }, totals: { turns: 0 } });
+
+        await takeBack("m-1");
+        expect(agents.entry("c1")).toMatchObject({ ending: { kind: "idle" }, totals: { turns: 0 } });
+    });
+
+    it("still goes back once its words are taken back after a restart", async () => {
+        const store = memoryStore();
+        const before = await doorFleet(store);
+        await before.ran("Add GitHub stars to the site", DOOR_NOW);
+        await before.turnedAway(DOOR_NOW + 60_000, heldWords("m-1", "Also show forks"));
+
+        const after = await doorFleet(store);
+        after.land.set("c1", "landed");
+        expect(after.card()).toMatchObject({ status: "error", failureCode: "sandbox-memory-low" });
+        await after.takeBack("m-1");
+        expect(after.card()).toMatchObject({ status: "landed", turns: 1 });
+    });
+
+    it("leaves a refusal whose words were never handed back, such as the sandbox's own held turn, as it stands", async () => {
+        const { conversations, agents, ran } = await doorFleet();
+        await ran("Add GitHub stars to the site", DOOR_NOW);
+        await ran("A watch fired", DOOR_NOW + 60_000, MEMORY_REFUSAL);
+        conversations.send("c1", { kind: "queue-joined", item: heldWords("m-1", "Later words") });
+        await conversations.send("c1", { kind: "queue-removed", id: "m-1", revision: conversations.queued("c1").items[0]?.revision ?? -1 }).settled;
+        expect(agents.entry("c1")?.ending).toMatchObject({ kind: "failed", code: "sandbox-memory-low" });
+        expect(agents.entry("c1")?.totals.turns).toBe(2);
     });
 });
