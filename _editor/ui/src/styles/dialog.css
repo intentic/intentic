@@ -67,17 +67,11 @@
         transition: border-color var(--motion-quick) var(--ease-smooth);
     }
 
-    .ui-dialog-heading {
-        display: flex;
-        min-width: 0;
-        flex: 1;
-        align-items: flex-start;
-        gap: calc(var(--spacing) * 3);
-    }
-
+    /* The mark and the titles sit straight in PrimeVue's header row beside its ×; the mark's margin is the gap before the words. */
     .ui-dialog-icon {
         display: flex;
         flex: none;
+        margin-inline-end: calc(var(--spacing) * 3);
     }
 
     .ui-dialog-titles {

@@ -258,17 +258,15 @@ const pt = computed(() => ({
         @hide="onHide"
     >
         <template v-if="chrome" #header>
-            <div class="ui-dialog-heading">
-                <!-- A mark before the words: a confirm's tinted glyph, an extension's brand. -->
-                <div v-if="$slots[`icon`]" class="ui-dialog-icon"><slot name="icon" /></div>
-                <div class="ui-dialog-titles">
-                    <!-- The title's own class and id, handed on so a slot's title wears the typography and still names the box. -->
-                    <slot name="header" title-class="p-dialog-title" :title-id="titleId">
-                        <span v-if="header !== undefined" :id="titleId" class="p-dialog-title">{{ header }}</span>
-                    </slot>
-                    <div v-if="describedNow()" :id="descriptionId" class="ui-dialog-description">
-                        <slot name="description">{{ description }}</slot>
-                    </div>
+            <!-- Laid straight into PrimeVue's header row, beside its ×. A mark before the words: a confirm's tinted glyph, an extension's brand. -->
+            <div v-if="$slots[`icon`]" class="ui-dialog-icon"><slot name="icon" /></div>
+            <div class="ui-dialog-titles">
+                <!-- The title's own class and id, handed on so a slot's title wears the typography and still names the box. -->
+                <slot name="header" title-class="p-dialog-title" :title-id="titleId">
+                    <span v-if="header !== undefined" :id="titleId" class="p-dialog-title">{{ header }}</span>
+                </slot>
+                <div v-if="describedNow()" :id="descriptionId" class="ui-dialog-description">
+                    <slot name="description">{{ description }}</slot>
                 </div>
             </div>
         </template>
