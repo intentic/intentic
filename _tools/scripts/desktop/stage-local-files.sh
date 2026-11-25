@@ -11,7 +11,9 @@ VERSION="${INTENTIC_VERSION:-0.0.0}"
 
 if [ ! -f "$ROOT/_extensions/onlyoffice/dist/editor/editor.js" ]; then
     echo "==> building the ONLYOFFICE editor page"
-    pnpm --filter @intentic/ext-onlyoffice build
+    # Through turbo, so the workspace packages its server bundles (@intentic/base and the rest) are built first: a
+    # release job starts from an emptied workspace (release.yml), where no dist/ of theirs exists to resolve.
+    (cd "$ROOT" && pnpm turbo run build --filter=@intentic/ext-onlyoffice)
 fi
 
 triples=("$@")
