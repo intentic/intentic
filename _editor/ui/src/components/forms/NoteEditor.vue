@@ -142,19 +142,20 @@ const escape = (): void => {
             @keydown.enter="keyToWrite"
             @focusout="leave"
         >
-            <div v-if="editing" class="px-4 py-3" @keydown.esc.prevent="escape">
-                <MarkdownDocument
-                    ref="doc"
-                    v-model="source"
-                    editable
-                    save="auto"
-                    :stored="raw"
-                    :saving="saving"
-                    :label="t(`ui.noteEditor.note2`)"
-                    :placeholder="t(`ui.noteEditor.writeNote`)"
-                    @save="emit(`save`, true)"
-                />
-            </div>
+            <MarkdownDocument
+                v-if="editing"
+                ref="doc"
+                v-model="source"
+                editable
+                save="auto"
+                :stored="raw"
+                :saving="saving"
+                :label="t(`ui.noteEditor.note2`)"
+                :placeholder="t(`ui.noteEditor.writeNote`)"
+                class="px-4 py-3"
+                @save="emit(`save`, true)"
+                @keydown.esc.prevent="escape"
+            />
             <slot v-else>
                 <MarkdownDocument :model-value="source" :label="t(`ui.noteEditor.note2`)" class="px-4 py-3" />
             </slot>
