@@ -52,8 +52,8 @@ const done = (): void => {
 
 <template>
     <PropertyRow :label="t(`automationRow.then`)">
-        <button ref="anchor" type="button" :class="EDITABLE_VALUE" :aria-label="t(`thenProperty.change`, { now: said })" @click="begin">
-            <span class="text-sm text-content">{{ said }}</span>
+        <button ref="anchor" type="button" :class="EDITABLE_VALUE" class="text-sm text-content" :aria-label="t(`thenProperty.change`, { now: said })" @click="begin">
+            {{ said }}
             <span v-if="shownError" class="text-xs text-danger">{{ shownError }}</span>
         </button>
 
