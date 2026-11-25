@@ -299,6 +299,11 @@ export interface ScannedProcess extends ParsedProcStat {
     readonly argv?: string | undefined;
     // The background job whose runner leads its session (or its group), when one does.
     readonly jobId?: string | undefined;
+    // The capture dir of the tmux-run runner that leads its session (or its group), for any agent command, job or not.
+    readonly runDir?: string | undefined;
+    // Whether it runs under the heavy-command queue: started by a program the queue judged, or under a slot it took
+    // (INTENTIC_HEAVY_HELD, INTENTIC_QUEUE_SLOT), so the memory gate already priced it.
+    readonly queued?: boolean | undefined;
 }
 
 // What the shared scan last saw of each job's runner, by the runner's pid (the session and group id of everything in its
@@ -345,7 +350,11 @@ export interface ProcSource {
 
 // `key` is start time and comm, so a reused pid or a renaming exec is read again. `runner` is the capture dir of a
 // tmux-run runner, for the one process each job has that leads its session.
-type Identity = Pick<ScannedProcess, "owner" | "stamps" | "role" | "program" | "argv"> & { readonly key: string; readonly runner: string | undefined };
+type Identity = Pick<ScannedProcess, "owner" | "stamps" | "role" | "program" | "argv" | "queued"> & { readonly key: string; readonly runner: string | undefined };
+
+// What marks a process the queue already covers (heavy-turn.cjs, bin/queue-run held_run).
+const QUEUED_ENV = ["INTENTIC_HEAVY_HELD", "INTENTIC_QUEUE_SLOT"] as const;
+const queuedOf = (environ: string): boolean => QUEUED_ENV.some((name) => envValue(environ, name) !== undefined);
 
 // Scans every process but `except`, keeping what each was found to be for the next scan. `remember` is the shared scan's
 // alone: it keeps the runners it saw for recentJobRunner.
@@ -375,6 +384,7 @@ export const createProcessScanner = (
             program: programOf(command),
             argv: argvOf(cmdline),
             runner: runnerDirOf(cmdline ?? ""),
+            queued: queuedOf(environ ?? ""),
         };
         identities.set(pid, identity);
         return identity;
@@ -390,11 +400,11 @@ export const createProcessScanner = (
             if (stat === undefined) {
                 return;
             }
-            const { owner, stamps, role, program, argv, runner } = await identify(pid, stat);
+            const { owner, stamps, role, program, argv, runner, queued } = await identify(pid, stat);
             if (runner !== undefined) {
                 runnerDirs.set(pid, runner);
             }
-            scanned.push({ pid, ...stat, owner, stamps, role, program, ...opt("argv", argv) });
+            scanned.push({ pid, ...stat, owner, stamps, role, program, ...opt("argv", argv), ...opt("queued", queued === true ? true : undefined) });
         });
         const alive = new Set(scanned.map((entry) => entry.pid));
         for (const pid of identities.keys()) {
@@ -417,9 +427,11 @@ export const createProcessScanner = (
             remember(recentJobProcesses, jobProcesses, started, now);
         }
         const byPid = new Map(scanned.map((entry) => [entry.pid, entry]));
+        const runDirOf = (entry: ScannedProcess): string | undefined =>
+            (entry.session === undefined ? undefined : runnerDirs.get(entry.session)) ?? runnerDirs.get(entry.pgrp);
         return scanned.map((scannedEntry) => {
             const jobId = jobProcesses.get(scannedEntry.pid)?.jobId;
-            const entry = jobId === undefined ? scannedEntry : { ...scannedEntry, jobId };
+            const entry = { ...scannedEntry, ...opt("jobId", jobId), ...opt("runDir", runDirOf(scannedEntry)) };
             if (entry.role !== "other" || !NATIVE_BUILD_STEP.test(entry.comm)) {
                 return entry;
             }

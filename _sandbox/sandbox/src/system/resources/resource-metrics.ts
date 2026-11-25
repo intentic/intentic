@@ -9,11 +9,11 @@ import { gitRunCallers, gitRunCounts, gitSpawnStats } from "@intentic/base/git";
 import type { Logger } from "pino";
 import { logsRoot } from "../../seams/logs-root.js";
 import { lineLog } from "../../store/open-document.js";
-import { opt } from "../../opt.js";
 import { flatKeyed, readCgroup, readText } from "./cgroup.js";
 import { type KnownProcess, knownOf, type OomDetector, startDaemonOomDetector } from "./cgroup-oom.js";
 import { MEMORY_KILLS_FILE } from "./memory-records.js";
 import { scanProcesses, type ScannedProcess } from "./process-scan.js";
+import { type OwnerSummary, ownerSums, type TopProcess, topProcesses } from "./process-summaries.js";
 import { queueSnapshot } from "./queue/queue-slots.js";
 import { holdWarnSeconds, SHIPPED_HEAVY_COMMANDS } from "@intentic/constants/heavy-rules";
 
@@ -48,6 +48,8 @@ export interface ProcessRow {
     readonly argv?: string | undefined;
     readonly rssHighWaterBytes?: number;
     readonly startTimeTicks?: number | undefined;
+    // Covered by the heavy-command queue, which prices it (process-scan.ts `queued`).
+    readonly queued?: boolean | undefined;
 }
 
 export interface ParsedProcStatus {
@@ -75,13 +77,13 @@ export const parseProcStatus = (text: string): ParsedProcStatus => ({
 });
 
 // Swap is only in status, so each scanned process is read once more; one gone since the scan is not a row.
-const rowOf = async ({ pid, ppid, pgrp, comm, program, role, cpuTicks, owner, jobId, argv, startTimeTicks }: ScannedProcess): Promise<ProcessRow | undefined> => {
+const rowOf = async ({ pid, ppid, pgrp, comm, program, role, cpuTicks, owner, jobId, argv, startTimeTicks, queued }: ScannedProcess): Promise<ProcessRow | undefined> => {
     const status = await readText(`/proc/${pid}/status`);
     if (status === undefined || cpuTicks === undefined) {
         return undefined;
     }
     const { rssBytes, swapBytes, threads, rssHighWaterBytes } = parseProcStatus(status);
-    return { pid, ppid, name: comm, program, role, rssBytes, swapBytes, threads, cpuTicks, owner, jobId, pgrp, argv, rssHighWaterBytes, startTimeTicks };
+    return { pid, ppid, name: comm, program, role, rssBytes, swapBytes, threads, cpuTicks, owner, jobId, pgrp, argv, rssHighWaterBytes, startTimeTicks, queued };
 };
 
 interface ProcessSummary {
@@ -101,58 +103,6 @@ const addProcess = (summary: ProcessSummary, row: ProcessRow, previousCpu: Reado
     summary.threads += row.threads;
     const previous = previousCpu.get(row.pid);
     summary.cpuTicksSincePreviousSample += previous === undefined ? 0 : Math.max(0, row.cpuTicks - previous);
-};
-
-// One row per heavy process, so a peak can be attributed after the fact; the roles above only say which bucket it was in,
-// the owner and job whose work it was (2026-11-05: a 17.6 GB game client sat in this list as `other`, tied to nothing).
-export interface TopProcess {
-    readonly pid: number;
-    readonly name: string;
-    readonly program: string | undefined;
-    readonly role: ProcessRole;
-    readonly rssBytes: number;
-    readonly swapBytes: number;
-    readonly threads: number;
-    readonly owner?: string;
-    readonly jobId?: string;
-}
-
-const TOP_PROCESSES = 8;
-
-// Heaviest first by resident plus swapped, since a paged-out process is still the one holding the memory.
-export const topProcesses = (rows: readonly ProcessRow[], limit: number = TOP_PROCESSES): TopProcess[] =>
-    rows
-        .toSorted((left, right) => right.rssBytes + right.swapBytes - (left.rssBytes + left.swapBytes))
-        .slice(0, limit)
-        .map(({ pid, name, program, role, rssBytes, swapBytes, threads, owner, jobId }) => ({
-            pid,
-            name,
-            program,
-            role,
-            rssBytes,
-            swapBytes,
-            threads,
-            ...opt("owner", owner),
-            ...opt("jobId", jobId),
-        }));
-
-// The key unstamped processes are summed under: no conversation id is one word, and neither reserved owner is this one.
-const UNSTAMPED = "unstamped";
-
-export interface OwnerSummary {
-    readonly count: number;
-    readonly rssBytes: number;
-    readonly swapBytes: number;
-}
-
-/** Resident and swapped bytes by owner stamp, so a minute's line says whose work held the memory, not only what kind. */
-export const ownerSums = (rows: readonly Pick<ProcessRow, "owner" | "rssBytes" | "swapBytes">[]): Record<string, OwnerSummary> => {
-    const sums = new Map<string, OwnerSummary>();
-    for (const { owner = UNSTAMPED, rssBytes, swapBytes } of rows) {
-        const sum = sums.get(owner) ?? { count: 0, rssBytes: 0, swapBytes: 0 };
-        sums.set(owner, { count: sum.count + 1, rssBytes: sum.rssBytes + rssBytes, swapBytes: sum.swapBytes + swapBytes });
-    }
-    return Object.fromEntries(sums);
 };
 
 const descendantsOf = (rows: readonly ProcessRow[], parentPid: number): ReadonlySet<number> => {
@@ -441,6 +391,8 @@ export interface ResourceMetricsOptions {
     // Names what the workload leaf's OOM killed on each sample (cgroup-oom.ts). The daemon's own, reading the kernel's log
     // and appending to memory-kills.jsonl, where no sampler is supplied; none beside a supplied one unless given.
     readonly oom?: OomDetector;
+    // Each minute's processes, for what learns from them (agent-envelope.ts); its failure never costs the sample.
+    readonly onProcesses?: (processes: readonly KnownProcess[]) => Promise<void>;
 }
 
 // OOM alarm: logged at error the moment a kill is observed. Reported as a delta since the raw counter is cumulative;
@@ -520,6 +472,7 @@ export const startResourceMetrics = ({
     intervalMs = SAMPLE_INTERVAL_MS,
     sampler: suppliedSampler,
     oom: suppliedOom,
+    onProcesses,
 }: ResourceMetricsOptions): ResourceMetrics => {
     if (historyRoot === "") {
         return { sample: async () => {}, stop: () => suppliedSampler?.stop() };
@@ -554,6 +507,9 @@ export const startResourceMetrics = ({
                     oomFailed = true;
                     logger.warn({ err: error }, "resource metrics: a kill in the workload cgroup could not be named or recorded");
                 }
+            });
+            await onProcesses?.(sampler.processes?.() ?? []).catch((error: Error) => {
+                logger.warn({ err: error }, "resource metrics: the agents' footprints could not be learned from this sample");
             });
             if (killed !== undefined) {
                 logger.error(

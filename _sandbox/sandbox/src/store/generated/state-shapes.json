@@ -231,6 +231,12 @@
       "since": "v1.335.0"
     }
   ],
+  "history:agent-envelopes.json": [
+    {
+      "type": "{ agents?: { at: number; mib: number }[] }",
+      "since": "unreleased"
+    }
+  ],
   "history:approval-decisions.json": [
     {
       "type": "{ approved: Record<string, { approvedAt: number; approver?: string; digest: string }> }",

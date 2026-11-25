@@ -3,6 +3,7 @@ import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/setting
 import type { Services } from "../../../composition.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { secretJudgeFacts } from "../../../secrets/secret-judge-facts.js";
+import { fileCommandPeaks } from "../../../system/resources/queue/command-peaks.js";
 import { opt } from "../../../opt.js";
 import type { AgentExecutionContext } from "../../../workload/agent-execution.js";
 import type { TurnBase } from "../../providers/agent-request.js";
@@ -16,7 +17,7 @@ import { installGrantsOf, installPlacementOf, PROJECT_INSTALL_RULE } from "../..
 
 export type TurnSafetyDeps = Pick<
     Services,
-    "secretRegistry" | "hostGuards" | "credentialGates" | "keyringLink" | "conversationGrants" | "heavyCommands" | "judgeCommand" | "logger" | "ownerGrants" | "runtimeInstalls" | "safetyLog" | "safetyPolicy" | "workspace"
+    "secretRegistry" | "hostGuards" | "credentialGates" | "keyringLink" | "conversationGrants" | "heavyCommands" | "judgeCommand" | "logger" | "ownerGrants" | "runtimeInstalls" | "safetyLog" | "safetyPolicy" | "workspace" | "config"
 >;
 
 // A closure over the judge, the policy text and the judge's setup rather than any of them directly, because the seam it
@@ -55,6 +56,7 @@ export const withTurnSafety = async (deps: TurnSafetyDeps, input: TurnSafetyInpu
             ...base.tools,
             // Read per command where the runtime runs its own shell line (Claude Code), per turn where it doesn't.
             heavyCommands: () => deps.heavyCommands.read(),
+            learnedPeaks: fileCommandPeaks(deps.config.historyRoot),
         },
         hooks: {
             ...base.hooks,

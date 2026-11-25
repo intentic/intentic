@@ -128,6 +128,16 @@ test("a saturated disk holds work nobody waits on, and never refuses a person's 
     expect(judge({ ...reading, ioStallPercent: 29, ioStallSustainedPercent: 19 }, { workload: "toolchain", attended: false })).toMatchObject({ verdict: "run" });
 });
 
+// (2026-11-25) An agent turn is priced at what agents in its sandbox were measured to grow to, where the caller learned it.
+test("a cost the caller learned prices the need in its class's place, for the sandbox and the host alike", () => {
+    const reading = { limitBytes: 16 * GIB, usedBytes: 14.25 * GIB, swapBytes: 0, stallPercent: 0, oomKills: undefined };
+    expect(judge(reading, { workload: "agentRuntime", attended: false })).toMatchObject({ verdict: "wait", needBytes: 2 * GIB });
+    expect(judge(reading, { workload: "agentRuntime", attended: false, costBytes: 0.5 * GIB })).toMatchObject({ verdict: "run", needBytes: 1.5 * GIB });
+    const host = { name: "rog", availableBytes: 4 * GIB, totalBytes: 32 * GIB, reserveBytes: 3.2 * GIB };
+    expect(judge({ ...reading, usedBytes: 4 * GIB, host }, { workload: "agentRuntime", attended: false, costBytes: 0.5 * GIB }).verdict).toBe("run");
+    expect(judge({ ...reading, usedBytes: 4 * GIB, host }, { workload: "agentRuntime", attended: false }).verdict).toBe("wait");
+});
+
 // The reading of 2026-10-05 22:14: avg10 flickered under 20% for minutes while everything paged.
 test("a minute of stall past STALL_SUSTAINED_PERCENT holds work the ten-second figure lets through", () => {
     const reading = { limitBytes: 20 * GIB, usedBytes: 8 * GIB, swapBytes: 0, stallPercent: 17.6, stallSustainedPercent: 12.4, oomKills: undefined };

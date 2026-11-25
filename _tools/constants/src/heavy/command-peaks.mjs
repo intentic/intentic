@@ -10,6 +10,7 @@
 // `env`, `nice` or `time` in front, the queue's own wrappers (queue-run, heavy-launch.cjs, offload-run), redirections,
 // and anything after a pipe or `;`. The repository is named by its git directory, never by the checkout's path, so every
 // worktree of one repository shares a record. Plain JavaScript like memory-room, which runs it before any install.
+import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
@@ -265,6 +266,84 @@ export const commandSignature = ({ rule, command, cwd }) => {
     return { key: `${rule} @${where}: ${words}`, command: words };
 };
 
+// (2026-11-25, the shinobi-society audit) WHICH LINE AN AGENT RAN, for a command that grew heavy without going through the
+// queue (a `python3 tools/gen.py` at 3.5 GiB, the repository's own binaries at 2.4 GiB, a game at 1.4 GiB, all priced at
+// nothing). Such a line is no program a rule names, so it is named by the whole line: every command of it as
+// `commandWords` names one, joined by the operators between them, under LEARNED_RULE. A leading `cd DIR` is where it ran,
+// not a command; a filter a pipe feeds (`| tail -40`) and a builtin that starts nothing are no part of it; a heredoc is
+// named by a hash of its body, so two scripts fed to `python3 -` are two commands. The daemon records such a line's peak
+// beside the queued ones and queues its next run (the daemon's system/resources/queue/unqueued-peaks.ts, learned-lines.ts).
+export const LEARNED_RULE = "learned";
+// The least such a line must have held, outside the queue or in it lately, for its next run to queue.
+export const LEARNED_MIN_BYTES = GIB;
+const PIPE_FILTERS = new Set(["tail", "head", "tee", "grep", "rg", "cat", "wc", "sort", "uniq", "cut", "sed", "awk", "jq", "tr", "less", "more", "column"]);
+const NO_COMMAND = new Set(["cd", "echo", "printf", "true", "false", "export", "set", "unset", "sleep", ":", "pwd", "wait"]);
+// A heredoc's opener (`<<'EOF'`, `<<-EOF`), what follows it on its line, its body and its terminator line.
+const HEREDOC = /<<-?[ \t]*(['"]?)([A-Za-z_][\w.-]*)\1([^\n]*)\n([\s\S]*?)\n[ \t]*\2[ \t]*(?=\n|$)/gu;
+
+// The line with each heredoc body replaced by a word naming it, continuations joined, and its lines separated by `;`.
+const flatLine = (line) =>
+    line
+        .replaceAll(HEREDOC, (_whole, _quote, _tag, rest, body) => ` heredoc:${createHash("sha256").update(body).digest("hex").slice(0, 10)}${rest}`)
+        .replaceAll("\\\n", " ")
+        .replaceAll("\n", " ; ");
+
+// The line's commands, each with the operator before it (undefined for the first).
+const segmentsOf = (words) => {
+    const segments = [{ operator: undefined, words: [] }];
+    for (const word of words) {
+        if (CONTROL.has(word)) {
+            segments.push({ operator: word, words: [] });
+        } else {
+            segments.at(-1).words.push(word);
+        }
+    }
+    return segments.filter((segment) => segment.words.length > 0);
+};
+
+// Where a `cd` segment moves the line to; undefined for any other segment, and for a `cd` that cannot be followed
+// (`cd -`, `cd ~/x`, `cd` alone, or a line with no known start).
+const movedTo = (segment, where) => {
+    const target = segment.words[1];
+    return basename(segment.words[0]) !== "cd" || segment.words.length !== 2 || where === undefined || target.startsWith("~") || target === "-"
+        ? undefined
+        : resolve(where, target);
+};
+
+const isCommand = (segment) => {
+    const program = basename(segment.words[0]);
+    return !NO_COMMAND.has(program) && !(segment.operator === "|" && PIPE_FILTERS.has(program));
+};
+
+const placeOf = (cwd) => {
+    const checkout = cwd === undefined ? undefined : checkoutOf(cwd);
+    return checkout === undefined ? "" : checkout.dir === "" ? checkout.repo : `${checkout.repo}/${checkout.dir}`;
+};
+
+/**
+ * The record an agent's whole line is kept under, and the words it is named by: `learned @repo/dir: words`. `cwd` is
+ * where the line starts; a leading `cd` moves it. Undefined for a line that names no command.
+ */
+export const lineSignature = (line, cwd) => {
+    const parts = [];
+    let where = cwd;
+    let first;
+    for (const segment of segmentsOf(lineWords(flatLine(line.slice(0, 4096))))) {
+        const moved = movedTo(segment, where);
+        where = moved ?? where;
+        const named = moved === undefined && isCommand(segment) ? commandWords(segment.words, where === undefined ? undefined : checkoutOf(where)?.root) : undefined;
+        if (named !== undefined) {
+            first ??= where;
+            parts.push(parts.length === 0 ? named : `${segment.operator} ${named}`);
+        }
+    }
+    if (parts.length === 0) {
+        return undefined;
+    }
+    const command = parts.join(" ").slice(0, MAX_CHARS);
+    return { key: `${LEARNED_RULE} @${placeOf(first)}: ${command}`, command };
+};
+
 /** The command a queue-run process runs, from its argv (bash, queue-run, its flags, `--`, the command); undefined for any other. */
 export const queuedCommand = (argv) => {
     const at = argv.findIndex((word) => basename(word) === "queue-run");
@@ -294,6 +373,18 @@ export const queuedSignature = (pid, rule, { proc = "/proc", cwd } = {}) => {
         // allow(silent-catch): a command that cannot be named (a working directory deleted under it) is priced by its rule
         return undefined;
     }
+};
+
+/**
+ * A signature named outright (`memory-room --key K --command C`, which queue-run passes for an agent's line queued by
+ * what it took last time: its argv is `bash <run dir>/agent`, which names nothing), with the start of queue-run process
+ * `pid`. Undefined where either is missing or the process cannot be read.
+ */
+export const namedSignature = (pid, key, command, { proc = "/proc" } = {}) => {
+    const fits = (text) => text !== undefined && text !== "" && text.length <= 600;
+    const stat = fits(key) && fits(command) ? readText(`${proc}/${pid}/stat`) : undefined;
+    const start = stat === undefined ? undefined : startTicksOf(stat);
+    return start === undefined ? undefined : { key, command, start };
 };
 
 // (2026-11-22, the shinobi-society audit) A COMMAND IS PRICED AT LEAST AT WHAT IT TOOK LAST TIME. A rule's price is a

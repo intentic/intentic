@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] [--size NAME] [--exclusive] [--calm-launcher PATH] [--calm-idle N] -- <command> [args...]
+# queue-run --pool NAME --limit N [--wait SECONDS] [--memory-gate SECONDS] [--max-hold SECONDS] [--on-deadline run|skip] [--label ID] [--size NAME] [--exclusive] [--calm-launcher PATH] [--calm-idle N] [--key K --command C] [--note TEXT] -- <command> [args...]
 #
 # Runs <command> once a slot in <pool> is free, so the expensive commands several agent sessions each decide to
 # run — a repo-wide test fan-out, a type check across 74 packages — take turns instead of landing on the box at
@@ -51,6 +51,12 @@ size=""
 exclusive=0
 calm_launcher=""
 calm_idle=""
+# (2026-11-25) The command's name for the memory gate, where its argv cannot name it (an agent's line queued by what
+# it took last time runs as `bash <run dir>/agent`: src/system/resources/queue/learned-lines.ts), and the one line said
+# before it queues.
+sig_key=""
+sig_command=""
+note=""
 # Only where the wait cannot be woken by the kernel (a bash before 5.1, see `next_slot`); fractions allowed.
 poll_seconds="${INTENTIC_QUEUE_POLL:-0.25}"
 
@@ -94,6 +100,9 @@ while [ "$i" -lt "${#flags[@]}" ]; do
         --exclusive) exclusive=1; i=$((i + 1)) ;;
         --calm-launcher) calm_launcher="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
         --calm-idle) calm_idle="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
+        --key) sig_key="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
+        --command) sig_command="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
+        --note) note="${flags[$((i + 1))]:-}"; i=$((i + 2)) ;;
         *) i=$((i + 1)) ;;
     esac
 done
@@ -101,6 +110,8 @@ done
 # Nothing to run is not an error worth a non-zero exit: it means the caller composed an empty command line,
 # and the command it meant to run does not exist to be harmed either way.
 [ $# -eq 0 ] && exit 0
+
+[ -n "$note" ] && printf '[queue-run] %s: %s\n' "$label" "$note" >&2
 
 run() { exec "$@"; }
 
@@ -184,6 +195,7 @@ fi
 if [ "$memory_gate" -gt 0 ] && gate="$(command -v memory-room 2>/dev/null)" && [ -n "$gate" ]; then
     gate_args=(--class toolchain --wait "$memory_gate" --ceiling "$wait_seconds" --label "$label" --pid "$$" --admitted)
     [ -n "$size" ] && gate_args+=(--size "$size")
+    [ -n "$sig_key" ] && [ -n "$sig_command" ] && gate_args+=(--key "$sig_key" --command "$sig_command")
     room_status=0
     if [ -x "$gate" ]; then
         admitted=$("$gate" "${gate_args[@]}") || room_status=$?

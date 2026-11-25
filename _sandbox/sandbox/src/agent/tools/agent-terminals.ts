@@ -15,6 +15,7 @@ import { TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { isNoTmuxTarget } from "../../terminal/tmux-server.js";
 import { OFFLOAD_RUN_BIN } from "../../offload/offload-prefix.js";
 import { type HeavyCommands, heavyEnvPrefix, QUEUE_RUN_BIN, queueRunEnabled } from "../../workload/heavy-commands.js";
+import { type LearnedPeaks, learnedQueuePrefix, learnedSignatureOf, SIGNATURE_FILE } from "../../system/resources/queue/learned-lines.js";
 import { shellPrefix } from "../../workload/workload-class.js";
 import { gpuShellPrefix } from "../../hosts/gpu/gpu-state.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
@@ -363,6 +364,48 @@ export const paneHop = (isolation: TurnPlacement | undefined): string => {
     return anchor === undefined || anchor.sandbox !== undefined || anchor.domain !== undefined ? "" : nsenterPrefix(namespaceTargetOf(anchor), anchor.cwd);
 };
 
+type HeavySources = {
+    readonly heavy: (() => Promise<HeavyCommands>) | undefined;
+    readonly offload: (() => Promise<Readonly<Record<string, string>>>) | undefined;
+    readonly learned: LearnedPeaks | undefined;
+};
+type HeavyLine = { readonly command: string; readonly executed: string; readonly cwd: string; readonly dir: string; readonly background: boolean };
+
+// The table every program of the line is judged by as it starts, with the prefix that hands it down; undefined where
+// there is none or it cannot be read. A line that resolved a secret offloads nothing, since the value would travel to
+// another machine.
+const judgedLine = async (line: HeavyLine, from: HeavySources) => {
+    try {
+        if (from.heavy === undefined) {
+            return undefined;
+        }
+        const table = await from.heavy();
+        const routes = line.executed === line.command ? ((await from.offload?.().catch(() => ({}))) ?? {}) : {};
+        return { table, env: heavyEnvPrefix(table, { queueRun: queueRunOf(), offloadRun: OFFLOAD_RUN_BIN, offload: routes }) };
+    } catch {
+        return undefined;
+    }
+};
+
+// The judged table's prefix, then, for a line that grew heavy outside the queue before, the queue it now waits in
+// (system/resources/queue/learned-lines.ts); "" with no table. The line's signature goes beside it in its run dir,
+// where its unqueued peaks are measured by it (system/resources/queue/unqueued-peaks.ts).
+const heavyPrefixes = async (line: HeavyLine, from: HeavySources): Promise<string> => {
+    const judged = await judgedLine(line, from);
+    if (judged === undefined) {
+        return "";
+    }
+    const signature = learnedSignatureOf(line.command, line.cwd);
+    try {
+        if (signature !== undefined) {
+            writeRunFile(line.dir, SIGNATURE_FILE, JSON.stringify(signature));
+        }
+    } catch {
+        // allow(silent-catch): a line whose signature cannot be written is not measured; it still runs, and may still queue
+    }
+    return `${judged.env}${await learnedQueuePrefix({ peaks: from.learned, signature, heavy: judged.table, queueRun: queueRunOf(), background: line.background })}`;
+};
+
 export const bashTmuxHooks = (
     envKeys: readonly string[] = [],
     // An isolated turn's Bash must land in the same tree as its Edit/Write:
@@ -380,6 +423,8 @@ export const bashTmuxHooks = (
     // Conversation and routing a background job's completion wakes; absent leaves such a job ordinary, so it still
     // dies with the turn — a conversationless turn has nowhere to deliver the wake anyway.
     jobs?: BackgroundJobSeed,
+    // What lines that grew heavy outside the queue took (queue/learned-lines.ts); absent, none is queued for it.
+    learned?: LearnedPeaks,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const envFlags = envKeyFlags(envKeys);
     // Only a turn that can file a job keeps its foreground calls to look at.
@@ -425,19 +470,6 @@ export const bashTmuxHooks = (
                         // Rides the namespace hop so every forked process carries it; lets the daemon tell an
                         // agent-started run apart.
                         const stamp = `${AGENT_SESSION_ENV}=${shellQuote(input.session_id)} ${owner !== undefined && /^[A-Za-z0-9_-]+$/u.test(owner) ? `${WORKLOAD_ENV}=${owner} ${TURN_PROOF_ENV}=${turnProof(owner)} ` : ""}`;
-                        // The table every program of the line is judged by as it starts; a line that resolved a
-                        // secret offloads nothing, since the value would travel to another machine.
-                        const heavyEnv = await (async (): Promise<string> => {
-                            try {
-                                if (heavy === undefined) {
-                                    return "";
-                                }
-                                const routes = executed === command ? ((await offload?.().catch(() => ({}))) ?? {}) : {};
-                                return heavyEnvPrefix(await heavy(), { queueRun: queueRunOf(), offloadRun: OFFLOAD_RUN_BIN, offload: routes });
-                            } catch {
-                                return "";
-                            }
-                        })();
                         // Filed first, so the flag and the registry entry cannot disagree about which dir holds this
                         // job's completion. A dir that cannot be made leaves the call ordinary rather than failing it.
                         const job =
@@ -454,8 +486,9 @@ export const bashTmuxHooks = (
                         const agentFile = join(dir, "agent");
                         // Through run-files.ts: for a fenced turn this dir is in the turn's own temp dir.
                         writeRunFile(dir, "agent", `${PIPESTATUS_TRAP}${executed}\n`);
+                        const heavyLine = await heavyPrefixes({ command, executed, cwd: input.cwd, dir, background: job !== undefined }, { heavy, offload, learned });
                         // gpu-run in front only where the owner gave every agent command the GPU (settings gpu.shells).
-                        const run = `${POLITE_PREFIX}${NO_PROMPTS}${heavyEnv}${gpuShellPrefix()}${agentScript(agentFile)}`;
+                        const run = `${POLITE_PREFIX}${NO_PROMPTS}${heavyLine}${gpuShellPrefix()}${agentScript(agentFile)}`;
                         // Namespace hop and demotion sit inside the wrapper; the forked tree inherits both, tmux-run
                         // stays outside.
                         const inner = `${stamp}${paneHop(isolation)}${run}`;

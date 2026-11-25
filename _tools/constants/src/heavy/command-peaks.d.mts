@@ -36,6 +36,16 @@ export function queuedSignature(
     rule: string,
     options?: { readonly proc?: string; readonly cwd?: string },
 ): (CommandSignature & { readonly start: number }) | undefined;
+export function namedSignature(
+    pid: number,
+    key: string | undefined,
+    command: string | undefined,
+    options?: { readonly proc?: string },
+): (CommandSignature & { readonly start: number }) | undefined;
+// The rule an agent's whole line is recorded and queued under once it grew heavy outside the queue.
+export const LEARNED_RULE: "learned";
+export const LEARNED_MIN_BYTES: number;
+export function lineSignature(line: string, cwd: string | undefined): CommandSignature | undefined;
 export const PEAK_MARGIN: number;
 export function learnedCostBytes(configuredBytes: number, peakBytes: number | undefined, limitBytes: number | undefined): number;
 export function peakWords(priced: LearnedPrice): string;

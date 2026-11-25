@@ -939,8 +939,17 @@ flowchart LR
   (`@intentic/constants` `heavy/command-peaks.mjs`) took at its peak lately, plus 15%, capped at the sandbox's limit:
   `system/resources/queue/peak-watch.ts` measures the process tree queue-run's pid leads from its exec to its exit, and
   `system/resources/queue/command-peaks.ts` keeps each command's last five peaks within two weeks, 300 commands at most,
-  in `/history/command-peaks.json`. `memory-room` names the price and the peak behind it on its wait line. `offload-run` says how to keep an offloaded command here (`INTENTIC_OFFLOAD=0`). Agents'
-  guide: `seed-skills/intentic/references/heavy-commands.md`.
+  in `/history/command-peaks.json`. `memory-room` names the price and the peak behind it on its wait line. (2026-11-25)
+  An agent's line that grew heavy WITHOUT the queue (a script, a binary run by path, which no rule or shim names) is
+  priced the same way: `system/resources/queue/unqueued-peaks.ts` sums, per tmux-run runner, the memory and swap of the
+  processes in its session the queue does not cover (no `INTENTIC_HEAVY_HELD`/`INTENTIC_QUEUE_SLOT`, process-scan.ts
+  `queued`), and a run that peaked at 1 GiB or more is kept in the same file under the line's signature
+  (`heavy/command-peaks.mjs` `lineSignature`, rule `learned`, which the Bash hook writes beside the run). The next run
+  of that line goes behind `queue-run --label learned` (pool `learned`, two at once; background jobs `learned-jobs`,
+  four), the gate asked for its peak by `--key`/`--command` so peak-watch measures it again, and one `--note` line says
+  why (`system/resources/queue/learned-lines.ts`). Only lines the daemon writes (Claude Code, its judged shells) are
+  measured and queued so. `offload-run` says how to keep an offloaded command here (`INTENTIC_OFFLOAD=0`). Agents' guide:
+  `seed-skills/intentic/references/heavy-commands.md`.
 - One `ResourceBudget` (`workload/resource-budget.ts`) decides whether there is room for more work: the turn door, a
   child waiting for room, heavy commands (over the local `room.sock`) and the editor's memory gauge all read its one
   snapshot, taken by the formula in `@intentic/constants/memory-room`. (2026-11-02) That reading is the sandbox's cgroup
@@ -953,6 +962,17 @@ flowchart LR
   whichever is more, and is told so by name ("rog, the machine this sandbox runs on, is low on memory: …"). A person's
   turn is never held for the host. No such machine, a distro whose Windows side is not connected, an agent older than
   the field, or an answer over two minutes old is no host constraint, never "no room".
+- (2026-11-25) Every agent turn running here holds a lease on what it is expected to grow into, so how many agents run
+  at once across the sandbox is set by what agents here measure, not by a count. `system/resources/agent-envelope.ts`
+  learns the envelope from the minute's process scan: each conversation's processes the heavy-command queue does not
+  cover, sampled while its turn is live and its runtime runs here; each agent's 90th-percentile minute once it ends; the
+  75th percentile of the last 50 (`/history/agent-envelopes.json`; 1 GiB until 8 are measured, kept within 256 MiB to
+  4 GiB). An agent turn nobody waits on is priced at the envelope and starts only where every other live agent turn's
+  lease (the envelope less what it holds now) and its own still fit beside a person's turn in the sandbox's own room
+  (`workload/leases/agent-leases.ts`); its row says so, and the snapshot's `agents` says how many more fit now. Held
+  children of different parents take turns for room (`room-wait-queue.ts` `fairOrder`), and an agent turn reads the
+  host by its last minute's median rather than its latest reading. A person's turn and heavy commands are judged as
+  before, and `subagentsAtOnce` stays a per-conversation limit.
 - Stored files evolve under one engine (`store/`). Each is declared with `defineDocument` beside its store, carrying
   the conversions its shape has had, its path and its layout. A document on `/history` also says whether it travels in
   a bundle (`portability`, and the `note` the bundle report shows when it does not); a workspace or auth one is found by

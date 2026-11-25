@@ -8,6 +8,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "account-pairings.json", portability: "secret" },
     { path: "account-usage.json", portability: "carry" },
     { path: "activity.jsonl", portability: "carry" },
+    { path: "agent-envelopes.json", portability: "carry" },
     { path: "approval-decisions.json", portability: "identity", note: "Approve again from Approvals anything that was approved and had not run yet." },
     { path: "audit/checkpoint.json", portability: "carry" },
     { path: "audit/forward.json", portability: "carry" },

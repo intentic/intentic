@@ -19,6 +19,7 @@ import type { HostDeviceReach } from "../../hosts/self-host.js";
 import type { RoleScope } from "../../roles/role-scope.js";
 import type { TurnShield } from "../../privacy/privacy-shield.js";
 import type { HeavyCommands } from "../../workload/heavy-commands.js";
+import type { LearnedPeaks } from "../../system/resources/queue/learned-lines.js";
 import type { AgentExecutionContext } from "../../workload/agent-execution.js";
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { OwnPhoneReach } from "../../phones/phone-peer.js";
@@ -181,6 +182,8 @@ export interface TurnTools {
     readonly heavyCommands?: () => Promise<HeavyCommands>;
     // Which heavy rules' lines run on a runner instead (settings `offload.commands`), read fresh per Bash command too.
     readonly offloadCommands?: () => Promise<Readonly<Record<string, string>>>;
+    // What agent lines that grew heavy outside the queue took, so the next run of one queues (queue/learned-lines.ts).
+    readonly learnedPeaks?: LearnedPeaks;
     // Whether the diagnostics server is mounted; withheld from a role whose `files` power is `none`.
     readonly diagnostics?: boolean;
     // What this runtime's tool list puts ahead of `<server>_<tool>` for the turn's MCP tools, where it is not

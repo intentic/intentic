@@ -194,6 +194,29 @@ describe("a process's background job", () => {
         expect(jobs).toEqual({ 500: JOB.slice(-36), 501: JOB.slice(-36), 502: JOB.slice(-36), 503: JOB.slice(-36), 600: undefined });
     });
 
+    // (2026-11-25) Every agent command's processes, job or not, by the runner leading their session, and which of them
+    // the queue already covers: what the unqueued peaks (queue/unqueued-peaks.ts) sum.
+    test("every process in a runner's session names its run dir, and one under the queue says so", async () => {
+        const { texts, pids } = stage([
+            [700, 1, 700, 700, "bash", `bash\0${FILED}/runner\0`],
+            [701, 700, 700, 700, "python3", "python3\0tools/gen.py\0"],
+            [702, 700, 700, 700, "cargo", "cargo\0build\0"],
+            [703, 702, 703, 700, "rustc", "rustc\0"],
+            [600, 1, 600, 600, "node", "node\0server.js\0"],
+        ]);
+        texts["/proc/702/environ"] = `INTENTIC_HEAVY_HELD=cargo-build\0`;
+        texts["/proc/703/environ"] = `INTENTIC_QUEUE_SLOT=/tmp/intentic-queue/cargo/slot.1\0`;
+        const scan = createProcessScanner({ listPids: async () => pids, readText: async (path) => texts[path] });
+        const seen = Object.fromEntries((await scan()).map(({ pid, runDir, queued }) => [pid, [runDir, queued]]));
+        expect(seen).toEqual({
+            700: [FILED, undefined],
+            701: [FILED, undefined],
+            702: [FILED, true],
+            703: [FILED, true],
+            600: [undefined, undefined],
+        });
+    });
+
     test("a foreground call is a job only once it was filed as one, by the id its job file names", async () => {
         const { texts, pids } = stage([
             [700, 1, 700, 700, "bash", `bash\0${FILED}/runner\0`],

@@ -1,14 +1,24 @@
 import { gitCommandLabel, observeGitCommands, observeStaleLocks } from "@intentic/base/git";
-import { turnRunMetrics } from "../conversations/actor/conversation-holdings.js";
+import { liveTurnConversations, turnRunMetrics } from "../conversations/actor/conversation-holdings.js";
 import { browserSessionMetrics } from "../browser/sessions/browser-sessions.js";
+import { createAgentEnvelope, fileAgentEnvelope } from "../system/resources/agent-envelope.js";
 import { startResourceMetrics } from "../system/resources/resource-metrics.js";
 import type { BootPhase } from "./boot-phase.js";
 
-// Neither series reads back into the code it measures.
+// The resource series reads back into nothing it measures, but one thing: what each agent turn held each minute teaches the
+// memory gate what the next one is expected to grow to (agent-envelope.ts), and every agent turn live here holds that
+// as its lease (workload/leases/agent-leases.ts). Wired here, above both the workload budget and the conversations it counts.
 export const startDaemonMetrics = ({ config, logger, services, shutdown }: BootPhase): void => {
+    const envelope = config.historyRoot === "" ? createAgentEnvelope() : fileAgentEnvelope(config.historyRoot);
+    const liveHere = (): ReadonlySet<string> => new Set(liveTurnConversations(services.conversations).map((run) => run.conversationId));
+    services.answerToLeases(() => {
+        const { bytes, learnedFrom } = envelope.envelope();
+        return { envelopeBytes: bytes, learnedFrom, agents: envelope.footprints(liveHere()) };
+    });
     const resourceMetrics = startResourceMetrics({
         historyRoot: config.historyRoot,
         logger,
+        onProcesses: (processes) => envelope.observe(processes, liveHere(), Date.now()),
         room: () => services.resources.snapshot(),
         owners: () => ({
             ...services.resourceOwners(),

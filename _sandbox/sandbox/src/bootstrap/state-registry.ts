@@ -131,6 +131,7 @@ import { turnStartsDocument } from "../store/start-window.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
 import { bootHistoryDocument } from "../system/boot/restarts/boot-history.js";
 import { choreClockDocument } from "../system/chore-clock.js";
+import { agentEnvelopesDocument } from "../system/resources/agent-envelope.js";
 import { commandPeaksDocument } from "../system/resources/queue/command-peaks.js";
 import { restartResumeDocument } from "../system/restart-resume.js";
 import { stagedUpdateDocument, updateOutcomeDocument, updatePreparingDocument } from "../system/updates/staged-update.js";
@@ -291,6 +292,7 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
     bootFailureDocument,
     bootHistoryDocument,
     choreClockDocument,
+    agentEnvelopesDocument,
     commandPeaksDocument,
     restartResumeDocument,
     stagedUpdateDocument,

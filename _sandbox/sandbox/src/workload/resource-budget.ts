@@ -8,6 +8,7 @@ import {
     type HostRoom,
     type MemoryReading,
     PERSON_RESERVE_BYTES,
+    type RoomWorkload,
     READING_FILES,
     readingFrom,
     RESERVATION_MS,
@@ -17,6 +18,7 @@ import {
     STALL_PERCENT,
     STALL_SUSTAINED_PERCENT,
 } from "@intentic/constants/memory-room";
+import { type AgentRoom, type Lease, type LeaseSource, agentRoomOf, leasedTurn, leaseFor, leaseWords, steadyHostOf } from "./leases/agent-leases.js";
 import { createHolds, holdFor, type Holds, type Taken } from "./room-wait-queue.js";
 import type { WorkloadClass } from "./workload-class.js";
 
@@ -56,20 +58,34 @@ export const WAIT_DEADLINE_MS = 10 * 60_000;
    admitted just before it: two turns at most start into a host with 3.5 GiB available. Heavy work keeps the reserve. */
 const AGENT_HOST_FLOOR_BYTES = 1.5 * 1024 ** 3;
 
+type Asked = Parameters<typeof judge>[1] & { readonly reservedBytes: number };
+
 // The formula's verdict on one request, but for an agent turn the host's reserve line alone holds: judged without the
 // host while the host keeps its floor (above), and held as the formula said otherwise.
-const verdictOf = (request: AdmitRequest, reading: MemoryReading, reservedBytes: number): RoomJudgement => {
-    const asked = { workload: request.workload, attended: request.attended, reservedBytes, size: request.size };
+const hostFloored = (request: AdmitRequest, reading: MemoryReading, asked: Asked): RoomJudgement => {
     const held = judge(reading, asked);
     const { host } = reading;
     if (held.verdict !== "wait" || request.workload !== "agentRuntime" || request.attended || host === undefined) {
         return held;
     }
-    if (host.availableBytes - reservedBytes < AGENT_HOST_FLOOR_BYTES + costBytesOf(request.workload, request.size)) {
+    if (host.availableBytes - asked.reservedBytes < AGENT_HOST_FLOOR_BYTES + (asked.costBytes ?? costBytesOf(request.workload, request.size))) {
         return held;
     }
     const sandboxOnly = judge({ ...reading, host: undefined }, asked);
     return sandboxOnly.verdict === "run" ? sandboxOnly : held;
+};
+
+// The verdict, and for an agent turn with leases, the sandbox's own room judged with them held, named as theirs where
+// they are what holds it. Never the host's: what agents here grow into is first the cache their VM already holds (WSL,
+// Docker Desktop), which the host's figure does not count as its own, and held to it the host's floor would stop them.
+const verdictOf = (request: AdmitRequest, reading: MemoryReading, reservedBytes: number, lease?: Lease): RoomJudgement => {
+    const asked = { workload: request.workload, attended: request.attended, size: request.size, costBytes: lease?.costBytes, reservedBytes };
+    const judged = hostFloored(request, reading, asked);
+    if (judged.verdict !== "run" || lease === undefined || lease.heldBytes === 0) {
+        return judged;
+    }
+    const leased = judge({ ...reading, host: undefined }, { ...asked, reservedBytes: reservedBytes + lease.heldBytes });
+    return leased.verdict === "run" ? judged : { ...leased, diagnosis: leaseWords(lease, leased) };
 };
 
 // Where admitted work runs: this sandbox, or a runner by id, which holds nothing here.
@@ -88,6 +104,8 @@ export interface BudgetSnapshot {
     readonly personNeedBytes: number;
     readonly stallLimitPercent: number;
     readonly stallSustainedLimitPercent: number;
+    // The agent turns holding leases and how many more fit now (agent-leases.ts); absent until leases are handed over.
+    readonly agents?: AgentRoom;
 }
 
 export interface AdmitRequest {
@@ -118,6 +136,9 @@ export interface AdmitRequest {
     // The door will be asked again for this owner (a child admitted before its turn is started): the admission is kept
     // for it, and the door's own admission takes it instead of judging a second time.
     readonly forTurn?: boolean;
+    // Whose fan-out it is part of (a child's parent): held work of different groups takes turns for room, so one parent's
+    // wide fan-out cannot keep another's first child waiting behind all of its own (room-wait-queue.ts fairOrder).
+    readonly group?: string | undefined;
 }
 
 export type Admission =
@@ -159,6 +180,8 @@ const STAKES = "Starting another agent now can slow the running ones down, and i
 
 interface Reservation {
     readonly owner: string | undefined;
+    // An agent turn's reservation stands only until its lease does (`localHeld`).
+    readonly workload: RoomWorkload;
     readonly place: WorkPlace;
     readonly bytes: number;
     readonly at: number;
@@ -197,6 +220,31 @@ export const heldOff = (held: readonly Pick<Reservation, "bytes" | "countedAt">[
     const grown = Math.max(0, counted - Math.min(...bases));
     const shrinkable = held.reduce((sum, reserved) => sum + (reserved.countedAt === undefined ? 0 : reserved.bytes), 0);
     return whole - shrinkable + Math.max(0, shrinkable - grown);
+};
+
+// An agent turn's reservation is done once its lease stands for it: the scan has seen the turn, so the reading shows what
+// it holds and the lease what it may still grow into. Gone for good, so a turn that ends inside RESERVATION_MS does not
+// bring it back once its lease is.
+const supersede = (reservations: Map<string, Reservation>, leased: ReadonlySet<string> | undefined): void => {
+    for (const [id, held] of reservations) {
+        if (held.workload === "agentRuntime" && held.owner !== undefined && leased?.has(held.owner) === true) {
+            reservations.delete(id);
+        }
+    }
+};
+
+// The snapshot of one reading with what admitted work still holds off it.
+const snapshotFrom = (taken: Taken, reservedBytes: number): BudgetSnapshot => {
+    const free = freeBytesOf(taken.reading);
+    return {
+        at: taken.at,
+        reading: taken.reading,
+        reservedBytes,
+        freeBytes: free === undefined ? undefined : Math.max(0, free - reservedBytes),
+        personNeedBytes: PERSON_RESERVE_BYTES,
+        stallLimitPercent: STALL_PERCENT,
+        stallSustainedLimitPercent: STALL_SUSTAINED_PERCENT,
+    };
 };
 
 // Whether a process is still running here; one this daemon may not signal still counts as running.
@@ -259,6 +307,7 @@ export const createResourceBudget = ({
     now = Date.now,
     alive = processAlive,
     sampleMs = SAMPLE_MS,
+    leases = () => undefined,
     waitIntervalMs = WAIT_INTERVAL_MS,
     waitDeadlineMs = WAIT_DEADLINE_MS,
     holderCheckMs = HOLDER_CHECK_MS,
@@ -270,6 +319,8 @@ export const createResourceBudget = ({
     readonly alive?: (pid: number) => boolean;
     // 0 takes no timed samples: readings are taken only when asked for.
     readonly sampleMs?: number;
+    // The agent turns running here and their envelope (`leaseSlot`); none, and agent turns are judged as before leases.
+    readonly leases?: LeaseSource;
     // How often held work looks again, and how long it is held before it is turned away, unless a request says.
     readonly waitIntervalMs?: number;
     readonly waitDeadlineMs?: number;
@@ -323,27 +374,23 @@ export const createResourceBudget = ({
     };
 
     const snapshotOf = (taken: { readonly at: number; readonly reading: MemoryReading }): BudgetSnapshot => {
-        const reservedBytes = localHeld(taken);
-        const free = freeBytesOf(taken.reading);
-        return {
-            at: taken.at,
-            reading: taken.reading,
-            reservedBytes,
-            freeBytes: free === undefined ? undefined : Math.max(0, free - reservedBytes),
-            personNeedBytes: PERSON_RESERVE_BYTES,
-            stallLimitPercent: STALL_PERCENT,
-            stallSustainedLimitPercent: STALL_SUSTAINED_PERCENT,
-        };
+        const held = leases();
+        supersede(reservations, held === undefined ? undefined : new Set(held.agents.keys()));
+        const snapshot = snapshotFrom(taken, localHeld(taken));
+        const agents = agentRoomOf(held, freeBytesOf(taken.reading), snapshot.reservedBytes);
+        return agents === undefined ? snapshot : { ...snapshot, agents };
     };
 
-    // `taken` is the reading the admission was judged on, or only its time where none was (work sent to a runner).
-    const claim = (request: AdmitRequest, taken: Taken | { readonly at: number; readonly reading?: undefined }): void => {
+    // `taken` is the reading the admission was judged on, or only its time where none was (work sent to a runner);
+    // `costBytes` what it was priced at where that is not its class's price (an agent turn's envelope).
+    const claim = (request: AdmitRequest, taken: Taken | { readonly at: number; readonly reading?: undefined }, costBytes?: number): void => {
         const { at } = taken;
         nextId += 1;
         reservations.set(String(nextId), {
             owner: request.owner,
+            workload: request.workload,
             place: request.where ?? "local",
-            bytes: request.size === undefined ? WORKLOAD_COST_BYTES[request.workload] : costBytesOf(request.workload, request.size),
+            bytes: costBytes ?? (request.size === undefined ? WORKLOAD_COST_BYTES[request.workload] : costBytesOf(request.workload, request.size)),
             at,
             // A pid this daemon cannot see (another pid namespace) would read as exited at once: the timed hold stands.
             pid: request.pid !== undefined && alive(request.pid) ? request.pid : undefined,
@@ -364,9 +411,12 @@ export const createResourceBudget = ({
 
     // One verdict on one reading, with no await between it and the claim, so the next request's verdict counts this one.
     const decide = (request: AdmitRequest, taken: { readonly at: number; readonly reading: MemoryReading }): RoomJudgement => {
-        const judged = verdictOf(request, taken.reading, localHeld(taken, request.owner));
+        const lease = leaseFor(request, leases());
+        supersede(reservations, lease?.owners);
+        const judgedOn = leasedTurn(request) ? steadyHostOf(taken, recent) : taken.reading;
+        const judged = verdictOf(request, judgedOn, localHeld(taken, request.owner), lease);
         if (judged.verdict === "run") {
-            claim(request, taken);
+            claim(request, taken, lease?.costBytes);
         }
         return judged;
     };

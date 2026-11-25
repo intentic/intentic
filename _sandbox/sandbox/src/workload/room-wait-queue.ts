@@ -6,8 +6,9 @@ import type { Admission, AdmitRequest } from "./resource-budget.js";
 // whole queue on one reading, and a hold ends once a look admits it, its deadline passes, or (for a caller that starts
 // anyway) waiting has stopped helping.
 
-// Work held for room, in the order it asked. Every look judges the whole queue on one reading, oldest first, so a
-// waiter whose timer happens to fire first cannot take room from one that has waited longer (2026-10-20).
+// Work held for room, in the order it asked. Every look judges the whole queue on one reading, oldest first within its
+// group (fairOrder), so a waiter whose timer happens to fire first cannot take room from one that has waited longer
+// (2026-10-20).
 interface Waiter {
     readonly request: AdmitRequest;
     // The latest verdict on it.
@@ -80,6 +81,25 @@ export const holdFor = async (
     return heldAdmission(last, diagnosis, now() - startedAt, gaveUp);
 };
 
+/* HELD WORK OF DIFFERENT FAN-OUTS TAKES TURNS FOR ROOM (2026-11-25, the shinobi-society audit). Held work was judged
+   oldest first, so a parent that spawned eight children a minute before another took the first eight rooms that freed,
+   and the other's first child waited behind all of them. Each look now judges the n-th waiter of every group before the
+   (n+1)-th of any, the order they asked in breaking ties: work with no group (a heavy command) is a group of its own. */
+export const fairOrder = <T>(items: readonly T[], groupOf: (item: T) => string | undefined): T[] => {
+    const taken = new Map<string, number>();
+    return items
+        .map((item, index) => {
+            const group = groupOf(item);
+            const turn = group === undefined ? 0 : (taken.get(group) ?? 0);
+            if (group !== undefined) {
+                taken.set(group, turn + 1);
+            }
+            return { item, index, turn };
+        })
+        .toSorted((left, right) => left.turn - right.turn || left.index - right.index)
+        .map(({ item }) => item);
+};
+
 // The queue of held work. `take` reads (fresh, or one a second old), `decide` judges and claims, `dropGone` forgets
 // reservations whose holder exited or aged out and says whether any went.
 export const createHolds = ({
@@ -106,7 +126,7 @@ export const createHolds = ({
             const wantFresh = fresh;
             fresh = false;
             const taken = await take(wantFresh);
-            for (const waiter of queue) {
+            for (const waiter of fairOrder(queue, (held) => held.request.group)) {
                 if (waiter.judged.verdict !== "run") {
                     waiter.judged = decide(waiter.request, taken);
                     if (waiter.judged.verdict === "run") {

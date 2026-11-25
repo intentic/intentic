@@ -1,6 +1,7 @@
 import { closeSync, constants, type FSWatcher, openSync, readSync, watch } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { ProcessRole } from "@intentic/sandbox-contract/schemas/metrics";
 import type { Logger } from "pino";
 import { opt } from "../../opt.js";
 import { flatKeyed, parsePressure, type ReadText, readText } from "./cgroup.js";
@@ -100,6 +101,9 @@ export const openKernelLog = (path = "/dev/kmsg"): KernelLogReader => {
 export interface KnownProcess {
     readonly pid: number;
     readonly name: string;
+    // What kind of process it is and whether the queue covers it, for what learns an agent's footprint (agent-envelope.ts).
+    readonly role?: ProcessRole | undefined;
+    readonly queued?: boolean | undefined;
     readonly owner?: string | undefined;
     readonly jobId?: string | undefined;
     readonly argv?: string | undefined;
@@ -114,6 +118,8 @@ export interface KnownProcess {
 export const knownOf = (row: {
     readonly pid: number;
     readonly name: string;
+    readonly role?: ProcessRole | undefined;
+    readonly queued?: boolean | undefined;
     readonly owner?: string | undefined;
     readonly jobId?: string | undefined;
     readonly argv?: string | undefined;

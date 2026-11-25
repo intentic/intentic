@@ -3,6 +3,7 @@ import { z } from "zod";
 import { defineDocument } from "../../../store/evolution/documents.js";
 import { openDocument } from "../../../store/open-document.js";
 import { createPeakWatch } from "./peak-watch.js";
+import { watchUnqueuedPeaks } from "./unqueued-peaks.js";
 
 /* WHAT EACH HEAVY COMMAND TOOK AT ITS PEAK, the last few times it ran in this sandbox (2026-11-22, the shinobi-society
    audit). The memory gate prices the next run of the same command at least at that, with a margin
@@ -13,7 +14,8 @@ import { createPeakWatch } from "./peak-watch.js";
    repository and folder, the program and what decides its size). Each keeps its last SAMPLES_KEPT peaks from the last
    two weeks, and is priced by the largest: a command made lighter stops being priced by its old peak within two weeks or
    five runs. Kept on /history, at most MAX_COMMANDS commands, the one run longest ago going first. Measured by
-   peak-watch.ts from the admission memory-room asked for until the command exits. */
+   peak-watch.ts from the admission memory-room asked for until the command exits. (2026-11-25) An agent's whole line that
+   grew heavy outside the queue is kept here too, under the rule `learned` (unqueued-peaks.ts), and queues its next run. */
 
 const MIB = 1024 ** 2;
 const SAMPLES_KEPT = 5;
@@ -76,8 +78,22 @@ export const fileCommandPeaks = (historyRoot: string, now: () => number = Date.n
     };
 };
 
-/** The learned peaks and their measurement, as the room socket takes them (workload/room-socket.ts CommandPeaks). */
+/**
+ * The learned peaks and their measurement, as the room socket takes them (workload/room-socket.ts CommandPeaks), with
+ * the watch on agent lines that grow heavy outside the queue (unqueued-peaks.ts), which records beside them; `stop`, as
+ * the socket closes, ends both.
+ */
 export const commandPeaks = (historyRoot: string): PeakRecords & ReturnType<typeof createPeakWatch> => {
     const records = fileCommandPeaks(historyRoot);
-    return { ...createPeakWatch({ record: records.record }), learned: records.learned, record: records.record };
+    const queued = createPeakWatch({ record: records.record });
+    const unqueued = watchUnqueuedPeaks({ record: records.record });
+    return {
+        ...queued,
+        learned: records.learned,
+        record: records.record,
+        stop: () => {
+            queued.stop();
+            unqueued.stop();
+        },
+    };
 };

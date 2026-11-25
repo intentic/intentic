@@ -38,7 +38,7 @@ export interface ShellLineAt {
 }
 
 export interface ShellLineOptions {
-    readonly tools: Pick<TurnTools, "secrets" | "cliEnv" | "heavyCommands" | "offloadCommands">;
+    readonly tools: Pick<TurnTools, "secrets" | "cliEnv" | "heavyCommands" | "offloadCommands" | "learnedPeaks">;
     readonly isolation: TurnPlacement | undefined;
     readonly owner: string | undefined;
     // Whether lines run through the terminal panel's tmux wrapper (agent-terminals.ts tmuxRunEnabled).
@@ -78,6 +78,7 @@ const panelHooks = (options: ShellLineOptions) => {
         options.tools.heavyCommands,
         options.tools.offloadCommands,
         options.jobs,
+        options.tools.learnedPeaks,
     );
     return {
         pre: hooks.PreToolUse?.[0]?.hooks[0],

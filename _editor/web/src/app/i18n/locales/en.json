@@ -7546,7 +7546,7 @@
         "agentSubagents": {
             "keepRoomForYou": "Room kept for you",
             "keepRoomForYouDescription": "Points of each allowance window, out of 100, that subagents leave for your own chats.",
-            "maximumDelegatedAgentsRunning": "Maximum delegated agents running in parallel.",
+            "maximumDelegatedAgentsRunning": "Maximum delegated agents one conversation runs in parallel. Across the sandbox, free memory decides.",
             "maximumDelegationDepth": "Maximum delegation depth.",
             "nestingDepth": "Nesting depth",
             "planByAllowance": "Plan fan-outs by allowance",

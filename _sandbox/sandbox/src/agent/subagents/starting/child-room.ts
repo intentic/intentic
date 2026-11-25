@@ -2,6 +2,7 @@ import { conversationProfile } from "../../../conversations/registry/agents-stor
 import type { Services } from "../../../composition.js";
 import { deliverWake } from "../../../seams/wake-delivery.js";
 import type { WorkPlace } from "../../../workload/resource-budget.js";
+import { fairOrder } from "../../../workload/room-wait-queue.js";
 import type { ChildRecord } from "../children.js";
 import { taskLine } from "../child-spec.js";
 import { NOT_STARTED } from "../child-words.js";
@@ -21,9 +22,11 @@ import { markSubagentEndingReported, noteSpawnedChild, subagentEndingReported } 
  *  default (settings `childRerunHorizonHours`), long enough to outlast another sandbox's afternoon of builds. */
 export const ROOM_CEILING_MS = 6 * 3_600_000;
 
-// The children waiting for room now, in the order they began to, sandbox-wide; each says where it stands on its row.
+// The children waiting for room now, in the order they began to, sandbox-wide; each says where it stands on its row,
+// counted as the gate takes them: its parent's children take turns with every other parent's (room-wait-queue.ts).
 interface Waiting {
     readonly childId: string;
+    readonly parent: string | undefined;
     readonly since: number;
     readonly diagnosis: string;
     readonly note: (summary: string) => void;
@@ -44,7 +47,7 @@ const roomLineWords = (waiting: Pick<Waiting, "since" | "diagnosis">, position: 
 
 // Every waiting child's row, told where it stands now.
 const renote = (): void => {
-    for (const [index, waiting] of LINE.entries()) {
+    for (const [index, waiting] of fairOrder(LINE, (entry) => entry.parent).entries()) {
         waiting.note(roomLineWords(waiting, index + 1, LINE.length));
     }
 };
@@ -95,6 +98,7 @@ export const admitChildRoom = async (
     const onShort = (diagnosis: string): void => {
         LINE.push({
             childId,
+            parent: kid?.parent,
             since: Date.now(),
             diagnosis,
             note: (summary) => noteSpawnedChild(services.conversations, childId, { status: "pending", summary }),
@@ -108,6 +112,7 @@ export const admitChildRoom = async (
             owner: childId,
             where,
             forTurn: true,
+            group: kid?.parent,
             wait: { onShort, deadlineMs: ROOM_CEILING_MS, signal: stop.signal },
         });
         if (room.verdict === "run") {

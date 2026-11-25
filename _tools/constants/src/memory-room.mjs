@@ -8,11 +8,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
-import { queuedSignature } from "./heavy/command-peaks.mjs";
+import { namedSignature, queuedSignature } from "./heavy/command-peaks.mjs";
 import { holdAtFloor, notStartedWords, waitWords } from "./heavy/memory-floor.mjs";
 
 // The price a measured peak sets, and the line a held command is told (beside the floor's own), both part of this formula.
-export { learnedCostBytes, PEAK_MARGIN } from "./heavy/command-peaks.mjs";
+export { LEARNED_MIN_BYTES, LEARNED_RULE, learnedCostBytes, lineSignature, PEAK_MARGIN, peakWords } from "./heavy/command-peaks.mjs";
 export { waitWords } from "./heavy/memory-floor.mjs";
 
 const GIB = 1024 ** 3;
@@ -268,22 +268,22 @@ export const costBytesOf = (workload, size) =>
         ? (SIZE_BYTES[size] ?? Number(size.slice(0, -1)) * MIB)
         : (COST_BYTES[workload] ?? COST_BYTES.agentRuntime);
 
-/** What starting one more of `workload` needs free: its own cost, plus a person's turn when nobody is waiting on it. */
-export const needBytes = (workload, attended, size) => costBytesOf(workload, size) + (attended ? 0 : PERSON_RESERVE_BYTES);
+/** What starting one more of `workload` needs free: its own cost (`costBytes` where the caller learned it), plus a person's turn when nobody is waiting on it. */
+export const needBytes = (workload, attended, size, costBytes) => (costBytes ?? costBytesOf(workload, size)) + (attended ? 0 : PERSON_RESERVE_BYTES);
 
 /**
  * The verdict for one more of `workload`: `run`, or, when the sandbox is short, `refuse` for work a person is waiting
  * on (they are told, and decide) and `wait` for work nobody is (it is held until there is room). `reservedBytes` is what
  * other admissions still hold off the reading. An unmeasurable sandbox has no opinion, and runs.
  */
-export const judge = (reading, { workload, attended, reservedBytes = 0, size }) => {
-    const need = needBytes(workload, attended, size);
+export const judge = (reading, { workload, attended, reservedBytes = 0, size, costBytes }) => {
+    const need = needBytes(workload, attended, size, costBytes);
     const { limitBytes, usedBytes, swapBytes, stallPercent, availableBytes } = reading;
     const stallSustainedPercent = reading.stallSustainedPercent ?? 0;
     const unreserved = freeBytesOf(reading);
     const counted = countedBytesOf(reading);
     // Asked before the sandbox's own figures, which may measure nothing: a VM with room says nothing of the PC under it.
-    const hostHeld = hostWait(reading, { workload, attended, reservedBytes, size }, need, unreserved);
+    const hostHeld = hostWait(reading, { workload, attended, reservedBytes, size, costBytes }, need, unreserved);
     if (hostHeld !== undefined) {
         return hostHeld;
     }
@@ -346,8 +346,8 @@ const hostShortOf = (host, costBytes, reservedBytes) => {
 };
 
 // The verdict that holds work nobody waits on for the host, or undefined while the host has room for it (hostShortOf).
-const hostWait = (reading, { workload, attended, reservedBytes, size }, need, unreserved) => {
-    const diagnosis = attended ? undefined : hostShortOf(reading.host, costBytesOf(workload, size), reservedBytes);
+const hostWait = (reading, { workload, attended, reservedBytes, size, costBytes }, need, unreserved) => {
+    const diagnosis = attended ? undefined : hostShortOf(reading.host, costBytes ?? costBytesOf(workload, size), reservedBytes);
     return diagnosis === undefined
         ? undefined
         : { verdict: "wait", needBytes: need, freeBytes: unreserved === undefined ? undefined : Math.max(0, unreserved - reservedBytes), reservedBytes, diagnosis };
@@ -532,7 +532,7 @@ const askedOf = (option) => {
         intervalMs: Math.max(50, Number(option("interval-ms", "5000")) || 5000),
         size: isRoomSize(option("size", "")) ? option("size", "") : undefined,
         pid,
-        signature: pid === undefined ? undefined : queuedSignature(pid, label),
+        signature: pid === undefined ? undefined : (namedSignature(pid, option("key", undefined), option("command", undefined)) ?? queuedSignature(pid, label)),
     };
 };
 
@@ -541,12 +541,12 @@ const admittedBytes = (answer, asked) =>
     answer.verdict === "run" && answer.source === "daemon" ? (answer.costBytes ?? costBytesOf(asked.workload, asked.size)) : 0;
 
 // `memory-room --class toolchain --wait 120 [--ceiling 900] --label NAME [--size targeted|cargo-build|6144m|…] [--pid PID]
-// [--admitted]` holds a command until there is room, printing why it waited. Short of room at `--wait` it starts anyway,
-// unless less than the floor is free: then it goes on waiting up to `--ceiling` and, still below it, exits 75 so the
-// command is not started (heavy/memory-floor.mjs). Every other outcome exits 0: a gate that cannot read the sandbox must not
-// be the reason a command did not run. `--admitted` prints what the daemon holds for the command (0 for none), for its
-// launcher to size its jobs to; `--json` prints the answer instead; `--free` prints the free memory as the daemon counts
-// it, for a caller that sizes itself to it.
+// [--key K --command C] [--admitted]` holds a command until there is room, saying why it waited (`--key`/`--command` name
+// what queue-run's argv cannot: an agent's queued line). Short of room at `--wait` it starts anyway, unless less than the
+// floor is free: then it waits up to `--ceiling` and, still below it, exits 75 so the command is not started
+// (heavy/memory-floor.mjs). Every other outcome exits 0: a gate that cannot read the sandbox must not be the reason a
+// command did not run. `--admitted` prints what the daemon holds for the command (0 for none), for its launcher to size
+// its jobs to; `--json` prints the answer instead; `--free` prints the free memory as the daemon counts it.
 const main = async (args) => {
     const option = (name, fallback) => {
         const at = args.indexOf(`--${name}`);

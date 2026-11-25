@@ -464,6 +464,24 @@ test("the gate is told the pid the command runs as and the rule's size by name; 
     expect(malformed).toMatch(/--pid \d+ --admitted$/u);
 });
 
+// (2026-11-25) An agent's line queued by what it took last time runs as `bash <run dir>/agent`, which names nothing: the
+// daemon names it (learned-lines.ts), and queue-run hands that name to the gate and says why it queues.
+test("a command named outright is named so to the gate, and its note is said before it queues", async () => {
+    const queue = await dir();
+    const seen = join(queue, "gate-args");
+    const bin = await stubGate(`printf '%s|' "$@" > ${seen}`);
+    const run = await queueRun(
+        queue,
+        ["--pool", "learned", "--limit", "2", "--memory-gate", "7", "--label", "learned", "--key", "learned @x: python3 gen.py", "--command", "python3 gen.py", "--note", "it peaked at 3.5 GiB"],
+        "echo ran",
+        bin,
+    );
+    expect(run.code).toBe(0);
+    expect(run.stdout.trim()).toBe("ran");
+    expect(run.stderr).toContain("[queue-run] learned: it peaked at 3.5 GiB\n");
+    expect(await readFile(seen, "utf8")).toMatch(/--label\|learned\|--pid\|\d+\|--admitted\|--key\|learned @x: python3 gen.py\|--command\|python3 gen.py\|$/u);
+});
+
 test("no memory gate is asked for when the deadline is zero", async () => {
     const queue = await dir();
     const bin = await stubGate(`echo called > ${join(queue, "called")}`);

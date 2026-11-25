@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { longHeldPools, ownerSums, parseProcStatus, type ProcessRow, type ResourceSnapshot, topProcesses } from "./resource-metrics.js";
+import { ownerSums, topProcesses } from "./process-summaries.js";
+import { longHeldPools, parseProcStatus, type ProcessRow, type ResourceSnapshot } from "./resource-metrics.js";
 
 describe("resource metric process attribution", () => {
     test("parses the memory fields from proc status", () => {

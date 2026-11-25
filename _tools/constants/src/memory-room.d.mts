@@ -100,16 +100,23 @@ export const EASED_BYTES: number;
 export function stuckWait(options?: { readonly stuckMs?: number; readonly easedBytes?: number }): {
     readonly observe: (judged: Pick<RoomJudgement, "freeBytes" | "reservedBytes">, at: number) => boolean;
 };
-export { learnedCostBytes, PEAK_MARGIN } from "./heavy/command-peaks.mjs";
+export { LEARNED_MIN_BYTES, LEARNED_RULE, learnedCostBytes, lineSignature, PEAK_MARGIN, peakWords } from "./heavy/command-peaks.mjs";
 export { waitWords } from "./heavy/memory-floor.mjs";
 
 export function readingFrom(read: (path: string) => string | undefined): MemoryReading;
 export function readReadingSync(): MemoryReading;
 export function costBytesOf(workload: RoomWorkload, size?: RoomSize): number;
-export function needBytes(workload: RoomWorkload, attended: boolean, size?: RoomSize): number;
+export function needBytes(workload: RoomWorkload, attended: boolean, size?: RoomSize, costBytes?: number): number;
 export function judge(
     reading: MemoryReading,
-    request: { readonly workload: RoomWorkload; readonly attended: boolean; readonly reservedBytes?: number; readonly size?: RoomSize | undefined },
+    request: {
+        readonly workload: RoomWorkload;
+        readonly attended: boolean;
+        readonly reservedBytes?: number;
+        readonly size?: RoomSize | undefined;
+        // What this one takes, where the caller learned it (an agent's envelope), instead of its class's or size's price.
+        readonly costBytes?: number | undefined;
+    },
 ): RoomJudgement;
 export function freeBytesOf(reading: MemoryReading): number | undefined;
 export function swapFullOf(reading: MemoryReading): boolean;

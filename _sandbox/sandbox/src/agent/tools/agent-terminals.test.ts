@@ -10,6 +10,7 @@ import { memoryFleet } from "../../conversations/registry/agents-registry.testin
 import { OOM_SCORE, priorityOf } from "../../workload/workload-class.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { queueRunEnabled } from "../../workload/heavy-commands.js";
+import { learnedSignatureOf } from "../../system/resources/queue/learned-lines.js";
 import { turnProof } from "../../seams/workload-stamp.js";
 import { bashTmuxHooks, NO_PROMPTS, PIPESTATUS_TRAP, softTimeoutOf } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./jobs/background-jobs.js";
@@ -316,6 +317,55 @@ test("the owner's own rule and hold ceiling reach the programs as the merged tab
         bashTmuxHooks([], undefined, undefined, undefined, heavy({ ruleEdits: [{ id: "slow-make", pattern: "^make\\b", maxHoldSeconds: 7200 }] })),
     );
     expect((tableOf(files.line)["rules"] as { rules: unknown[] }).rules[0]).toEqual({ id: "slow-make", pattern: "^make\\b", maxHoldSeconds: 7200 });
+});
+
+// (2026-11-25, the shinobi-society audit) A LINE THAT GREW HEAVY OUTSIDE THE QUEUE QUEUES ITS NEXT RUN: its signature goes
+// beside it, where the daemon measures it by, and once it was learned heavy the line runs behind queue-run, inside the
+// table and ahead of the shell that runs it. Unlearned, or with peaks that cannot be read, it runs as before.
+describe("a learned heavy line", () => {
+    const LINE = "python3 tools/gen.py --all 2>&1 | tail -40";
+    const GIB = 1024 ** 3;
+    // As the hook names it from where the call ran (queue/learned-lines.ts, whose own tests say how).
+    const KEY = learnedSignatureOf(LINE, WORKSPACE_ROOT)?.key ?? "";
+    const learned = (peakBytes: number | undefined, fail = false) => ({
+        learned: async (key: string) => {
+            if (fail) {
+                throw new Error("unreadable");
+            }
+            return key === KEY && peakBytes !== undefined ? { command: "python3 tools/gen.py --all", peakBytes, runs: 1 } : undefined;
+        },
+    });
+    // The rewritten line and the signature written beside it, before the run dir goes.
+    const run = async (peaks: ReturnType<typeof learned>) => {
+        const hooks = bashTmuxHooks([], undefined, undefined, undefined, heavy(), undefined, undefined, peaks);
+        const command = (await rewritten({ command: LINE }, hooks)) ?? "";
+        const dir = dirname((/ -f (\S+) /u.exec(command)?.[1] ?? "").replaceAll("'", ""));
+        const read = (name: string): string | undefined => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : undefined);
+        const files = { dir, line: read("line") ?? "", signature: read("signature") };
+        rmSync(dir, { recursive: true, force: true });
+        return files;
+    };
+    test("runs behind queue-run at its learned price once it peaked at a gibibyte or more", async () => {
+        expect(KEY).toEndWith(": python3 tools/gen.py --all");
+        const files = await run(learned(3.5 * GIB));
+        expect(JSON.parse(files.signature ?? "{}")).toEqual({ key: KEY, command: "python3 tools/gen.py --all" });
+        const queued = files.line.indexOf("/usr/local/bin/queue-run --pool learned --limit 2 ");
+        if (!queueRunEnabled()) {
+            expect(queued).toBe(-1);
+            return;
+        }
+        expect(queued).toBeGreaterThan(files.line.indexOf("env INTENTIC_HEAVY="));
+        expect(queued).toBeLessThan(files.line.indexOf(`bash ${shellQuote(join(files.dir, "agent"))}`));
+        expect(files.line).toContain(`--size 3584m --key ${shellQuote(KEY)} `);
+    });
+
+    test("runs as before when never learned, learned light, or its peaks cannot be read", async () => {
+        for (const peaks of [learned(undefined), learned(0.5 * GIB), learned(4 * GIB, true)]) {
+            const files = await run(peaks);
+            expect(files.line).toContain("env INTENTIC_HEAVY=");
+            expect(files.line).not.toContain("queue-run --pool learned");
+        }
+    });
 });
 
 test("a sandbox with no table configured runs the line with no table at all", async () => {

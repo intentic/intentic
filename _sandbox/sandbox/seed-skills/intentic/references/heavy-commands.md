@@ -33,6 +33,14 @@ cannot see.
   to be stopped by the memory guard when it does.
   If you made the command lighter, the old peak keeps pricing it until five newer runs or two weeks pass. Narrowing
   the command (`-p one-crate`, `--lib`) makes it a different command with a record of its own.
+- `` [queue-run] learned: `python3 tools/gen.py` peaked at 3.5 GiB on its last run, so it takes its turn with this
+  sandbox's heavy commands, priced at 4.0 GiB. `` means a line of yours that no rule names (a script, a binary run by
+  path, `./target/debug/x`) held 1 GiB or more the last time you or another agent ran it, outside the queue. The
+  sandbox measures what every agent command's processes hold that the queue does not already cover, and the next time
+  the same line runs (the same commands with their arguments, in the same repository and folder, from any worktree;
+  a leading `cd`, a `| tail` and redirections do not count) it waits for room and a slot like a build, priced at that
+  peak plus 15%. It starts by itself. Once five newer runs, or two weeks, have stayed under 1 GiB, it runs straight
+  away again. Codex and Cursor turns, whose shell the daemon does not write, are neither measured nor queued this way.
 - `offload: running on <machine>, where the owner's Offloaded work setting sends <kind> commands` means the command
   runs on one of the owner's machines and its changed files come back. To run one here instead, behind this
   sandbox's queue: `INTENTIC_OFFLOAD=0 <command>`. Never set `INTENTIC_HEAVY_HELD`: it skips the queue itself, and

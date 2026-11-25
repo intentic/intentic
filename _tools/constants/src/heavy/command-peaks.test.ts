@@ -1,4 +1,14 @@
-import { commandSignature, commandWords, learnedCostBytes, lineWords, PEAK_MARGIN, peakWords, pricedWords, queuedCommand, startTicksOf } from "./command-peaks.mjs";
+import {
+    commandSignature,
+    commandWords,
+    learnedCostBytes,
+    lineWords,
+    PEAK_MARGIN,
+    peakWords,
+    pricedWords,
+    queuedCommand,
+    startTicksOf,
+} from "./command-peaks.mjs";
 import { floorWords } from "./memory-floor.mjs";
 
 const GIB = 1024 ** 3;

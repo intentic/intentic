@@ -708,7 +708,7 @@ export const SandboxSettingsSchema = z.object({
     // Three separate ceilings since they stop different things: width (parallel fan-out), lifetime (per conversation),
     // depth (how far a child may delegate) — raising width alone just hits the lifetime cap sooner. Defaults mirror the
     // CLI's own unset behavior; hitting one stops the agent rather than retrying.
-    subagentsAtOnce: z.number().min(1).max(200).default(20).describe("How many subagents may work at the same time."),
+    subagentsAtOnce: z.number().min(1).max(200).default(20).describe("How many subagents one conversation may run at the same time."),
     subagentsPerTurn: z.number().min(1).max(2000).default(200).describe("How many a single turn may start in total."),
     // Depth 1 means an agent may delegate but its children may not; unlike the other two, a runaway here is
     // multiplicative, not merely wide.

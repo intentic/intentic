@@ -536,7 +536,7 @@ const baseOptions = (
                           request.tools.secrets,
                           request.tools.heavyCommands,
                           request.tools.offloadCommands,
-                          request.hooks.backgroundJobs,
+                          request.hooks.backgroundJobs, request.tools.learnedPeaks,
                       )
                     : request.tools.secrets !== undefined
                       ? secretCommandHooks(request.tools.secrets)

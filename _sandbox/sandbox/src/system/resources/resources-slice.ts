@@ -1,3 +1,4 @@
+import { type LeaseSource, leaseSlot } from "../../workload/leases/agent-leases.js";
 import { createResourceBudget, hostAwareReading, type HostSource, type ResourceBudget } from "../../workload/resource-budget.js";
 import { createLiveMetrics, type LiveMetrics } from "./live-metrics.js";
 import type { PerfTracker } from "./perf.js";
@@ -17,6 +18,9 @@ export interface ResourcesSlice {
     // (2026-11-02) Where the memory of the machine running this sandbox comes from, handed over at boot once the device hub
     // exists (hosts/host-memory.ts): heavy work also waits for that machine.
     readonly answerToHost: (host: HostSource) => void;
+    // (2026-11-25) Where the agent turns running here and their leases are handed over at boot, once the conversations
+    // and the minute's process scan exist (agent-leases.ts, bootstrap/daemon-metrics.ts).
+    readonly answerToLeases: (leases: LeaseSource) => void;
 }
 
 export interface ResourcesDeps {
@@ -31,7 +35,8 @@ export interface ResourcesDeps {
 export const createResourcesSlice = ({ workspaceRoot, perf, owners }: ResourcesDeps): ResourcesSlice => {
     // Samples on a timer of its own, so a death certificate can look back at what the sandbox had.
     const reading = hostAwareReading();
-    const resources = createResourceBudget({ read: reading.read });
+    const leases = leaseSlot();
+    const resources = createResourceBudget({ read: reading.read, leases: leases.read });
     return {
         perf,
         resourceOwners: () => {
@@ -44,5 +49,6 @@ export const createResourcesSlice = ({ workspaceRoot, perf, owners }: ResourcesD
         liveMetrics: createLiveMetrics({ workspaceRoot, budget: resources }),
         resources,
         answerToHost: reading.answerToHost,
+        answerToLeases: leases.answerToLeases,
     };
 };

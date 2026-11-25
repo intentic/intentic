@@ -14,6 +14,8 @@ export const resourcesSliceFake = () =>
         resources: budgetOn(),
         // No machine runs a route suite, so there is no host part to hand over.
         answerToHost: () => undefined,
+        // Nor any agent measured, so no lease is handed over and agent turns are judged by the box alone.
+        answerToLeases: () => undefined,
         // Real tracker: in-memory, unref'd summary timer, and request middleware records through it on every route.
         perf: createPerfTracker(createLogger(testConfig)),
     }) satisfies Partial<ResourcesSlice>;
