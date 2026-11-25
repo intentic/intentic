@@ -244,7 +244,16 @@ test("the record itself is one flag away, bounded by last and narrowed by grep",
 test("what the daemon keeps is one flag away: every row naming the conversation by table, and its directory", async () => {
     const app = fleetApp();
     await twoConversations(app);
-    const { status, body } = await fleet(app, "/fleet/fair-sage-ey2r?diff=0&stored=1");
+    // The turn's stream ends before its run log is removed (turn-runs.ts: the run finishes, then the record is written
+    // and the log goes), so the unit is read once that has happened rather than in the moment between.
+    const { status, body } = await waitFor(
+        async () => {
+            const answer = await fleet(app, "/fleet/fair-sage-ey2r?diff=0&stored=1");
+            expect(answer.body.stored?.unit.files.map((file) => file.path)).not.toContain("running.jsonl");
+            return answer;
+        },
+        { timeout: 3_000 },
+    );
     expect(status).toBe(200);
     const rows = body.stored?.rows ?? {};
     expect(Object.keys(rows).toSorted()).toEqual(["conversation", "conversation_repo"]);

@@ -30,7 +30,8 @@ import { LANDING_CHECKS_NOTE_HEADER, WORKTREE_NOTE_HEADER } from "../../../../se
 // What a turn is allowed to run on, and what it's handed once it may; session-resume rules live with the route instead
 // (app.integration.test.ts). A refusal is a value (`ok: false` + code), assertable without a stream.
 
-// Takes the arguments through, since which account an arm asks for is itself under test below.
+// Takes the arguments through, since which account an arm asks for is itself under test below. Only the second one is
+// asserted: an adapter may lay its own seams over the deps it is handed (the Claude Code loop's stall guard does).
 const credentials = jest.fn<(...args: unknown[]) => Promise<Record<string, unknown>>>();
 // Only the resolution is faked. The rest of the module stands, because the pre-dispatch context check reads its
 // model-resolution rule (routedModel) and a mock that replaced the whole module left that undefined.
@@ -559,7 +560,7 @@ test("a turn naming no account runs on the one this conversation last ran on", a
 
     await planTurn(services, turn({ conversationId: "conv-account" }), context);
 
-    expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "the-account-that-ran-it" }));
+    expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "the-account-that-ran-it" }));
 });
 
 // The picker stays the user's: a turn that names an account is a deliberate move, and the record must not undo it.
@@ -568,7 +569,7 @@ test("an account the turn names outranks the conversation's latched one", async 
 
     await planTurn(services, turn({ conversationId: "conv-account", account: "the-account-the-user-picked" }), context);
 
-    expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "the-account-the-user-picked" }));
+    expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "the-account-the-user-picked" }));
 });
 
 // An organisation that turns an account's Claude Code off leaves it signing in fine and showing full headroom, so a
@@ -619,7 +620,7 @@ describe("a conversation whose account can no longer serve it", () => {
 
         await planTurn(services, turn({ conversationId: "conv-seat" }), context);
 
-        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "spare" }));
+        expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "spare" }));
         expect(moves).toEqual([["conv-seat", "spare"]]);
     });
 
@@ -655,7 +656,7 @@ describe("a conversation whose account can no longer serve it", () => {
 
         await planTurn(services, turn({ conversationId: "conv-seat", account: "seatless" }), context);
 
-        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "spare" }));
+        expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "spare" }));
         expect(moves).toEqual([["conv-seat", "spare"]]);
     });
 
@@ -671,7 +672,7 @@ describe("a conversation whose account can no longer serve it", () => {
 
         seat.probe.answer = BACK_ON;
         await planTurn(services, turn({ conversationId: "conv-seat", account: "seatless" }), context);
-        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "seatless" }));
+        expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "seatless" }));
         expect([Object.keys(seat.marks), moves]).toEqual([[], []]);
     });
 
@@ -686,7 +687,7 @@ describe("a conversation whose account can no longer serve it", () => {
         seat.now += 2 * FIRST_RECHECK_MS;
         await planTurn(services, turn({ conversationId: "conv-seat" }), context);
 
-        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "seatless" }));
+        expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "seatless" }));
         expect([Object.keys(seat.marks), moves]).toEqual([[], []]);
     });
 });
@@ -730,7 +731,7 @@ describe("a conversation on an account the records call spent", () => {
 
         await planTurn(services, { ...turn({ conversationId: "conv-spent" }), speaker: PERSON }, context);
 
-        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "spare" }));
+        expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "spare" }));
         expect(moves).toEqual([["conv-spent", "spare"]]);
         expect(notes).toEqual([
             accountMovedRow({
@@ -747,7 +748,7 @@ describe("a conversation on an account the records call spent", () => {
 
         await planTurn(services, { ...turn({ conversationId: "conv-spent", account: "home", accountPicked: true }), speaker: PERSON }, context);
 
-        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "home" }));
+        expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "home" }));
         expect(moves).toEqual([]);
     });
 
@@ -756,7 +757,7 @@ describe("a conversation on an account the records call spent", () => {
 
         await planTurn(services, { ...turn({ conversationId: "conv-spent", account: "home", accountPicked: true }), resume: "restart" as const }, context);
 
-        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "spare" }));
+        expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "spare" }));
         expect(moves).toEqual([["conv-spent", "spare"]]);
     });
 });
@@ -804,7 +805,7 @@ describe("a conversation working for someone held to some AI accounts", () => {
 
         await planTurn(services, turn({ conversationId: "conv-reach" }), context);
 
-        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "team" }));
+        expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "team" }));
         expect(moves).toEqual([["conv-reach", "team"]]);
     });
 
@@ -813,7 +814,7 @@ describe("a conversation working for someone held to some AI accounts", () => {
 
         await planTurn(services, turn({ conversationId: "conv-reach" }), context);
 
-        expect(credentials).toHaveBeenCalledWith(services, expect.objectContaining({ account: "team" }));
+        expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "team" }));
         expect(moves).toEqual([]);
     });
 });

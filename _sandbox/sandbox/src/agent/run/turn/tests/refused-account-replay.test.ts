@@ -83,6 +83,6 @@ test("a peer's message to a conversation on a refused account runs on the accoun
     const plan = await planTurn(planning, sent, context);
 
     expect(plan.ok).toBe(true);
-    expect(credentials).toHaveBeenCalledWith(planning, expect.objectContaining({ account: "personal" }));
+    expect(credentials).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ account: "personal" }));
     expect(moves).toEqual([["deft-reef", "personal"]]);
 });

@@ -51,13 +51,18 @@ describe.skipIf(!kernel.runs)(kernel.title("an ACP runtime's OOM rank"), () => {
    children. Signalling the wrapper alone left them running (2026-11-24); the agent now leads a process group of its own,
    and stopping it ends the group. */
 
+// A zombie has ended too: the grandchild is orphaned once the wrapper dies, and collecting it is PID 1's job. A sandbox
+// runs docker-init there, which collects; CI's job container runs `tail -f /dev/null`, which never does, so a signal-0
+// probe read every killed grandchild there as still running.
 const alive = (pid: number): boolean => {
+    let stat: string;
     try {
-        process.kill(pid, 0);
-        return true;
+        stat = readFileSync(`/proc/${String(pid)}/stat`, "utf8");
     } catch {
         return false;
     }
+    // The state follows the command, which is in parentheses and may hold any character, the last ")" included.
+    return stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3) !== "Z";
 };
 
 // A wrapper standing in for npx: it starts a grandchild, writes its pid where the test reads it, and waits.
