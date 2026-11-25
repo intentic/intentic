@@ -74,7 +74,7 @@ watch(
             </button>
             <span class="min-w-0 flex-1 truncate text-muted">
                 <span class="text-content">{{ book.title }}</span>
-                <span v-if="book.author !== undefined"> · {{ book.author }}</span>
+                <template v-if="book.author !== undefined"> · {{ book.author }}</template>
             </span>
             <span class="shrink-0 text-subtle">{{ index + 1 }} / {{ chapters.length }}</span>
             <Button size="small" tier="quiet" :disabled="index === 0" @click="show(index - 1)">
