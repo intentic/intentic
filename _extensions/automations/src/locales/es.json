@@ -436,7 +436,8 @@
             "completed": "Ejecutada",
             "error": "Falló",
             "skipped": "Omitida",
-            "interrupted": "Interrumpida"
+            "interrupted": "Interrumpida",
+            "carried": "Continuada"
         },
         "peek": {
             "oneTime": "Una sola vez",

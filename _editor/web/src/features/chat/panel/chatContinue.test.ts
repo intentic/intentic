@@ -748,7 +748,9 @@ it(`shows one copy of a checklist restored by failed retries in an older transcr
     ]);
     await mountPanel();
     expect(document.body.textContent?.match(/Build the picker/g)).toHaveLength(1);
-    expect(document.body.textContent?.match(/Claude usage limit reached\./g)).toHaveLength(2);
+    // Both refusals are kept. Where they are drawn is the notice layout's call (noticeLayout.ts: the column or the turn's
+    // receipt), so they are counted on the transcript rather than in the column's text.
+    expect(conversation.transcript.messages.value.filter((row) => row.text === `Claude usage limit reached.`)).toHaveLength(2);
     expect(conversation.transcript.messages.value).toHaveLength(6);
 });
 

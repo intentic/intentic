@@ -128,12 +128,13 @@ const SLOT_TONE: Record<EntryState, string> = {
     error: toneWash(`danger`),
     skipped: `border border-line-subtle text-subtle hover:bg-content/5`,
     interrupted: `border border-line-subtle text-subtle hover:bg-content/5`,
+    carried: `border border-line-subtle text-subtle hover:bg-content/5`,
 };
 const slotIcon = (entry: CalendarEntry): IconName => {
     if (entry.state === `upcoming`) {
         return entry.automation.trigger.kind === `once` ? `pin` : `clock`;
     }
-    return ({ paused: `pause`, completed: `check`, error: `exclamation-circle`, skipped: `minus`, interrupted: `minus` } as const)[entry.state];
+    return ({ paused: `pause`, completed: `check`, error: `exclamation-circle`, skipped: `minus`, interrupted: `minus`, carried: `arrow-right` } as const)[entry.state];
 };
 const stateWord = (state: EntryState): string => t(`calendar.state.${state}`);
 const spoken = (entry: CalendarEntry): string => `${entry.automation.id}, ${stateWord(entry.state)} ${formatDateTime(entry.at)}`;

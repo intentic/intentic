@@ -39,4 +39,6 @@
 // 2.47.0 records the listener protocol's reliable delivery: `id` on a /deliver body (a gateway posts one reply id once),
 // `features` on a gateway's status (`DELIVER_ID_FEATURE`), and the dispatch key header (`LISTENER_DISPATCH_KEY_HEADER`)
 // a gateway names a retried message by. Additive: each is optional, and an older side ignores it.
-export const extensionApiVersion = "2.47.0";
+// 2.48.0 records the automations wire's webhook signature schemes (`WEBHOOK_SIGNATURE_SCHEMES`, `WebhookSignatureSchema`,
+// `WebhookSignatureSchemeSchema`) and its `carried` run outcome, and the keyring wire's `isVaultKey`. Additive.
+export const extensionApiVersion = "2.48.0";

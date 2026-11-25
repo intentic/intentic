@@ -855,7 +855,7 @@ describe(`ChatMessageView child-agent card`, () => {
         expect(element.querySelector(`[data-child-reason]`)?.textContent).toContain(`This turn has taken in content from outside (shell-fetch)`);
         expect(element.textContent).not.toContain(`Requested because`);
         // Skipping refuses this child alone and lets the turn go on; No ends the turn, as on every permission card.
-        expect(answers(element)).toEqual([`Start it`, `Skip this, keep going`, `No`]);
+        expect(answers(element)).toEqual([`Skip this, keep going`, `No`, `Start it`]);
     });
 
     it(`says nothing of an account nobody chose`, () => {
@@ -924,7 +924,7 @@ describe(`ChatMessageView child-agent card`, () => {
         expect(element.textContent).toContain(`Now the lexer too.`);
         expect(element.textContent).toContain(`Opus 4.6`);
         expect(chip(element)).toBeNull();
-        expect(answers(element)).toEqual([`Send it`, `Skip this, keep going`, `No`]);
+        expect(answers(element)).toEqual([`Skip this, keep going`, `No`, `Send it`]);
     });
 
     it(`once settled, reads what started and what the agent had asked for, and offers nothing`, () => {

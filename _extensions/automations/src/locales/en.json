@@ -436,7 +436,8 @@
             "completed": "Ran",
             "error": "Failed",
             "skipped": "Skipped",
-            "interrupted": "Cut off"
+            "interrupted": "Cut off",
+            "carried": "Carried on"
         },
         "peek": {
             "oneTime": "One time",

@@ -16,6 +16,8 @@ const MARK: Record<AutomationRun[`outcome`], string> = {
     // Checked, found nothing, cost nothing. Deliberately the same tone as the empty slot beside it.
     skipped: `bg-content/15`,
     interrupted: `bg-content/25`,
+    // Refused for a spent allowance and moved on or booked again by the sandbox: not a failure, so no hue of its own.
+    carried: `bg-content/25`,
 };
 
 // The hover card has to say what the marks cannot: which colour meant what, and how many of each. Ordered
@@ -30,6 +32,7 @@ const summary = computed<{ title: string; rows: { label: string; value: number |
             { label: t(`runStrip.ran`), value: count(`completed`), tone: `success` },
             { label: t(`runStrip.skipped`), value: count(`skipped`) },
             { label: t(`runStrip.cutOff`), value: count(`interrupted`) },
+            { label: t(`automationRow.outcome.carriedOn`), value: count(`carried`) },
         ],
     };
 });

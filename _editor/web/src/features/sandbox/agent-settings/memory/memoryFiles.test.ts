@@ -45,7 +45,7 @@ it(`drops a root file that is over the ceiling alone, and lets a folder's take t
 
     expect(files.map(({ dropped }) => dropped)).toEqual([true, false]);
     expect(files[0]?.share).toBeGreaterThan(100);
-    expect(files[1]?.share).toBe(2.5);
+    expect(files[1]?.share).toBeCloseTo((500 / MEMORY_MAX_CHARS) * 100);
 });
 
 it(`counts only the folders on the way down, not a sibling's file`, () => {

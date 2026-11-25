@@ -46,6 +46,7 @@ const STATE: Record<EntryState, { icon: IconName; tone: string }> = {
     error: { icon: `exclamation-circle`, tone: `text-danger` },
     skipped: { icon: `minus`, tone: `text-subtle` },
     interrupted: { icon: `minus`, tone: `text-subtle` },
+    carried: { icon: `arrow-right`, tone: `text-subtle` },
 };
 const moment = computed(() => (props.state === undefined ? undefined : STATE[props.state]));
 const ahead = computed(() => props.state === `upcoming` || props.state === `paused`);
