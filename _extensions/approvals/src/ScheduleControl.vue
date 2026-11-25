@@ -78,7 +78,7 @@ const commit = (value: string): void => {
         @click="editing = true"
     >
         <Icon name="clock" />
-        <span>{{ at === undefined ? t(`scheduleControl.noDate`) : words(at) }}</span>
+        {{ at === undefined ? t(`scheduleControl.noDate`) : words(at) }}
         <Icon name="pencil" class="text-2xs opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
 </template>

@@ -345,9 +345,12 @@ const HOUR_LINES = {
 
                     <!-- The lane: a rule firing through the day, one bar over the days it fires on. -->
                     <div v-if="lane.length > 0" class="grid gap-y-1 border-b border-line-subtle py-1.5" :style="GRID">
-                        <div class="flex items-center justify-end pr-2" :style="{ gridRow: `1 / span ${lane.length}` }">
-                            <Icon name="repeat" class="text-2xs text-subtle" v-tooltip.top="t(`calendar.allDay`)" />
-                        </div>
+                        <Icon
+                            name="repeat"
+                            class="mr-2 self-center justify-self-end text-2xs text-subtle"
+                            :style="{ gridRow: `1 / span ${lane.length}` }"
+                            v-tooltip.top="t(`calendar.allDay`)"
+                        />
                         <button
                             v-for="(bar, row) in lane"
                             :key="bar.key"
@@ -441,11 +444,12 @@ const HOUR_LINES = {
             </div>
 
             <!-- Said over the grid rather than instead of it: the grid is still where a click sets one. -->
-            <div v-if="empty" class="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
-                <div class="flex max-w-xs flex-col items-center gap-1 rounded-lg bg-canvas/90 px-4 py-3 text-center shadow-sm backdrop-blur-sm">
-                    <span class="text-sm text-content">{{ t(`calendar.nothingThisWeek`) }}</span>
-                    <span class="text-2xs text-subtle">{{ t(`calendar.clickToSet`) }}</span>
-                </div>
+            <div
+                v-if="empty"
+                class="pointer-events-none absolute inset-6 m-auto flex size-fit max-w-xs flex-col items-center gap-1 rounded-lg bg-canvas/90 px-4 py-3 text-center shadow-sm backdrop-blur-sm"
+            >
+                <span class="text-sm text-content">{{ t(`calendar.nothingThisWeek`) }}</span>
+                <span class="text-2xs text-subtle">{{ t(`calendar.clickToSet`) }}</span>
             </div>
         </div>
 

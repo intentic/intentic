@@ -29,12 +29,12 @@ const fileName = (path: string): string => path.split(`/`).at(-1) ?? path;
         <!-- Quiet sections show only enough post text to identify the row. -->
         <template v-if="tone === `quiet`">
             <p v-if="title" class="truncate text-sm font-medium text-content">{{ title }}</p>
-            <div class="max-h-10 overflow-hidden" :class="title ? `mt-0.5` : ``">
-                <Markdown
-                    :source="post.content"
-                    style="--prose-size: 0.75rem; --prose-code: 0.6875rem; --prose-lead: 1.625; --prose-gap: 0.35em; color: var(--color-muted)"
-                />
-            </div>
+            <Markdown
+                :source="post.content"
+                class="max-h-10 overflow-hidden"
+                :class="title ? `mt-0.5` : ``"
+                style="--prose-size: 0.75rem; --prose-code: 0.6875rem; --prose-lead: 1.625; --prose-gap: 0.35em; color: var(--color-muted)"
+            />
         </template>
 
         <template v-else>
