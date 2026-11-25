@@ -85,20 +85,17 @@ const checkVerdict = (result: WatchCheckResult): string => {
         <p class="text-2xs text-subtle">{{ conditionCaption(form.condition) }}</p>
 
         <!-- The block a command is read in, with a caret: a code block's own ground and rim, as the opened automation draws it. -->
-        <div
+        <CodeField
             v-if="form.condition === `guard`"
+            v-model="form.guard"
             class="rounded-md border bg-canvas transition-colors hover:border-line-strong focus-within:border-line-strong"
             :class="conditionShown ? `border-danger` : `border-line`"
-        >
-            <CodeField
-                v-model="form.guard"
-                lang="bash"
-                rows="2"
-                :placeholder="t(`automationFields.guardPlaceholder`)"
-                :aria-label="t(`automationFields.guardCommand`)"
-                @blur="markTouched(`condition`)"
-            />
-        </div>
+            lang="bash"
+            rows="2"
+            :placeholder="t(`automationFields.guardPlaceholder`)"
+            :aria-label="t(`automationFields.guardCommand`)"
+            @blur="markTouched(`condition`)"
+        />
 
         <template v-if="form.condition === `npm`">
             <div class="flex flex-wrap gap-1.5">
@@ -233,7 +230,7 @@ const checkVerdict = (result: WatchCheckResult): string => {
         <!-- WHEN IT FIRES: every passing check, or only a change in what the check saw. Nothing to compare without a check. -->
         <template v-if="form.condition !== `none`">
             <div class="flex flex-wrap items-center gap-3 text-xs text-content">
-                <span>{{ t(`automationFields.fireOn`) }}</span>
+                {{ t(`automationFields.fireOn`) }}
                 <SegmentedControl v-model="form.fireOn" :options="FIRE_ON_OPTIONS" />
             </div>
             <p class="-mt-1 text-2xs text-subtle">

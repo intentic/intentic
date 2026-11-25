@@ -71,22 +71,21 @@ const tools = computed<ActionItem[]>(() => [
             }}</span>
         </template>
         <template #control>
-            <div class="ml-auto flex shrink-0 items-center gap-2">
-                <span v-if="runner.version" class="font-mono text-2xs text-subtle">v{{ runner.version }}</span>
-                <div class="flex items-center gap-1">
-                    <!-- The span carries the tooltip: a disabled button takes no hover, and its reason is the point. -->
-                    <span v-for="item in ops" :key="item.op" v-tooltip.top="tipOf(item.op, item.press)">
-                        <Button
-                            :label="t(`runners.action.${item.op}`)"
-                            size="small"
-                            tier="quiet"
-                            :loading="pending.has(item.op)"
-                            :disabled="!item.press.enabled || pending.size > 0"
-                            @click="emit(`op`, item.op)"
-                        />
-                    </span>
-                    <OverflowActions :actions="tools" :header="runner.name" :button-class="ui.iconButton({ size: `md` })" />
-                </div>
+            <!-- The buttons sit `gap-1` apart; the version's `mr-1` makes its own gap to them `gap-2`. -->
+            <div class="ml-auto flex shrink-0 items-center gap-1">
+                <span v-if="runner.version" class="mr-1 font-mono text-2xs text-subtle">v{{ runner.version }}</span>
+                <!-- The span carries the tooltip: a disabled button takes no hover, and its reason is the point. -->
+                <span v-for="item in ops" :key="item.op" v-tooltip.top="tipOf(item.op, item.press)">
+                    <Button
+                        :label="t(`runners.action.${item.op}`)"
+                        size="small"
+                        tier="quiet"
+                        :loading="pending.has(item.op)"
+                        :disabled="!item.press.enabled || pending.size > 0"
+                        @click="emit(`op`, item.op)"
+                    />
+                </span>
+                <OverflowActions :actions="tools" :header="runner.name" :button-class="ui.iconButton({ size: `md` })" />
             </div>
         </template>
     </Row>
