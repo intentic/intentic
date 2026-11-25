@@ -3338,6 +3338,8 @@
             "fixWait": "Benched",
             "lastRead": "Last read",
             "moreRoom": "+{hidden} more with room",
+            "moreAccounts": "{count} more account | {count} more accounts",
+            "withRoom": "with room",
             "nothingRoomRightNow": "Nothing has room right now.",
             "notReRead": "Not re-read",
             "onAgentTab": "On the Agent tab",

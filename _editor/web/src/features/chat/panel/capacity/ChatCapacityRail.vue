@@ -192,6 +192,11 @@ const staleNote = computed((): { readonly count: number; readonly detail: string
 
 const plural = (count: number): string => t(`chat.chatCapacityRail.accountCount`, { count }, count);
 
+// The account badge's hover: accounts with room the column draws no row for, or, on a provider with nothing to measure,
+// every one its one line stands for.
+const moreTip = (count: number): Tip => ({ title: t(`chat.chatCapacityRail.moreAccounts`, { count }, count), note: t(`chat.chatCapacityRail.withRoom`) });
+const roomTip = (count: number): Tip => ({ title: plural(count), note: t(`chat.chatCapacityRail.withRoom`) });
+
 // Who a row of the hover card means: the names while there are few enough to read, else how many.
 const whoOf = (labels: readonly string[], count: number): string | number => (labels.length === count && count <= 2 ? labels.join(`, `) : count);
 
@@ -367,7 +372,18 @@ const OUTLINE_LANES = [[`week`, `session`], [`month`]] as const;
                         <div v-for="entry in measuredProviders" :key="entry.provider" class="flex flex-col gap-2.5">
                             <div class="flex items-center gap-1.5" data-reveal>
                                 <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
-                                <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
+                                <span class="min-w-0 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
+                                <span
+                                    v-if="entry.hidden > 0"
+                                    v-tooltip.left="moreTip(entry.hidden)"
+                                    class="flex shrink-0 items-center gap-0.5 text-3xs text-subtle tabular-nums"
+                                    aria-hidden="true"
+                                    data-more-room
+                                >
+                                    <Icon name="users" class="text-[0.6rem]" />+{{ entry.hidden }}
+                                </span>
+                                <span v-if="entry.hidden > 0" class="sr-only">{{ t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden }) }}</span>
+                                <span class="flex-1" />
                                 <span v-if="headingMine(entry)" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
                                 <!-- How many accounts have room is the screen reader's: drawn, "24/32" beside every name was a column of
                                  fractions the bars already answer (a spent account has no bar). -->
@@ -416,10 +432,6 @@ const OUTLINE_LANES = [[`week`, `session`], [`month`]] as const;
                                 </div>
                             </div>
 
-                            <!-- Never a silent cap: a partial list still says how many more have room. -->
-                            <span v-if="entry.hidden > 0" class="text-2xs text-subtle">{{
-                                t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
-                            }}</span>
                         </div>
                     </div>
 
@@ -428,17 +440,28 @@ const OUTLINE_LANES = [[`week`, `session`], [`month`]] as const;
                         v-if="unmeasuredProviders.length > 0 || capacity.out.length > 0 || capacity.blocked.length > 0"
                         class="flex flex-col gap-1.5"
                     >
+                        <!-- One line stands for every account of a provider with nothing to measure, so its count is how many it
+                         has with room, as a quiet badge on that line: until 2026-11-25 a second line said "+N more with room"
+                         under it, N leaving out the rows a capped list would have drawn and this line never does. -->
                         <div v-for="entry in unmeasuredProviders" :key="entry.provider" data-reveal>
-                            <div class="flex items-center gap-1.5" aria-hidden="true">
-                                <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" />
-                                <span class="min-w-0 flex-1 truncate text-2xs font-medium text-content">{{ entry.label }}</span>
-                                <span v-if="entry.mine" class="shrink-0 text-3xs text-subtle">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
-                                <span class="shrink-0 text-2xs text-subtle">{{ entry.rows[0]?.note }}</span>
+                            <div class="flex items-center gap-1.5">
+                                <ProviderLogo :provider="entry.provider" class="shrink-0 text-2xs text-muted" aria-hidden="true" />
+                                <span class="min-w-0 truncate text-2xs font-medium text-content" aria-hidden="true">{{ entry.label }}</span>
+                                <span
+                                    v-if="entry.ready > 1"
+                                    v-tooltip.left="roomTip(entry.ready)"
+                                    class="flex shrink-0 items-center gap-0.5 text-3xs text-subtle tabular-nums"
+                                    aria-hidden="true"
+                                    data-more-room
+                                >
+                                    <Icon name="users" class="text-[0.6rem]" />{{ entry.ready }}
+                                </span>
+                                <span class="flex-1" />
+                                <span v-if="entry.mine" class="shrink-0 text-3xs text-subtle" aria-hidden="true">{{ t(`chat.chatCapacityRail.thisChat`) }}</span>
+                                <span class="shrink-0 text-2xs text-subtle" aria-hidden="true">{{ entry.rows[0]?.note }}</span>
                             </div>
                             <span class="sr-only">{{ entry.rows[0] ? rowDetail(entry.rows[0], entry) : entry.label }}</span>
-                            <span v-if="entry.hidden > 0" class="text-2xs text-subtle">{{
-                                t(`chat.chatCapacityRail.moreRoom`, { hidden: entry.hidden })
-                            }}</span>
+                            <span v-if="entry.ready > 1" class="sr-only">{{ plural(entry.ready) }} {{ t(`chat.chatCapacityRail.withRoom`) }}</span>
                         </div>
 
                         <!-- WHAT CANNOT RUN IS SAID BY TONE, NOT A HEADING: the name dimmed, what holds it in the danger ink (spent) or the

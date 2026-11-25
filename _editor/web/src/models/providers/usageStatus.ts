@@ -244,13 +244,18 @@ export interface NestedPool<T> {
 
 // Orders pools as a tree, each under the tightest-fitting pool that contains it (the shortest clock that still holds
 // it), parents before their children, and otherwise in the order given. Callers pass their own row type and how to
-// read it as a pool, so one rule nests the rail's lanes and the Usage tab's meters alike.
-export const nestPools = <T>(items: readonly T[], poolOf: (item: T) => PlanLimitPool): readonly NestedPool<T>[] => {
+// read it as a pool, so one rule nests the rail's lanes and the Usage tab's meters alike. `shares` narrows which pools
+// may hold which, for a row standing for several accounts: one account's month holds nothing another account spends.
+export const nestPools = <T>(
+    items: readonly T[],
+    poolOf: (item: T) => PlanLimitPool,
+    shares: (outer: T, inner: T) => boolean = () => true,
+): readonly NestedPool<T>[] => {
     const parentOf = new Map<T, T>();
     for (const item of items) {
         const pool = poolOf(item);
         // Containment is a strict order, so the holder that holds no other holder is the nearest one.
-        const holders = items.filter((other) => containsPool(poolOf(other), pool));
+        const holders = items.filter((other) => containsPool(poolOf(other), pool) && shares(other, item));
         const holder = holders.find((other) => !holders.some((inner) => containsPool(poolOf(other), poolOf(inner))));
         if (holder !== undefined) {
             parentOf.set(item, holder);

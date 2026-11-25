@@ -135,8 +135,9 @@ it(`does not claim a pool has the most room when nothing in it was measured`, ()
     expect(el.textContent).not.toContain(`most room`);
     // The one true fact appears once on the drawn line, not once as the row's name and again below it.
     expect(drawn(el).match(/no published limits/g)).toHaveLength(1);
-    // The screen-reader sentence says only that: with no figure there's nothing else to report.
-    expect(spoken(el)).toEqual([`no published limits`]);
+    // The screen-reader sentence says only that, and how many accounts the line stands for: its one drawn figure.
+    expect(spoken(el)).toEqual([`no published limits`, `2 accounts with room`]);
+    expect(drawn(el)).not.toContain(`more with room`);
 });
 
 it(`names a provider that has fallen off the list, and when it comes back`, () => {

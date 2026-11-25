@@ -515,6 +515,45 @@ describe(`a pool nobody picks among`, () => {
         ]);
     });
 
+    // 2026-11-25: two ChatGPT Free sign-ins spent for the month beside one Plus with room. The month, carried only by the
+    // spent two, headed the row at 0% with the Plus's week and session drawn inside it, so the folded rail read "Codex 0%".
+    it(`leaves out an allowance only accounts that cannot serve carry, and nests nothing across accounts`, () => {
+        const free = (index: number, used: number): TranslatorAccount => ({
+            name: `codex-free-${index}`,
+            label: `free${index}@example.com`,
+            usage: {
+                measuredAt: NOW - 60_000,
+                windows: [{ kind: `monthly`, label: `Monthly · all models`, utilization: used, periodSeconds: 2_592_000, resetsAt: after(2_000_000), gates: `all` }],
+            },
+        });
+        const plus: TranslatorAccount = {
+            name: `codex-plus`,
+            label: `plus@example.com`,
+            usage: {
+                measuredAt: NOW - 60_000,
+                windows: [
+                    { kind: `five_hour`, utilization: 26, periodSeconds: 18_000, resetsAt: after(1_000), gates: `all` },
+                    { kind: `seven_day`, utilization: 27, periodSeconds: 604_800, resetsAt: after(400_000), gates: `all` },
+                ],
+            },
+        };
+        const lanesOf = () => chatCapacity([], NOW).providers.find((entry) => entry.provider === `codex`)?.rows[0]?.lanes ?? [];
+
+        translatorAccounts.value = { ...NO_ROUTED, codex: [free(1, 100), free(2, 100), plus] };
+        expect(lanesOf().map((lane) => [lane.kind, lane.percent, lane.depth, lane.capped])).toEqual([
+            [`seven_day`, 27, 0, false],
+            [`five_hour`, 26, 1, false],
+        ]);
+
+        // A Free account with room keeps its month, drawn beside the Plus's week rather than holding it.
+        translatorAccounts.value = { ...NO_ROUTED, codex: [free(1, 40), free(2, 100), plus] };
+        expect(lanesOf().map((lane) => [lane.kind, lane.percent, lane.depth])).toEqual([
+            [`monthly`, 70, 0],
+            [`seven_day`, 27, 0],
+            [`five_hour`, 26, 1],
+        ]);
+    });
+
     it(`leaves out a refused model's own pool where a spent pool already gates that model, and draws it where none does`, () => {
         const opus = { kind: `refused:claude-opus-4-6-thinking`, label: `Claude Opus 4.6 Thinking`, utilization: 100, resetsAt: after(450_000), gates: { models: [`claude-opus-4-6-thinking`] } };
         const reading = (claudeUse: number): AccountUsage => ({

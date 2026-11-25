@@ -3338,6 +3338,8 @@
             "fixWait": "En pausa",
             "lastRead": "Última lectura",
             "moreRoom": "+{hidden} más con sitio",
+            "moreAccounts": "{count} cuenta más | {count} cuentas más",
+            "withRoom": "con margen",
             "nothingRoomRightNow": "Ahora mismo no hay sitio en ninguno.",
             "notReRead": "Sin releer",
             "onAgentTab": "En la pestaña Agente",

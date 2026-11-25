@@ -237,7 +237,7 @@ const capacityLanes = (row: PlanLimitRow, paced = true): readonly CapacityLane[]
                 left.pool.label.localeCompare(right.pool.label),
         );
     // Each shorter allowance then moves under the one it spends into, so the rail draws the session inside the week.
-    return nestPools(sorted, (entry) => entry.pool).map(({ item: { pool, period }, depth, parent, capped }) => ({
+    return nestPools(sorted, (entry) => entry.pool, (outer, inner) => sameAccounts(outer.pool, inner.pool)).map(({ item: { pool, period }, depth, parent, capped }) => ({
         kind: pool.kind,
         // Falls back to the pool's own label when the period can't be read; the column truncates it.
         short: period?.short ?? pool.label,
@@ -284,20 +284,39 @@ const usualPool = (all: readonly PlanLimitPool[]): PlanLimitPool | undefined => 
     );
 };
 
+// Which accounts a pooled row's allowance was summed from, so a lane nests only inside one the same accounts carry.
+const carriersOf = new WeakMap<PlanLimitPool, ReadonlySet<string>>();
+
+const sameAccounts = (outer: PlanLimitPool, inner: PlanLimitPool): boolean => {
+    const [holding, held] = [carriersOf.get(outer), carriersOf.get(inner)];
+    return holding === undefined || held === undefined || [...held].every((id) => holding.has(id));
+};
+
 // A pool's allowances as one: each allowance's use is the mean of what its accounts have used of it, so thirty fresh
 // sign-ins and one spent read as about 3% gone, never as the roomiest one's 100% left nor the tightest one's 0%. Every
 // account the provider counts goes in, spent ones too: they are part of the total the turns spend. A credential that
 // needs a person sits outside `total`, so it sits outside the figure; an account with no reading says nothing and is
 // left out rather than counted as unused. A window resets account by account, so the date carried is the soonest one
 // that hands spent room back.
-const pooledPools = (rows: readonly PlanLimitRow[]): readonly PlanLimitPool[] => {
-    const byAllowance = new Map<string, PlanLimitPool[]>();
+// AN ALLOWANCE ONLY ACCOUNTS THAT CANNOT SERVE CARRY IS LEFT OUT. Plans differ inside one pool: ChatGPT Free publishes
+// one 30-day window, Plus and Team a week and its 5 hours. With two Free sign-ins spent for the month beside one Plus with
+// room, the month (0% left, carried only by the spent two) headed the row, the Plus's week and session drawn inside it,
+// and the folded rail read "Codex 0%" while every turn still ran (2026-11-25). The accounts it holds are counted with the
+// rest of what can't serve; the row is about the room a turn can start in.
+const pooledPools = (rows: readonly PlanLimitRow[], serving: ReadonlySet<string>): readonly PlanLimitPool[] => {
+    const byAllowance = new Map<string, { readonly pools: PlanLimitPool[]; readonly carriers: string[] }>();
     for (const row of rows.filter((entry) => !needsAPerson(entry))) {
         for (const [key, pool] of accountAllowances(row)) {
-            byAllowance.set(key, [...(byAllowance.get(key) ?? []), pool]);
+            const held = byAllowance.get(key) ?? { pools: [], carriers: [] };
+            held.pools.push(pool);
+            held.carriers.push(row.id);
+            byAllowance.set(key, held);
         }
     }
-    return [...byAllowance.values()].flatMap((all) => {
+    const allowances = [...byAllowance.values()];
+    const usable = allowances.filter((entry) => entry.carriers.some((id) => serving.has(id)));
+    // Only where something is left: a serving account with no reading of its own must not empty the row of every figure.
+    return (usable.length > 0 ? usable : allowances).flatMap(({ pools: all, carriers }) => {
         const usual = usualPool(all);
         if (usual === undefined) {
             return [];
@@ -305,16 +324,16 @@ const pooledPools = (rows: readonly PlanLimitRow[]): readonly PlanLimitPool[] =>
         const resets = (all.some((pool) => pool.percent > 0) ? all.filter((pool) => pool.percent > 0) : all).flatMap((pool) =>
             pool.resetsAt === undefined ? [] : [pool.resetsAt],
         );
-        return [
-            {
-                ...usual,
-                percent: all.reduce((sum, pool) => sum + pool.percent, 0) / all.length,
-                resetsAt: resets.length === 0 ? undefined : Math.min(...resets),
-                rounded: all.some((pool) => pool.rounded === true),
-                lapsedAt: undefined,
-                missingSince: undefined,
-            },
-        ];
+        const summed: PlanLimitPool = {
+            ...usual,
+            percent: all.reduce((sum, entry) => sum + entry.percent, 0) / all.length,
+            resetsAt: resets.length === 0 ? undefined : Math.min(...resets),
+            rounded: all.some((entry) => entry.rounded === true),
+            lapsedAt: undefined,
+            missingSince: undefined,
+        };
+        carriersOf.set(summed, new Set(carriers));
+        return [summed];
     });
 };
 
@@ -353,7 +372,9 @@ const pooledRow = (group: PlanLimitGroup, ready: readonly PlanLimitRow[]): PlanL
     // roomier only because it is old. It counts only when nothing else was read (as oldestMovableReading dates).
     const movable = read.filter((row) => row.unread === undefined);
     const counted = movable.length > 0 ? movable : read;
-    return counted.length === 0 ? lead : { ...lead, identity: undefined, pools: pooledPools(counted), stale: counted.some((row) => row.stale) };
+    return counted.length === 0
+        ? lead
+        : { ...lead, identity: undefined, pools: pooledPools(counted, new Set(ready.map((row) => row.id))), stale: counted.some((row) => row.stale) };
 };
 
 const capacityProvider = (group: PlanLimitGroup, ready: readonly PlanLimitRow[], mine: CapacityMine | undefined): CapacityProvider => {
