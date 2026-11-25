@@ -303,11 +303,10 @@ const promptPlaceholder = computed(() =>
                     <!-- The full form, for what has no value of its own on the draft (a listener's people, tools, a fallback model):
                          the same draft, with its way back and its Create at its top. -->
                     <template v-if="mode === `settings`">
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center justify-between gap-2">
                             <Button size="small" tier="quiet" :label="t(`automationDraft.back`)" @click="mode = `draft`">
                                 <template #icon><Icon name="chevron-left" /></template>
                             </Button>
-                            <span class="flex-1"></span>
                             <Button tier="accent" size="small" :label="t(`automationDraft.create`)" :loading="save.isPending.value" @click="submit" />
                         </div>
                         <AutomationFields :state="state" :recipe-note="template?.title" />
@@ -315,21 +314,19 @@ const promptPlaceholder = computed(() =>
 
                     <!-- Settings beside the document with room, above it without, as an opened automation has them. -->
                     <div v-else class="flex flex-col gap-6 @3xl:flex-row @3xl:gap-8">
-                        <div class="@3xl:order-last @3xl:w-1/3 @3xl:shrink-0 @3xl:border-l border-line-subtle @3xl:pl-6">
-                            <dl class="flex flex-col gap-2">
-                                <WhenProperty :state="state" />
-                                <EndsProperty v-if="retireOffered" :state="state" />
-                                <ThenProperty v-if="targetsOffered" :state="state" />
-                                <ServiceProperty v-if="needsModels" :automation="summary" />
-                                <RoleProperty v-if="roleShown" :automation="summary" />
-                                <template v-if="needsModels">
-                                    <ModelProperty :automation="summary" />
-                                    <p v-if="touched.has(`models`) && state.modelsError.value" class="text-xs text-danger">{{ state.modelsError.value }}</p>
-                                </template>
-                                <GateProperty :automation="summary" />
-                                <GroupProperty :automation="summary" />
-                            </dl>
-                        </div>
+                        <dl class="flex flex-col gap-2 @3xl:order-last @3xl:w-1/3 @3xl:shrink-0 @3xl:border-l border-line-subtle @3xl:pl-6">
+                            <WhenProperty :state="state" />
+                            <EndsProperty v-if="retireOffered" :state="state" />
+                            <ThenProperty v-if="targetsOffered" :state="state" />
+                            <ServiceProperty v-if="needsModels" :automation="summary" />
+                            <RoleProperty v-if="roleShown" :automation="summary" />
+                            <template v-if="needsModels">
+                                <ModelProperty :automation="summary" />
+                                <p v-if="touched.has(`models`) && state.modelsError.value" class="text-xs text-danger">{{ state.modelsError.value }}</p>
+                            </template>
+                            <GateProperty :automation="summary" />
+                            <GroupProperty :automation="summary" />
+                        </dl>
 
                         <div class="flex min-w-0 flex-1 flex-col gap-6">
                             <!-- What it is told, written in the type it will be read in, with no box around it. -->
