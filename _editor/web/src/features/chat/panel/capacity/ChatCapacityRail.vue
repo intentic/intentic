@@ -270,13 +270,13 @@ const asideTip = computed((): Tip => {
     const fixes = [...new Set(blocked.flatMap((entry) => fixWhere(entry) ?? []))];
     return {
         title: out.length > 0 || blocked.length > 0 ? t(`chat.chatCapacityRail.unavailable`) : t(`chat.chatCapacityRail.otherProviders`),
-        tone: out.length > 0 ? `danger` : blocked.length > 0 ? `warning` : undefined,
+        tone: out.length > 0 || blocked.length > 0 ? `warning` : undefined,
         rows: [
             ...unmeasuredProviders.value.map((entry) => ({
                 label: thisChat(entry.label, entry.mine),
                 value: [entry.rows[0]?.note, entry.ready > 1 ? plural(entry.ready) : undefined].filter((part) => part !== undefined).join(` · `),
             })),
-            ...out.map((entry) => ({ label: thisChat(entry.label, entry.mine), value: outNote(entry), tone: `danger` as const })),
+            ...out.map((entry) => ({ label: thisChat(entry.label, entry.mine), value: outNote(entry), tone: `warning` as const })),
             ...blocked.map((entry) => ({
                 label: t(`chat.chatCapacityRail.cantServe`, { count: entry.count }),
                 value: entry.reason,
@@ -297,13 +297,12 @@ const asideSpoken = computed(() =>
         .filter((part) => part !== undefined && part !== ``)
         .join(`. `),
 );
-// The mark's own ink: the worst thing the card holds, quiet when it only lists providers that publish no limits.
+// The mark's own ink: warning while anything on the card can't run (spent included: waiting fixes it, so not danger),
+// quiet when it only lists providers that publish no limits. Pulled in past the header's gap so it reads as the label's.
 const asideIcon = computed(() =>
-    capacity.value.out.length > 0
-        ? ({ name: `exclamation-circle`, tone: `text-danger` } as const)
-        : capacity.value.blocked.length > 0
-          ? ({ name: `exclamation-triangle`, tone: `text-warning` } as const)
-          : ({ name: `info-circle`, tone: `text-subtle` } as const),
+    capacity.value.out.length > 0 || capacity.value.blocked.length > 0
+        ? ({ name: `exclamation-triangle`, tone: `text-warning` } as const)
+        : ({ name: `info-circle`, tone: `text-subtle` } as const),
 );
 // The usage column's outline while the accounts are read: the lanes each of two providers' accounts usually carries
 // (a week and its session; one monthly pool).
@@ -355,7 +354,7 @@ const OUTLINE_LANES = [[`week`, `session`], [`month`]] as const;
                     <span
                         v-tooltip.right="asideTip"
                         tabindex="0"
-                        class="ml-1.5 flex shrink-0 items-center rounded-sm text-[0.65rem] outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        class="-ml-1 flex shrink-0 items-center rounded-sm text-[0.65rem] outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         :class="asideIcon.tone"
                         data-capacity-aside
                     >
