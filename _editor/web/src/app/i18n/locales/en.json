@@ -3513,10 +3513,10 @@
             "sourceChat": "the chat this was forked from"
         },
         "chatHeld": {
-            "memoryLow": "Sandbox memory is low",
+            "memoryLow": "Low memory",
             "messageWaits": "Message waits",
             "notSent": "Not sent",
-            "raiseMemory": "Raise memory to {gib} GiB",
+            "raiseMemory": "Raise to {gib} GiB",
             "refused": "Refused before it ran",
             "trialRefused": "The free trial couldn't answer. Your message is kept",
             "restartsSandbox": "Restarts sandbox",
@@ -4713,6 +4713,7 @@
             "stoppedEnding": "Turn stopped short",
             "stoppedStatus": "Turn stopped short · work kept",
             "wait": "Wait for me",
+            "waitShort": "Wait",
             "waitBrief": "Nothing sent for you",
             "waitNote": "Nothing is sent for you. The turn stays here and one press finishes it.",
             "whenFar": "{clock}, {wait}",
@@ -4722,6 +4723,7 @@
             "coolingDown": "you can try again in a minute",
             "memoryEnding": "Sandbox memory low",
             "resendMemory": "Send when memory frees",
+            "resendMemoryShort": "Auto-send",
             "resendMemoryBrief": "Sends once memory frees up",
             "resendMemoryNote": "Sends the message by itself once the sandbox's memory has stayed free for half a minute, one held chat at a time.",
             "waitMemoryNote": "Nothing is sent for you. The message waits here until somebody presses Send anyway.",

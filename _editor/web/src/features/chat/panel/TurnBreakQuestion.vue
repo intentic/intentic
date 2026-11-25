@@ -14,6 +14,9 @@ import { breakAnswers, effectivePolicy, sandboxPolicy } from "../../../models/co
 // a spent allowance, an outage or a stopped turn, ChatContinueStrip; the held line for low memory, ChatHeldMessages), so
 // the same question reads, moves and saves the same way wherever it is asked. The settings row asks it for the whole
 // sandbox (AgentRecovery), the board card's menu for one conversation (AgentSessionMenu), in the same words.
+// `inline` asks it inside the held line, beside the press it is the other way to: the answers alone, in their short
+// words, with neither "Next" before them nor a line after them. The picked pill says what it will do and each pill's
+// hover gives its whole name; as a second row of its own the question doubled the held line's height (2026-11-25).
 
 const props = defineProps<{
     ending: TurnBreak;
@@ -21,11 +24,13 @@ const props = defineProps<{
     // The sibling account a `move` would go to; without one no move is offered (breakAnswers).
     account?: string | undefined;
     // What the answer will do, said beside it; undefined says nothing (an answer to wait, which its own chip says).
-    describe: (answer: TurnBreakPolicy) => string | undefined;
+    describe?: (answer: TurnBreakPolicy) => string | undefined;
     // Shown but not pressable: no sandbox to write to, or no live session to answer for.
     disabled?: boolean;
     // Hung off the right edge, under a held message's line, rather than across a card of its own.
     end?: boolean;
+    // Among the held line's presses: short words, no "Next", no line after (above).
+    inline?: boolean;
 }>();
 // Said once the answer is saved, for what only the asker can do about it (start watching for an outage's retry, move
 // a held turn now).
@@ -39,7 +44,7 @@ const { agentById, setBreakPolicy } = useAgents();
 // Each pill's hover: its own name and the one consequence that tells it from the others.
 const options = computed(() =>
     breakAnswers(props.ending, props.account).map((answer) => ({
-        label: answer.label,
+        label: props.inline === true ? (answer.short ?? answer.label) : answer.label,
         value: answer.value,
         icon: answer.icon,
         title: { title: answer.label, note: answer.brief },
@@ -86,12 +91,12 @@ const choose = async (next: TurnBreakPolicy): Promise<void> => {
 };
 
 // One clock, stated once, on the line the answer sits on.
-const line = computed(() => props.describe(answer.value));
+const line = computed(() => (props.inline === true ? undefined : props.describe?.(answer.value)));
 </script>
 
 <template>
     <div v-if="options.length > 1" class="flex flex-wrap items-center gap-x-2 gap-y-1" :class="end === true && `justify-end`">
-        <span class="shrink-0 text-subtle">{{ t(`chat.turnBreak.next`) }}</span>
+        <span v-if="inline !== true" class="shrink-0 text-subtle">{{ t(`chat.turnBreak.next`) }}</span>
         <SegmentedControl
             v-model="answer"
             :options="options"
@@ -104,5 +109,5 @@ const line = computed(() => props.describe(answer.value));
         <!-- Its own line once the row has no room for a phrase beside the answers, rather than a column a word wide. -->
         <span v-if="line !== undefined" class="min-w-40 flex-1 text-subtle" :class="end === true && `text-right`">{{ line }}</span>
     </div>
-    <span v-if="refused !== undefined" role="alert" class="text-2xs text-danger">{{ refused }}</span>
+    <span v-if="refused !== undefined" role="alert" class="text-2xs text-danger" :class="inline === true && `w-full text-right`">{{ refused }}</span>
 </template>

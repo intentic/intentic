@@ -3513,10 +3513,10 @@
             "sourceChat": "le chat d'où provient cette bifurcation"
         },
         "chatHeld": {
-            "memoryLow": "La mémoire du sandbox est faible",
+            "memoryLow": "Mémoire faible",
             "messageWaits": "Le message attend",
             "notSent": "Non envoyé",
-            "raiseMemory": "Monter la mémoire à {gib} GiB",
+            "raiseMemory": "Monter à {gib} GiB",
             "refused": "Refusé avant de s’exécuter",
             "trialRefused": "L’essai gratuit n’a pas pu répondre. Votre message est conservé",
             "restartsSandbox": "Redémarre la sandbox",
@@ -4713,6 +4713,7 @@
             "stoppedEnding": "Tour interrompu",
             "stoppedStatus": "Tour interrompu · travail conservé",
             "wait": "M'attendre",
+            "waitShort": "Attendre",
             "waitBrief": "Rien n'est envoyé",
             "waitNote": "Rien n'est envoyé à votre place. Le tour attend ici ; une pression permet de le terminer.",
             "whenFar": "{clock}, {wait}",
@@ -4722,6 +4723,7 @@
             "coolingDown": "vous pourrez réessayer dans une minute",
             "memoryEnding": "Mémoire du sandbox faible",
             "resendMemory": "Envoyer quand la mémoire se libère",
+            "resendMemoryShort": "Envoi auto",
             "resendMemoryBrief": "Envoie quand la mémoire se libère",
             "resendMemoryNote": "Envoie automatiquement le message une fois que le sandbox dispose de mémoire libre depuis trente secondes, un chat en attente à la fois.",
             "waitMemoryNote": "Rien n'est envoyé à votre place. Le message attend ici jusqu'à ce que quelqu'un appuie sur Envoyer quand même.",

@@ -5,7 +5,7 @@ import { engineMemoryGib, type ResourcesForm } from "@intentic/ui/sandbox-resour
 import { computed, ref } from "vue";
 import { useSelfResources } from "../../../../models/sandbox/devices/useSelfResources";
 
-/* The other way past a low-memory hold, where this machine can reshape the sandbox: raise its memory first, while the held message waits through the restart. */
+/* The other way past a low-memory hold, where this machine can reshape the sandbox: raise its memory first, while the held message waits through the restart. Said after the why it answers, in the held line's cause slot. */
 
 const t = useT();
 const selfResources = useSelfResources();
@@ -36,6 +36,8 @@ const apply = async (resources: ResourcesForm): Promise<void> => {
 
 <template>
     <template v-if="offered">
+        <!-- A clause of the why it stands after ("Low memory · Raise to 21 GiB", ChatHeldStatus's cause), so its own dot. -->
+        <span aria-hidden="true">·</span>
         <button
             type="button"
             class="touch-target shrink-0 font-medium text-link hover:underline disabled:cursor-default disabled:text-subtle disabled:hover:no-underline"
@@ -56,5 +58,5 @@ const apply = async (resources: ResourcesForm): Promise<void> => {
             @apply="apply"
         />
     </template>
-    <span v-if="failed !== undefined" role="alert" class="w-full text-right text-warning">{{ failed }}</span>
+    <span v-if="failed !== undefined" role="alert" class="w-full text-warning">{{ failed }}</span>
 </template>

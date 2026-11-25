@@ -163,7 +163,7 @@ describe(`a message the sandbox held for low memory`, () => {
         );
         expect(element.querySelector<HTMLImageElement>(`img`)?.getAttribute(`src`)).toBe(`blob:${SHOT}`);
         expect(element.querySelector(`img`)?.getAttribute(`alt`)).toBe(`image.png`);
-        expect(statusLine(element)).toBe(`Not sent · Sandbox memory is low`);
+        expect(statusLine(element)).toBe(`Not sent · Low memory`);
     });
 
     it(`offers one press to send it, which lets the queue go and asks nothing else`, async () => {
@@ -184,7 +184,7 @@ describe(`a message the sandbox held for low memory`, () => {
         const element = mount(chatHolding({ items: [held()], paused: `refused` }));
         await nextTick();
 
-        const reason = [...element.querySelectorAll(`[role="status"] span`)].find((span) => span.textContent?.trim() === `Sandbox memory is low`)!;
+        const reason = [...element.querySelectorAll(`[role="status"] span`)].find((span) => span.textContent?.trim() === `Low memory`)!;
         expect(tips.get(reason)).toEqual(READING_TIP);
         expect(tips.get(pressNamed(element, `Send anyway`)[0]!)).toEqual({
             title: `Starts now`,
@@ -204,7 +204,7 @@ describe(`a message the sandbox held for low memory`, () => {
         const element = mount(chat, {}, undefined, reopensAt);
         await nextTick();
 
-        expect(statusLine(element)).toBe(`Not sent · Sandbox memory is low`);
+        expect(statusLine(element)).toBe(`Not sent · Low memory`);
         const later = buttons(element).find((button) => button.textContent?.trim().startsWith(`Send at`) === true);
         expect(later?.textContent?.trim()).toMatch(/^Send at \S/u);
         const anyway = pressNamed(element, `Send anyway`)[0]!;
@@ -220,12 +220,12 @@ describe(`a message the sandbox held for low memory`, () => {
         const named = mount(chatHolding({ items: [held()], paused: `refused` }));
         await nextTick();
         // 16 GiB now plus the 4 GiB step, well under the engine's 64.
-        expect(pressNamed(named, `Raise memory to 20 GiB`)).toHaveLength(1);
+        expect(pressNamed(named, `Raise to 20 GiB`)).toHaveLength(1);
         app?.unmount();
 
         const unnamed = mount(chatHolding({ items: [held()], paused: `refused` }, [...SENT, memoryRow(`sendAnyway`)]));
         await nextTick();
-        expect(buttons(unnamed).some((button) => button.textContent?.includes(`Raise memory`) === true)).toBe(false);
+        expect(buttons(unnamed).some((button) => button.textContent?.startsWith(`Raise to`) === true)).toBe(false);
         expect(pressNamed(unnamed, `Send anyway`)).toHaveLength(1);
     });
 
@@ -252,10 +252,10 @@ describe(`a message the sandbox held for low memory`, () => {
         const element = mount(chat, {}, { failureCode: `sandbox-memory-low`, failure: MEMORY_TEXT });
         await nextTick();
 
-        expect(statusLine(element)).toBe(`Not sent · Sandbox memory is low`);
-        const reason = [...element.querySelectorAll(`[role="status"] span`)].find((span) => span.textContent?.trim() === `Sandbox memory is low`)!;
+        expect(statusLine(element)).toBe(`Not sent · Low memory`);
+        const reason = [...element.querySelectorAll(`[role="status"] span`)].find((span) => span.textContent?.trim() === `Low memory`)!;
         expect(tips.get(reason)).toEqual(READING_TIP);
-        expect(buttons(element).some((button) => button.textContent?.includes(`Raise memory`) === true)).toBe(false);
+        expect(buttons(element).some((button) => button.textContent?.startsWith(`Raise to`) === true)).toBe(false);
         pressNamed(element, `Send anyway`)[0]!.click();
         expect(resume).toHaveBeenCalledTimes(1);
     });
@@ -266,7 +266,7 @@ describe(`a message the sandbox held for low memory`, () => {
 
         expect(element.querySelectorAll(`img`)).toHaveLength(1);
         expect(element.textContent).toContain(`plan.md`);
-        expect(statusLine(element)).toBe(`Not sent · Sandbox memory is low`);
+        expect(statusLine(element)).toBe(`Not sent · Low memory`);
     });
 });
 
@@ -277,22 +277,31 @@ const armedAnswer = (element: HTMLElement): string | undefined =>
         .find((pill) => pill.getAttribute(`aria-selected`) === `true`)
         ?.textContent?.trim();
 
-// What happens next, asked under the held line as a spent allowance's card asks it: the same control, the same words.
+// What happens next, asked as a spent allowance's card asks it (the same control), but on the held line itself, beside
+// the press it is the other way to: as a row of its own, with "Next" and a sentence after it, it doubled the line.
 describe(`what happens next to a message held for low memory`, () => {
-    it(`asks it under the line, sending once memory frees up unless the chat said to wait`, async () => {
+    it(`asks it on the line in short words, sending once memory frees up unless the chat said to wait`, async () => {
         const element = mount(chatHolding({ items: [held()], paused: `refused` }));
         await nextTick();
 
-        expect(answerPills(element).map((pill) => pill.textContent?.trim())).toEqual([`Wait for me`, `Send when memory frees`]);
-        expect(armedAnswer(element)).toBe(`Send when memory frees`);
-        expect(element.textContent).toContain(`Goes by itself once memory frees up`);
+        const line = element.querySelector(`[data-held-press]`)!;
+        expect(answerPills(element).every((pill) => line.contains(pill))).toBe(true);
+        expect(line.contains(pressNamed(element, `Send anyway`)[0]!)).toBe(true);
+        expect(answerPills(element).map((pill) => pill.textContent?.trim())).toEqual([`Wait`, `Auto-send`]);
+        // The whole name is still read out, and a hover away.
+        expect(answerPills(element).map((pill) => pill.getAttribute(`aria-label`))).toEqual([
+            `Wait · Wait for me, Nothing sent for you`,
+            `Auto-send · Send when memory frees, Sends once memory frees up`,
+        ]);
+        expect(armedAnswer(element)).toBe(`Auto-send`);
+        expect(element.textContent).not.toContain(`Next`);
+        expect(element.textContent).not.toContain(`Goes by itself`);
         app?.unmount();
 
         memoryOverride.value = `wait`;
         const waiting = mount(chatHolding({ items: [held()], paused: `refused` }));
         await nextTick();
-        expect(armedAnswer(waiting)).toBe(`Wait for me`);
-        expect(waiting.textContent).not.toContain(`Goes by itself`);
+        expect(armedAnswer(waiting)).toBe(`Wait`);
     });
 
     // The sandbox's own answer is no override: writing it clears the chat's, so the chat keeps following the sandbox.
@@ -301,13 +310,13 @@ describe(`what happens next to a message held for low memory`, () => {
         await nextTick();
 
         answerPills(element)
-            .find((pill) => pill.textContent?.trim() === `Wait for me`)!
+            .find((pill) => pill.textContent?.trim() === `Wait`)!
             .click();
         await settled();
         expect(setBreakPolicy).toHaveBeenLastCalledWith(`c1`, `memory`, `wait`);
 
         answerPills(element)
-            .find((pill) => pill.textContent?.trim() === `Send when memory frees`)!
+            .find((pill) => pill.textContent?.trim() === `Auto-send`)!
             .click();
         await settled();
         expect(setBreakPolicy).toHaveBeenLastCalledWith(`c1`, `memory`, null);
@@ -368,7 +377,7 @@ describe(`the other holds, drawn the same way`, () => {
 
         expect(statusLine(element)).toBe(`Not sent · Refused before it ran`);
         expect(pressNamed(element, `Send again`)).toHaveLength(1);
-        expect(buttons(element).some((button) => button.textContent?.includes(`Raise memory`) === true)).toBe(false);
+        expect(buttons(element).some((button) => button.textContent?.startsWith(`Raise to`) === true)).toBe(false);
     });
 
     // The free trial could not answer (busy past the sandbox's own retries, no model for the pick, or spent for today):

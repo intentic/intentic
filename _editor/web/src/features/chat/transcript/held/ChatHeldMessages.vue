@@ -4,7 +4,6 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, watch } from "vue";
 import TurnBreakQuestion from "../../panel/TurnBreakQuestion.vue";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
-import { memoryNext } from "../../../../models/conversations/endings/turnBreak";
 import MemoryRaise from "../notices/MemoryRaise.vue";
 import ChatHeldBooking from "./ChatHeldBooking.vue";
 import ChatHeldBubble from "./ChatHeldBubble.vue";
@@ -20,7 +19,7 @@ import { useAccessWall } from "../../../../models/conversations/endings/accessWa
 import { RouterLink } from "vue-router";
 import { modelsHref } from "../../../../lib/routes/modelsPath";
 
-/* What the conversation's queue holds, drawn where the reader looks for a message they just sent: at the foot of the transcript, as their own prompts. What a Stop or a refusal held is marked not sent, over the one line that says why and the one press that sends it; a low-memory hold also asks what happens next, as a spent allowance does. Each group of messages booked for later stands under its own line with the time it goes, its own Change and its own Send now (ChatHeldBooking). */
+/* What the conversation's queue holds, drawn where the reader looks for a message they just sent: at the foot of the transcript, as their own prompts. What a Stop or a refusal held is marked not sent, over the one line that says why and the one press that sends it; a low-memory hold also asks, on that same line, what happens next, as a spent allowance does. Each group of messages booked for later stands under its own line with the time it goes, its own Change and its own Send now (ChatHeldBooking). */
 
 defineProps<{
     // The quick bar's composer, with no transcript above it: each message on one line (ChatHeldBubble).
@@ -72,6 +71,9 @@ const TRIAL_REFUSALS: ReadonlySet<string> = new Set([`trial-unavailable`, `trial
 const trialRefused = computed(() => reason.value === `refused` && TRIAL_REFUSALS.has(lastFailure.value?.code ?? ``));
 // The bubbles are the words that wait; a continuation (a Continue booked for later, let go and then held) has none.
 const bubbles = computed(() => waiting.value.filter((message) => message.continues !== true));
+// Each group stands in a column as wide as its widest message, and its line runs across that column (ChatHeldStatus): the
+// why from the messages' left edge, the presses to their right one. Over the quick bar's composer the card is the column.
+const column = (compact: boolean): string => (compact ? `flex flex-col gap-2` : `flex max-w-[85%] flex-col items-end gap-2`);
 const press = computed((): HeldPress => {
     switch (reason.value) {
         case `memory`:
@@ -95,47 +97,45 @@ const press = computed((): HeldPress => {
         class="flex flex-col gap-2"
         :class="compact ? `rounded-xl bg-card shadow-sm px-3 py-2` : `items-end pt-1`"
     >
-        <template v-if="held">
+        <div v-if="held" :class="column(compact)">
             <ChatHeldBubble v-for="message in bubbles" :key="message.id" :message="message" :compact="compact" />
             <!-- Marked so the bar over the composer (ChatWaitingBar) repeats a memory hold only while this line is out of view. -->
-            <ChatHeldStatus :reason="reason" :detail="detail" :trial="trialRefused" :spread="compact" v-bind="{ [HELD_PRESS_ATTR]: `` }">
+            <ChatHeldStatus :reason="reason" :detail="detail" :trial="trialRefused" v-bind="{ [HELD_PRESS_ATTR]: `` }">
+                <!-- Only a hold that named its ceiling can be raised past (a stall names none), and never under a live turn, which the restart would kill. -->
+                <template #cause><MemoryRaise v-if="notice?.noticeAction === `sandboxMemory` && !streaming" /></template>
+                <!-- What happens next, asked as every wall asks it (a spent allowance's card, ChatContinueStrip), beside the
+                     press it is the other way to: wait for that press, or send it by itself once memory has stayed free. -->
+                <TurnBreakQuestion v-if="reason === `memory`" ending="memory" :conversation-id="conversation.conversationId" inline />
                 <!-- Held means nothing goes by itself, even after a turn running now: the press lets it go, after that turn if one runs. -->
-                <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-                    <Button
-                        v-if="trialRefused"
-                        :as="RouterLink"
-                        :to="modelsHref()"
-                        size="small"
-                        thumb
-                        :tier="reopenAt === undefined ? `accent` : `boring`"
-                        data-held-connect-model
-                        >{{
-                        t(`chat.words.connectAModel`)
-                    }}</Button>
-                    <Button
-                        size="small"
-                        thumb
-                        :tier="reopenAt === undefined && accessWall === undefined && wayOut === undefined && !trialRefused ? `accent` : `quiet`"
-                        :disabled="reopen.blockedLine.value !== undefined"
-                        v-tooltip.top="reopen.blockedHint.value ?? press.hint"
-                        @click="resumeQueue(heldIds)"
-                        >{{ press.label }}</Button
-                    >
-                    <Button tier="accent" v-if="reopenAt !== undefined" size="small" thumb v-tooltip.top="sendAtHint" @click="sendAtReopen()">
-                        <Icon name="clock" class="mr-1 text-2xs" />{{ sendAtLabel }}
-                    </Button>
-                    <!-- Only a hold that named its ceiling can be raised past (a stall names none), and never under a live turn, which the restart would kill. -->
-                    <MemoryRaise v-if="notice?.noticeAction === `sandboxMemory` && !streaming" />
-                </span>
+                <Button
+                    v-if="trialRefused"
+                    :as="RouterLink"
+                    :to="modelsHref()"
+                    size="small"
+                    thumb
+                    :tier="reopenAt === undefined ? `accent` : `boring`"
+                    data-held-connect-model
+                    >{{
+                    t(`chat.words.connectAModel`)
+                }}</Button>
+                <Button
+                    size="small"
+                    thumb
+                    :tier="reopenAt === undefined && accessWall === undefined && wayOut === undefined && !trialRefused ? `accent` : `quiet`"
+                    :disabled="reopen.blockedLine.value !== undefined"
+                    v-tooltip.top="reopen.blockedHint.value ?? press.hint"
+                    @click="resumeQueue(heldIds)"
+                    >{{ press.label }}</Button
+                >
+                <Button tier="accent" v-if="reopenAt !== undefined" size="small" thumb v-tooltip.top="sendAtHint" @click="sendAtReopen()">
+                    <Icon name="clock" class="mr-1 text-2xs" />{{ sendAtLabel }}
+                </Button>
             </ChatHeldStatus>
             <p v-if="reopen.blockedLine.value" class="text-2xs text-muted" role="status">{{ reopen.blockedLine.value }}</p>
             <ChatHeldRouting :messages="bubbles" :compact="compact" />
-            <!-- What happens next, asked as every wall asks it (a spent allowance's card, ChatContinueStrip): wait for the
-                 press, or send it by itself once memory has stayed free for a while. -->
-            <div v-if="reason === `memory`" class="flex flex-col gap-1 text-2xs text-muted" :class="compact ? `items-start` : `items-end`">
-                <TurnBreakQuestion ending="memory" :conversation-id="conversation.conversationId" :describe="memoryNext" :end="!compact" />
-            </div>
-        </template>
-        <ChatHeldBooking v-for="group in bookedGroups" :key="group.ids.join(` `)" :group="group" :compact="compact" />
+        </div>
+        <div v-for="group in bookedGroups" :key="group.ids.join(` `)" :class="column(compact)">
+            <ChatHeldBooking :group="group" :compact="compact" />
+        </div>
     </div>
 </template>

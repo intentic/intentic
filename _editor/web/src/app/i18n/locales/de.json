@@ -3513,10 +3513,10 @@
             "sourceChat": "der Chat, von dem dies geforkt wurde"
         },
         "chatHeld": {
-            "memoryLow": "Der Speicher der Sandbox ist knapp",
+            "memoryLow": "Wenig Speicher",
             "messageWaits": "Nachricht wartet",
             "notSent": "Nicht gesendet",
-            "raiseMemory": "Speicher auf {gib} GiB erhöhen",
+            "raiseMemory": "Auf {gib} GiB erhöhen",
             "refused": "Vor dem Start abgelehnt",
             "trialRefused": "Die kostenlose Testphase konnte nicht antworten. Deine Nachricht bleibt erhalten",
             "restartsSandbox": "Startet Sandbox neu",
@@ -4713,6 +4713,7 @@
             "stoppedEnding": "Zug vorzeitig angehalten",
             "stoppedStatus": "Zug vorzeitig angehalten · Arbeit erhalten",
             "wait": "Auf mich warten",
+            "waitShort": "Warten",
             "waitBrief": "Nichts wird gesendet",
             "waitNote": "Für Sie wird nichts gesendet. Der Zug bleibt hier, und ein Klick schließt ihn ab.",
             "whenFar": "{clock}, {wait}",
@@ -4722,6 +4723,7 @@
             "coolingDown": "Sie können es in einer Minute erneut versuchen",
             "memoryEnding": "Sandbox-Speicher knapp",
             "resendMemory": "Senden, wenn Speicher frei wird",
+            "resendMemoryShort": "Auto-Senden",
             "resendMemoryBrief": "Sendet, sobald Speicher frei ist",
             "resendMemoryNote": "Sendet die Nachricht von selbst, sobald der Speicher der Sandbox eine halbe Minute lang frei geblieben ist, ein zurückgehaltener Chat nach dem anderen.",
             "waitMemoryNote": "Für Sie wird nichts gesendet. Die Nachricht wartet hier, bis jemand „Trotzdem senden“ drückt.",

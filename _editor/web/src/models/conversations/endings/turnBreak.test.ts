@@ -1,5 +1,5 @@
 import { TURN_BREAK_POLICIES } from "@intentic/sandbox-contract/schemas/turn-break";
-import { breakAnswers, breakLabel, effectivePolicy, memoryNext, sandboxPolicy } from "./turnBreak";
+import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "./turnBreak";
 
 // One question per ending, in one vocabulary. These pin the two things every surface depends on: which answer is in
 // force for a conversation, and which answers an ending may even be asked.
@@ -82,8 +82,8 @@ describe(`the memory wall`, () => {
         expect(breakAnswers(`memory`, `second@b.c`).map((answer) => answer.value)).toEqual([`wait`, `resend`]);
     });
 
-    it(`says what an armed answer will do, and nothing for one that waits`, () => {
-        expect(memoryNext(`resend`)).toBe(`Goes by itself once memory frees up`);
-        expect(memoryNext(`wait`)).toBeUndefined();
+    // Asked inside the held line, beside Send anyway, where the whole names took a row of their own.
+    it(`names each answer in a word or two for the held line`, () => {
+        expect(breakAnswers(`memory`).map((answer) => answer.short)).toEqual([`Wait`, `Auto-send`]);
     });
 });

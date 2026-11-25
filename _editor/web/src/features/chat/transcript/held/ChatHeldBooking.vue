@@ -25,7 +25,7 @@ import { modelsHref } from "../../../../lib/routes/modelsPath";
 
 const props = defineProps<{
     group: BookedGroup;
-    // The quick bar's composer: each message on one line (ChatHeldBubble), the line spread across its card.
+    // The quick bar's composer: each message on one line (ChatHeldBubble).
     compact?: boolean;
 }>();
 
@@ -140,17 +140,15 @@ const takeBack = (): void => {
     <template v-if="!group.continues">
         <ChatHeldBubble v-for="message in group.messages" :key="message.id" :message="message" :compact="compact" />
     </template>
-    <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :spread="compact" :continues="group.continues" :retry="retry">
-        <span class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-            <Button v-if="retry" :as="RouterLink" :to="modelsHref()" size="small" thumb tier="quiet">{{ t(`chat.words.connectAModel`) }}</Button>
-            <span v-if="retimable" ref="changeAnchor" class="inline-flex">
-                <Button size="small" thumb tier="quiet" :aria-expanded="changing" @click="changing = !changing">{{
-                    t(`chat.chatHeld.change`)
-                }}</Button>
-            </span>
-            <Button v-if="group.continues" size="small" thumb tier="quiet" @click="takeBack()">{{ t(`chat.chatHeld.takeBack`) }}</Button>
-            <Button tier="accent" size="small" thumb :disabled="availability.blockedLine.value !== undefined" v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
+    <ChatHeldStatus reason="scheduled" :until="until" :after="awaited" :continues="group.continues" :retry="retry">
+        <Button v-if="retry" :as="RouterLink" :to="modelsHref()" size="small" thumb tier="quiet">{{ t(`chat.words.connectAModel`) }}</Button>
+        <span v-if="retimable" ref="changeAnchor" class="inline-flex">
+            <Button size="small" thumb tier="quiet" :aria-expanded="changing" @click="changing = !changing">{{
+                t(`chat.chatHeld.change`)
+            }}</Button>
         </span>
+        <Button v-if="group.continues" size="small" thumb tier="quiet" @click="takeBack()">{{ t(`chat.chatHeld.takeBack`) }}</Button>
+        <Button tier="accent" size="small" thumb :disabled="availability.blockedLine.value !== undefined" v-tooltip.top="hint" @click="sendNow()">{{ t(`chat.chatQueue.sendNow`) }}</Button>
     </ChatHeldStatus>
     <p v-if="availability.blockedLine.value" class="text-2xs text-muted" role="status">{{ availability.blockedLine.value }}</p>
     <p v-if="outgrownWords" class="text-2xs text-subtle" :class="compact ? `` : `text-right`" role="note">{{ outgrownWords }}</p>

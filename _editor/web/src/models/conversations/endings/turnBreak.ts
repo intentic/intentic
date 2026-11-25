@@ -40,6 +40,8 @@ export interface BreakAnswer {
     readonly note: string;
     /** The one consequence that tells it from the others, in a few words: the note of the control's hover card. */
     readonly brief: string;
+    /** Its name in a word or two, where it is asked among other presses (TurnBreakQuestion `inline`); the label otherwise. */
+    readonly short?: string;
     readonly icon: IconName;
 }
 
@@ -49,10 +51,18 @@ export interface BreakAnswer {
 // the same two answers, said about what they are about.
 const memoryAnswerOf = (policy: TurnBreakPolicy): BreakAnswer =>
     policy === `wait`
-        ? { value: policy, label: t(`chat.turnBreak.wait`), note: t(`chat.turnBreak.waitMemoryNote`), brief: t(`chat.turnBreak.waitBrief`), icon: `pause` }
+        ? {
+              value: policy,
+              label: t(`chat.turnBreak.wait`),
+              short: t(`chat.turnBreak.waitShort`),
+              note: t(`chat.turnBreak.waitMemoryNote`),
+              brief: t(`chat.turnBreak.waitBrief`),
+              icon: `pause`,
+          }
         : {
               value: policy,
               label: t(`chat.turnBreak.resendMemory`),
+              short: t(`chat.turnBreak.resendMemoryShort`),
               note: t(`chat.turnBreak.resendMemoryNote`),
               brief: t(`chat.turnBreak.resendMemoryBrief`),
               icon: `clock`,
@@ -126,9 +136,3 @@ export const breakLabel = (ending: TurnBreak): string => {
     }
 };
 
-/**
- * What the memory wall's answer will do, in one line under the control, or nothing while it is `wait`: the selected
- * chip already says that (pickUpNext's rule for the other walls). No instant to promise: room comes back when the
- * running work lets it go.
- */
-export const memoryNext = (policy: TurnBreakPolicy): string | undefined => (policy === `wait` ? undefined : t(`chat.turnBreak.goesWhenRoom`));

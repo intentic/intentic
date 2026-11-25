@@ -3513,10 +3513,10 @@
             "sourceChat": "czatu, z którego to rozgałęziono"
         },
         "chatHeld": {
-            "memoryLow": "Pamięć sandboxa się kończy",
+            "memoryLow": "Mało pamięci",
             "messageWaits": "Wiadomość czeka",
             "notSent": "Nie wysłano",
-            "raiseMemory": "Zwiększ pamięć do {gib} GiB",
+            "raiseMemory": "Zwiększ do {gib} GiB",
             "refused": "Odrzucone, zanim ruszyło",
             "trialRefused": "Darmowy okres próbny nie mógł odpowiedzieć. Twoja wiadomość jest zachowana",
             "restartsSandbox": "Restart sandboksa",
@@ -4837,6 +4837,7 @@
             "stoppedEnding": "Tura przerwana",
             "stoppedStatus": "Tura przerwana · praca zachowana",
             "wait": "Czekaj na mnie",
+            "waitShort": "Czekaj",
             "waitBrief": "Nic nie zostanie wysłane",
             "waitNote": "Nic nie zostanie wysłane za Ciebie. Tura zostaje tutaj, a jedno kliknięcie ją dokończy.",
             "whenFar": "{clock}, {wait}",
@@ -4846,6 +4847,7 @@
             "coolingDown": "możesz spróbować ponownie za minutę",
             "memoryEnding": "Mało pamięci w sandboxie",
             "resendMemory": "Wyślij, gdy zwolni się pamięć",
+            "resendMemoryShort": "Autowysyłka",
             "resendMemoryBrief": "Wyśle, gdy zwolni się pamięć",
             "resendMemoryNote": "Sama wyśle wiadomość, gdy pamięć sandboxa pozostanie wolna przez pół minuty, po jednym wstrzymanym czacie naraz.",
             "waitMemoryNote": "Nic nie zostanie wysłane za Ciebie. Wiadomość czeka tutaj, aż ktoś kliknie „Wyślij mimo to”.",

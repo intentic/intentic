@@ -4,7 +4,6 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import TurnBreakQuestion from "../../panel/TurnBreakQuestion.vue";
 import { usePaneView } from "../../../../models/conversations/panel/useChat-view";
-import { memoryNext } from "../../../../models/conversations/endings/turnBreak";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import ChatHeldStatus from "../held/ChatHeldStatus.vue";
 import { memoryReading, useHeldQueue, useKeptTurn } from "../held/heldQueue";
@@ -34,21 +33,19 @@ const atReopen = computed(() => reopen.bookContinue.value);
 </script>
 
 <template>
-    <!-- Under the kept message, the same line a queued one gets: it was not sent, why, the press, and what happens next. -->
+    <!-- Under the kept message, the same line a queued one gets: it was not sent, why, what happens next, and the press. -->
     <div v-if="heldHere" class="flex flex-col items-end gap-1 self-end">
         <ChatHeldStatus reason="memory" :detail="memoryReading(message.text)">
+            <template #cause><MemoryRaise v-if="message.noticeAction === `sandboxMemory`" /></template>
+            <TurnBreakQuestion ending="memory" :conversation-id="conversation.conversationId" inline />
             <Button tier="accent" v-if="atReopen !== undefined" size="small" thumb v-tooltip.top="reopen.hint.value" @click="atReopen()">
                 <Icon name="clock" class="mr-1 text-2xs" />{{ reopen.label.value }}
             </Button>
             <Button size="small" thumb :tier="atReopen === undefined ? `accent` : `quiet`" :disabled="reopen.blockedLine.value !== undefined" v-tooltip.top="reopen.blockedHint.value ?? sendAnywayTip()" @click="send">{{
                 t(`chat.chatHeld.sendAnyway`)
             }}</Button>
-            <MemoryRaise v-if="message.noticeAction === `sandboxMemory`" />
         </ChatHeldStatus>
         <p v-if="reopen.blockedLine.value" class="text-2xs text-muted" role="status">{{ reopen.blockedLine.value }}</p>
-        <div class="flex flex-col items-end gap-1 text-2xs text-muted">
-            <TurnBreakQuestion ending="memory" :conversation-id="conversation.conversationId" :describe="memoryNext" end />
-        </div>
     </div>
     <!-- Settled: what happened, in the past tense, since the press it offered is gone with the hold. -->
     <div v-else-if="!folded" class="chat-meta flex w-full items-start gap-x-2 py-0.5 text-2xs text-subtle" v-tooltip.top="figures">

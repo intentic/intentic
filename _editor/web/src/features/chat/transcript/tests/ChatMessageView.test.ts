@@ -1746,7 +1746,7 @@ describe(`a low-memory hold`, () => {
         buttons(element).find((button) => button.textContent?.trim() === `Send anyway`);
     // By its lead words, so a withdrawal cannot pass on a changed size alone.
     const raise = (element: HTMLElement): HTMLButtonElement | undefined =>
-        buttons(element).find((button) => button.textContent?.trim().startsWith(`Raise memory to`) === true);
+        buttons(element).find((button) => button.textContent?.trim().startsWith(`Raise to`) === true);
     // The row's one line, its parts apart as the gap draws them.
     const line = (element: HTMLElement): string =>
         [...(element.querySelector(`[role="status"]`)?.children ?? [])].map((part) => part.textContent?.trim() ?? ``).join(` `);
@@ -1781,7 +1781,7 @@ describe(`a low-memory hold`, () => {
         pane.messages = [opener, row];
         const element = mount(row);
 
-        expect(line(element)).toBe(`Not sent · Sandbox memory is low`);
+        expect(line(element)).toBe(`Not sent · Low memory`);
         expect(raise(element)).toBeUndefined();
         sendAnyway(element)!.click();
 
@@ -1797,7 +1797,7 @@ describe(`a low-memory hold`, () => {
         const element = mount(row);
 
         // 16 GiB now plus the component's 4 GiB step, well under this engine's 64.
-        expect(raise(element)?.textContent?.trim()).toBe(`Raise memory to 20 GiB`);
+        expect(raise(element)?.textContent?.trim()).toBe(`Raise to 20 GiB`);
         sendAnyway(element)!.click();
 
         expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [] });
@@ -1811,7 +1811,7 @@ describe(`a low-memory hold`, () => {
         pane.messages = [opener, row];
         const element = mount(row);
 
-        expect(raise(element)?.textContent?.trim()).toBe(`Raise memory to 19 GiB`);
+        expect(raise(element)?.textContent?.trim()).toBe(`Raise to 19 GiB`);
     });
 
     it(`withdraws the raise, and keeps the send, once the cap already reaches the engine's size`, () => {
