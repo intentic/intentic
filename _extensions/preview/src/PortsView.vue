@@ -65,12 +65,10 @@ const openTerminal = (session: string): void => host().terminal.open(session);
             <!-- Spaced as the column it sits in. -->
             <div class="flex flex-col gap-4">
                 <RowGroup :label="t(`portsView.services`)">
-                    <RowNote v-if="workspacePorts.length === 0" variant="empty">
-                        <span class="flex flex-col items-center gap-2">
-                            <Icon name="ports" class="text-2xl text-subtle" />
-                            <span class="text-sm">{{ t(`portsView.nothingYoursListeningYet`) }}</span>
-                            <span class="text-2xs text-subtle">{{ t(`portsView.startDevServerIn`) }}</span>
-                        </span>
+                    <RowNote v-if="workspacePorts.length === 0" variant="empty" class="flex flex-col items-center gap-2">
+                        <Icon name="ports" class="text-2xl text-subtle" />
+                        <span class="text-sm">{{ t(`portsView.nothingYoursListeningYet`) }}</span>
+                        <span class="text-2xs text-subtle">{{ t(`portsView.startDevServerIn`) }}</span>
                     </RowNote>
 
                     <PortRow

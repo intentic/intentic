@@ -424,14 +424,13 @@ const openStartOver = (): void => {
                     <!-- Jobs that could not be read leave the circles out, as a run with none would; the expanded row says why. -->
                     <Await v-if="jobsLoaded.state !== `failed`" :of="jobsLoaded" :imprint="stagesSkeleton">
                         <PipelineGraph v-if="stages.length > 0" :stages="stages" :recurring="recurring" />
-                        <!-- Same circles-and-connectors geometry as the real graph, so the row doesn't re-flow once jobs land. -->
+                        <!-- Same circles-and-connectors geometry as the real graph, so the row doesn't re-flow once jobs land.
+                             Laid straight into the box above, whose `flex items-center` lines them up. -->
                         <template #fallback>
-                            <div class="flex items-center" aria-hidden="true">
-                                <template v-for="i in 3" :key="i">
-                                    <span v-if="i > 1" class="h-px w-3 shrink-0 bg-line"></span>
-                                    <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
-                                </template>
-                            </div>
+                            <template v-for="i in 3" :key="i">
+                                <span v-if="i > 1" class="h-px w-3 shrink-0 bg-line"></span>
+                                <span class="skeleton h-6 w-6 shrink-0 rounded-full"></span>
+                            </template>
                         </template>
                     </Await>
                 </div>
@@ -547,13 +546,16 @@ const openStartOver = (): void => {
         <template #below>
             <Await :of="jobsLoaded" :imprint="jobsSkeleton" :label="t(`pipelineRunRow.loadingJobs`)">
                 <template #fallback>
-                    <div class="flex flex-col gap-2" role="status" aria-busy="true" :aria-label="t(`pipelineRunRow.loadingJobs`)">
-                        <div class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4">
-                            <template v-for="i in 3" :key="i">
-                                <span v-if="i > 1" class="h-px w-6 shrink-0 bg-line"></span>
-                                <span class="skeleton h-12 w-48 shrink-0 rounded-md"></span>
-                            </template>
-                        </div>
+                    <div
+                        class="flex h-36 items-center gap-3 overflow-hidden rounded-lg border border-line bg-canvas px-4"
+                        role="status"
+                        aria-busy="true"
+                        :aria-label="t(`pipelineRunRow.loadingJobs`)"
+                    >
+                        <template v-for="i in 3" :key="i">
+                            <span v-if="i > 1" class="h-px w-6 shrink-0 bg-line"></span>
+                            <span class="skeleton h-12 w-48 shrink-0 rounded-md"></span>
+                        </template>
                     </div>
                 </template>
                 <PipelineDagGraph

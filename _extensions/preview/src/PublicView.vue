@@ -71,20 +71,19 @@ const size = (bytes: number): string => {
                  until the list or its empty card has been seen once and can be drawn as it was. -->
             <Await :of="loaded" imprint="preview.public-files" :label="t(`publicView.readingPublishedFiles`)">
                 <template #fallback>
-                    <div class="rounded-lg bg-card shadow-sm" role="status" aria-busy="true">
+                    <!-- The status is the card itself; the spoken line is out of flow, so the dividers still fall between the rows. -->
+                    <div class="flex flex-col divide-y divide-line-subtle rounded-lg bg-card shadow-sm" role="status" aria-busy="true">
                         <span class="sr-only">{{ t(`publicView.readingPublishedFiles`) }}</span>
-                        <div class="flex flex-col divide-y divide-line-subtle" aria-hidden="true">
-                            <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2">
-                                <span class="skeleton block h-3.5 w-3.5 shrink-0" />
-                                <div class="flex min-w-0 flex-1 flex-col gap-1">
-                                    <span class="skeleton block h-2.5" :class="[`w-48`, `w-64`, `w-40`][row % 3]" />
-                                    <span class="skeleton block h-2 w-12" />
-                                </div>
-                                <!-- Open, Share, Unpublish: what every served file's row ends with. -->
-                                <span class="skeleton mx-1.5 block h-5 w-5 shrink-0" />
-                                <span class="skeleton block h-7 w-16 shrink-0 rounded-md" />
-                                <span class="skeleton mx-2 block h-3.5 w-16 shrink-0" />
+                        <div v-for="row in 3" :key="row" class="flex items-center gap-3 px-4 py-2" aria-hidden="true">
+                            <span class="skeleton block h-3.5 w-3.5 shrink-0" />
+                            <div class="flex min-w-0 flex-1 flex-col gap-1">
+                                <span class="skeleton block h-2.5" :class="[`w-48`, `w-64`, `w-40`][row % 3]" />
+                                <span class="skeleton block h-2 w-12" />
                             </div>
+                            <!-- Open, Share, Unpublish: what every served file's row ends with. -->
+                            <span class="skeleton mx-1.5 block h-5 w-5 shrink-0" />
+                            <span class="skeleton block h-7 w-16 shrink-0 rounded-md" />
+                            <span class="skeleton mx-2 block h-3.5 w-16 shrink-0" />
                         </div>
                     </div>
                 </template>
