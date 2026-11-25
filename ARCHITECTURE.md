@@ -19,6 +19,7 @@ flowchart LR
 - [platform.md](docs/architecture/platform.md): the hosted account service, its registry and the hosted machines it runs.
 - [app-plane.md](docs/architecture/app-plane.md): what counts as the product, and how one editor release drives daemons of any age.
 - [extensions.md](docs/architecture/extensions.md): how extensions are packaged, loaded and kept to what they declare.
+- [core-and-extensions.md](docs/architecture/core-and-extensions.md): what belongs in the core and what in a feature's extension, the API gaps that pull policy into the core, and the cases that set the line.
 - [capabilities.md](docs/architecture/capabilities.md): connectors, accounts and machines, the catalog they come from, and where their credentials live.
 - [access.md](docs/architecture/access.md): who a turn acts for (people and services), the access profiles that bound them, and the roles held to them.
 - [accounts.md](docs/architecture/accounts.md): what one signed-in account reaches across every sandbox it is in, who knows each edge, and how the editor joins them into the access map.

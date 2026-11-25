@@ -13,6 +13,8 @@ flowchart LR
     procs -->|"same extension token"| daemon
 ```
 
+Whether a feature's code goes in an extension or the core, and what to do when the API below cannot carry it, is [core-and-extensions.md](core-and-extensions.md).
+
 ## The package
 
 - An extension is a directory with an `intentic-extension.json` manifest (`ExtensionManifestSchema` in [`manifest.ts`](../../_shared/extension-manifest/src/manifest.ts)). Its id is `publisher.name`, and `engines.intentic` is a semver range over the host's extension API version, which versions the UI kit's exports as well as the API's, checked before activation.
