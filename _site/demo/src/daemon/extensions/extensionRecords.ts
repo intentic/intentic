@@ -122,9 +122,17 @@ const seedDev = (): void => {
         return;
     }
     devSeeded = true;
-    const working = demoQuiet() ? undefined : demoExtensions().find((extension) => extension.id === `intentic.documentation`);
+    if (demoQuiet()) {
+        return;
+    }
+    const working = demoExtensions().find((extension) => extension.id === `intentic.documentation`);
     if (working !== undefined) {
         working.dev = { path: `extensions/documentation`, uncommitted: 3, revision: `d41c9e07` };
+    }
+    // Pointed at a checkout that cannot run, so the pinned version still does: the warning that leads its page.
+    const held = demoExtensions().find((extension) => extension.id === `intentic.deployments`);
+    if (held !== undefined) {
+        held.dev = { path: `extensions/deployments`, held: `the checkout at extensions/deployments is not built yet` };
     }
 };
 

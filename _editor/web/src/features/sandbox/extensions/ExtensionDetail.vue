@@ -1,28 +1,26 @@
 <script setup lang="ts">
-import { extensionIdOf } from "@intentic/extension-manifest";
-import { Button, formatCount, InfoHint, Notice, type NoticeTone, StatusBadge, ui } from "@intentic/ui";
-import { messageOr } from "@intentic/ui/async";
-import { computed, onMounted, ref } from "vue";
-import CatalogDetail from "../../../components/CatalogDetail.vue";
-import { startAgent } from "../../../models/fleet/agentActions";
-import { sandboxRpc } from "../../../client/sandbox/sandboxRpc";
+import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
 import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extension-updates";
+import { Button, Notice, type NoticeTone, Row, RowGroup, RowNote, StatusBadge, type StatusVariant } from "@intentic/ui";
+import { computed } from "vue";
 import type { ExtensionEntry } from "../../extensions/useExtensionList";
-import { publishBrief, tightenBrief } from "../../../models/sandbox/extensionBrief";
+import ExtensionPlaces from "./detail/ExtensionPlaces.vue";
+import ExtensionPublishing from "./detail/ExtensionPublishing.vue";
+import ExtensionReach from "./detail/ExtensionReach.vue";
+import { routesOf } from "./detail/extensionRoutes";
+import ProfileLayout, { type ProfileStat } from "./detail/ProfileLayout.vue";
 import { devLineOf } from "./extensionDev";
-import ExtensionFacts from "./ExtensionFacts.vue";
-import ExtensionSection from "./ExtensionSection.vue";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
-import ExtensionUpdateOffer from "./ExtensionUpdateOffer.vue";
 import ExtensionSwitch from "./ExtensionSwitch.vue";
+import ExtensionUpdateOffer from "./ExtensionUpdateOffer.vue";
 import ExtensionUpdatePolicy from "./ExtensionUpdatePolicy.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// One installed extension, opened where the Installed list stood, the way Capabilities opens a connection: the way back,
-// then its mark, name and state with its switch at the head, since on and off is the verb for the whole of it. Below,
-// it reads top to bottom by how soon the reader has to act: what is wrong or waiting (alerts, the update on offer), what
-// they set (settings, update policy), what it may reach, and last, apart, removing it. What it is (version, source,
-// what it adds) is ExtensionFacts, docked beside all that on a wide pane and at the foot on a narrow one.
+// One installed extension, opened where the Installed list stood. Its card says who it is with its switch beside the
+// name, since on and off is the verb for the whole of it, and answers at a glance whether it works, what it may reach,
+// how it updates, whether it fits this app and which build runs. What is wrong or waiting runs the full width under
+// that. Below, what the reader sets (settings, update policy), what it may reach, publishing, and last, removing it, on
+// one side; where it shows up in the editor on the other, first on a narrow pane.
 
 const t = useT();
 
@@ -41,6 +39,7 @@ const emit = defineEmits<{
 const manifest = computed(() => entry.extension.manifest);
 const settings = computed(() => manifest.value.contributes?.settings ?? []);
 const installed = computed(() => entry.extension.source === `installed`);
+const workspace = computed(() => entry.extension.source === `workspace`);
 
 // Where it runs from when that is not its pinned copy (extensionDev.ts).
 const dev = computed(() => entry.extension.dev);
@@ -53,7 +52,7 @@ const detailTone = computed<NoticeTone>(() => (entry.state.variant === `danger` 
 const registryAlert = computed(() => installed.value && (entry.extension.advisory !== undefined || entry.extension.health?.state === `unhealthy`));
 const detailNotice = computed(() => (registryAlert.value ? undefined : entry.detail));
 
-// The update offer's own id, which its card reads.
+// The update offer's own id, which its card reads and the header's update figure lands on.
 const updateAnchor = computed(() => `extension-update-${entry.extension.id}`);
 
 // Offered only where removal means something: a baked extension has no files here to delete, and an essential one is
@@ -68,90 +67,139 @@ const removalHint = computed(() =>
         : t(`sandbox.extensionRow.removalHintConnections`, { count: entry.dependents.length }, entry.dependents.length),
 );
 
-// What the extension has actually done with its declared reach, from a per-route call ledger. With no observations yet
-// (just installed, or never opened), every route reads as declared rather than guessed 'unneeded'. The method is split
-// off so the eye reads the path, which is the part that says what it touches.
-const observed = computed(() => entry.extension.usage);
-const routes = computed(() =>
-    (manifest.value.permissions?.sandbox ?? []).map((route) => {
-        const calls = observed.value?.[route]?.calls ?? 0;
-        const space = route.indexOf(` `);
-        return {
-            route,
-            method: space === -1 ? `` : route.slice(0, space),
-            path: space === -1 ? route : route.slice(space + 1),
-            calls,
-            unused: observed.value !== undefined && calls === 0,
-        };
-    }),
-);
-const usedCount = computed(() => routes.value.filter((route) => route.calls > 0).length);
-const routesCaption = computed(() =>
-    observed.value === undefined
-        ? t(`sandbox.extensionRow.routesDeclared`, { count: routes.value.length }, routes.value.length)
-        : t(`sandbox.extensionRow.routesUsed`, { used: usedCount.value, count: routes.value.length }, routes.value.length),
-);
+const routes = computed(() => routesOf(entry.extension));
+// Whether the main column holds anything; a reader who may change nothing of an extension that reaches nothing reads
+// where it shows up there instead, rather than beside an empty column.
+const hasMain = computed(() => manage || routes.value.length > 0 || workspace.value);
 
-// Only for a workspace extension, whose manifest the owner can actually edit; needs at least one route used and one
-// never called, so there's something to act on.
-const tightenable = computed(
-    () =>
-        entry.extension.source === `workspace` &&
-        observed.value !== undefined &&
-        routes.value.some((route) => route.unused) &&
-        routes.value.some((route) => route.calls > 0),
-);
-
-// Fetched when the page opens, since it reads the bundle off disk. Shown for a workspace extension only: the same
-// checks against an installed one would flag somebody else's commit the owner can't change.
-const readiness = ref<{ id: string; label: string; status: string; detail: string }[]>();
-const readinessError = ref<string>();
-onMounted(async () => {
-    if (entry.extension.source !== `workspace`) {
-        return;
-    }
-    readinessError.value = undefined;
-    try {
-        const result = await sandboxRpc.extensions.readiness({ id: entry.extension.id });
-        readiness.value = [...result.checks];
-    } catch (failure) {
-        readiness.value = undefined;
-        readinessError.value = messageOr(failure, t(`sandbox.extensionRow.couldNotCheck`));
+// Where its code comes from, in words: the heading's line, since nothing in a manifest says what it does.
+const sourceWords = computed(() => {
+    switch (entry.extension.source) {
+        case `builtin`:
+            return t(`sandbox.extensionRow.sourceBuiltin`);
+        case `workspace`:
+            return t(`sandbox.extensionRow.sourceWorkspace`);
+        default:
+            return t(`sandbox.extensionRow.sourceInstalled`);
     }
 });
 
-// All checks ran and none failed; a warning stays the author's call, not a blocker.
-const publishable = computed(() => readiness.value !== undefined && !readiness.value.some((check) => check.status === `fail`));
-// A workspace extension's name is its directory (one per subdirectory), so no round trip is needed.
-const workspaceDir = computed(() => `.intentic/config/workspace-extensions/${manifest.value.name}`);
-const publish = computed(() => ({ id: extensionIdOf(manifest.value), dir: workspaceDir.value, name: manifest.value.name }));
-const tighten = computed(() => ({
-    id: extensionIdOf(manifest.value),
-    dir: workspaceDir.value,
-    unused: routes.value.filter((route) => route.unused).map((route) => route.route),
-    used: routes.value.filter((route) => route.calls > 0).map(({ route, calls }) => ({ route, calls })),
-}));
+// A state's own colour, where it has one a figure can wear.
+const toneOf = (variant: StatusVariant): ProfileStat[`tone`] =>
+    variant === `success` || variant === `warning` || variant === `danger` || variant === `info` ? variant : undefined;
 
-// Where it shows up, ordered by facetsOf's visibility ranking: the heading's one line of what it is. Settings are not a
-// place, and the page lists them right below.
-const places = computed(() =>
-    entry.facets
-        .filter((facet) => facet.surface && facet.kind !== `settings`)
-        .map((facet) => facet.label)
-        .join(` · `),
-);
+// Does it work: its trouble in the host's word where it has one, else on or off.
+const status = computed<ProfileStat>(() => {
+    const label = t(`sandbox.extensionRow.status`);
+    const word = entry.state.badge ? entry.state.label : undefined;
+    if (entry.state.attention || dev.value?.held !== undefined || registryAlert.value) {
+        return {
+            id: `status`,
+            icon: `exclamation-triangle`,
+            value: word ?? t(`sandbox.extensionRow.needsYou`),
+            label,
+            tone: entry.state.variant === `danger` ? `danger` : `warning`,
+        };
+    }
+    if (!entry.extension.enabled) {
+        return { id: `status`, icon: `circle`, value: t(`sandbox.extensionRow.off`), label };
+    }
+    return {
+        id: `status`,
+        icon: `check-circle`,
+        value: word ?? t(`sandbox.extensionRow.on`),
+        label,
+        tone: word === undefined ? `success` : toneOf(entry.state.variant),
+    };
+});
+
+// What it may reach, and how much of that it has used once anything was observed.
+const reach = computed<ProfileStat>(() => {
+    const count = routes.value.length;
+    if (count === 0) {
+        return {
+            id: `reach`,
+            icon: `shield`,
+            value: t(`sandbox.extensionRow.reachNone`),
+            label: t(`sandbox.extensionRow.reachLabel`),
+            tone: `success`,
+        };
+    }
+    if (entry.extension.usage === undefined) {
+        return { id: `reach`, icon: `shield`, value: `${count}`, label: t(`sandbox.extensionRow.reachDeclared`, count), target: `extension-reach` };
+    }
+    const used = routes.value.filter((route) => route.calls > 0).length;
+    return { id: `reach`, icon: `shield`, value: `${used} / ${count}`, label: t(`sandbox.extensionRow.reachUsed`), target: `extension-reach` };
+});
+
+// The release on offer where there is one; otherwise the standing answer for the next.
+const POLICY_WORDS = {
+    notify: () => t(`sandbox.extensionUpdatePolicy.notify`),
+    agent: () => t(`sandbox.extensionUpdatePolicy.agentPrepared`),
+    auto: () => t(`sandbox.extensionUpdatePolicy.auto`),
+} as const;
+const updates = computed<ProfileStat[]>(() => {
+    if (!installed.value) {
+        return [];
+    }
+    const offer = entry.extension.update;
+    if (offer !== undefined) {
+        return [
+            {
+                id: `updates`,
+                icon: offer.securityFix ? `shield` : `arrow-circle-up`,
+                value: offer.version === undefined ? offer.ref.slice(0, 7) : `v${offer.version}`,
+                label: offer.securityFix ? t(`sandbox.extensionRow.securityUpdate`) : t(`sandbox.extensionRow.update`),
+                tone: offer.securityFix ? `danger` : `info`,
+                target: manage ? updateAnchor.value : undefined,
+            },
+        ];
+    }
+    const policy = entry.extension.updatePolicy?.updates ?? `notify`;
+    return [
+        {
+            id: `updates`,
+            icon: `arrow-circle-up`,
+            value: POLICY_WORDS[policy](),
+            label: t(`sandbox.extensionRow.onNewRelease`),
+            target: manage ? `extension-updates` : undefined,
+        },
+    ];
+});
+
+const stats = computed<ProfileStat[]>(() => {
+    const range = manifest.value.engines.intentic;
+    const fits = satisfiesEngines(range, extensionApiVersion);
+    return [
+        status.value,
+        reach.value,
+        ...updates.value,
+        {
+            id: `fits`,
+            icon: fits ? `check-circle` : `exclamation-triangle`,
+            value: fits ? t(`sandbox.extensionRow.fits`) : t(`sandbox.extensionRow.doesntFit`),
+            label: t(`sandbox.extensionRow.requiresApp`, { range }),
+            tone: fits ? `success` : `warning`,
+        },
+        installed.value
+            ? { id: `version`, value: `v${manifest.value.version}`, label: entry.extension.commit.slice(0, 7), mono: true }
+            : { id: `version`, value: `v${manifest.value.version}`, label: t(`sandbox.extensionRow.versionLabel`) },
+    ];
+});
 </script>
 
 <template>
-    <CatalogDetail
+    <ProfileLayout
         :back="t(`sandbox.words.installed`)"
         :name="manifest.name"
         :prefix="entry.extension.source === `builtin` ? undefined : manifest.publisher"
-        :description="places || undefined"
+        :description="sourceWords"
         :art="manifest.art"
         :logo="manifest.logo"
         :icon="manifest.icon"
         :idle="!entry.extension.enabled"
+        :stats="stats"
+        aside-leads
         @back="emit(`back`)"
     >
         <template v-if="entry.state.badge || entry.extension.update !== undefined" #badge>
@@ -167,17 +215,16 @@ const places = computed(() =>
             <ExtensionSwitch :extension="entry.extension" :pending="pending" @toggle="(enabled) => emit(`toggle`, entry.extension, enabled)" />
         </template>
 
-        <div class="flex flex-col gap-2.5">
-            <!-- What is wrong or waiting leads, each in a box of its own tone; an ordinary extension has none of them. -->
+        <!-- What is wrong or waiting, each in its own tone; an ordinary extension has none of them. -->
+        <template #alerts>
             <Notice v-if="detailNotice" :tone="detailTone" size="sm">{{ detailNotice }}</Notice>
-
             <!-- Where it runs from, and the way back; the checkout itself is never touched from here. -->
             <Notice v-if="devLine !== undefined" :tone="dev?.held === undefined ? `info` : `warning`" size="sm">
                 {{ devLine }}
                 <template v-if="manage" #actions>
                     <Button
                         size="small"
-                        tier="boring"
+                        :tier="dev?.held === undefined ? `boring` : `accent`"
                         :label="t(`sandbox.extensionRow.devBackToPinned`)"
                         :disabled="pending"
                         @click="emit(`devClear`, entry.extension)"
@@ -186,127 +233,43 @@ const places = computed(() =>
                     </Button>
                 </template>
             </Notice>
-
             <ExtensionUpdateOffer v-if="manage && installed" :extension="entry.extension" :anchor="updateAnchor" />
+        </template>
 
-            <!-- The record proper: one section per question, ruled apart, each headed the same way. -->
-            <div>
-                <div class="divide-y divide-line">
-                    <ExtensionSection v-if="manage && settings.length > 0" :label="t(`shared.settings`)">
-                        <ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" />
-                    </ExtensionSection>
+        <div class="flex flex-col gap-6">
+            <!-- What the reader sets, then what it may reach, then publishing, and apart and last, removing it. -->
+            <RowGroup v-if="manage && settings.length > 0" id="extension-settings" :label="t(`shared.settings`)">
+                <RowNote variant="block"><ExtensionSettingsForm :extension-id="entry.extension.id" :settings="settings" /></RowNote>
+            </RowGroup>
 
-                    <!-- Only git-installed extensions have an update lifecycle to set a policy for. -->
-                    <ExtensionUpdatePolicy v-if="manage && installed" :extension="entry.extension" />
+            <!-- Only git-installed extensions have an update lifecycle to set a policy for. -->
+            <ExtensionUpdatePolicy v-if="manage && installed" :extension="entry.extension" />
 
-                    <!-- The reach approved at install, and whether it was ever used. -->
-                    <ExtensionSection v-if="routes.length > 0" :label="t(`sandbox.extensionRow.sandboxAccess`)" :caption="routesCaption">
-                        <div class="flex flex-col gap-2">
-                            <ul class="flex flex-wrap gap-1.5" :aria-label="t(`sandbox.extensionRow.sandboxAccess`)">
-                                <li
-                                    v-for="route in routes"
-                                    :key="route.route"
-                                    v-tooltip.top="
-                                        route.calls > 0
-                                            ? {
-                                                  title: t(`sandbox.extensionRow.used`),
-                                                  rows: [{ label: t(`sandbox.extensionRow.calls`), value: formatCount(route.calls) }],
-                                              }
-                                            : route.unused
-                                              ? t(`sandbox.extensionRow.neverCalled`)
-                                              : undefined
-                                    "
-                                    class="flex items-baseline gap-1.5 rounded-md border px-1.5 py-0.5 font-mono text-2xs"
-                                    :class="route.unused ? `border-dashed border-line-strong text-subtle` : `border-line bg-canvas/60 text-content`"
-                                >
-                                    <span class="text-[0.625rem] font-medium" :class="route.unused ? `` : `text-muted`">{{ route.method }}</span>
-                                    <span>{{ route.path }}</span>
-                                </li>
-                            </ul>
-                            <!-- A legend, not a lecture: the reasoning behind "never called" waits behind its (i). -->
-                            <div v-if="observed === undefined" class="text-2xs text-subtle">{{ t(`sandbox.extensionRow.notObservedYet`) }}</div>
-                            <div
-                                v-else-if="routes.some((route) => route.unused)"
-                                class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-subtle"
-                            >
-                                <span class="flex items-center gap-1.5">
-                                    <span class="inline-block h-2.5 w-4 rounded-sm border border-dashed border-line-strong" aria-hidden="true" />
-                                    {{ t(`sandbox.extensionRow.neverCalled`) }}
-                                    <InfoHint :label="t(`sandbox.extensionRow.neverCalledWhyLabel`)">
-                                        <span class="block text-xs text-content">{{ t(`sandbox.extensionRow.neverCalledWhy`) }}</span>
-                                    </InfoHint>
-                                </span>
-                                <!-- Maintainer-owned extensions route review to the owner. -->
-                                <button
-                                    v-if="tightenable"
-                                    type="button"
-                                    :class="ui.textButton({ size: `xs` })"
-                                    @click="startAgent(tightenBrief(tighten))"
-                                >
-                                    {{ t(`sandbox.extensionRow.agentGoThrough`) }}
-                                </button>
-                            </div>
-                        </div>
-                    </ExtensionSection>
+            <ExtensionReach :entry="entry" />
 
-                    <!-- File checks cover only facts answerable without running the extension. -->
-                    <ExtensionSection
-                        v-if="entry.extension.source === `workspace`"
-                        :label="t(`sandbox.extensionRow.publishing`)"
-                        :caption="t(`sandbox.extensionRow.publishingCaption`)"
-                    >
-                        <div class="flex flex-col gap-2.5">
-                            <p v-if="readinessError" class="text-2xs text-danger">{{ readinessError }}</p>
-                            <ul v-else-if="readiness" class="flex flex-col gap-1">
-                                <li v-for="check in readiness" :key="check.id" class="flex items-start gap-1.5 text-2xs">
-                                    <Icon
-                                        :name="check.status === `pass` ? `check` : check.status === `warn` ? `exclamation-triangle` : `times`"
-                                        :class="check.status === `pass` ? `text-success` : check.status === `warn` ? `text-warning` : `text-danger`"
-                                        class="shrink-0"
-                                    />
-                                    <span class="text-content"
-                                        >{{ check.label }} <span class="text-subtle">· {{ check.detail }}</span></span
-                                    >
-                                </li>
-                            </ul>
-                            <!-- Offered only when nothing fails; a warning is the author's call, not a blocker. -->
-                            <div v-if="publishable" class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                                <Button
-                                    size="small"
-                                    tier="boring"
-                                    :label="t(`sandbox.extensionRow.publishWithAgent`)"
-                                    @click="startAgent(publishBrief(publish))"
-                                >
-                                    <template #icon><Icon name="sparkles" /></template>
-                                </Button>
-                                <span class="text-2xs text-subtle">{{ t(`sandbox.extensionRow.publishAgentPushesFiles`) }}</span>
-                            </div>
-                        </div>
-                    </ExtensionSection>
-                </div>
+            <!-- The same checks against an installed one would flag somebody else's commit the owner can't change. -->
+            <ExtensionPublishing v-if="workspace" :extension="entry.extension" />
 
-                <!-- What it is: docked beside the page on a wide pane, read here at the foot on a narrow one. Outside the
-                 ruled list above, whose rules would otherwise count the hidden copy as a part and draw a line before it. -->
-                <ExtensionFacts :entry="entry" class="border-t border-line py-5 @3xl:hidden" />
+            <!-- Uninstalling is not the errand this page is opened for; the dialog it raises spells out the consequences. -->
+            <RowGroup v-if="removable">
+                <Row icon="trash" tone="danger" :title="t(`sandbox.extensionRow.removeTitle`)" :description="removalHint">
+                    <template #control>
+                        <Button
+                            tier="quiet"
+                            size="small"
+                            tone="danger"
+                            :label="t(`sandbox.extensionRow.remove`)"
+                            @click="emit(`remove`, entry.extension)"
+                        />
+                    </template>
+                </Row>
+            </RowGroup>
 
-                <!-- Apart and last: uninstalling is not the errand this page is opened for. A real, bordered button, since it
-                 is the one thing here nothing undoes; the dialog it raises spells out the consequences. -->
-                <footer v-if="removable" class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-line py-3.5">
-                    <div class="min-w-0">
-                        <p class="text-xs font-medium text-content">{{ t(`sandbox.extensionRow.removeTitle`) }}</p>
-                        <p class="mt-0.5 text-2xs text-subtle">{{ removalHint }}</p>
-                    </div>
-                    <Button tier="quiet" size="small" tone="danger" :label="t(`sandbox.extensionRow.remove`)" @click="emit(`remove`, entry.extension)">
-                        <template #icon><Icon name="trash" /></template>
-                    </Button>
-                </footer>
-            </div>
+            <ExtensionPlaces v-if="!hasMain" :entry="entry" />
         </div>
 
-        <!-- Pushed down by the way back and the heading (102px) and a section's top padding, so its header lines up with
-             the first section's rather than with the extension's name. -->
-        <template #aside>
-            <ExtensionFacts :entry="entry" class="pt-[7.625rem]" />
+        <template v-if="hasMain" #aside>
+            <ExtensionPlaces :entry="entry" />
         </template>
-    </CatalogDetail>
+    </ProfileLayout>
 </template>

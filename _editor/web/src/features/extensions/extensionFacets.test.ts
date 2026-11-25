@@ -50,6 +50,25 @@ describe(`facetsOf`, () => {
         expect(facets[0]?.label).toMatch(new RegExp(`^${probes.length} `));
     });
 
+    it(`names automation templates, side panel views and agent tools in words, not by their schema key`, () => {
+        const facets = facetsOf(
+            manifest({
+                automationTemplates: [
+                    { id: `nightly-sweep`, title: `Nightly sweep`, trigger: { kind: `schedule`, cron: `0 3 * * *` }, prompt: `Sweep.` },
+                ],
+                sideViews: [{ id: `ci-run`, label: `CI run` }],
+                tools: {},
+            }),
+        );
+        expect(facets.map((facet) => facet.label)).toEqual([`side panel view`, `automation template`, `agent tools`]);
+        expect(facets.map((facet) => facet.names)).toEqual([[`CI run`], [`Nightly sweep`], []]);
+    });
+
+    it(`says where on screen a view lands, so it can be drawn there`, () => {
+        const facets = facetsOf(manifest({ views: [{ id: `docs`, label: `Documentation`, surface: `rail` as const }] }));
+        expect(facets[0]?.place).toBe(`rail`);
+    });
+
     it(`says nothing at all for a manifest that contributes nothing`, () => {
         expect(labels(undefined)).toEqual([]);
     });

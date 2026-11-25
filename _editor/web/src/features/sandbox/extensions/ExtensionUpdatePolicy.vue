@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract/schemas/extension-updates";
-import { Notice, SegmentedControl, ui } from "@intentic/ui";
+import { Button, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useOperations } from "../../../workbench/operations/operations";
-import ExtensionSection from "./ExtensionSection.vue";
 import { drawerScope, extensionBusy, latestFailure } from "./extensionWork";
 import { useExtensionUpdates } from "./useExtensionUpdates";
 import { useT } from "@intentic/ui/i18n";
 
-// The owner's standing answer for one git-installed extension: what happens next time its registry lists a release, what
-// happens if the registry flags it, and the way back to the version before. The release on offer right now is the
-// drawer's lead (ExtensionUpdateOffer), not a part of this.
+// The owner's standing answer for one git-installed extension, one line each: what happens next time its registry lists
+// a release, what happens if the registry flags it, and the way back to the version before. The release on offer right
+// now leads the page (ExtensionUpdateOffer), not a part of this.
 
 const t = useT();
 
@@ -74,41 +74,47 @@ const revert = async (): Promise<void> => {
 </script>
 
 <template>
-    <ExtensionSection :label="t(`sandbox.extensionUpdatePolicy.updates`)">
-        <div class="flex flex-col gap-3">
-            <div class="flex flex-col gap-1.5">
-                <p class="text-2xs text-muted">{{ t(`sandbox.extensionUpdatePolicy.newReleaseListed`) }}</p>
+    <RowGroup id="extension-updates" :label="t(`sandbox.extensionUpdatePolicy.updates`)">
+        <Row :title="t(`sandbox.extensionUpdatePolicy.newReleaseListed`)" :description="policyCaption(policy.updates)" wide-control>
+            <template #control>
                 <SegmentedControl
-                    class="self-start"
                     :model-value="policy.updates"
                     :options="POLICY_OPTIONS"
                     @update:model-value="(value: string) => setPolicy(value as ExtensionUpdatePolicy[`updates`])"
                 />
-                <p class="text-2xs text-subtle">{{ policyCaption(policy.updates) }}</p>
-            </div>
-
-            <label class="flex cursor-pointer items-start gap-2 text-2xs text-muted">
-                <input
-                    type="checkbox"
-                    class="mt-0.5"
-                    :checked="policy.advisories === `auto-disable`"
+            </template>
+        </Row>
+        <Row :title="t(`sandbox.extensionUpdatePolicy.offIfFlagged`)" :description="t(`sandbox.extensionUpdatePolicy.offIfFlaggedWhen`)">
+            <template #control>
+                <!-- Compact, matching the switch at the head of the page: two switch sizes on one page read as two kinds of control. -->
+                <ToggleSwitch
+                    class="ui-switch-sm shrink-0"
+                    :model-value="policy.advisories === `auto-disable`"
                     :disabled="busy"
-                    @change="(event) => setAdvisories((event.target as HTMLInputElement).checked)"
+                    :aria-label="t(`sandbox.extensionUpdatePolicy.offIfFlagged`)"
+                    @update:model-value="(value: boolean) => setAdvisories(value)"
                 />
-                {{ t(`sandbox.extensionUpdatePolicy.switchOffAutomaticallyRegistry`) }}
-            </label>
-
-            <p v-if="previous" class="flex flex-wrap items-center gap-x-2 text-2xs text-subtle">
-                <span>
-                    {{ t(`sandbox.extensionUpdatePolicy.previousVersionKept`) }}{{ previous.version !== undefined ? ` (v${previous.version})` : `` }}.
-                </span>
-                <button type="button" :class="ui.textButton({ tone: `quiet`, size: `xs` })" :disabled="busy" @click="revert">
-                    <Icon name="undo" />
-                    {{ t(`sandbox.extensionUpdatePolicy.revertTo`, { ref: previous.ref.slice(0, 7) }) }}
-                </button>
-            </p>
-
-            <Notice v-if="notice" :of="notice" size="sm" />
-        </div>
-    </ExtensionSection>
+            </template>
+        </Row>
+        <Row
+            v-if="previous"
+            :title="t(`sandbox.extensionUpdatePolicy.previousVersionKept`)"
+            :description="previous.version === undefined ? previous.ref.slice(0, 7) : `v${previous.version} · ${previous.ref.slice(0, 7)}`"
+        >
+            <template #control>
+                <Button
+                    size="small"
+                    tier="boring"
+                    :label="t(`sandbox.extensionUpdatePolicy.revertTo`, { ref: previous.ref.slice(0, 7) })"
+                    :disabled="busy"
+                    @click="revert"
+                >
+                    <template #icon><Icon name="undo" /></template>
+                </Button>
+            </template>
+        </Row>
+        <RowNote v-if="notice" icon="exclamation-triangle" :tone="notice.tone === `danger` ? `danger` : `warning`">
+            {{ notice.title }}<template v-if="notice.detail"> {{ notice.detail }}</template>
+        </RowNote>
+    </RowGroup>
 </template>

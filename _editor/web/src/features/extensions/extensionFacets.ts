@@ -16,6 +16,8 @@ export interface ExtensionFacet {
     readonly names: readonly string[];
     /** Whether the collapsed row shows it; false for wiring with no place of its own (watched files, settings). */
     readonly surface: boolean;
+    /** Where on screen, when a kind lands in more than one place: a view's surface (`rail`, `sandbox`, `directory`). */
+    readonly place?: string;
 }
 
 // An unknown contribution kind is named by its schema key, so it is counted the same way in every language.
@@ -42,6 +44,9 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
         }
     };
 
+    // One facet of a kind, which is what every kind but `views` yields.
+    const one = (kind: string, label: string, names: readonly string[], surface = true): ExtensionFacet[] => [{ kind, label, names, surface }];
+
     // Ordered by how visible the contribution is: what the reader can point at first, plumbing last.
     take(`views`, (views) =>
         Object.entries(VIEW_SURFACES).flatMap(([surface, label]) => {
@@ -49,95 +54,91 @@ export const facetsOf = (manifest: ExtensionManifest): ExtensionFacet[] => {
             if (matching.length === 0) {
                 return [];
             }
-            return [{ kind: `views`, label: label(matching.length), names: matching.map((view) => view.label), surface: true }];
+            return [{ kind: `views`, label: label(matching.length), names: matching.map((view) => view.label), surface: true, place: surface }];
         }),
     );
-    take(`viewers`, (viewers) => [
-        {
-            kind: `viewers`,
-            label: t(`extensions.extensionFacets.fileViewers`, { count: viewers.length }, viewers.length),
-            names: viewers.flatMap((viewer) => viewer.extensions.map((extension) => `.${extension}`)),
-            surface: true,
-        },
-    ]);
+    take(`viewers`, (viewers) =>
+        one(
+            `viewers`,
+            t(`extensions.extensionFacets.fileViewers`, { count: viewers.length }, viewers.length),
+            viewers.flatMap((viewer) => viewer.extensions.map((extension) => `.${extension}`)),
+        ),
+    );
     // Named for the folder, not the tab: the reader notices an icon on directories in their file tree.
-    take(`documents`, (documents) => [
-        {
-            kind: `documents`,
-            label: t(`extensions.extensionFacets.folderDocuments`, { count: documents.length }, documents.length),
-            names: documents.map((document) => document.label),
-            surface: true,
-        },
-    ]);
-    take(`commands`, (commands) => [
-        {
-            kind: `commands`,
-            label: t(`extensions.extensionFacets.commands`, { count: commands.length }, commands.length),
-            names: commands.map((command) => command.title),
-            surface: true,
-        },
-    ]);
-    take(`capabilities`, (capabilities) => [
-        {
-            kind: `capabilities`,
-            label: t(`extensions.extensionFacets.capabilityCards`, { count: capabilities.length }, capabilities.length),
-            names: capabilities.map((contribution) => contribution.catalog.name),
-            surface: true,
-        },
-    ]);
+    take(`documents`, (documents) =>
+        one(
+            `documents`,
+            t(`extensions.extensionFacets.folderDocuments`, { count: documents.length }, documents.length),
+            documents.map((document) => document.label),
+        ),
+    );
+    take(`sideViews`, (views) =>
+        one(
+            `sideViews`,
+            t(`extensions.extensionFacets.sideViews`, { count: views.length }, views.length),
+            views.map((view) => view.label),
+        ),
+    );
+    take(`commands`, (commands) =>
+        one(
+            `commands`,
+            t(`extensions.extensionFacets.commands`, { count: commands.length }, commands.length),
+            commands.map((command) => command.title),
+        ),
+    );
+    take(`capabilities`, (cards) =>
+        one(
+            `capabilities`,
+            t(`extensions.extensionFacets.capabilityCards`, { count: cards.length }, cards.length),
+            cards.map((card) => card.catalog.name),
+        ),
+    );
+    take(`automationTemplates`, (templates) =>
+        one(
+            `automationTemplates`,
+            t(`extensions.extensionFacets.automationTemplates`, { count: templates.length }, templates.length),
+            templates.map((template) => template.title),
+        ),
+    );
     // Provider rides the label; event types are the detail underneath, not part of the name.
-    take(`listener`, (listener) => [
-        {
-            kind: `listener`,
-            label: t(`extensions.extensionFacets.listener`, { provider: listener.provider }),
-            names: listener.events.map((event) => event.type),
-            surface: true,
-        },
-    ]);
-    take(`processes`, (processes) => [
-        {
-            kind: `processes`,
-            label: t(`extensions.extensionFacets.backgroundServices`, { count: processes.length }, processes.length),
-            names: processes.map((process) => process.name),
-            surface: true,
-        },
-    ]);
-    take(`agent`, () => [
-        {
-            kind: `agent`,
-            label: t(`extensions.extensionFacets.agentPlugin`),
-            names: [t(`extensions.extensionFacets.agentPluginNames`)],
-            surface: true,
-        },
-    ]);
-    take(`bin`, (bin) => [
-        {
-            kind: `bin`,
-            label: t(`extensions.extensionFacets.agentCli`),
-            names: [t(`extensions.extensionFacets.binNames`, { dir: bin })],
-            surface: true,
-        },
-    ]);
-    take(`environment`, (environment) => [
-        {
-            kind: `environment`,
-            label: t(`extensions.extensionFacets.imageLayer`),
-            names: [t(`extensions.extensionFacets.environmentNames`, { fragment: environment.fragment })],
-            surface: true,
-        },
-    ]);
-    take(`settings`, (settings) => [
-        {
-            kind: `settings`,
-            label: t(`extensions.extensionFacets.settings`, { count: settings.length }, settings.length),
-            names: settings.map((setting) => setting.title),
-            surface: true,
-        },
-    ]);
+    take(`listener`, (listener) =>
+        one(
+            `listener`,
+            t(`extensions.extensionFacets.listener`, { provider: listener.provider }),
+            listener.events.map((event) => event.type),
+        ),
+    );
+    take(`processes`, (processes) =>
+        one(
+            `processes`,
+            t(`extensions.extensionFacets.backgroundServices`, { count: processes.length }, processes.length),
+            processes.map((process) => process.name),
+        ),
+    );
+    take(`agent`, () => one(`agent`, t(`extensions.extensionFacets.agentPlugin`), [t(`extensions.extensionFacets.agentPluginNames`)]));
+    take(`bin`, (bin) => one(`bin`, t(`extensions.extensionFacets.agentCli`), [t(`extensions.extensionFacets.binNames`, { dir: bin })]));
+    take(`tools`, () => one(`tools`, t(`extensions.extensionFacets.agentTools`), []));
+    take(`environment`, (environment) =>
+        one(`environment`, t(`extensions.extensionFacets.imageLayer`), [
+            t(`extensions.extensionFacets.environmentNames`, { fragment: environment.fragment }),
+        ]),
+    );
+    take(`settings`, (settings) =>
+        one(
+            `settings`,
+            t(`extensions.extensionFacets.settings`, { count: settings.length }, settings.length),
+            settings.map((setting) => setting.title),
+        ),
+    );
     // Not a place; explains why a view refreshes without polling. Worth stating once the row is open, not on it.
-    take(`files`, (files) => [
-        { kind: `files`, label: t(`extensions.extensionFacets.watchedFiles`), names: files.map((file) => file.path), surface: false },
-    ]);
+    take(`files`, (files) =>
+        one(
+            `files`,
+            t(`extensions.extensionFacets.watchedFiles`),
+            files.map((file) => file.path),
+            false,
+        ),
+    );
 
     for (const [kind, value] of Object.entries(contributes)) {
         if (taught.has(kind) || value === undefined) {

@@ -201,7 +201,6 @@
         "count": 4,
         "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"
     },
-    "_editor/web/src/features/sandbox/extensions/ExtensionDetail.vue": "standing single-sandbox read when SandboxScope landed (2026-11-23)",
     "_editor/web/src/features/sandbox/extensions/useManifestProblems.ts": {
         "count": 2,
         "why": "standing single-sandbox read when SandboxScope landed (2026-11-23)"

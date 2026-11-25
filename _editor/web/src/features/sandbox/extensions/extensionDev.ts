@@ -14,7 +14,8 @@ export const devLineOf = (extension: ExtensionSummary): string | undefined => {
             ? current.path
             : t(`sandbox.extensionRow.devInConversation`, { path: current.path, conversation: current.conversation });
     if (current.held !== undefined) {
-        return t(`sandbox.extensionRow.devHeld`, { where, reason: current.held });
+        // The reason names the checkout itself ("the checkout at … is gone"), so the sentence says where only once.
+        return t(`sandbox.extensionRow.devHeld`, { reason: current.held });
     }
     const running = t(`sandbox.extensionRow.devRunningFrom`, { where });
     const count = current.uncommitted ?? 0;
