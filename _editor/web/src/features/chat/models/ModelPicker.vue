@@ -1,21 +1,9 @@
 <script setup lang="ts">
-import { browserOwnsClick, SearchBar, SectionHeader, useDevice, useListNavigation } from "@intentic/ui";
+import { browserOwnsClick, SearchBar, useDevice, useListNavigation } from "@intentic/ui";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
-import { providerLabel, termsOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import {
-    accessBadge,
-    accessKnown,
-    accessStateFor,
-    anyProviderReady,
-    hasSignIn,
-    nothingShared,
-    providerReady,
-    providerRunnable,
-    trialBadge,
-    withheldBadge,
-} from "../../../models/providers/access";
+import { providerLabel } from "@intentic/sandbox-contract/models/agent-catalog";
+import { accessKnown, hasSignIn, providerReady, trialBadge } from "../../../models/providers/access";
 import { formatReset } from "../../../models/providers/usageStatus";
 import { providerWithheld, spentModels } from "../../../models/providers/aiReach";
 import { badgeMeta } from "./catalog";
@@ -27,18 +15,16 @@ import {
     customEntryFor,
     filterEntries,
     foldUnconnected,
-    isOlderEntry,
     newerThanEntry,
     normalize,
     type PickerEntry,
     type PickerLane,
-    lanesOf,
-    offeredProviders,
     pickerBlocks,
-    pickerEntries,
     pickerSections,
     promotesFreeAccess,
 } from "../../../models/conversations/accounts/modelPickerState";
+import { pickerSource } from "../../../models/conversations/accounts/pickerSource";
+import { readComputerHarnesses } from "../../../models/conversations/accounts/computerSignIn";
 import { loadAllProviderModels, loadProviderModels } from "../../../models/conversations/accounts/useChat-catalog";
 import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
@@ -47,15 +33,19 @@ import PickerConnectFirst from "./PickerConnectFirst.vue";
 import PickerConnectMore from "./PickerConnectMore.vue";
 import PickerNothingShared from "./PickerNothingShared.vue";
 import PickerRail from "./PickerRail.vue";
+import PickerLaneHeader from "./PickerLaneHeader.vue";
 import { useNow } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
-import { modelsPath } from "../../../lib/routes/modelsPath";
 import { browsingCatalog } from "../../../models/providers/loadBrowsingCatalog";
 import PickerCatalogStatus from "./PickerCatalogStatus.vue";
 
 const t = useT();
 
-/* THE APP'S ONE MODEL PICKER (search + provider rail + one grouped list). */
+/* THE APP'S ONE MODEL PICKER (search + provider rail + one grouped list), for a sandbox's providers and for the coding
+   agents of this computer alike (pickerSource.ts): what it offers and what each needs is the source's to say, and how a
+   locked lane is unlocked is its parts' (PickerLaneHeader, PickerCatalogStatus, PickerConnectFirst, PickerConnectMore):
+   Sandbox ▸ Models for a sandbox's provider, the coding agent's own set up or sign in, pressed in place, for this
+   computer's. */
 
 /* `submit` is the keyboard's way to the `commit` slot, and it is deliberately NOT plain Enter. */
 const emit = defineEmits<{ pick: [PickerEntry]; submit: []; close: [] }>();
@@ -91,6 +81,11 @@ const searchInput = ref<{ focus: () => void } | null>(null);
 
 const searching = computed(() => query.value.trim().length > 0);
 
+// Who answers for the providers: a sandbox, or this computer. What only a sandbox has (prices, the trial, the browsing
+// catalogue, vendors' terms, a typed model id) is asked of a sandbox alone.
+const source = computed(() => pickerSource.value);
+const sandboxSide = computed(() => source.value.kind === `sandbox`);
+
 // A lead row belongs to no provider, so every provider-shaped question about it has to be short-circuited: readiness
 // (or search would sink it below every connected model), and the lock badge below. It is a mode, not a credential.
 const isLead = (entry: PickerEntry): boolean => (leadRows ?? []).some((lead) => lead.key === entry.key);
@@ -98,20 +93,21 @@ const isLead = (entry: PickerEntry): boolean => (leadRows ?? []).some((lead) => 
 // theirs to spend (Access ▸ People). A provider connected here but not shared with them sits with the ones nothing can
 // run yet, so the models they can use lead the list rather than share it with models that would only be refused.
 const leadAwareReady = (candidate: AgentProvider): boolean =>
-    (leadRows ?? []).some((entry) => entry.provider === candidate) || providerRunnable(candidate);
+    (leadRows ?? []).some((entry) => entry.provider === candidate) || source.value.runnable(candidate);
 
 // Rail lanes: the providers the sections offer (a retired trial drops out of both), folded by the same rule.
-const offered = computed(() => offeredProviders(provider, providerRunnable));
-const railLanes = computed<readonly PickerLane[]>(() => lanesOf(offered.value));
+const offered = computed(() => source.value.offered(provider));
+const railLanes = computed<readonly PickerLane[]>(() => source.value.lanes(offered.value));
 
 // The free sign-in's chip is lit only for a reader who has connected nothing; after that it states its price in the
 // same quiet chip as every other locked row.
-const promoteFree = computed(() => promotesFreeAccess(railLanes.value.flatMap((lane) => lane.providers), providerRunnable));
+const promoteFree = computed(() => sandboxSide.value && promotesFreeAccess(railLanes.value.flatMap((lane) => lane.providers), source.value.runnable));
 
 // Custom-model row appended last to results; targets the railed lane's first provider, else the current one.
 const railLane = computed<PickerLane | undefined>(() => railLanes.value.find((lane) => lane.key === rail.value));
+// A sandbox's alone: a coding agent of this computer names its models by its own aliases, and takes no other.
 const customEntry = computed<PickerEntry | undefined>(() =>
-    searching.value ? customEntryFor(pickerEntries.value, query.value, railLane.value?.providers[0] ?? provider) : undefined,
+    searching.value && sandboxSide.value ? customEntryFor(source.value.entries(), query.value, railLane.value?.providers[0] ?? provider) : undefined,
 );
 
 // Which groups show their full catalog, by lane key; resets with query and rail on every open.
@@ -125,15 +121,15 @@ const toggleExpanded = (target: string): void => {
 };
 
 // Nothing here is the reader's to run, though something is connected: the one line that says so leads the list.
-const nothingYours = computed(() => nothingShared());
+const nothingYours = computed(() => source.value.nothingShared());
 
 // Lanes the reader cannot run yet stay out of the list once something can (foldUnconnected); search reads them all anyway.
 // With nothing of theirs at all, every lane waits there, under the line that says why: a list of rows none of which can be
 // picked says less than that line. A lane the rail names is shown whatever it holds, since naming it asked for it.
 const othersOpen = ref(false);
 const fold = computed(() => {
-    const laid = pickerSections(pickerEntries.value, provider, rail.value, providerRunnable);
-    return nothingYours.value && rail.value === undefined ? { shown: [], folded: laid } : foldUnconnected(laid, provider, providerRunnable);
+    const laid = pickerSections(source.value.entries(), provider, rail.value, source.value.runnable, offered.value, source.value.lanes);
+    return nothingYours.value && rail.value === undefined ? { shown: [], folded: laid } : foldUnconnected(laid, provider, source.value.runnable);
 });
 // The row opens the fold only when everything behind it is withheld from the reader (Access ▸ People), which it names.
 // Lanes merely not connected yet get no row: the connect view has doors enough, and search and the rail still reach them.
@@ -193,8 +189,8 @@ const sections = computed<
         // name is asking for that model, not for the mode sitting above it.
         // A retired trial is not found by name either, nor the catalog of a sign-in or key its lane does not draw (one
         // model listed twice, under two ids); every other row keeps search's whole-catalogue reach.
-        const catalog = pickerEntries.value.filter((entry) => offered.value.includes(entry.provider));
-        const matched = filterEntries([...(leadRows ?? []), ...catalog], query.value, rail.value, leadAwareReady, isOlderEntry);
+        const catalog = source.value.entries().filter((entry) => offered.value.includes(entry.provider));
+        const matched = filterEntries([...(leadRows ?? []), ...catalog], query.value, rail.value, leadAwareReady, source.value.older);
         // Ranked hits first, custom entry last, so Enter takes the real match; search stays flat, no family folding.
         const rows = withRows(customEntry.value === undefined ? matched : [...matched, customEntry.value]);
         return [flatSection(`search`, rows)];
@@ -220,7 +216,7 @@ const sections = computed<
                 expanded: isExpanded,
                 // Offered only when it would actually change the list, so a short group never grows a dead control.
                 collapsible: isExpanded || section.total > rowCount,
-                badge: single === undefined ? undefined : (withheldBadge(single) ?? accessBadge(single)),
+                badge: single === undefined ? undefined : source.value.chip(single),
                 withheld: single !== undefined && providerWithheld(single),
                 trial: single === undefined ? undefined : trialBadge(single),
             };
@@ -267,11 +263,11 @@ const isDisabled = (entry: PickerEntry): boolean => (unpickable?.(entry) ?? fals
 // A row whose provider has no credential yet; dimmed and lock-marked, never disabled. A lead row has no provider to
 // hold a credential, so asking would lock a mode that is always available and make it read as refused. A withheld row
 // is not locked: connecting would not make it the reader's.
-const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && !providerReady(entry.provider) && !providerWithheld(entry.provider);
+const isLocked = (entry: PickerEntry): boolean => !isLead(entry) && source.value.locked(entry.provider);
 
 // Nothing in this sandbox can run: every row is locked, so the way to unlock them leads the list (PickerConnectFirst).
 // Not when something is connected and none of it is the reader's: connecting is not their way on (PickerNothingShared).
-const nothingConnected = computed(() => accessKnown.value && !anyProviderReady() && !nothingYours.value);
+const nothingConnected = computed(() => source.value.nothingRunnable());
 
 // Connecting is Full access's, and that of someone given AI accounts of their own (ChatAccountPanel.vue says why).
 const { canShip } = useTier();
@@ -298,11 +294,13 @@ const namedUnconnected = computed<AgentProvider | undefined>(() => {
 // The way to connect more, at the foot of the list: the lanes nothing can run yet are folded out of it, so without this
 // row the picker never said where more models come from. Not where PickerConnectFirst already leads, nor for a reader
 // connecting cannot help (PickerNothingShared).
-const connectMore = computed(() => accessKnown.value && mayConnect.value && !nothingYours.value && (searching.value || !nothingConnected.value));
-
-// Deep link to Sandbox ▸ Models, opened on this provider's lane with its sign-in already starting. A real link, not a
-// button click, so hover shows the destination and Ctrl/Cmd-click opens it in another tab.
-const connectTo = (target: AgentProvider) => modelsPath({ provider: target });
+// On this computer nothing is connected on a page: the agents that cannot run yet are the lanes folded away, and the row
+// opens them in place, each with its own press.
+const connectMore = computed(() =>
+    sandboxSide.value
+        ? accessKnown.value && mayConnect.value && !nothingYours.value && (searching.value || !nothingConnected.value)
+        : !searching.value && !othersOpen.value && fold.value.folded.length > 0,
+);
 
 // A plain click closes the picker; a modified one opens elsewhere and must leave this list untouched.
 const closeOnPlainClick = (event: MouseEvent): void => {
@@ -346,11 +344,11 @@ const railTo = (target: string | undefined): void => {
 
 // Ticks while the picker is open (it is mounted only then), so a row stops reading "back at 15:04" the moment it is 15:04.
 const now = useNow(true, 30_000);
-watch(now, () => { void browsingCatalog.refresh(); }, { immediate: true });
+watch(now, () => { if (sandboxSide.value) { void browsingCatalog.refresh(); } }, { immediate: true });
 
 // No account of the reader's can serve this model now, by the answer Usage left and the spawn listing read (aiReach.ts spentModels):
 // dimmed and stamped, never hidden nor disabled, as it comes back on its own. Unlike `isLocked`: a provider with no credential.
-const spentRows = computed(() => spentModels(pickerEntries.value, now.value));
+const spentRows = computed(() => spentModels(source.value.entries(), now.value));
 const isCooling = (entry: PickerEntry): boolean => spentRows.value.has(entry.key);
 const coolingBadge = (entry: PickerEntry): string | undefined => {
     const reopensAt = spentRows.value.get(entry.key)?.reopensAt;
@@ -360,7 +358,7 @@ const coolingBadge = (entry: PickerEntry): string | undefined => {
 // A version its family has moved past, said on the row: Opus 5 and Opus 5.5 differ by two characters, and a row picked
 // by mistake became the model every new chat opened on.
 const olderWords = (entry: PickerEntry): readonly string[] => {
-    const newer = newerThanEntry(entry);
+    const newer = source.value.older(entry) ? newerThanEntry(entry) : undefined;
     return newer === undefined ? [] : [t(`chat.modelPicker.olderThan`, { newer: newer.label })];
 };
 
@@ -370,23 +368,12 @@ const rowAriaLabel = (entry: PickerEntry): string => {
     return [
         entry.label,
         ...(isSelected(entry) ? [t(`chat.modelPicker.currentModel`)] : []),
-        ...(isLocked(entry) ? [accessBadge(entry.provider) ?? t(`chat.modelPicker.notConnected`)] : []),
+        ...(isLocked(entry) ? [source.value.chip(entry.provider) ?? t(`chat.modelPicker.notConnected`)] : []),
         ...(isWithheld(entry) && !searching.value ? [t(`common.access.short.notShared`)] : []),
         ...olderWords(entry),
         ...(cooling === undefined ? [] : [cooling]),
         ...(helperOnly === undefined ? [] : [helperOnly]),
     ].join(`, `);
-};
-
-// A provider whose connected account can no longer be refreshed; badged so a broken credential isn't mistaken for a
-// healthy one.
-const providerNeedsReauth = (target: AgentProvider): boolean => accessStateFor(target).needsReauth;
-
-// The vendor's note on a provider whose own loop its terms forbid (the owner keeps such routes by choice); only that
-// status earns the list header, since a merely unlisted loop is a choice made later, in the footer.
-const forbiddenNote = (target: AgentProvider): string | undefined => {
-    const terms = termsOf(target, `native`);
-    return terms?.status === `against-terms` ? terms.note : undefined;
 };
 
 // A folded lane's state is loading/error until every card has answered, error winning; codex/grok have no static floor,
@@ -407,10 +394,15 @@ const retrySection = (providers: readonly AgentProvider[]): void => {
 };
 
 onMounted(() => {
-    // The catalogs are daemon-owned and cached there: refresh on every open so search spans warm lists.
-    void loadAllProviderModels();
-    // Access data (locks, reauth, plan) is only as fresh as the daemon's bound; also refresh on every open.
-    void refreshConnections();
+    if (sandboxSide.value) {
+        // The catalogs are daemon-owned and cached there: refresh on every open so search spans warm lists.
+        void loadAllProviderModels();
+        // Access data (locks, reauth, plan) is only as fresh as the daemon's bound; also refresh on every open.
+        void refreshConnections();
+    } else {
+        // Asked again each time it opens: the reader may have installed or signed in to one beside this window.
+        void readComputerHarnesses();
+    }
     // Desktop only: on mobile the software keyboard would instantly cover half the sheet.
     if (!mobile.value) {
         void nextTick(() => searchInput.value?.focus());
@@ -439,7 +431,7 @@ onMounted(() => {
 
         <!-- Fixed height so the rail's filter states never resize the panel; min-h-40, not 0, since the footer's height depends on what's connected. -->
         <div class="flex h-80 min-h-40 flex-col max-md:h-auto max-md:min-h-0">
-            <PickerRail :lanes="railLanes" :rail="rail" :provider="provider" @select="railTo" />
+            <PickerRail :lanes="railLanes" :rail="rail" :provider="provider" :source="source" @select="railTo" />
 
             <div
                 id="model-picker-list"
@@ -452,44 +444,16 @@ onMounted(() => {
                 <PickerFoldRow v-if="foldFirst" v-model="othersOpen" />
                 <template v-for="section in sections" :key="section.key">
                     <!-- Group header doubles as the access line (cost + way out); absent once connected, since a usable provider needs no annotation. -->
-                    <SectionHeader v-if="section.label !== undefined" :label="section.label" density="dense" class="px-3 pb-1 pt-2" role="presentation">
-                        <template #info>
-                            <template v-if="section.provider !== undefined">
-                                <Icon
-                                    v-if="providerNeedsReauth(section.provider)"
-                                    name="exclamation-triangle"
-                                    class="text-2xs text-warning"
-                                    v-tooltip.top="t(`chat.words.reconnectNeeded`)"
-                                />
-                                <!-- A provider whose own loop its vendor forbids, said quietly: the full note sits in the picker footer once picked. -->
-                                <Icon
-                                    v-if="forbiddenNote(section.provider) !== undefined"
-                                    name="exclamation-circle"
-                                    class="text-2xs text-subtle"
-                                    v-tooltip.top="forbiddenNote(section.provider)"
-                                />
-                                <span
-                                    v-if="section.badge !== undefined"
-                                    class="rounded px-1 py-px text-[0.6rem] font-medium"
-                                    :class="
-                                        promoteFree && accessStateFor(section.provider).access?.kind === `free`
-                                            ? `bg-primary-500/15 text-accent`
-                                            : `bg-content/5 text-subtle`
-                                    "
-                                    >{{ section.badge }}</span
-                                >
-                            </template>
-                            <!-- The trial's count; no Connect beside it, since this provider already works. -->
-                            <span v-if="section.trial !== undefined" class="rounded bg-primary-500/15 px-1 py-px text-[0.6rem] font-medium text-accent">{{
-                                section.trial
-                            }}</span>
-                        </template>
-                        <template v-if="section.provider !== undefined && section.badge !== undefined && !section.withheld" #actions>
-                            <RouterLink :to="connectTo(section.provider)" class="text-2xs text-link hover:underline" @click="closeOnPlainClick">
-                                {{ t(`ui.action.connect`) }}
-                            </RouterLink>
-                        </template>
-                    </SectionHeader>
+                    <PickerLaneHeader
+                        v-if="section.label !== undefined"
+                        :label="section.label"
+                        :provider="section.provider"
+                        :badge="section.badge"
+                        :trial="section.trial"
+                        :withheld="section.withheld"
+                        :promote-free="promoteFree"
+                        @navigate="closeOnPlainClick"
+                    />
                     <PickerCatalogStatus v-if="!searching && section.label !== undefined" :provider="section.provider" :withheld="section.withheld" :row-count="section.rowCount" :state="stateFor(section.providers)" @retry="retrySection(section.providers)" @navigate="closeOnPlainClick" />
                     <template v-for="block in section.blocks" :key="block.key">
                         <!-- Family header, shown only for older-version blocks; the latest band needs none, since the section header above already names the group. -->
@@ -526,7 +490,7 @@ onMounted(() => {
                                 {{ shortModelLabel(row.entry.label) }}
                             </span>
                             <span
-                                v-if="isOlderEntry(row.entry)"
+                                v-if="source.older(row.entry)"
                                 class="shrink-0 rounded-sm border border-line px-1 text-2xs leading-4 text-subtle"
                                 aria-hidden="true"
                                 v-tooltip.top="olderWords(row.entry)[0]"
@@ -549,7 +513,7 @@ onMounted(() => {
                                 v-if="isLocked(row.entry)"
                                 name="lock"
                                 class="shrink-0 text-2xs text-subtle"
-                                v-tooltip.top="accessBadge(row.entry.provider)"
+                                v-tooltip.top="source.chip(row.entry.provider)"
                             />
                             <Icon v-if="isSelected(row.entry)" name="check" class="shrink-0 text-2xs text-accent" aria-hidden="true" />
                         </button>
@@ -578,7 +542,7 @@ onMounted(() => {
                         {{ t(`chat.modelPicker.searchAllProviders`) }}
                     </button>
                 </div>
-                <PickerConnectMore v-if="connectMore" :provider="namedUnconnected" @navigate="closeOnPlainClick" />
+                <PickerConnectMore v-if="connectMore" :provider="namedUnconnected" @navigate="closeOnPlainClick" @reveal="othersOpen = true" />
             </div>
         </div>
 

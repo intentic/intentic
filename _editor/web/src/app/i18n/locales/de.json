@@ -5605,14 +5605,15 @@
                 "terminal": "Melde dich in einem Terminal auf diesem Computer bei {harness} an und sende dann erneut."
             },
             "picker": {
-                "title": "Coding-Agenten auf diesem Computer",
                 "none": "Auf diesem Computer wurde kein Coding-Agent gefunden. Installiere Claude Code oder Codex und öffne dies dann erneut.",
-                "reading": "Modelle werden gelesen…",
-                "afterTurn": "Ein anderer Agent kann gewählt werden, sobald dieser Durchgang endet.",
                 "notSetUp": "Nicht eingerichtet",
                 "signedOut": "Abgemeldet",
-                "ownModel": "Eigenes Modell",
-                "signedIn": "Angemeldet: {account}"
+                "setUp": "Einrichten",
+                "signIn": "Anmelden",
+                "setUpToList": "Richte ihn auf diesem Computer ein, um seine Modelle zu sehen.",
+                "signInToList": "Melde dich an, um seine Modelle zu sehen.",
+                "nothingRuns": "Auf diesem Computer kann noch kein Coding-Agent laufen. Richte unten einen ein.",
+                "setUpMore": "Einen weiteren Coding-Agent einrichten"
             }
         }
     },
@@ -6440,9 +6441,6 @@
         "firstTaskSendFailed": "Der Arbeitsbereich konnte Ihre erste Aufgabe nicht senden.",
         "agents": {
             "title": "Agenten",
-            "conversations": "Unterhaltungen",
-            "newConversation": "Neu",
-            "noConversations": "In diesem Ordner gibt es noch keine Unterhaltungen.",
             "consent": {
                 "title": "Einen Agenten auf diesem Computer ausführen?",
                 "lead": "Das startet einen Coding-Agenten, den du hier bereits hast, etwa Claude Code oder Codex, im Ordner {folder}, außerhalb jeder Sandbox.",
@@ -6458,6 +6456,11 @@
                 "here": "Auf diesem Computer (ohne Sandbox)",
                 "sandbox": "In einer Sandbox",
                 "aboutFile": "Zu {path}: "
+            },
+            "board": {
+                "firstLine": "Gib ihm eine Aufgabe. Er arbeitet in diesem Ordner, an deinen eigenen Dateien, und seine Karte erscheint genau hier.",
+                "finishedFirst": "Abgeschlossene Unterhaltungen warten hier. Was sie geändert haben, ist schon in deinem Ordner.",
+                "finishedEmpty": "Abgeschlossene Unterhaltungen warten hier."
             }
         }
     },

@@ -16,7 +16,7 @@ flowchart LR
   with a chat on it, starts a conversation on this computer from a desktop window. It runs inside the app's file
   server ([local-files](../local-files)), which serves it beside each window's folder; nothing here listens by itself.
 - **The chat is the sandbox's own.** Every procedure is answered in the sandbox contract's shapes (`procedures/`):
-  `agent` (run, attach, reply, stop), `agents` (the cards, the transcript), `providers` and `accounts`. A turn's frames
+  `agent` (run, attach, reply, stop), `agents` (the cards, the transcript, the archive), `providers` and `accounts`. A turn's frames
   are folded by the contract's own `TranscriptFold`, read from the agent by [acp-events](../../_sandbox/acp-events), and
   each row is stamped with its run and its id by the contract's `RunRowIds`, as the daemon's are. So the editor draws a
   turn here with the components that draw one in a sandbox, and nothing in the wire is special to this side.

@@ -3,12 +3,13 @@ import { Icon, toneTint } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computerAgents } from "../../../../client/sandbox/useDaemonRoutes";
 
-/* "THIS COMPUTER · NOT SANDBOXED", wherever a conversation with an agent that runs on this computer itself is drawn
-   (local/agents/): in the chat's header and by its composer. The chat there is the sandbox's own, row for row, so the
-   one thing that differs has to be said by the chat itself, always, not once on a screen the reader has since closed:
-   nothing contains this agent. Its words are its own text, never a hover's, in the warning ink a sandbox's chat never
-   wears at rest; what that means at length is the consent screen's to say (LocalAgentsConsent.vue). Draws nothing in a
-   sandbox. */
+/* "THIS COMPUTER · NOT SANDBOXED", by the composer of a conversation with an agent that runs on this computer itself
+   (local/agents/). The chat there is the sandbox's own, row for row, so the one thing that differs has to be said by
+   the chat itself, always, not once on a screen the reader has since closed: nothing contains this agent. Its words are
+   its own text, never a hover's, in the warning ink a sandbox's chat never wears at rest; what that means at length is
+   the consent screen's to say (LocalAgentsConsent.vue). Once, under the box the next message is written in: until
+   2026-11-25 it stood in the header too, where it crowded the docked chat's title in a column of a chat's width.
+   Draws nothing in a sandbox. */
 
 const t = useT();
 </script>

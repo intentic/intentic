@@ -19,6 +19,7 @@ import { useTier } from "../../../client/sandbox/useTier";
 import { modelsHref } from "../../../lib/routes/modelsPath";
 import { useT } from "@intentic/ui/i18n";
 import { ACCOUNT_NUDGE } from "./accountNudge";
+import ChatGateRow from "./ChatGateRow.vue";
 
 // The one line above the composer when this chat has nothing to send with. It sits beside a composer that stands
 // whatever it says — it never replaced the box and never pitches a subscription unasked. Silent until `accessKnown`
@@ -101,63 +102,39 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
 
 <template>
     <!-- A sign-in already under way, wherever it was started: back to where it can be finished, or put down from here. -->
-    <div
-        v-if="accessKnown && live && !shownBeside"
-        role="status"
-        class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
-    >
-        <!-- Not a spinner: nothing is loading, the next move is the reader's. -->
-        <Icon name="clock" class="shrink-0 text-link" />
-        <span class="min-w-0 flex-1 text-left">{{
-            t(`chat.chatAccountPanel.signInWaiting`, { provider: signInName(live.provider) })
-        }}</span>
-        <span class="flex shrink-0 items-center gap-3">
+    <!-- Not a spinner: nothing is loading, the next move is the reader's. -->
+    <ChatGateRow v-if="accessKnown && live && !shownBeside" role="status" icon="clock" tone="text-link">
+        {{ t(`chat.chatAccountPanel.signInWaiting`, { provider: signInName(live.provider) }) }}
+        <template #actions>
             <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="cancelSignIn">
                 {{ t(`ui.action.cancel`) }}
             </button>
             <RouterLink :to="modelsHref()" :class="ui.textButton({ size: `xs` }, `font-semibold`)">
                 {{ t(`chat.chatAccountPanel.finishSignIn`) }}
             </RouterLink>
-        </span>
-    </div>
+        </template>
+    </ChatGateRow>
 
     <!-- A sign-in that ended without connecting anything says so once, here as in Sandbox ▸ Models, until tried again or put away. -->
-    <div
-        v-else-if="accessKnown && failure && !shownBeside"
-        role="alert"
-        class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
-    >
-        <Icon name="exclamation-circle" class="shrink-0 text-danger" />
+    <ChatGateRow v-else-if="accessKnown && failure && !shownBeside" role="alert" icon="exclamation-circle" tone="text-danger">
         <!-- Named first: the daemon's own sentence after it does not always say which provider it was about. -->
-        <span class="min-w-0 flex-1 text-left"
-            ><span class="font-medium text-content">{{
-                t(`chat.chatAccountPanel.didntConnect`, { provider: signInName(failure.provider) })
-            }}</span>
-            {{ failure.message }}</span
-        >
-        <span class="flex shrink-0 items-center gap-3">
+        <span class="font-medium text-content">{{ t(`chat.chatAccountPanel.didntConnect`, { provider: signInName(failure.provider) }) }}</span>
+        {{ failure.message }}
+        <template #actions>
             <button type="button" :class="ui.textButton({ tone: `subtle`, size: `xs` })" @click="dismissSignInFailure">
                 {{ t(`ui.action.dismiss`) }}
             </button>
             <RouterLink :to="retryTo" :class="ui.textButton({ size: `xs` }, `font-semibold`)">
                 {{ t(`ui.action.tryAgain`) }}
             </RouterLink>
-        </span>
-    </div>
+        </template>
+    </ChatGateRow>
 
     <!-- On a model that isn't the reader's: another of theirs where they have one, else asking the owner for one. -->
-    <div
-        v-else-if="accessKnown && withheld"
-        class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
-        data-account-gate
-        data-account-withheld
-    >
-        <Icon name="lock" class="shrink-0 text-subtle" />
+    <ChatGateRow v-else-if="accessKnown && withheld" icon="lock" tone="text-subtle" wide data-account-gate data-account-withheld>
         <!-- Named as the chat's own provider where somebody chose it or a started chat sits on it; a first chat on the app's floor names no vendor. -->
-        <span class="min-w-[12rem] flex-1 text-left">{{
-            named ? t(`chat.chatAccountPanel.notShared`, { provider: providerDisplayLabel(provider) }) : t(`chat.modelPicker.nothingShared`)
-        }}</span>
-        <span class="flex shrink-0 items-center gap-3">
+        {{ named ? t(`chat.chatAccountPanel.notShared`, { provider: providerDisplayLabel(provider) }) : t(`chat.modelPicker.nothingShared`) }}
+        <template #actions>
             <ChatChooseModelButton
                 v-if="others"
                 :key="`choose-${nudge}`"
@@ -168,24 +145,19 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
             <span v-else :key="`ask-${nudge}`" class="inline-flex items-center gap-2" :class="{ 'ui-shake': nudge > 0 }">
                 <AccessAsk :reason="{ kind: `ai-accounts` }" :place="t(`shared.chat`)" tier="accent" small />
             </span>
-        </span>
-    </div>
+        </template>
+    </ChatGateRow>
 
     <!-- Nothing to send with: the one press that changes that. Another model where something else runs; else connecting one. -->
-    <div
-        v-else-if="accessKnown && !connected && !trialSpent && !shownBeside"
-        class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl bg-card shadow-sm px-4 py-3 text-2xs text-muted"
-        data-account-gate
-    >
-        <Icon name="th-large" class="shrink-0 text-subtle" />
-        <span class="min-w-[12rem] flex-1 text-left">{{
+    <ChatGateRow v-else-if="accessKnown && !connected && !trialSpent && !shownBeside" icon="th-large" tone="text-subtle" wide data-account-gate>
+        {{
             stranded
                 ? t(`chat.chatAccountPanel.goneMidTurn`, { providerName })
                 : named
                   ? t(`chat.chatAccountPanel.isntConnectedInSandbox`, { providerName })
                   : t(`chat.chatAccountPanel.noModelYet`)
-        }}</span>
-        <span class="flex shrink-0 items-center gap-3">
+        }}
+        <template #actions>
             <template v-if="others">
                 <RouterLink v-if="mayConnect && byName" :to="connectTo" :class="ui.textButton({ size: `xs`, tone: `subtle` })">
                     {{ connectLabel }}
@@ -211,6 +183,6 @@ const nudge = inject(ACCOUNT_NUDGE, ref(0));
                 {{ connectLabel }}
             </Button>
             <span v-else class="text-2xs text-subtle">{{ t(`chat.chatAccountPanel.whoConnects`) }}</span>
-        </span>
-    </div>
+        </template>
+    </ChatGateRow>
 </template>

@@ -5605,14 +5605,15 @@
                 "terminal": "Inicia sesión en {harness} desde un terminal en este equipo y vuelve a enviar."
             },
             "picker": {
-                "title": "Agentes de programación en este equipo",
                 "none": "No se encontró ningún agente de programación en este equipo. Instala Claude Code o Codex y vuelve a abrir esto.",
-                "reading": "Leyendo sus modelos…",
-                "afterTurn": "Podrás elegir otro agente cuando termine este turno.",
                 "notSetUp": "Sin configurar",
                 "signedOut": "Sin sesión",
-                "ownModel": "Su propio modelo",
-                "signedIn": "Sesión iniciada: {account}"
+                "setUp": "Configurar",
+                "signIn": "Iniciar sesión",
+                "setUpToList": "Configúralo en este equipo para ver sus modelos.",
+                "signInToList": "Inicia sesión para ver sus modelos.",
+                "nothingRuns": "Todavía no puede ejecutarse ningún agente de programación en este equipo. Configura uno abajo.",
+                "setUpMore": "Configurar otro agente de programación"
             }
         }
     },
@@ -6440,9 +6441,6 @@
         "firstTaskSendFailed": "El espacio de trabajo no pudo enviar tu primera tarea.",
         "agents": {
             "title": "Agentes",
-            "conversations": "Conversaciones",
-            "newConversation": "Nueva",
-            "noConversations": "Aún no hay conversaciones en esta carpeta.",
             "consent": {
                 "title": "¿Ejecutar un agente en este equipo?",
                 "lead": "Esto inicia un agente de programación que ya tienes aquí, como Claude Code o Codex, en la carpeta {folder}, fuera de cualquier sandbox.",
@@ -6458,6 +6456,11 @@
                 "here": "En este equipo (sin sandbox)",
                 "sandbox": "En un sandbox",
                 "aboutFile": "Sobre {path}: "
+            },
+            "board": {
+                "firstLine": "Dale una tarea. Trabaja en esta carpeta, sobre tus propios archivos, y su tarjeta aparece justo aquí.",
+                "finishedFirst": "Las conversaciones terminadas esperan aquí. Lo que cambiaron ya está en tu carpeta.",
+                "finishedEmpty": "Las conversaciones terminadas esperan aquí."
             }
         }
     },

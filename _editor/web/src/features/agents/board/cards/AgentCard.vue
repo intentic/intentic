@@ -323,7 +323,8 @@ const statusShown = computed(() => cornerStandingShown(props.agent.status) && !(
 // sandbox's keeps the reader's own with the draft (agents.reactDraft) until its first turn carries them onto the card. A
 // refused start or a chat reopened from history has neither, and another sandbox's draft marks are not read back here.
 const draftMarks = computed(() => props.agent.status === `draft` && localOnly.value && supportsRoute(`agents.reactDraft`));
-const reactable = computed(() => !unregistered(props.agent.status) || draftMarks.value);
+// Only where the card's side keeps marks at all: a folder of this computer keeps none (local/agents/).
+const reactable = computed(() => (!unregistered(props.agent.status) && supportsRoute(`agents.react`)) || draftMarks.value);
 // The strip lives in the summary row and the press that opens its picker in the header, so the header reaches it here.
 const reactionsStrip = useTemplateRef<ReactionsStrip>(`reactionsStrip`);
 // The card's own element: the permission row raises the held command off its hover.

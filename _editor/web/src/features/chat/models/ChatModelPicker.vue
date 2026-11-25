@@ -6,7 +6,7 @@ import { AUTO_KEY, autoEntry, type PickerEntry } from "../../../models/conversat
 import { usePickerAccounts } from "../accounts/pickerAccounts";
 import { type RunSettingsPatch, usePickerRunSettings } from "../../../models/providers/pickerRunSettings";
 import ModelPicker from "./ModelPicker.vue";
-import ComputerModelPicker from "./computer/ComputerModelPicker.vue";
+import ComputerPickerFooter from "./computer/ComputerPickerFooter.vue";
 import { computerAgents } from "../../../client/sandbox/useDaemonRoutes";
 import PickerAccounts from "../accounts/PickerAccounts.vue";
 import PickerRunSettings from "./run-settings/PickerRunSettings.vue";
@@ -46,7 +46,10 @@ const { autoOpen } = conversation.selection;
 // member who opened the picker on a chat under way and searched "auto" was told no such model exists, which read as
 // Auto being withheld from them (2026-11-04).
 const autoOpenHere = computed(() => messages.value.length === 0 && autoOpen.value);
-const leadRows = computed(() => (box.value === undefined ? [autoEntry(t(`chat.words.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : []));
+// Auto reads a new chat's first message with a model of the sandbox's: there is none such on this computer.
+const leadRows = computed(() =>
+    box.value === undefined && !computerAgents.value ? [autoEntry(t(`chat.words.autoLabel`), t(`chat.chatModelPicker.autoDescription`))] : [],
+);
 const leadSelected = computed(() => (auto.value ? AUTO_KEY : undefined));
 
 // Whether the account rows draw for this provider, and a refusal no row carries; needed before the footer renders its own padding.
@@ -163,10 +166,9 @@ const footerVisible = computed(() =>
 </script>
 
 <template>
-    <!-- A chat that runs on this computer picks among the coding agents installed here, each with its own models. -->
-    <ComputerModelPicker v-if="computerAgents" :conversation="conversation" @selected="emit(`selected`)" />
+    <!-- A chat that runs on this computer picks among the coding agents installed here, each with its own models, in the same
+         picker (pickerSource.ts): what unlocks a lane is the agent's own set up or sign in, pressed in place, not a page. -->
     <ModelPicker
-        v-else
         :provider="provider"
         :model="model"
         :unpickable="unpickable"
@@ -176,8 +178,10 @@ const footerVisible = computed(() =>
         @close="emit(`selected`)"
     >
         <template #footer>
+            <!-- This computer's: the harness's own sign-in, and a live turn's note. -->
+            <ComputerPickerFooter v-if="computerAgents" :provider="provider" :note="liveTurnNote" />
             <!-- Session controls with no place in the shared list: who serves the turn, extended thinking, fast speed, and this runtime's limits. -->
-            <PickerFooter v-if="footerVisible">
+            <PickerFooter v-else-if="footerVisible">
                 <!-- What Auto is about to do, said where it was switched on: a mode that changes the model owes an explanation before it does, not after. -->
                 <div v-if="auto" class="flex flex-col gap-1 py-2">
                     <span class="text-2xs text-subtle">{{ t(`chat.chatModelPicker.autoArmed`) }}</span>

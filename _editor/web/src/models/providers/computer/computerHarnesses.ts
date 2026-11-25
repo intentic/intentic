@@ -106,6 +106,9 @@ export const computerHarnesses = computed(() =>
 
 export const computerHarness = (id: AgentProvider): ComputerHarness | undefined => computerHarnesses.value.find((harness) => harness.id === id);
 
+/** The listing has answered: from here on an empty list means no coding agent is on this computer, not one unread. */
+export const harnessesListed = computed(() => advertisedLoops.value !== undefined);
+
 /**
  * A turn refused for want of a sign-in, where the chat runs on this computer: remembered, so the press that signs the
  * harness in is offered whatever its account list says, and answered with the line the chat shows. Undefined in a sandbox.

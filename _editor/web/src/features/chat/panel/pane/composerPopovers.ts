@@ -6,10 +6,10 @@ import { modelLabelFor } from "../../../../models/providers/providerCatalog";
 import type { QuickPick, QuickPickSources } from "../../composer/composerQuickPick";
 import { drillMention, fileMention, mentionQueryAt, replaceMention } from "../../composer/useMentions";
 import { type SendLater, timeChoices } from "../../../../models/conversations/drafts/sendLater";
-import { chatPickable, isOlderEntry, pickerEntries } from "../../../../models/conversations/accounts/modelPickerState";
+import { chatPickable } from "../../../../models/conversations/accounts/modelPickerState";
+import { pickerSource } from "../../../../models/conversations/accounts/pickerSource";
 import { effortsFor } from "../../../../models/providers/effortScale";
 import { ensureProviderCommands, loadAllProviderModels } from "../../../../models/conversations/accounts/useChat-catalog";
-import { providerRunnable } from "../../../../models/providers/access";
 import { providerWithheld } from "../../../../models/providers/aiReach";
 import { isReviewCommand } from "../../../../models/providers/reviewCommands";
 import { type SlashRow, slashMatches, slashRunOf } from "../../../../models/conversations/commands/slashCommands";
@@ -82,14 +82,15 @@ const quickSourcesOf = (chat: Conversation, host: PopoversHost): QuickPickSource
             : {
                   // A keyboard list has no use for a row that refuses the pick: helper-only models are left out here, and
                   // so are the models of providers the reader may not run (Access ▸ People).
-                  entries: pickerEntries.value.filter(
-                      (entry) => chatPickable(entry) && !providerWithheld(entry.provider) && (!host.view.streaming.value || entry.provider === provider),
-                  ),
+                  // The window's side's own (pickerSource.ts): this computer's coding agents where it runs them.
+                  entries: pickerSource.value
+                      .entries()
+                      .filter((entry) => chatPickable(entry) && !providerWithheld(entry.provider) && (!host.view.streaming.value || entry.provider === provider)),
                   provider,
                   model: selection.model.value,
                   label: modelLabelFor(provider, selection.model.value),
-                  isReady: providerRunnable,
-                  older: isOlderEntry,
+                  isReady: pickerSource.value.runnable,
+                  older: pickerSource.value.older,
               },
         effort: steered || selection.auto.value || !selection.capabilities.value.effort ? undefined : effortSourceOf(chat),
         // Both are this sandbox's, and neither is the send's while a workflow takes it, as their pills say.

@@ -3,8 +3,9 @@ import type { Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
-import { accessBadge, accessStateFor, providerRunnable, withheldBadge } from "../../../models/providers/access";
+import { accessStateFor } from "../../../models/providers/access";
 import type { PickerLane } from "../../../models/conversations/accounts/modelPickerState";
+import type { PickerSource } from "../../../models/conversations/accounts/pickerSource";
 import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 import { degradedNote } from "../../../models/providers/capacity/degradedNote";
 import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
@@ -12,12 +13,14 @@ import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 // The model picker's provider strip (ModelPicker.vue). It filters, never switches: scoping to one provider is a safe
 // glance, and switching only happens by picking a model row. `select` is the filter the reader asked for; the picker
 // owns what follows it (focus back to the search).
-const { lanes, rail, provider } = defineProps<{
+const { lanes, rail, provider, source } = defineProps<{
     lanes: readonly PickerLane[];
     // The lane key the list is filtered to; undefined is every provider.
     rail: string | undefined;
     // The provider the conversation is on, which keeps its dot whatever the filter.
     provider: AgentProvider;
+    // Who answers for the lanes: a sandbox's providers, or this computer's coding agents (pickerSource.ts).
+    source: PickerSource;
 }>();
 const emit = defineEmits<{ select: [lane: string | undefined] }>();
 const t = useT();
@@ -29,18 +32,21 @@ const needsReauth = (target: AgentProvider): boolean => accessStateFor(target).n
 // Whether this provider's runtime can serve a turn, from the daemon's background probe; distinct from the credential
 // badges above. Silent unless sure; asked against the native harness, the axis a row would run on by default.
 const { pairIssue } = useSandboxVersion();
-const runtimeIssue = (target: AgentProvider): string | undefined => pairIssue(capabilitiesOf(target, `native`).runtime, target);
+// A sandbox's runtime alone: a coding agent of this computer is its own program, which the sandbox's probe never ran.
+const runtimeIssue = (target: AgentProvider): string | undefined =>
+    source.kind === `sandbox` ? pairIssue(capabilitiesOf(target, `native`).runtime, target) : undefined;
 
 // The provider itself failing or throttling turns, as the daemon reports it: every account may read full of room while
 // every turn on them fails, so a reader choosing where to run is told here, and when the sandbox tries it again.
-const outage = (target: AgentProvider) => degradedNote(target);
+const outage = (target: AgentProvider) => (source.kind === `sandbox` ? degradedNote(target) : undefined);
 
 // What a lane stands on: its first provider; every other rail fact is an account fact. Ready means the reader can run
 // it (connected, and theirs to spend), as the list's own order reads it.
 const lead = (lane: PickerLane): AgentProvider => lane.providers[0]!;
-const ready = (lane: PickerLane): boolean => lane.providers.some(providerRunnable);
-// What the lane's access says in words: not shared with the reader, else its price while not connected.
-const access = (lane: PickerLane): string | undefined => withheldBadge(lead(lane)) ?? accessBadge(lead(lane));
+const ready = (lane: PickerLane): boolean => lane.providers.some(source.runnable);
+// What the lane's access says in words: not shared with the reader, else its price while not connected, or on this
+// computer what the coding agent still needs.
+const access = (lane: PickerLane): string | undefined => source.chip(lead(lane));
 const active = (lane: PickerLane): boolean => lane.providers.includes(provider);
 
 // The tooltip carries what the icon can't: whether this lane can run, and at what price. A card of facts for the pointer

@@ -5605,14 +5605,15 @@
                 "terminal": "Sign in to {harness} in a terminal on this computer, then send again."
             },
             "picker": {
-                "title": "Coding agents on this computer",
                 "none": "No coding agent was found on this computer. Install Claude Code or Codex, then open this again.",
-                "reading": "Reading its models…",
-                "afterTurn": "Another agent can be chosen once this turn ends.",
                 "notSetUp": "Not set up",
                 "signedOut": "Signed out",
-                "ownModel": "Its own model",
-                "signedIn": "Signed in: {account}"
+                "setUp": "Set up",
+                "signIn": "Sign in",
+                "setUpToList": "Set it up on this computer to list its models.",
+                "signInToList": "Sign in to list its models.",
+                "nothingRuns": "No coding agent can run on this computer yet. Set one up below.",
+                "setUpMore": "Set up another coding agent"
             }
         }
     },
@@ -6440,9 +6441,6 @@
         "firstTaskSendFailed": "The workspace could not send your first task.",
         "agents": {
             "title": "Agents",
-            "conversations": "Conversations",
-            "newConversation": "New",
-            "noConversations": "No conversations in this folder yet.",
             "consent": {
                 "title": "Run an agent on this computer?",
                 "lead": "This starts a coding agent you already have here, such as Claude Code or Codex, in the folder {folder}, outside every sandbox.",
@@ -6458,6 +6456,11 @@
                 "here": "On this computer (not sandboxed)",
                 "sandbox": "In a sandbox",
                 "aboutFile": "About {path}: "
+            },
+            "board": {
+                "firstLine": "Give it a task. It works in this folder, on your own files, and its card appears right here.",
+                "finishedFirst": "Finished conversations wait here. What they changed is already in your folder.",
+                "finishedEmpty": "Finished conversations wait here."
             }
         }
     },

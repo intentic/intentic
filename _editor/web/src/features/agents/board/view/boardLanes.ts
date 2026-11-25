@@ -2,6 +2,7 @@ import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/auto
 import type { WorkflowRun } from "@intentic/sandbox-contract/schemas/workflows";
 import { t } from "@intentic/ui/i18n";
 import { useVocabulary } from "../../../../workbench/views/vocabulary";
+import { computerAgents } from "../../../../client/sandbox/useDaemonRoutes";
 import { computed, type Ref } from "vue";
 import type { FleetLane } from "../../../../models/agent-status/agentStatus-lanes";
 import type { SubagentRoster } from "../../../../models/fleet/subagentRoster";
@@ -40,12 +41,16 @@ export const laneHeads = (): readonly LaneHead[] => [
         empty: useVocabulary().value.laneActiveEmpty,
         first: useVocabulary().value.laneActiveEmpty,
     },
-    {
-        key: `finished`,
-        label: t(`shared.finished`),
-        empty: useVocabulary().value.laneFinishedEmpty,
-        first: useVocabulary().value.laneFinishedFirst,
-    },
+    // On this computer a conversation's work is in the reader's folder as it is made: nothing waits to land, so the lane
+    // says what it holds rather than promising a review that never comes (local/agents/).
+    computerAgents.value
+        ? { key: `finished`, label: t(`shared.finished`), empty: t(`local.agents.board.finishedEmpty`), first: t(`local.agents.board.finishedFirst`) }
+        : {
+              key: `finished`,
+              label: t(`shared.finished`),
+              empty: useVocabulary().value.laneFinishedEmpty,
+              first: useVocabulary().value.laneFinishedFirst,
+          },
 ];
 
 // A lane's look while a card is in flight, one class string per state rather than composed flags: two ring widths or

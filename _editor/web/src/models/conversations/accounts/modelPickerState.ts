@@ -47,7 +47,8 @@ export const autoEntry = (label: string, description: string): PickerEntry => ({
 
 export const isAutoPick = (pick: TurnPick): boolean => pick.provider === AUTO_PROVIDER;
 
-const entryFor = (provider: AgentProvider, option: ModelOption): PickerEntry => {
+/** One model of one provider as the picker's row, keyed `${provider}:${model}`. */
+export const pickerEntryFor = (provider: AgentProvider, option: ModelOption): PickerEntry => {
     const entry: PickerEntry = {
         key: `${provider}:${option.value}`,
         provider,
@@ -69,9 +70,9 @@ const optionsForPicker = (provider: AgentProvider): ModelOption[] =>
 
 export const pickerEntries = computed<readonly PickerEntry[]>(() => [
     ...PROVIDERS.flatMap(({ value: provider }) =>
-        optionsForPicker(provider).map((option) => entryFor(provider, option))),
-    ...endpointProviders.value.flatMap((endpoint) => modelOptionsFor(endpoint.id).map((option) => entryFor(endpoint.id, option))),
-    ...acpProviders.value.map((agent) => entryFor(agent.id, { label: agent.label, value: `` })),
+        optionsForPicker(provider).map((option) => pickerEntryFor(provider, option))),
+    ...endpointProviders.value.flatMap((endpoint) => modelOptionsFor(endpoint.id).map((option) => pickerEntryFor(endpoint.id, option))),
+    ...acpProviders.value.map((agent) => pickerEntryFor(agent.id, { label: agent.label, value: `` })),
 ]);
 
 // The newer version a row's family has superseded it with, if any: the picker tags the row and search sinks it.
@@ -316,8 +317,10 @@ export const pickerSections = (
     activeProvider: AgentProvider,
     rail: string | undefined,
     isReady: (provider: AgentProvider) => boolean,
+    // What the picker's source offers and how it lanes them (pickerSource.ts); a sandbox's providers unless told.
+    providers: readonly AgentProvider[] = offeredProviders(activeProvider, isReady),
+    laned: (providers: readonly AgentProvider[]) => readonly PickerLane[] = lanesOf,
 ): readonly PickerSection[] => {
-    const providers = offeredProviders(activeProvider, isReady);
     // Active provider leads regardless of connection; then connected first; cost only ranks within the locked band,
     // and only for a reader who has connected nothing yet.
     const byCost = promotesFreeAccess(providers, isReady);
@@ -329,7 +332,7 @@ export const pickerSections = (
         });
     const order = providers.includes(activeProvider) ? [activeProvider, ...rest] : rest;
     // Folds after ordering, so the local lane is seated by its best-placed card.
-    return lanesOf(order)
+    return laned(order)
         .filter((lane) => rail === undefined || lane.key === rail)
         .map((lane) => {
             const owned = entries.filter((entry) => lane.providers.includes(entry.provider));

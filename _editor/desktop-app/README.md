@@ -339,9 +339,11 @@ flowchart LR
   remembers for the slug. _(2026-10-05) A removal used to forget only the sandbox's display name, and the agent went on
   syncing its folder until a new sandbox was made for that same folder._
 - **Agents on this computer, with no sandbox** (2026-11-24, `src-tauri/src/host_agents.rs`,
-  [host-agents](../../_devices/host-agents)). A local window's Agents page is the editor's own chat on the reader's own
-  harness (Claude Code, Codex, Gemini CLI and the rest), working in the window's folder: on this computer's side, or
-  inside the WSL distro that holds the folder. The turns, the harnesses and their sign-ins are the file server's
+  [host-agents](../../_devices/host-agents)). A local window's Agents page is the editor's own board, with its own chat
+  docked at the right of every page of the window as in a sandbox, on the reader's own harness (Claude Code, Codex,
+  Gemini CLI and the rest), working in the window's folder: on this computer's side, or inside the WSL distro that holds
+  the folder. The model picker is the sandbox's too, its lanes the harnesses this computer has, each set up or signed
+  in from its own lane. The turns, the harnesses and their sign-ins are the file server's
   ([local-files](../../_devices/local-files)); the app keeps three things. **The reader's yes:** an agent here runs as
   the reader with nothing between it and their files, so no turn starts until they have read that once and turned
   agents on for this computer (`host_agents_accept`, kept in `host-agents.json` in the app's config folder, told to the

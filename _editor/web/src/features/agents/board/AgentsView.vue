@@ -28,6 +28,7 @@ import { presenceOthers } from "../../../workbench/presence/usePresence";
 import { useSandboxSharedAccess } from "../../../models/sandbox/useSandboxSharedAccess";
 import { useAgents } from "../../../models/fleet/useAgents";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { computerAgents } from "../../../client/sandbox/useDaemonRoutes";
 import { agentDisplayTitle } from "../../../models/agent-status/agentStatus-meta";
 import { useVocabulary } from "../../../workbench/views/vocabulary";
 import { listedViewMissing, WORKFLOWS } from "../../../workbench/views/listedViews";
@@ -290,7 +291,8 @@ useAttentionAsk({
 // Workspace facts the starters turn on, already fetched for the rail elsewhere: the board adds no fetch of its own.
 const { panels: workspaceRepos } = usePanels();
 const workspaceChanges = useChanges();
-const starters = computed(() => boardStarters(workspaceRepos.value.length, workspaceChanges.count.value));
+// A folder of this computer is the code to point an agent at, whatever a sandbox's repository list says (local/agents/).
+const starters = computed(() => boardStarters(computerAgents.value ? 1 : workspaceRepos.value.length, workspaceChanges.count.value));
 const launching = useBoardLaunches(computed(() => view.value.archive));
 // A phone draws only the lanes with something in them (phoneLanes.ts).
 const { drawnLanes, bareLane, saysEmpty, content } = usePhoneLanes({ mobile, heads: LANES, view, lanes, scope, dragging, filtering, launching, waiting });

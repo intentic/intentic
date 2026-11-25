@@ -3,6 +3,7 @@
      takes this slot's place rather than redrawing the screen around it. -->
 <script setup lang="ts">
 import { useT } from "@intentic/ui/i18n";
+import { computerAgents } from "../../../../client/sandbox/useDaemonRoutes";
 import { composeAgent, startAgent } from "../../../../models/fleet/agentActions";
 import type { Starter } from "../view/firstScreen";
 import TourMark from "../../../tour/TourMark.vue";
@@ -18,7 +19,8 @@ const { starters } = defineProps<{ starters: readonly Starter[] }>();
              composer's and the rail's marks for the same step whenever the board is on screen. -->
         <TourMark step="agent" place="board" :priority="3" side="bottom" class="absolute -right-1 -top-1" />
         <p class="text-xs font-semibold text-content">{{ t(`agents.firstAgentSlot.title`) }}</p>
-        <p class="text-2xs leading-snug text-muted">{{ t(`agents.firstAgentSlot.line`) }}</p>
+        <!-- On this computer it works in the reader's own folder, not a copy of it (local/agents/). -->
+        <p class="text-2xs leading-snug text-muted">{{ computerAgents ? t(`local.agents.board.firstLine`) : t(`agents.firstAgentSlot.line`) }}</p>
         <!-- Starters fill the composer and never send: the reader sends their own first turn. -->
         <div class="flex flex-wrap gap-1.5">
             <button v-for="starter in starters" :key="starter.label" type="button" class="ui-chip" @click="composeAgent(starter.prompt)">

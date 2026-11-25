@@ -5605,14 +5605,15 @@
                 "terminal": "Connectez-vous à {harness} dans un terminal sur cet ordinateur, puis renvoyez."
             },
             "picker": {
-                "title": "Agents de code sur cet ordinateur",
                 "none": "Aucun agent de code n'a été trouvé sur cet ordinateur. Installez Claude Code ou Codex, puis rouvrez ceci.",
-                "reading": "Lecture de ses modèles…",
-                "afterTurn": "Un autre agent pourra être choisi à la fin de ce tour.",
                 "notSetUp": "Non installé",
                 "signedOut": "Déconnecté",
-                "ownModel": "Son propre modèle",
-                "signedIn": "Connecté : {account}"
+                "setUp": "Configurer",
+                "signIn": "Se connecter",
+                "setUpToList": "Configurez-le sur cet ordinateur pour voir ses modèles.",
+                "signInToList": "Connectez-vous pour voir ses modèles.",
+                "nothingRuns": "Aucun agent de code ne peut encore fonctionner sur cet ordinateur. Configurez-en un ci-dessous.",
+                "setUpMore": "Configurer un autre agent de code"
             }
         }
     },
@@ -6440,9 +6441,6 @@
         "firstTaskSendFailed": "L'espace de travail n'a pas pu envoyer votre première tâche.",
         "agents": {
             "title": "Agents",
-            "conversations": "Conversations",
-            "newConversation": "Nouvelle",
-            "noConversations": "Aucune conversation dans ce dossier pour l'instant.",
             "consent": {
                 "title": "Exécuter un agent sur cet ordinateur ?",
                 "lead": "Cela démarre un agent de code que vous avez déjà ici, comme Claude Code ou Codex, dans le dossier {folder}, hors de toute sandbox.",
@@ -6458,6 +6456,11 @@
                 "here": "Sur cet ordinateur (hors sandbox)",
                 "sandbox": "Dans une sandbox",
                 "aboutFile": "À propos de {path} : "
+            },
+            "board": {
+                "firstLine": "Confiez-lui une tâche. Il travaille dans ce dossier, sur vos propres fichiers, et sa carte apparaît ici même.",
+                "finishedFirst": "Les conversations terminées attendent ici. Ce qu'elles ont modifié est déjà dans votre dossier.",
+                "finishedEmpty": "Les conversations terminées attendent ici."
             }
         }
     },

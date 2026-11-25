@@ -3,6 +3,7 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
+import { pickerSource } from "../../../models/conversations/accounts/pickerSource";
 import { providerDisplayLabel } from "../../../models/providers/providerCatalog";
 import { modelsHref } from "../../../lib/routes/modelsPath";
 
@@ -15,8 +16,12 @@ const { provider } = defineProps<{
     // A provider the search named that nothing of is connected yet; undefined offers the Models page itself.
     provider?: AgentProvider;
 }>();
-const emit = defineEmits<{ navigate: [event: MouseEvent] }>();
+const emit = defineEmits<{ navigate: [event: MouseEvent]; reveal: [] }>();
 const t = useT();
+
+// On this computer more comes from a coding agent set up here, not a page: the ones that cannot run yet are folded out
+// of the list above, and this opens them where they stand, each with its own press (ModelPicker.vue `connectMore`).
+const computer = computed(() => pickerSource.value.kind === `computer`);
 
 const to = computed(() => modelsHref(provider === undefined ? {} : { provider }));
 const label = computed(() =>
@@ -25,7 +30,18 @@ const label = computed(() =>
 </script>
 
 <template>
+    <button
+        v-if="computer"
+        type="button"
+        class="ui-row-select mt-1 flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-2xs text-link max-md:min-h-11"
+        data-picker-connect-more
+        @click="emit(`reveal`)"
+    >
+        <Icon name="plus" class="shrink-0 text-2xs" aria-hidden="true" />
+        <span class="min-w-0 flex-1">{{ t(`chat.computer.picker.setUpMore`) }}</span>
+    </button>
     <RouterLink
+        v-else
         :to="to"
         class="ui-row-select mt-1 flex w-full items-center gap-2 border-t border-line px-3 py-2 text-2xs text-link max-md:min-h-11"
         data-picker-connect-more

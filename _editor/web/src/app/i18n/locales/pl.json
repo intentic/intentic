@@ -5605,14 +5605,15 @@
                 "terminal": "Zaloguj się do {harness} w terminalu na tym komputerze, a potem wyślij ponownie."
             },
             "picker": {
-                "title": "Agenci programistyczni na tym komputerze",
                 "none": "Na tym komputerze nie znaleziono żadnego agenta programistycznego. Zainstaluj Claude Code lub Codex i otwórz to ponownie.",
-                "reading": "Odczytywanie modeli…",
-                "afterTurn": "Innego agenta można wybrać po zakończeniu tej tury.",
                 "notSetUp": "Nieskonfigurowany",
                 "signedOut": "Wylogowany",
-                "ownModel": "Własny model",
-                "signedIn": "Zalogowano: {account}"
+                "setUp": "Skonfiguruj",
+                "signIn": "Zaloguj się",
+                "setUpToList": "Skonfiguruj go na tym komputerze, aby zobaczyć jego modele.",
+                "signInToList": "Zaloguj się, aby zobaczyć jego modele.",
+                "nothingRuns": "Na tym komputerze nie może jeszcze działać żaden agent programistyczny. Skonfiguruj jednego poniżej.",
+                "setUpMore": "Skonfiguruj innego agenta programistycznego"
             }
         }
     },
@@ -14799,9 +14800,6 @@
         "firstTaskSendFailed": "Przestrzeń robocza nie mogła wysłać Twojego pierwszego zadania.",
         "agents": {
             "title": "Agenci",
-            "conversations": "Rozmowy",
-            "newConversation": "Nowa",
-            "noConversations": "W tym folderze nie ma jeszcze rozmów.",
             "consent": {
                 "title": "Uruchomić agenta na tym komputerze?",
                 "lead": "To uruchamia agenta programistycznego, którego już tu masz, na przykład Claude Code lub Codex, w folderze {folder}, poza jakimkolwiek sandboxem.",
@@ -14817,6 +14815,11 @@
                 "here": "Na tym komputerze (bez sandboxa)",
                 "sandbox": "W sandboxie",
                 "aboutFile": "W sprawie {path}: "
+            },
+            "board": {
+                "firstLine": "Daj mu zadanie. Pracuje w tym folderze, na Twoich własnych plikach, a jego karta pojawi się właśnie tutaj.",
+                "finishedFirst": "Zakończone rozmowy czekają tutaj. To, co zmieniły, jest już w Twoim folderze.",
+                "finishedEmpty": "Zakończone rozmowy czekają tutaj."
             }
         }
     },

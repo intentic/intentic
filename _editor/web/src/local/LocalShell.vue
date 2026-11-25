@@ -2,7 +2,8 @@
 import type { ViewBadge,Disposable } from "@intentic/extension-api";
 import { localPath } from "@intentic/sandbox-contract/app-routes";
 import { useT } from "@intentic/ui/i18n";
-import { computed, onMounted, onUnmounted, ref, unref } from "vue";
+import { loadChunk } from "@intentic/ui/chunk";
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, unref, watchPostEffect } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import { LOCAL_NAVIGATE_EVENT, LOCAL_PROJECT_ASK_EVENT, localFace } from "../app/environments/local";
 import { type LocalView, localHost } from "../app/environments/localHost";
@@ -25,7 +26,12 @@ import { type ProcessTile, processTilesOf } from "../models/processes/processTil
 import ProcessTiles from "../parts/processes/ProcessTiles.vue";
 import { registerBuiltin } from "../workbench/commands/builtinCommands";
 import { useKeybindings } from "../workbench/commands/useKeybindings";
+import { chatTucked } from "../models/conversations/panel/chatPanelLayout";
+import { TUCKED_STRIP_PX } from "../shell/side/sideLayout";
+import { useLayout } from "../workbench/window/useLayout";
+import { uiLength } from "../workbench/window/uiScale";
 import { useHeldAgentDraft } from "./agents/appHeldDraft";
+
 import { navigatedPath } from "./appEvents";
 import { arrivingRail, withoutRail } from "./railArrival";
 import { takeFolderSwitches } from "./folderSwitch";
@@ -44,7 +50,9 @@ import { useLocalProject } from "./useLocalProject";
 // the workspace's own cluster (shell/rail/OtherSandboxes.vue), or the add tile while there are none; then Files, the
 // folder itself, and every other view the app adds (Passwords, localHost.ts); at the foot, the account, the sandbox
 // shell's own control (AccountPanel: Settings open in this window, Sign out leaves it on its folder), or the sign-in
-// before there is one (LocalAccountTile). The cluster and Mod+Alt+H unroll the rail onto every sandbox
+// before there is one (LocalAccountTile). Where this computer runs agents and the reader has turned them on, the chat
+// stands at the right of every page, in the sandbox shell's own right-hand column (agents/LocalChat.vue), and the
+// Agents tile opens the sandbox's own board. The cluster and Mod+Alt+H unroll the rail onto every sandbox
 // (LocalMasterRail.vue), the sections going into the bookmark at its foot (LocalSectionPicker.vue), the change played
 // as the workspace plays its own (shell/rail/railMorph.ts). The tiles are the sandbox shell's own
 // (shell/rail/iconRail.css), so signing in changes what the rail holds, never what it is.
@@ -119,6 +127,22 @@ const agentsTile = computed<Tile | undefined>(() => {
     return waiting > 0 ? { ...tile, badge: { count: waiting, tooltip: t(`agents.agentsTile.needYou`, { count: waiting }, waiting) } } : tile;
 });
 // This computer's own page (the view the app marks `logo`, Devices) has no tile: the logo above is its door.
+// THE CHAT, AT THE RIGHT OF EVERY PAGE, as a sandbox's shell stands it (local/agents/LocalChat.vue): once this computer
+// runs agents and the reader has turned them on, never before, since the yes is what lets the sidecar start a turn. The
+// column's width is written onto the grid as the sandbox shell writes it (ShellDesktop.vue `--side-width`), the chat's
+// own stored width, or its strip's while it is tucked away, so a drag of its edge restyles the grid alone.
+// Its code arrives with the first yes: a window whose computer runs no agents, or before the reader has said yes, holds
+// none of the chat in memory.
+const LocalChat = defineAsyncComponent(() => loadChunk(() => import(`./agents/LocalChat.vue`)));
+const agentsHost = host.agents;
+onMounted(() => void agentsHost?.follow());
+const chatBeside = computed(() => computerAgents.value && agentsHost?.accepted.value === true);
+const layout = useLayout();
+const shellEl = ref<HTMLElement>();
+const chatColumn = computed(() => (chatTucked.value ? TUCKED_STRIP_PX : (layout.liveChatWidth.value ?? layout.chatWidth.value)));
+watchPostEffect(() => {
+    shellEl.value?.style.setProperty(`--side-width`, chatBeside.value ? uiLength(chatColumn.value) : `0px`);
+});
 const tiles = computed<readonly Tile[]>(() => [
     ...(agentsTile.value === undefined ? [] : [agentsTile.value]),
     { section: `workspace`, to: localPath(`files`), label: t(`shared.files`) },
@@ -248,7 +272,7 @@ onUnmounted(() => stopTaking?.());
 </script>
 
 <template>
-    <div class="local-shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
+    <div ref="shellEl" class="local-shell grid h-screen overflow-hidden bg-canvas text-content" :style="gridStyle">
         <SkipToContent />
         <nav
             ref="railNav"
@@ -302,16 +326,25 @@ onUnmounted(() => stopTaking?.());
                 </RouterView>
             </div>
         </main>
+        <!-- The chat in the right-hand column, with its quick bar over the page while tucked: once agents are on here. -->
+        <LocalChat v-if="chatBeside" />
         <!-- The window's close, held back for unsaved edits: asked over any screen, Files or not. -->
         <CloseGuardDialog :open="closeAsked" :question="closeQuestion" @cancel="keepWindow" @confirm="closeWindow" />
     </div>
 </template>
 
 <style scoped>
+/* Not inherited, as the sandbox shell registers it: written on every frame of a drag of the chat's edge. */
+@property --side-width {
+    syntax: "*";
+    inherits: false;
+}
+
 .local-shell {
-    grid-template-columns: var(--icon-rail-width) minmax(0, 1fr);
+    /* The sandbox shell's three columns: the chat's is 0 wide until agents are on here (LocalChat.vue). */
+    grid-template-columns: var(--icon-rail-width) minmax(0, 1fr) minmax(0, var(--side-width, 0px));
     /* One explicit row, so a stray element landing in an implicit row can't starve 1fr to zero height. */
     grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: "rail workspace";
+    grid-template-areas: "rail workspace side";
 }
 </style>

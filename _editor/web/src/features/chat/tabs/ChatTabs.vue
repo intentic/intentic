@@ -22,7 +22,6 @@ import { viewersOfSession } from "../../../workbench/presence/usePresence";
 import PresenceAvatars from "../../../workbench/presence/PresenceAvatars.vue";
 import ChatTabList from "./ChatTabList.vue";
 import PastChatList from "../panel/PastChatList.vue";
-import ChatComputerBadge from "../models/computer/ChatComputerBadge.vue";
 import { computerAgents, supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
 import { useT } from "@intentic/ui/i18n";
 
@@ -210,19 +209,21 @@ const barVerbs = (): MenuItem[] => [
     { separator: true },
     ...waysOut(),
 ];
-// The two ways out of the way, in the header buttons' own order: fold it within this window, then leave it. Neither on
-// a folder window's Agents page, where the chat is the page: there is no edge to fold it into and no window to move it to.
-const waysOut = (): MenuItem[] =>
-    computerAgents.value
+// The two ways out of the way, in the header buttons' own order: fold it within this window, then leave it. A folder
+// window has the fold alone (local/agents/LocalChat.vue): the chat stands in its column as in a sandbox's, and the window
+// has no second one to move it to.
+const waysOut = (): MenuItem[] => [
+    ...(floats.value ? [] : [{ label: t(`chat.words.tuckChatAway`), shortcut: commandShortcut(`chat.toggleTucked`), command: toggleChatTucked }]),
+    ...(computerAgents.value
         ? []
         : [
-              ...(floats.value ? [] : [{ label: t(`chat.words.tuckChatAway`), shortcut: commandShortcut(`chat.toggleTucked`), command: toggleChatTucked }]),
               {
                   label: floats.value ? t(`chat.words.dockChatBack`) : t(`chat.words.moveChatIntoNewWindow`),
                   shortcut: commandShortcut(`chat.toggleFloating`),
                   command: (): void => toggleChatFloating(),
               },
-          ];
+          ]),
+];
 
 // The next chat waiting on the reader after the focused one, open or not (needsYouQueue): opening one reads it, so it
 // drops out and the next press goes on from the head of what is left.
@@ -398,11 +399,9 @@ onBeforeUnmount(() => {
             >
                 <Icon name="plus" class="text-sm" />
             </button>
-            <!-- Said in the header for as long as the chat is with an agent on this computer itself (ChatComputerBadge). -->
-            <ChatComputerBadge />
             <!-- Not in a window of its own, which has no edge to fold into. -->
             <button
-                v-if="!floats && !computerAgents"
+                v-if="!floats"
                 type="button"
                 class="composer-ghost h-7 w-7 shrink-0"
                 @click="toggleChatTucked()"
@@ -411,6 +410,7 @@ onBeforeUnmount(() => {
             >
                 <Icon name="chevrons-right" class="text-sm" />
             </button>
+            <!-- Not in a folder window, which has no window of its own to move the chat to (local/agents/LocalChat.vue). -->
             <button
                 v-if="!computerAgents"
                 type="button"

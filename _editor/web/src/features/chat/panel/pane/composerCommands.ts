@@ -12,7 +12,8 @@ import {
     type SlashRow,
     slashRows,
 } from "../../../../models/conversations/commands/slashCommands";
-import { chatPickable, type PickerEntry, pickerEntries } from "../../../../models/conversations/accounts/modelPickerState";
+import { chatPickable, type PickerEntry } from "../../../../models/conversations/accounts/modelPickerState";
+import { pickerSource } from "../../../../models/conversations/accounts/pickerSource";
 import type { ConversationView } from "../../../../models/conversations/panel/useChat-view";
 import type { Conversation } from "../../../../models/conversations/session/conversation";
 import { startAgent } from "../../../../models/fleet/agentActions";
@@ -66,7 +67,8 @@ const note = (typed: string, text: string, tone?: `warning`): CommandResult =>
 const modelNamed = (words: string, view: ConversationView): PickerEntry | undefined => {
     const needle = words.toLowerCase();
     const provider = view.provider.value;
-    const pickable = pickerEntries.value
+    const pickable = pickerSource.value
+        .entries()
         .filter((entry) => chatPickable(entry) && !providerWithheld(entry.provider) && (!view.streaming.value || entry.provider === provider))
         .toSorted((a, b) => Number(b.provider === provider) - Number(a.provider === provider));
     const said = (entry: PickerEntry): readonly string[] => [entry.value.toLowerCase(), entry.label.toLowerCase()];

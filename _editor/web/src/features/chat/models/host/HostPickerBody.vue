@@ -11,6 +11,8 @@ import ModelPicker from "../ModelPicker.vue";
 import PickerAccounts from "../../accounts/PickerAccounts.vue";
 import PickerRunSettings from "../run-settings/PickerRunSettings.vue";
 import PickerFooter from "../PickerFooter.vue";
+import ComputerPickerFooter from "../computer/ComputerPickerFooter.vue";
+import { computerAgents } from "../../../../client/sandbox/useDaemonRoutes";
 import PickerStatus from "../../accounts/PickerStatus.vue";
 import { loopRowShown, offeredLoops } from "../../../../models/providers/offeredLoops";
 import { formatChord, isApplePlatform } from "../../../../workbench/commands/keybindings";
@@ -147,8 +149,10 @@ const choose = (entry: PickerEntry): void => {
         @close="dismissModelPick()"
     >
         <template #footer>
+            <!-- On this computer, the coding agent's own sign-in, as the composer's picker draws it there. -->
+            <ComputerPickerFooter v-if="computerAgents" :provider="request.provider" />
             <!-- The composer picker's own footer and its three parts: the status line, the account rows, the toolbar under a rule. -->
-            <PickerFooter v-if="footerVisible">
+            <PickerFooter v-else-if="footerVisible">
                 <PickerStatus :provider="request.provider" :harness="request.harness ?? `native`" :model="request.model" />
                 <PickerAccounts
                     v-if="hasContent"

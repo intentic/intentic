@@ -73,6 +73,8 @@ export const conversationStore = (home: string, log: (line: string) => void): Co
     // session known, settled) and each write is its own file renamed into place, so an older one could land last: one
     // that finds a newer write was asked for since lets go of its own instead of landing.
     const newest = new Map<string, number>();
+    // The writes of each conversation not finished yet, for a removal to wait out.
+    const writing = new Map<string, Set<Promise<void>>>();
     const numbered = (id: string): number => {
         const number = (newest.get(id) ?? 0) + 1;
         newest.set(id, number);
@@ -97,13 +99,22 @@ export const conversationStore = (home: string, log: (line: string) => void): Co
         },
         save: async (conversation) => {
             const number = numbered(conversation.id);
-            await mkdir(dir, { recursive: true });
-            const staged = stagingOf(fileOf(conversation.id));
-            await writeFile(staged, `${JSON.stringify(conversation)}\n`, { mode: MODE });
-            if (newest.get(conversation.id) === number) {
-                await renameOver(staged, fileOf(conversation.id));
-            } else {
-                await rm(staged, { force: true });
+            const write = (async () => {
+                await mkdir(dir, { recursive: true });
+                const staged = stagingOf(fileOf(conversation.id));
+                await writeFile(staged, `${JSON.stringify(conversation)}\n`, { mode: MODE });
+                if (newest.get(conversation.id) === number) {
+                    await renameOver(staged, fileOf(conversation.id));
+                } else {
+                    await rm(staged, { force: true });
+                }
+            })();
+            const inFlight = writing.get(conversation.id) ?? new Set();
+            writing.set(conversation.id, inFlight.add(write));
+            try {
+                await write;
+            } finally {
+                inFlight.delete(write);
             }
         },
         saveNow: (conversation) => {
@@ -111,7 +122,11 @@ export const conversationStore = (home: string, log: (line: string) => void): Co
             mkdirSync(dir, { recursive: true });
             writeFileAtomicSync(fileOf(conversation.id), `${JSON.stringify(conversation)}\n`, MODE);
         },
+        // Every write still on its way lets go of its own (a newer one was asked for), and one already landing is waited
+        // for, so a write behind the last change can never put the file back after it is gone.
         remove: async (id) => {
+            numbered(id);
+            await Promise.allSettled((writing.get(id) ?? []));
             await rm(fileOf(id), { force: true });
         },
     };

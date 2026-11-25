@@ -2,6 +2,7 @@
 import { useDevice } from "@intentic/ui";
 import { computed, nextTick } from "vue";
 import { useWallpaper } from "../../../skins/useWallpaper";
+import { computerAgents } from "../../../client/sandbox/useDaemonRoutes";
 import ChatCapacityRail from "../../chat/panel/capacity/ChatCapacityRail.vue";
 import type { CapacityMine } from "../../chat/panel/capacity/chatCapacity";
 import { useShellChatLink } from "../../chat/panel/shellChatLink";
@@ -13,8 +14,9 @@ import { focusComposer } from "../../../models/conversations/tabs/useChat-tabs";
 import AgentsView from "../board/AgentsView.vue";
 
 /* The Agents area (/agents): every registered conversation in one lifecycle, with workspace and isolated placement shown
-   on the same board, the chat standing on its right (shell/side). Also what a desktop's /chat lands on, and what a
-   popped-out chat's window draws beside it (shell/window/FloatingSection.vue). */
+   on the same board, the chat standing on its right (shell/side). Also what a desktop's /chat lands on, what a
+   popped-out chat's window draws beside it (shell/window/FloatingSection.vue), and a folder window's Agents page, where
+   this computer runs agents itself (local/agents/LocalAgents.vue). */
 
 /* USAGE LEFT STANDS ONCE, WHERE THERE IS ROOM FOR IT. The chat beside the board draws it in its own side rail, under its
    checklist, once the chat is wide enough for that rail (ChatPanel.vue `showsRail`). Until then, and while the chat is
@@ -28,7 +30,8 @@ import AgentsView from "../board/AgentsView.vue";
    for it. A drag of the seam between board and chat moves it once, where the hand rests or lets go, not at whatever
    pixel the drag passed. */
 const { mobile } = useDevice();
-const usageHere = computed(() => !mobile.value && !chatRailOnScreen.value);
+// None on this computer: its agents spend the reader's own harness's allowance, which nothing here meters (local/agents/).
+const usageHere = computed(() => !mobile.value && !chatRailOnScreen.value && !computerAgents.value);
 // The focused chat's account, marked in Usage left as the one the reader typing beside it is spending (ChatSideRail's rule).
 const chat = useChat();
 const mine = computed((): CapacityMine => {
