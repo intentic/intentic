@@ -76,7 +76,7 @@ const headline = computed(() => (canDrive.value ? t(`chat.askDock.waitingOnYou`)
                 data-ask-body
                 :data-ask-line="ask.key"
                 data-dock-tone="ask"
-                class="chat-dock-row max-h-[50dvh] overflow-y-auto overscroll-contain [&_.chat-card]:overflow-clip [&_.chat-card-actions]:sticky [&_.chat-card-actions]:bottom-0 [&_.chat-card-actions]:bg-card"
+                class="chat-dock-row max-h-[50dvh] overflow-y-auto overscroll-contain [&_.chat-card]:overflow-clip [&_.chat-card-actions]:sticky [&_.chat-card-actions]:bottom-0 [&_.chat-card-actions]:bg-(--chat-dock-fill)"
             >
                 <ChatAskBody :ask="ask" />
             </div>

@@ -1006,29 +1006,22 @@
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
 }
-/* THE DOCK OVER THE COMPOSER (ChatDock): one frame, a line each (ChatDockRow), however many components draw them and
-   however deep. Every line carries the rule above it, and the frame starts a pixel up, so the first line's rule is under
-   the frame's own edge: no line has to know whether it is the first. With no line in it the frame is not drawn at all.
-   The frame is drawn OVER what it holds (`::after`), not as the box's own border: an open ask scrolls in a layer of its
-   own, and at a fractional offset the GPU snapped that layer over the bottom edge, so the frame lost its foot. */
+/* THE DOCK OVER THE COMPOSER (ChatDock): a line each (ChatDockRow), however many components draw them and however deep,
+   each its own soft tile a hair apart, with no stroke anywhere. An outline round the whole read as a box drawn round
+   the footer, and its rules between lines as a table (2026-11-25); tiles keep the lines one group by their spacing
+   alone. Every line carries the gap above it and the column starts that gap up, so no line has to know whether it is
+   the first. With no line in it the dock is not drawn at all. */
 .chat-dock:not(:has(.chat-dock-row)) {
     display: none;
 }
-.chat-dock::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1px solid var(--color-line);
-    border-radius: inherit;
-    pointer-events: none;
-}
-/* While the agent waits on the reader, the frame takes the accent: the one thing in the footer holding the turn. */
-.chat-dock:has([data-dock-tone="ask"])::after {
-    border-color: color-mix(in srgb, var(--color-primary-500) 45%, transparent);
-}
-/* A line arrives: it rises the house distance into its place, on the house pace (motion.css, which stills it). */
+/* A line arrives: it rises the house distance into its place, on the house pace (motion.css, which stills it). Its
+   fill is a step off the footer's ground; while the line is something the agent waits on the reader for, a warm wash
+   of the accent instead, so what holds the turn is a colour rather than a border. */
 .chat-dock-row {
-    border-top: 1px solid var(--color-line);
+    --chat-dock-fill: color-mix(in oklab, var(--color-content) 5%, var(--color-card));
+    margin-top: calc(var(--spacing) * 0.75);
+    border-radius: var(--radius-xl);
+    background: var(--chat-dock-fill);
     transition:
         opacity var(--motion-base) var(--ease-smooth),
         translate var(--motion-base) var(--ease-smooth);
@@ -1036,6 +1029,9 @@
         opacity: 0;
         translate: 0 var(--motion-rise);
     }
+}
+.chat-dock-row[data-dock-tone="ask"] {
+    --chat-dock-fill: color-mix(in oklab, var(--color-primary-500) 8%, var(--color-card));
 }
 /* A CARD THE DOCK CARRIES WHOLE heads its line where the folded line stood: its title's first line on the folded
    title's (the line's 8px, then half of what a 26px press stands taller than a 16px line), its fold where the folded

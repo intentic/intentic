@@ -4,7 +4,7 @@ import { Button, SectionHeader, ui } from "@intentic/ui";
 import ChatDock from "../chat/panel/dock/ChatDock.vue";
 import ChatDockRow from "../chat/panel/dock/ChatDockRow.vue";
 
-// Every press in the chat's footer is a line of one frame (ChatDock): the glyph says whose move it is in its colour, the
+// Every press in the chat's footer is a tile of one group (ChatDock): the glyph says whose move it is in its colour, the
 // words read first, the bright press stands last. Drawn here from the same component the chat draws, with made-up words.
 const WIDTHS = [
     { key: `wide`, label: `Pane`, frame: `w-full max-w-2xl` },
@@ -15,7 +15,7 @@ const WIDTHS = [
 <template>
     <section class="flex flex-col gap-4">
         <SectionHeader label="Dock over the composer" :heading="2" />
-        <p class="text-xs text-muted">One frame, a line each. Accent glyph and rim: the agent waits on you. Green: done. The bright press is last.</p>
+        <p class="text-xs text-muted">A soft tile each, no strokes. Warm tile and accent glyph: the agent waits on you. Green: done. The bright press is last.</p>
         <div class="flex flex-wrap items-start gap-6">
             <div v-for="width in WIDTHS" :key="width.key" class="flex flex-col gap-4 @container" :class="width.frame">
                 <span class="text-3xs text-subtle uppercase">{{ width.label }}</span>

@@ -734,14 +734,14 @@ One word per idea on screen and in code. The retired spellings are refused by
 | cover | One file name read in every folder (README.md, package.json): the explorer tree lists folders alone and marks those holding it, and the home shows the current folder's copy in place of its tiles (`features/workspace/home/homeCover.ts`); on screen, "Show README.md in every folder" |
 | gallery | The home drawing a folder's pictures and videos as themselves, in justified rows: each keeps its proportions, every row but the last fills the pane, and the name stays under each (`features/workspace/home/gallery/homeGallery.ts`). A selected picture wears a ring round the picture itself, not a card round picture and name; a caption too narrow for its name gives up the start every name in the group shares first, then is cut in its middle, and a video's says no extension, its play badge saying what it is. The folders above it are the home's one-line chips (`HomeChip.vue`), as in every folder: there a folder or a file with nothing inside to show is a chip, a file read from its start is a card with a miniature of that start (`HomeCard.vue`), and a picture shows itself. On by itself where two of every three files are pictures or videos, and the reader's to switch per folder on the home's bar, beside a size slider (`galleryChoice.ts`). Rows are laid out from each file's box read off its header by the daemon (`workspace.dimensions`), and a video shows a frame the daemon cut with ffmpeg rather than its first, so a film opening on a fade is not a white card |
 
-Everything there is to press over the composer stands in one dock (`features/chat/panel/dock/`): one frame, a line each
-(`ChatDockRow`), whoever draws it. A line is its glyph in the colour of whose move it is (accent while the agent waits on
+Everything there is to press over the composer stands in one dock (`features/chat/panel/dock/`): a line each
+(`ChatDockRow`), whoever draws it, each a soft tile a hair apart with no stroke anywhere. A line is its glyph in the colour of whose move it is (accent while the agent waits on
 the reader, green done, amber a wall), what it is and its few words, a detail under them, and its presses at the end of
 the line, the bright one last; on a narrow pane the presses go under the words and share out the width. In order: what
 the chat's work needs next (a request to read it, its way back from the archive, its land, its commit and push), a
 stopped turn's way on or out, what the turn left running, and last, against the composer, everything the chat waits on
 a person for (`features/chat/panel/asks/`), a line each in the order asked: cards the turn is parked on, needs it went on
-without, its children's permissions. The frame takes the accent while any of those wait, and only an ask then lights its
+without, its children's permissions. An ask's tile takes a warm wash of the accent, and while any wait only an ask lights its
 press. A card answered in place folds to its line and opens to its whole card where the line stood, the same word and
 title at its head (`CARD_TITLE_PRESS`) and its fold at the end (`CARD_HEADER_TAIL`), while the transcript keeps a
 one-line stub where it was asked and the settled card once it is answered; a line's title goes to where it was asked.
