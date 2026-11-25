@@ -37,9 +37,7 @@ const options = computed(() => [
         <div class="flex shrink-0 items-center border-b border-line-subtle px-2 py-1.5">
             <SegmentedControl v-model="view" :options="options" />
         </div>
-        <div class="min-h-0 flex-1">
-            <ImageView v-if="view === 'preview' && url" :src="url" />
-            <Code v-else-if="view === 'source'" :code="text" lang="xml" class="h-full overflow-auto" />
-        </div>
+        <ImageView v-if="view === 'preview' && url" :src="url" class="min-h-0 flex-1" />
+        <Code v-else-if="view === 'source'" :code="text" lang="xml" class="min-h-0 flex-1 overflow-auto" />
     </div>
 </template>

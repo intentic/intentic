@@ -251,7 +251,7 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
             v-if="deck !== undefined && !loading"
             class="flex shrink-0 items-center gap-3 border-b border-line-subtle px-3 py-1.5 text-2xs text-muted"
         >
-            <span>{{ t(`pptxViewer.slideCount`, { count: deck.slides.length }, deck.slides.length) }}</span>
+            {{ t(`pptxViewer.slideCount`, { count: deck.slides.length }, deck.slides.length) }}
             <button
                 v-if="hasNotes"
                 type="button"
@@ -272,7 +272,7 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
             :class="
                 presenting
                     ? `pptx-show fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black`
-                    : `ui-softscroll relative min-h-0 flex-1 overflow-auto bg-muted/20 px-4 py-4`
+                    : `ui-softscroll relative flex min-h-0 flex-1 flex-col items-center gap-6 overflow-auto bg-muted/20 px-4 py-4`
             "
             @click="presenting && go(1)"
         >
@@ -280,7 +280,7 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
                 <p v-if="deck === undefined || deck.slides.length === 0" class="py-10 text-center text-sm text-muted">
                     {{ t(`pptxViewer.presentationNoSlides`) }}
                 </p>
-                <div v-else class="mx-auto flex flex-col items-center gap-6">
+                <template v-else>
                     <figure v-for="slide of shownSlides" :key="slide.number" class="flex flex-col items-center gap-1">
                         <div class="pptx-frame overflow-hidden" :class="presenting ? `` : `rounded-sm shadow-md ring-1 ring-line`" :style="frameStyle">
                             <!-- Drawn at the deck's own pixel size and scaled as one piece: every box inside keeps its exact place. -->
@@ -336,17 +336,17 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
                                     <!-- Named rather than dropped: a chart this viewer cannot draw is still something on the slide. -->
                                     <div
                                         v-else
-                                        class="pptx-box absolute flex flex-col items-center justify-center gap-1 rounded border border-dashed border-line text-muted"
+                                        class="pptx-box absolute flex flex-col items-center justify-center gap-1 rounded border border-dashed border-line text-xs text-muted"
                                         :style="boxStyle(box)"
                                     >
                                         <Icon name="box" class="text-xl" />
-                                        <span class="text-xs">{{ box.label }}</span>
+                                        {{ box.label }}
                                     </div>
                                 </template>
                             </div>
                         </div>
                         <figcaption v-if="!presenting" class="flex flex-col items-center gap-1 text-2xs text-subtle" :style="{ width: frameStyle.width }">
-                            <span>{{ t(`pptxViewer.slide`, { number: slide.number }) }}</span>
+                            {{ t(`pptxViewer.slide`, { number: slide.number }) }}
                             <div
                                 v-if="notesShown && slide.notes.length > 0"
                                 class="w-full rounded border border-line bg-canvas px-3 py-2 text-left text-xs text-muted"
@@ -355,7 +355,7 @@ const hasNotes = computed(() => deck.value?.slides.some((slide) => slide.notes.l
                             </div>
                         </figcaption>
                     </figure>
-                </div>
+                </template>
             </ViewerStatus>
             <!-- Out of the way until the pointer comes near it, as a projector's audience should see only the slide. -->
             <div
