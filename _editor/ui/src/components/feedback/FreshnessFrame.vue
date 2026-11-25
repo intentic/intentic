@@ -128,12 +128,11 @@ const why = computed(() => {
             v-if="age !== undefined"
             v-tooltip.bottom="why"
             role="status"
-            class="ui-enter pointer-events-auto mt-1.5 flex items-center gap-1.5 rounded-full border border-line bg-card px-2.5 py-0.5 text-2xs text-muted shadow-sm"
+            class="ui-enter pointer-events-auto mt-1.5 flex items-center gap-1.5 rounded-full border border-line bg-card px-2.5 py-0.5 text-2xs tabular-nums text-muted shadow-sm"
         >
             <Icon v-if="warned" name="exclamation-circle" class="text-warning" aria-hidden="true" />
             <!-- Still checking: the edge's breath, not a spinner, which would be the busiest thing on the page. -->
-            <span v-else class="ui-freshness-dot size-1.5 shrink-0 rounded-full" aria-hidden="true" />
-            <span class="tabular-nums">{{ t(`ui.freshness.updated`, { ago: age }) }}</span>
+            <span v-else class="ui-freshness-dot size-1.5 shrink-0 rounded-full" aria-hidden="true" />{{ t(`ui.freshness.updated`, { ago: age }) }}
         </p>
     </div>
 </template>

@@ -102,12 +102,10 @@ onBeforeUnmount(hide);
                 v-if="open"
                 ref="card"
                 role="tooltip"
-                class="pointer-events-none fixed z-[1200]"
+                class="pointer-events-none fixed z-[1200] rounded-xl border border-line-strong bg-overlay p-4 text-left shadow-xl shadow-black/30"
                 :style="{ top: `${pos.top}px`, left: `${pos.left}px`, width: `${width}px` }"
             >
-                <span class="block rounded-xl border border-line-strong bg-overlay p-4 text-left shadow-xl shadow-black/30">
-                    <slot />
-                </span>
+                <slot />
             </span>
         </Teleport>
     </span>
