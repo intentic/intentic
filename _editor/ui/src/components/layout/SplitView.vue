@@ -89,9 +89,13 @@ const barPin = computed(() => (scroll === `page` ? `sticky top-0 z-10 bg-canvas`
 
 <template>
     <!-- The root spans the pane in every arrangement: it is what `narrow` measures. -->
-    <div ref="root" class="flex min-w-0 flex-col" :class="scroll === `panes` ? `h-full min-h-0 overflow-hidden` : docked ? `min-h-full` : ``">
-        <!-- DOCKED: the index on the pane's left edge, the body beside it. -->
-        <div v-if="docked" class="flex min-w-0 flex-1" :class="scroll === `panes` ? `min-h-0` : ``">
+    <div
+        ref="root"
+        class="flex min-w-0"
+        :class="[docked ? `` : `flex-col`, scroll === `panes` ? `h-full min-h-0 overflow-hidden` : docked ? `min-h-full` : ``]"
+    >
+        <!-- DOCKED: the index on the pane's left edge, the body beside it, as the root's own row. -->
+        <template v-if="docked">
             <!-- THE INDEX IS A COLUMN OF ITS OWN, docked to the shell's rail: the same surface and edge the rail stands on, so
                  rail and index read as one piece of navigation, the area and the page within it, and the body beside them
                  as the page. Full height (the column stretches the row) however short the body is; its contents stick to
@@ -129,31 +133,29 @@ const barPin = computed(() => (scroll === `page` ? `sticky top-0 z-10 bg-canvas`
                     </div>
                 </div>
             </div>
-            <div class="flex min-w-0 flex-1 flex-col" :class="scroll === `panes` ? `min-h-0` : ``">
-                <div class="flex min-w-0 flex-1 flex-col p-(--ui-page-padding)" :class="scroll === `panes` ? `min-h-0` : ``">
-                    <!-- 60rem, the body's width when it sat beside the rail in the 80rem page, so no screen's rows reflow; centred in
-                         what the index leaves, so a wide pane keeps the body in its middle rather than against the index. -->
-                    <div
-                        class="mx-auto flex w-full min-w-0 flex-col"
-                        :class="[width === `full` ? `` : `max-w-240`, scroll === `panes` ? `min-h-0 flex-1` : ``]"
+            <div class="flex min-w-0 flex-1 flex-col p-(--ui-page-padding)" :class="scroll === `panes` ? `min-h-0` : ``">
+                <!-- 60rem, the body's width when it sat beside the rail in the 80rem page, so no screen's rows reflow; centred in
+                     what the index leaves, so a wide pane keeps the body in its middle rather than against the index. -->
+                <div
+                    class="mx-auto flex w-full min-w-0 flex-col"
+                    :class="[width === `full` ? `` : `max-w-240`, scroll === `panes` ? `min-h-0 flex-1` : ``]"
+                >
+                    <!-- What the title row carried besides the title: a sentence about what is shown, and its actions, over
+                         the body they act on. -->
+                    <header
+                        v-if="hasDescription || $slots[`actions`]"
+                        class="ui-page-header mb-4 flex min-h-8 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2"
                     >
-                        <!-- What the title row carried besides the title: a sentence about what is shown, and its actions, over
-                             the body they act on. -->
-                        <header
-                            v-if="hasDescription || $slots[`actions`]"
-                            class="ui-page-header mb-4 flex min-h-8 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2"
-                        >
-                            <p v-if="hasDescription" class="min-w-0 flex-auto text-sm text-muted">{{ description }}</p>
-                            <div v-if="$slots[`actions`]" class="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
-                                <slot name="actions" />
-                            </div>
-                        </header>
-                        <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>
-                        <slot name="detail" :compact="false" />
-                    </div>
+                        <p v-if="hasDescription" class="min-w-0 flex-auto text-sm text-muted">{{ description }}</p>
+                        <div v-if="$slots[`actions`]" class="ml-auto flex max-w-full shrink-0 flex-wrap items-center justify-end gap-2">
+                            <slot name="actions" />
+                        </div>
+                    </header>
+                    <div v-if="$slots[`strips`]" class="mb-4 flex shrink-0 flex-col gap-3"><slot name="strips" /></div>
+                    <slot name="detail" :compact="false" />
                 </div>
             </div>
-        </div>
+        </template>
 
         <!-- UNDOCKED (no index, or a pane too narrow for one beside the body): the screen's name and controls in the top bar
              over the page (ViewBar.vue), lined up with the page's column (Page's cap and gutters); on a phone, in
