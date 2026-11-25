@@ -22,7 +22,8 @@ confidence — a shell variable standing in for a host (unless the same line set
 a subshell, a script, an interpreter (`python -c`, `node -e`), a program it does not know, a flag that follows redirects or sends through a proxy — is treated like a host
 off the list: a card in the conversation names the secret, its hosts and where this use would send it, and the value
 goes nowhere until somebody clicks, whatever the safety judge said and whether or not it could be asked. A secret typed
-into a web page is held to the page's host. With nobody to ask, in an unattended turn, it is refused, and the agent is
+into a web page is held to the page's host, and one the agent writes into a call to an MCP server I connected is held to
+that server's host. With nobody to ask, in an unattended turn, it is refused, and the agent is
 told how to use the secret without a card. On with no hosts listed, every use asks.
 
 The card's Allow once has a caret beside it with the wider yeses. "Allow <secret> anywhere in this conversation" lets that

@@ -130,6 +130,8 @@ export const credentialLane = (offer: TranscriptCredentialOffer["offer"]): strin
             return t(`chat.cardStatus.laneGateway`);
         case "ssh":
             return t(`chat.cardStatus.laneSsh`);
+        case "mcp":
+            return t(`chat.cardStatus.laneMcp`);
         default:
             return offer.kind === "capability" ? t(`chat.cardStatus.laneCapability`) : t(`chat.cardStatus.laneCredential`);
     }

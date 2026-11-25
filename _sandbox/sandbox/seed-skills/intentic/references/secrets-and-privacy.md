@@ -15,6 +15,12 @@ unknown name fails and lists the names that exist. In a file you write, keep the
   `--env-file {{secret:name|file}}`, `set -a; . {{secret:name|file}}; set +a`, `cp {{secret:name|file}} dev.env`. The
   file is removed 15 minutes later; gates and host guards treat it as they treat the plain reference. Only the shell
   tools and the code tool hand one over.
+- **In a call to an MCP server the owner connected** (one of the sandbox's MCP connections, its tools named after it):
+  write the reference in the tool's argument, as in a command. It goes as a request to that server's host would: unasked
+  when the secret's host guard is off or lists that host, on a card when the guard is on and does not. Whatever the
+  server answers is masked back to the reference. A `|file` reference and a secret kept on the owner's computers are
+  refused there. In the sandbox's own tools (the browsers, the computers, subagents) a reference stays plain text: to
+  put a value into a page or a window, use `mcp__secrets__type_secret`.
 - **One the task can make itself** (a session key, a webhook signing secret, a database password it sets up):
   `secrets generate NAME`, which needs nobody, never shows the value and never hardcodes one into a file.
 - **A value under 12 characters** is masked in what you read only where its context names a secret (`password=…`,

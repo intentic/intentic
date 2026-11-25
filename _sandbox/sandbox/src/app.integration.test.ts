@@ -1109,11 +1109,14 @@ test("agent.run merges internal (env) tools with the mcp-kind capabilities for t
     await runAgentTurn(client, { prompt: "do it" });
     // Internal first, then external mcp capabilities (last-wins on name collisions). The credential-free browser rides
     // after them wherever Chromium is on disk, which is the machine's say, not this merge's
-    // (browser-tools.integration.test.ts owns that mount).
-    expect(seen?.tools.remote?.filter((tool) => tool.name !== ANONYMOUS_BROWSER_SERVER)).toEqual([
+    // (browser-tools.integration.test.ts owns that mount). A card is reached on the turn's door with the turn's own
+    // bearer, never at its address with its token (capabilities/mcp-oauth/mcp-remote.ts).
+    const remote = seen?.tools.remote?.filter((tool) => tool.name !== ANONYMOUS_BROWSER_SERVER);
+    expect(remote).toEqual([
         { name: "obs", url: "https://signoz.example.com/mcp", token: "internal" },
-        { name: "linear", url: "https://mcp.linear.app/sse", token: "external" },
+        { name: "linear", url: expect.stringMatching(/\/mcp\/linear$/), token: expect.any(String) },
     ]);
+    expect(remote?.[1]?.token).not.toBe("external");
 });
 
 test("capabilities.setSecret replaces just the secret, and reveal returns it: even pre-scaffold", async () => {

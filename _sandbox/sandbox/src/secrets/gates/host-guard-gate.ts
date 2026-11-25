@@ -9,7 +9,7 @@ import { wakeWords } from "../../guard/held-cards.js";
 import { opt } from "../../opt.js";
 import { type HostReading, type GuardedName, readHosts } from "../guards/host-guards.js";
 import type { SecretTarget } from "../secret-access.js";
-import { commandDestination, type Destination, pageDestination, SCRIPT_DESTINATION } from "../secret-destinations.js";
+import { commandDestination, type Destination, pageDestination, SCRIPT_DESTINATION, serverDestination } from "../secret-destinations.js";
 
 // The check every exit makes before a secret's value leaves: where the reference becomes a value, after the command gate
 // has had its say and whatever it said. For a secret whose host guard is on, a use whose every named host is on the list
@@ -84,6 +84,8 @@ const destinationOf = (target: SecretTarget): Destination => {
     switch (target.kind) {
         case "page":
             return pageDestination(target.url);
+        case "mcp":
+            return serverDestination(target.url);
         case "program":
             return target.language === "bash" ? commandDestination(target.text) : SCRIPT_DESTINATION;
         case "window":
@@ -96,6 +98,8 @@ const nounOf = (target: SecretTarget): string => {
     switch (target.kind) {
         case "page":
             return "page";
+        case "mcp":
+            return "call";
         case "program":
             return target.language === "bash" ? "command" : "script";
         case "window":
@@ -109,6 +113,8 @@ const whereOf = (target: SecretTarget): string => {
     switch (target.kind) {
         case "page":
             return target.url;
+        case "mcp":
+            return `${target.tool}\u0000${target.url}`;
         case "program":
             return target.text;
         case "window":
@@ -141,9 +147,12 @@ const sentenceOf = (reading: Asked, target: SecretTarget): string => {
         return `${listsOf(reading.guarded)}, and this would type ${them} into ${placeOf(target)}, which names no site to check.`;
     }
     if (reading.destination === "outside") {
-        return target.kind === "page"
-            ? `${listsOf(reading.guarded)}, and this page is on ${both(reading.hosts)}.`
-            : `${listsOf(reading.guarded)}, and this ${noun} would send ${them} to ${both(reading.hosts)}.`;
+        if (target.kind === "page") {
+            return `${listsOf(reading.guarded)}, and this page is on ${both(reading.hosts)}.`;
+        }
+        // The server's tool named, since the card is the one place the person sees which call carries it.
+        const what = target.kind === "mcp" ? `call to ${target.tool}` : noun;
+        return `${listsOf(reading.guarded)}, and this ${what} would send ${them} to ${both(reading.hosts)}.`;
     }
     return `${listsOf(reading.guarded)}, and where this ${noun} sends ${them} cannot be read from it: ${reading.why}.`;
 };

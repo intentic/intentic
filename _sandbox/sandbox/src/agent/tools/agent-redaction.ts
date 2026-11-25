@@ -4,6 +4,7 @@ import { contextualEntries, maskValues, multilineParts, SECRET_VALUE_MIN } from 
 import { classifyCommand } from "@intentic/sandbox-contract/policy/command-classes";
 import { maskCredentialMaterial } from "@intentic/sandbox-contract/policy/credential-material";
 import { type NamedSecret, secretReference, surfaceForms } from "../../secrets/secret-registry.js";
+import { type Json, restoreStrings } from "../../privacy/gateway/protocols/walk.js";
 
 // Masks every tool's PostToolUse output, not just Bash's, closing the gap where masking depended on how a value was
 // fetched. Values mask to `{{secret:name}}`, not a blank, so a read-then-rewrite round-trips. A second, shape-based
@@ -90,6 +91,10 @@ const mapStrings = (value: unknown, transform: (text: string) => string): unknow
 };
 
 export const maskDeep = (value: unknown, targets: readonly MaskTarget[]): unknown => mapStrings(value, (text) => maskString(text, targets));
+
+// The same over a value already parsed as JSON (a message an MCP server sent, mcp-remote.ts), its type kept; the same
+// value back when nothing matched.
+export const maskJson = (value: Json, targets: readonly MaskTarget[]): Json => restoreStrings(value, (text) => maskString(text, targets));
 
 export const WITHHELD =
     "[intentic withheld this tool's output: the sandbox's secrets could not be read to mask it. Check the secrets stores (the sandbox's own secrets, the capability vault) and try again.]";

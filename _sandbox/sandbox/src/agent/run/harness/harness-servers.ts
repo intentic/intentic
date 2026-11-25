@@ -75,7 +75,7 @@ const subjectsOf = (names: readonly string[]): Map<string, { readonly kind: Cred
 };
 
 // Where a lane puts a value, in the words a refusal uses.
-const LANE_PLACE = { shell: "command", code: "script", browser: "page", device: "window", desktop: "window" } as const satisfies Readonly<
+const LANE_PLACE = { shell: "command", code: "script", browser: "page", device: "window", desktop: "window", mcp: "call to an MCP server" } as const satisfies Readonly<
     Record<SecretLane, string>
 >;
 
@@ -83,7 +83,9 @@ const LANE_PLACE = { shell: "command", code: "script", browser: "page", device: 
 // that must never fail or slow the tool call that spent the secret), and the two gates bound to this turn: where the
 // values may go, asked first since a use sent nowhere needs nobody's release, then who must release them. A name only a
 // keyring on the owner's computers holds is fetched from there, for this turn's conversation, once both gates said yes.
-export const turnSecretAccess = (deps: HarnessServersDeps, input: AgentTurn, signal: AbortSignal): SecretAccess => ({
+// Only the conversation is read of the turn, so the MCP door builds the same seam for one call it forwards
+// (capabilities/mcp-oauth/mcp-remote.ts) from the conversation the turn's bearer names.
+export const turnSecretAccess = (deps: HarnessServersDeps, input: Pick<AgentTurn, "conversationId">, signal: AbortSignal): SecretAccess => ({
     list: deps.secretRegistry,
     device: {
         held: async () => (await deps.deviceSecrets.held()).map(({ machine, pointer }) => ({ name: pointer.name, machine })),

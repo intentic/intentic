@@ -221,6 +221,23 @@ describe("the decision table", () => {
         });
     });
 
+    it("reads an MCP card's address as where a call's arguments go, naming the tool on the card", async () => {
+        const server = (url: string): SecretTarget => ({ kind: "mcp", server: "gh", url, tool: "mcp__gh__create_issue" });
+        const { deps, frames } = fake([GITHUB]);
+        expect(await createHostGuardGate(deps).check(asked(server("https://api.github.com/mcp")))).toEqual({ allow: true });
+        const pending = createHostGuardGate(deps).check(asked(server("https://mcp.tools.example/mcp")));
+        await answer(frames, "deny");
+        expect(await pending).toMatchObject({ allow: false });
+        expect(frames[0]).toEqual({
+            kind: "permission",
+            requestId: expect.any(String),
+            toolName: "mcp__gh__create_issue",
+            title: "Send GITHUB_TOKEN to mcp.tools.example?",
+            displayName: "Send secret",
+            explain: `${LISTS}, and this call to mcp__gh__create_issue would send it to mcp.tools.example.`,
+        });
+    });
+
     it("holds a connector's default, which is on, to every field of its capability", async () => {
         const guards = effectiveHostGuards([], new Map([["github", ["api.github.com"]]]));
         const { deps, frames } = fake(guards);

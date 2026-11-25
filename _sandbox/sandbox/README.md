@@ -149,6 +149,10 @@ flowchart LR
   the value on stdin, only into a program on the secret's list), the focused window on one of the owner's computers or
   an app on a phone attached to one (typed by that computer's keyring, which checks the window), and a page in the
   owner's own browser (a one-time ticket the extension redeems at `POST /system/webext/secret`).
+- A reference in a tool call's arguments to an MCP card's server resolves at the MCP door
+  (`capabilities/mcp-oauth/mcp-remote.ts`, `resolveCallSecrets` in `secrets/secret-access.ts`), gated as a request to
+  the card's host (lane `mcp`), and the server's answer is masked back on the way to the agent; the daemon's own
+  servers leave a reference as text.
 - Files cross between the owner's own browser and the artifacts shelf through two doors on the extension's token
   (`browser/cast/media-shelf.ts`, `webext/file-tickets.ts`): `POST /system/webext/media` stores what the agent saved from a page
   (`save_media`, or a download its click started) under `.intentic/records/artifacts/chrome/` with a sanitized name, at

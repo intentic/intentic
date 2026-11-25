@@ -2,6 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { SECRET_REFERENCE } from "@intentic/sandbox-contract/schemas/needs";
 import { hasSecretReferences, type NamedSecret, referencedNames, resolveSecretReferences } from "./secret-registry.js";
 import { writeSecretFile } from "./secret-files.js";
+import { isList, isRecord, isText, type Json, restoreStrings } from "../privacy/gateway/protocols/walk.js";
 import { DETAIL_MAX } from "./secret-uses.js";
 
 // A `|file` reference anywhere in a text (`{{secret:NAME|file}}`): the second capture of the contract's pattern.
@@ -15,8 +16,8 @@ const FILELESS_REFUSAL =
 // An unknown name is a hard refusal; substitution is textual, inside whatever quoting the agent chose.
 
 // The exits a value leaves through: a command, a script, a page in a sandbox browser, a window or phone app on one of
-// the owner's computers, a window on the sandbox's own desktop.
-export type SecretLane = "shell" | "code" | "browser" | "device" | "desktop";
+// the owner's computers, a window on the sandbox's own desktop, a tool call to an MCP server the owner connected.
+export type SecretLane = "shell" | "code" | "browser" | "device" | "desktop" | "mcp";
 
 export interface SecretUseReport {
     readonly name: string;
@@ -27,13 +28,15 @@ export interface SecretUseReport {
 }
 
 // Where the values are about to go, for the host limit (host-guard-gate.ts): the reference-form program of a command or
-// script, the page a value is typed into, or a window or phone app on one of the owner's computers, each with the tool
-// a card about it files under. A window and an app name no site, so a host-guarded secret typed into one asks.
+// script, the page a value is typed into, a window or phone app on one of the owner's computers, or an MCP card's
+// server, each with the tool a card about it files under. A window and an app name no site, so a host-guarded secret
+// typed into one asks. An MCP card's calls all go to its one address, so its host is the destination, read like a page's.
 export type SecretTarget =
     | { readonly kind: "program"; readonly text: string; readonly language: "bash" | "javascript"; readonly tool: string }
     | { readonly kind: "page"; readonly url: string; readonly tool: string }
     | { readonly kind: "window"; readonly machine: string; readonly program?: string; readonly tool: string }
-    | { readonly kind: "app"; readonly machine: string; readonly serial: string; readonly tool: string };
+    | { readonly kind: "app"; readonly machine: string; readonly serial: string; readonly tool: string }
+    | { readonly kind: "mcp"; readonly server: string; readonly url: string; readonly tool: string };
 
 // Secrets a keyring on one of the owner's computers holds (secrets/device/): this sandbox knows their names and holds
 // none of their values, so each use asks that computer for one, after every gate here has had its say.
@@ -67,11 +70,16 @@ const commandDetail = (command: string): string => {
     return head.length <= DETAIL_MAX ? head : `${head.slice(0, DETAIL_MAX)}…`;
 };
 
-export type ResolvedCommand = { readonly command: string } | { readonly refusal: string };
+// Why a use was not let through, in the sentence the agent reads.
+export interface SecretRefusal {
+    readonly refusal: string;
+}
+
+export type ResolvedCommand = { readonly command: string } | SecretRefusal;
 
 // The way to get a name nobody holds is part of the refusal: a card the person pastes the value into, never the chat,
 // so the agent neither stops to write instructions nor asks for a value it would then hold (docs/architecture/needs.md).
-const unknownRefusal = (unknown: readonly string[], known: readonly string[]): ResolvedCommand => {
+const unknownRefusal = (unknown: readonly string[], known: readonly string[]): SecretRefusal => {
     const ask = unknown.map((name) => `\`secrets ask ${name} --why "…"\``).join(" or ");
     return {
         refusal: `no stored secret named ${unknown.map((name) => `"${name}"`).join(", ")}: ${
@@ -182,4 +190,83 @@ export const resolveCommandSecrets = async (
         secrets.used({ name, lane, detail, ...(approvedBy !== undefined ? { approvedBy } : {}) });
     }
     return { command: text };
+};
+
+// Every string value in a call's arguments, wherever it sits; keys are names the server reads, never a place a value
+// goes, so they are left as they are.
+const stringsIn = (value: Json): readonly string[] => {
+    if (isText(value)) {
+        return [value];
+    }
+    if (isList(value)) {
+        return value.flatMap(stringsIn);
+    }
+    return isRecord(value) ? Object.values(value).flatMap(stringsIn) : [];
+};
+
+// The call the ledger says a value went out in: the tool as the agent names it, and the host it went to.
+const callDetail = (target: Extract<SecretTarget, { readonly kind: "mcp" }>): string => {
+    let host = target.url;
+    try {
+        host = new URL(target.url).host;
+    } catch {
+        // allow(silent-catch): an address that does not parse is shown as it is written.
+    }
+    const detail = `${target.tool} (${host})`;
+    return detail.length <= DETAIL_MAX ? detail : `${detail.slice(0, DETAIL_MAX)}…`;
+};
+
+const MCP_FILELESS_REFUSAL =
+    "a call to an MCP server cannot hand a secret over as a file (`|file`): write the plain reference in the argument, or run the command in the Bash tool, where the reference becomes the path of a private file holding the value";
+
+// Kept on one of the owner's computers: its keyring releases a value to a command, a script or a field it types into,
+// and has no word for a call to an MCP server, so the person there could not be told what they were letting go.
+const onDeviceRefusal = (names: readonly string[]): SecretRefusal => ({
+    refusal:
+        `${names.map((name) => `"${name}"`).join(", ")} ${names.length === 1 ? "is" : "are"} kept in a keyring on one of the owner's computers, which releases a value only to a command, a script or a field it types into, never to an MCP server's tool call. ` +
+        "Use it in a command instead, or type it with `type_secret`.",
+});
+
+export type ResolvedCall = { readonly arguments: Json } | SecretRefusal;
+
+// The arguments of one tool call to an MCP card's server (capabilities/mcp-oauth/mcp-remote.ts), with every reference
+// in a string value resolved, through the same steps and gates as a command: every name known, then the gates with the
+// server's address as the destination (the host guard reads its host the way it reads a page's), then the substitution.
+// What differs is what cannot happen here: a `|file` reference has no process to read the file, and a value a computer's
+// keyring holds is asked of it for a command, a script or a typed field only, so both are refused before anyone is asked.
+export const resolveCallSecrets = async (args: Json, secrets: SecretAccess, target: Extract<SecretTarget, { readonly kind: "mcp" }>): Promise<ResolvedCall> => {
+    const strings = stringsIn(args);
+    const text = strings.join("\n");
+    if (!hasSecretReferences(text)) {
+        return { arguments: args };
+    }
+    if (hasFileReferences(text)) {
+        return { refusal: MCP_FILELESS_REFUSAL };
+    }
+    const holdings = await holdingsOf(secrets);
+    if (holdings === undefined) {
+        return { refusal: "the secret store could not be read, the reference cannot be resolved; retry, or make the call without it" };
+    }
+    const names = referencedNames(text);
+    const known = new Set([...holdings.held.map((secret) => secret.name), ...holdings.onDevice]);
+    const unknown = names.filter((name) => !known.has(name));
+    if (unknown.length > 0) {
+        return unknownRefusal(unknown, [...known]);
+    }
+    const onDevice = names.filter((name) => holdings.onDevice.has(name));
+    if (onDevice.length > 0) {
+        return onDeviceRefusal(onDevice);
+    }
+    const detail = callDetail(target);
+    const released = await secrets.release(names, "mcp", detail, target);
+    if ("refusal" in released) {
+        return { refusal: released.refusal };
+    }
+    // The same walk the privacy shield turns its tokens back with: every string value, keys as written.
+    const resolved = restoreStrings(args, (value) => resolveSecretReferences(value, holdings.held).text);
+    for (const name of names) {
+        const approvedBy = released.approvedBy?.[name];
+        secrets.used(approvedBy === undefined ? { name, lane: "mcp", detail } : { name, lane: "mcp", detail, approvedBy });
+    }
+    return { arguments: resolved };
 };

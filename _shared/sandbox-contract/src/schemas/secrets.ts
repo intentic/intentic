@@ -72,9 +72,9 @@ export const CredentialGateKindSchema = z
 export type CredentialGateKind = z.infer<typeof CredentialGateKindSchema>;
 
 export const CredentialLaneSchema = z
-    .enum(["shell", "code", "browser", "session", "otp", "gateway", "ssh", "device", "desktop"])
+    .enum(["shell", "code", "browser", "session", "otp", "gateway", "ssh", "device", "desktop", "mcp"])
     .describe(
-        "What the credential was about to be used for: a shell command, a script, typing into a page, mounting a connected account, one one-time code, a request the credential gateway attaches it to, a signature the sandbox's ssh agent makes with a held key, typing into a window or phone app on one of the owner's computers, or typing into a window on the sandbox's own desktop.",
+        "What the credential was about to be used for: a shell command, a script, typing into a page, mounting a connected account, one one-time code, a request the credential gateway attaches it to, a signature the sandbox's ssh agent makes with a held key, typing into a window or phone app on one of the owner's computers, typing into a window on the sandbox's own desktop, or an argument of a tool call to an MCP server the owner connected.",
     );
 export type CredentialLane = z.infer<typeof CredentialLaneSchema>;
 
@@ -319,14 +319,14 @@ export const SecretInventoryEntrySchema = z.object({
         .object({
             at: z.number().describe("When, in milliseconds."),
             lane: z
-                .enum(["shell", "code", "browser", "gateway", "ssh", "device", "desktop"])
+                .enum(["shell", "code", "browser", "gateway", "ssh", "device", "desktop", "mcp"])
                 .describe(
-                    "How it was used: a command, a script, typed into a page, attached by the credential gateway to a request the agent sent, a key the sandbox's ssh agent signed with for the agent, typed into a window or app on one of the owner's computers, or typed into a window on the sandbox's desktop.",
+                    "How it was used: a command, a script, typed into a page, attached by the credential gateway to a request the agent sent, a key the sandbox's ssh agent signed with for the agent, typed into a window or app on one of the owner's computers, typed into a window on the sandbox's desktop, or sent in a tool call to an MCP server the owner connected.",
                 ),
             detail: z
                 .string()
                 .optional()
-                .describe("Where it went: the start of the command or script, or the site. Names and destinations only, never values."),
+                .describe("Where it went: the start of the command or script, the site, or the MCP tool and its server's host. Names and destinations only, never values."),
             approvedBy: z.string().optional().describe("Who released it for that use, when it is gated. Absent when nothing had to be approved."),
         })
         .optional()

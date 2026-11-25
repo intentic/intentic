@@ -1,4 +1,5 @@
 import { unstubbed } from "@intentic/testing";
+import { z } from "zod";
 import { Hono } from "hono";
 import { createTurnMounts } from "../../agent/tools/turn-mounts.js";
 import { createTurnMountRoute, type MountEndpoints } from "../../agent/tools/turn-mounts.routes.js";
@@ -10,6 +11,9 @@ import { createOpenCalls, type OpenCalls } from "../credentials/open-calls.js";
 import { createMcpRemoteEndpoint, MCP_BODY_MAX, type RemoteDeps } from "./mcp-remote.js";
 import { createMcpSignIns } from "./mcp-sign-ins.js";
 import { encodeMcpSession, mcpSessionOf } from "./mcp-session.js";
+import { maskJson, maskTargets } from "../../agent/tools/agent-redaction.js";
+import type { SecretAccess, SecretTarget, SecretUseReport } from "../../secrets/secret-access.js";
+import type { NamedSecret } from "../../secrets/secret-registry.js";
 
 // A signed-in MCP server as a turn reaches it: mounted on the turn's lease, so the agent holds the turn's bearer and the
 // door attaches the connection's access token, renewing it when due or when the server refuses it. Against a real
@@ -51,10 +55,14 @@ const signedInTurn = async (accessTtl: number) => {
     return { fake, store, tools, turnBearer, call, lease };
 };
 
-test("a signed-in server is mounted on the turn's door, and a pasted token's server is reached at its own address", async () => {
+test("every MCP card is mounted on the turn's door, a pasted token's as much as a sign-in's, so the agent holds neither", async () => {
     const { tools, turnBearer } = await signedInTurn(3600);
     expect(tools).toEqual([
         { name: "tracker", url: "http://127.0.0.1:1/mcp/tracker", token: turnBearer },
+        { name: "pasted", url: "http://127.0.0.1:1/mcp/pasted", token: turnBearer },
+    ]);
+    // Without a lease a pasted token rides as it is.
+    expect(mcpToolsOf([{ id: "pasted", kind: "mcp", config: { url: "https://pasted.example/mcp", token: "tok-pasted" } }])).toEqual([
         { name: "pasted", url: "https://pasted.example/mcp", token: "tok-pasted" },
     ]);
     // Without a lease (the daemon's own calls) the access token rides as it stands, never the session around it.
@@ -197,4 +205,128 @@ test("the door holds one event stream per conversation, and cuts it once the con
     await store.remove("tracker");
     expect(await sweep()).toBe(1);
     await expect(last).rejects.toThrow("was removed");
+});
+
+// The door's secret seam over a pasted-token connection (issue #57): a stand-in for the turn's gates over one stored
+// value, the daemon's own masker, and an upstream that records what it was sent and answers with what a test hands it.
+const STORED: NamedSecret = { name: "GITHUB_TOKEN", value: "ghp_door_value_0123456789", source: "sandbox" };
+
+const secretDoor = async (answer: (sent: string) => Response, release: SecretAccess["release"] = async () => ({ ok: true })) => {
+    const store = memoryCapabilitiesStore();
+    await store.upsert({ id: "tracker", kind: "mcp", config: { url: "https://tracker.example/mcp", token: "tok-1" } });
+    const sent: string[] = [];
+    const uses: SecretUseReport[] = [];
+    const targets: SecretTarget[] = [];
+    const held: string[] = [];
+    const upstream = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const body = await new Response(init?.body).text();
+        sent.push(body);
+        return answer(body);
+    };
+    const remote = createMcpRemoteEndpoint({
+        capabilities: store,
+        bearer: async () => ({ bearer: "tok-1" }),
+        fetch: Object.assign(upstream, { preconnect: fetch.preconnect }),
+        secrets: () => ({
+            list: async () => [STORED],
+            used: (use) => void uses.push(use),
+            release: async (names, lane, detail, target) => {
+                targets.push(target);
+                return release(names, lane, detail, target);
+            },
+        }),
+        mask: async (message) => maskJson(message, maskTargets([STORED])),
+    });
+    const hold = () => {
+        held.push("held");
+        return () => void held.push("let go");
+    };
+    const app = new Hono<AppEnv>().post("/mcp/tracker", (c) =>
+        remote({ kind: "remote", capability: "tracker" }, c, { name: "tracker", conversationId: "c1", signal: c.req.raw.signal, hold }),
+    );
+    const post = (body: unknown) => app.request("/mcp/tracker", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    return { post, sent, uses, targets, held };
+};
+
+const toolCall = (id: number, name: string, args: Record<string, unknown>) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
+
+// An upstream answer that says back what the call carried, the way a server echoing its input would.
+const SavedCallSchema = z.object({ id: z.number(), params: z.object({ arguments: z.object({ token: z.string() }) }) });
+const echoing = (sent: string): Response => {
+    const call = SavedCallSchema.parse(JSON.parse(sent));
+    return Response.json({ jsonrpc: "2.0", id: call.id, result: { content: [{ type: "text", text: `saved ${call.params.arguments.token}` }] } });
+};
+
+test("a call's reference becomes its value only on the way to the server, and the server's echo is masked back", async () => {
+    const door = await secretDoor(echoing);
+    const answered = await door.post(toolCall(7, "save", { token: "{{secret:GITHUB_TOKEN}}", note: "keep" }));
+    expect(await answered.json()).toEqual({ jsonrpc: "2.0", id: 7, result: { content: [{ type: "text", text: "saved {{secret:GITHUB_TOKEN}}" }] } });
+    expect(door.sent).toEqual([JSON.stringify(toolCall(7, "save", { token: STORED.value, note: "keep" }))]);
+    expect(door.targets).toEqual([{ kind: "mcp", server: "tracker", url: "https://tracker.example/mcp", tool: "mcp__tracker__save" }]);
+    expect(door.uses).toEqual([{ name: "GITHUB_TOKEN", lane: "mcp", detail: "mcp__tracker__save (tracker.example)" }]);
+    // The turn's watchdog was held while the gates had their say, and let go after.
+    expect(door.held).toEqual(["held", "let go"]);
+});
+
+test("a refused call never reaches the server, and answers the model with why as the tool's error", async () => {
+    const door = await secretDoor(echoing, async () => ({ refusal: "GITHUB_TOKEN's host guard lets it go unasked only to api.github.com" }));
+    const answered = await door.post(toolCall(7, "save", { token: "{{secret:GITHUB_TOKEN}}" }));
+    expect(answered.status).toBe(200);
+    expect(await answered.json()).toEqual({
+        jsonrpc: "2.0",
+        id: 7,
+        result: { content: [{ type: "text", text: "GITHUB_TOKEN's host guard lets it go unasked only to api.github.com" }], isError: true },
+    });
+    expect(door.sent).toEqual([]);
+    expect(door.uses).toEqual([]);
+});
+
+test("a batch goes whole or not at all", async () => {
+    const door = await secretDoor(echoing, async (_names, _lane, _detail, target) =>
+        target.kind === "mcp" && target.tool.endsWith("__publish") ? { refusal: "not to there" } : { ok: true },
+    );
+    const answered = await door.post([toolCall(1, "save", { token: "{{secret:GITHUB_TOKEN}}" }), toolCall(2, "publish", { token: "{{secret:GITHUB_TOKEN}}" })]);
+    expect(await answered.json()).toEqual([
+        {
+            jsonrpc: "2.0",
+            id: 1,
+            result: { content: [{ type: "text", text: "Not sent: another call in the same batch was refused, so none of them went. Make the calls one at a time." }], isError: true },
+        },
+        { jsonrpc: "2.0", id: 2, result: { content: [{ type: "text", text: "not to there" }], isError: true } },
+    ]);
+    expect(door.sent).toEqual([]);
+});
+
+test("a call with no reference, or a reference anywhere but a tool's arguments, is forwarded byte for byte", async () => {
+    const door = await secretDoor(() => Response.json({ jsonrpc: "2.0", id: 1, result: {} }));
+    const spaced = '{ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "save", "arguments": { "token": "plain" } } }';
+    await door.post(JSON.parse(spaced));
+    const listing = { jsonrpc: "2.0", id: 2, method: "prompts/get", params: { name: "{{secret:GITHUB_TOKEN}}" } };
+    await door.post(listing);
+    expect(door.sent).toEqual([JSON.stringify(JSON.parse(spaced)), JSON.stringify(listing)]);
+    expect(door.targets).toEqual([]);
+});
+
+test("an event stream is masked event by event as it comes, its other fields and events as they came", async () => {
+    const progress = 'event: message\nid: 1\ndata: {"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":1}}\n\n';
+    // One message split over two data lines, CRLF-ended, carrying the stored value.
+    const result = `id: 2\r\ndata: {"jsonrpc":"2.0","id":7,\r\ndata: "result":{"content":[{"type":"text","text":"token ${STORED.value}"}]}}\r\n\r\n`;
+    const wire = new TextEncoder().encode(progress + result);
+    const door = await secretDoor(() => {
+        // Seven bytes at a time, so events and line endings straddle chunks.
+        const body = new ReadableStream<Uint8Array>({
+            start: (controller) => {
+                for (let at = 0; at < wire.length; at += 7) {
+                    controller.enqueue(wire.slice(at, at + 7));
+                }
+                controller.close();
+            },
+        });
+        return new Response(body, { headers: { "content-type": "text/event-stream" } });
+    });
+    const answered = await door.post(toolCall(7, "save", { token: "{{secret:GITHUB_TOKEN}}" }));
+    expect(answered.headers.get("content-type")).toBe("text/event-stream");
+    expect(await answered.text()).toBe(
+        `${progress}id: 2\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: 7, result: { content: [{ type: "text", text: "token {{secret:GITHUB_TOKEN}}" }] } })}\r\n\r\n`,
+    );
 });

@@ -9,8 +9,8 @@ import type { MountTarget, RpcMessage, TurnHold, TurnMounts } from "./turn-mount
 // The one door every daemon-hosted MCP server is reached through, `ALL /mcp/<name>`: the bearer names one live turn (and
 // its conversation), that turn's lease maps the name to a target, and the target's endpoint answers. Streamable HTTP, answered as plain
 // JSON: nothing a daemon-hosted server says is server-initiated, so there is no stream to open. An extension endpoint that
-// speaks the transport itself (a backend path, a process's port) and a signed-in remote server are the exceptions,
-// forwarded whole.
+// speaks the transport itself (a backend path, a process's port) and a remote server the owner connected are the
+// exceptions, forwarded whole (the remote one with its calls' references resolved and its answers masked on the way).
 
 // Who a request is for, handed to the endpoint along with the target: the conversation comes from the bearer, never from
 // anything the request says about itself.
@@ -21,6 +21,9 @@ export interface MountCall {
     readonly signal: AbortSignal;
     // The longest the turn's MCP client waits on one call, when its runtime cannot be told longer (LeaseOptions).
     readonly clientCeilingMs?: number;
+    // The turn's watchdog hold, for an endpoint that forwards the exchange whole and may wait on a person on the way (a
+    // remote server's call whose secret reference asks first, mcp-remote.ts).
+    readonly hold?: TurnHold;
 }
 
 type TargetOf<K extends MountTarget["kind"]> = Extract<MountTarget, { readonly kind: K }>;
@@ -38,7 +41,7 @@ export interface MountEndpoints {
     readonly tools: RpcEndpoint<TargetOf<"tools">>;
     // The whole exchange, forwarded to the backend host or the process (extension-mcp.ts).
     readonly extension: (target: TargetOf<"extension">, c: Context<AppEnv>, call: MountCall) => Promise<Response>;
-    // The whole exchange, forwarded to a signed-in MCP server with its fresh bearer (capabilities/mcp-oauth/mcp-remote.ts).
+    // The whole exchange, forwarded to an MCP card's server with its credential (capabilities/mcp-oauth/mcp-remote.ts).
     readonly remote: (target: TargetOf<"remote">, c: Context<AppEnv>, call: MountCall) => Promise<Response>;
 }
 
@@ -155,7 +158,7 @@ export const createTurnMountRoute =
             return endpoints.extension(target, c, call);
         }
         if (target.kind === "remote") {
-            return endpoints.remote(target, c, call);
+            return endpoints.remote(target, c, { ...call, ...opt("hold", reach.hold) });
         }
         const handle = held(rpcOf(endpoints, target, call), target.kind === "daemon" ? undefined : reach.hold);
         return answerRpc(c, async (message) => {

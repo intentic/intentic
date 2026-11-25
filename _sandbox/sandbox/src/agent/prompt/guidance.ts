@@ -359,8 +359,9 @@ const ENTRIES: readonly GuidanceEntry[] = [
         when: (facts) => facts.runtime.secretRefs,
         // Asking for one, gates and host guards are `secrets --help` and the intentic skill's secrets reference (2026-11-17).
         text: (facts) =>
-            "Stored secrets show as `{{secret:name}}`: write that token in a command and the real value is substituted at " +
-            "execution; keep it as-is in files, and never ask the user to paste a value into chat. " +
+            "Stored secrets show as `{{secret:name}}`: write that token in a command, or in an argument to a tool of an MCP " +
+            "server the owner connected, and the real value is substituted at execution; keep it as-is in files, and never " +
+            "ask the user to paste a value into chat. " +
             `${toolName(facts, "secrets", "type_secret")} types one into a focused field. A refused secret or account is a ` +
             "person's decision: carry on without it and say so rather than looking for another way in. `secrets --help` " +
             "has the rest.",

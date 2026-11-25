@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { cleanMcpResult } from "../guard/mcp-output.js";
-import { maskDeep, maskTargets } from "../agent/tools/agent-redaction.js";
+import { maskDeep, maskJson, maskTargets } from "../agent/tools/agent-redaction.js";
+import { turnSecretAccess } from "../agent/run/harness/harness-servers.js";
 import { daemonEndpoint, createTurnMountRoute } from "../agent/tools/turn-mounts.routes.js";
 import { chatgptImagesInBackground, imageJobSeeds } from "../agent/tools/jobs/daemon/chatgpt-image-jobs.js";
 import { judgeIndependentCommand } from "../agent/tools/command-judge.js";
@@ -72,6 +73,9 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
                     capabilities: services.capabilities,
                     bearer: services.mcpSignIns.bearer,
                     reaches: async (conversationId, capability) => reachAllows(await services.credentialReach(conversationId), "capability", capability),
+                    // The turn's own secret seam, gates and use ledger included, for the conversation the bearer names.
+                    secrets: (conversationId, signal) => turnSecretAccess(services, { conversationId }, signal),
+                    mask: async (message) => maskJson(message, maskTargets(await services.secretRegistry())),
                 }),
             },
             async (tool, result, conversationId) => {

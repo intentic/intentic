@@ -1,5 +1,5 @@
 import type { NamedSecret } from "./secret-registry.js";
-import { type DeviceSecrets, resolveCommandSecrets, type SecretAccess, type SecretUseReport } from "./secret-access.js";
+import { type DeviceSecrets, resolveCallSecrets, resolveCommandSecrets, type SecretAccess, type SecretUseReport } from "./secret-access.js";
 
 // The one place a reference becomes a value, with a name only a computer's keyring holds: every name known first, then
 // the gates, then each device-held value asked of its computer, then the substitution. A value a computer released before
@@ -96,6 +96,54 @@ const DOTENV: NamedSecret = { name: "DEV_ENV", value: "A=1\nB=2\n", source: "san
 test("a |file reference where no file can be written is refused before anyone is asked, never inlined", async () => {
     const { secrets, recorded } = access({ registry: [DOTENV] });
     expect(await resolveCommandSecrets("cp {{secret:DEV_ENV|file}} .env", secrets)).toMatchObject({ refusal: expect.stringContaining("cannot hand a secret over as a file") });
+    expect(recorded.steps).toEqual([]);
+    expect(recorded.uses).toEqual([]);
+});
+
+// A tool call to an MCP card's server: every string value of its arguments, at any depth, through the same gates, with
+// the server's address as where the values go.
+const MCP_TARGET = { kind: "mcp", server: "tracker", url: "https://mcp.tracker.example/mcp", tool: "mcp__tracker__create_issue" } as const;
+
+test("a call's references resolve wherever a string sits, once released for the server, and the use is on the ledger", async () => {
+    const targets: unknown[] = [];
+    const { secrets, recorded } = access({
+        release: async (names, lane, detail, target) => {
+            recorded.steps.push(`release ${names.join(",")} ${lane} ${detail}`);
+            targets.push(target);
+            return { ok: true, approvedBy: { GITHUB_TOKEN: "ada@acme.dev" } };
+        },
+    });
+    const args = { title: "Rotate", auth: { token: "{{secret:GITHUB_TOKEN}}" }, tags: ["x {{secret:GITHUB_TOKEN}} y", 3, true, null], "{{secret:GITHUB_TOKEN}}": "key" };
+    expect(await resolveCallSecrets(args, secrets, MCP_TARGET)).toEqual({
+        arguments: { title: "Rotate", auth: { token: "ghp_stored_value" }, tags: ["x ghp_stored_value y", 3, true, null], "{{secret:GITHUB_TOKEN}}": "key" },
+    });
+    expect(recorded.steps).toEqual(["release GITHUB_TOKEN mcp mcp__tracker__create_issue (mcp.tracker.example)"]);
+    expect(targets).toEqual([MCP_TARGET]);
+    expect(recorded.uses).toEqual([{ name: "GITHUB_TOKEN", lane: "mcp", detail: "mcp__tracker__create_issue (mcp.tracker.example)", approvedBy: "ada@acme.dev" }]);
+});
+
+test("a call with no reference goes as it came, and nobody is asked", async () => {
+    const { secrets, recorded } = access({ registry: [] });
+    const args = { query: "secret: {{not-a-reference}}", page: 2 };
+    expect(await resolveCallSecrets(args, secrets, MCP_TARGET)).toEqual({ arguments: args });
+    expect(recorded.steps).toEqual([]);
+});
+
+test("a refused release is the call's refusal, and nothing is recorded as used", async () => {
+    const { secrets, recorded } = access({ release: async () => ({ refusal: "GITHUB_TOKEN's host guard lets it go unasked only to api.github.com" }) });
+    expect(await resolveCallSecrets({ token: "{{secret:GITHUB_TOKEN}}" }, secrets, MCP_TARGET)).toEqual({
+        refusal: "GITHUB_TOKEN's host guard lets it go unasked only to api.github.com",
+    });
+    expect(recorded.uses).toEqual([]);
+});
+
+test("a call refuses an unknown name, a |file reference and a keyring-held name before anyone is asked", async () => {
+    const { secrets, recorded } = access({ registry: [STORED, DOTENV] });
+    expect(await resolveCallSecrets({ token: "{{secret:NOBODY_HAS_IT}}" }, secrets, MCP_TARGET)).toMatchObject({ refusal: expect.stringContaining('no stored secret named "NOBODY_HAS_IT"') });
+    expect(await resolveCallSecrets({ env: "{{secret:DEV_ENV|file}}" }, secrets, MCP_TARGET)).toMatchObject({ refusal: expect.stringContaining("cannot hand a secret over as a file") });
+    expect(await resolveCallSecrets({ password: "{{secret:VPN_PASSWORD}}" }, secrets, MCP_TARGET)).toMatchObject({
+        refusal: expect.stringContaining('"VPN_PASSWORD" is kept in a keyring on one of the owner\'s computers'),
+    });
     expect(recorded.steps).toEqual([]);
     expect(recorded.uses).toEqual([]);
 });

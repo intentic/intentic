@@ -1857,6 +1857,10 @@
     {
       "type": "{ approvedBy?: string; at: number; detail?: string; lane: \"shell\" | \"code\" | \"browser\" | \"gateway\" | \"ssh\" | \"device\" | \"desktop\"; name: string }",
       "since": "v1.338.0"
+    },
+    {
+      "type": "{ approvedBy?: string; at: number; detail?: string; lane: \"shell\" | \"code\" | \"browser\" | \"gateway\" | \"ssh\" | \"device\" | \"desktop\" | \"mcp\"; name: string }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/records/senders.json": [

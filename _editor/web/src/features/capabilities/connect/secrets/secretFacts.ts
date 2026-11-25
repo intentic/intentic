@@ -25,7 +25,7 @@ interface LaneWords {
 }
 
 // What it was spent on, by the lane the ledger recorded. A command's and a script's start are code, said under the
-// sentence rather than inside it; a site, a computer and a request's host read as words.
+// sentence rather than inside it, as is an MCP call's tool; a site, a computer and a request's host read as words.
 const laneWords = (use: LastUse): LaneWords => {
     const detail = use.detail;
     switch (use.lane) {
@@ -33,6 +33,9 @@ const laneWords = (use: LastUse): LaneWords => {
             return { phrase: t(`capabilities.secretFacts.inCommand`), code: detail };
         case `code`:
             return { phrase: t(`capabilities.secretFacts.inScript`), code: detail };
+        // The tool as the agent named it and its server's host: code, like a command's start.
+        case `mcp`:
+            return { phrase: t(`capabilities.secretFacts.inMcpCall`), code: detail };
         case `desktop`:
             return { phrase: t(`capabilities.secretFacts.typedOnDesktop`), code: detail };
         case `browser`:

@@ -111,14 +111,22 @@ export const commandDestination = (command: string): Destination => {
 // A script decides where it sends things as it runs; its text shows at most where it might.
 export const SCRIPT_DESTINATION: Destination = unreadable("it is a script, and a script decides where it sends things as it runs");
 
-// The page a value would be typed into: its host is the destination.
-export const pageDestination = (url: string): Destination => {
+// One address a value goes to whole, named `what` in the sentence a doubt about it reads.
+const addressDestination = (url: string, what: string): Destination => {
     let parsed: URL;
     try {
         parsed = new URL(url);
     } catch {
-        return unreadable("the page's address cannot be read");
+        return unreadable(`the ${what}'s address cannot be read`);
     }
     const host = WEB_SCHEMES.has(parsed.protocol.slice(0, -1)) ? normalizeHost(parsed.hostname) : undefined;
-    return host === undefined ? unreadable(`the page (${parsed.protocol}) has no host a list could name`) : { certain: true, hosts: [host] };
+    return host === undefined ? unreadable(`the ${what} (${parsed.protocol}) has no host a list could name`) : { certain: true, hosts: [host] };
 };
+
+// The page a value would be typed into: its host is the destination.
+export const pageDestination = (url: string): Destination => addressDestination(url, "page");
+
+// An MCP card's server, every call to which goes to its one address (capabilities/mcp-oauth/mcp-remote.ts): its host is
+// the destination of whatever a call's arguments carry. Where the server sends a value next is its own business, the
+// way it is a site's once a page has it.
+export const serverDestination = (url: string): Destination => addressDestination(url, "MCP server");
