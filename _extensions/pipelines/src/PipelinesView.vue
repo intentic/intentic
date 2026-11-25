@@ -17,7 +17,7 @@ import {
     RowGroup,
     RowNote,
     SplitView,
-    toneTint,
+    toneFill,
     useNarrow,
     type AgentRunBooking,
     type AgentRunChoice,
@@ -332,31 +332,32 @@ const fixRun = async (
                     <template #fallback><PipelinesSkeleton /></template>
                     <!-- Laid out as the column. -->
                     <div class="flex flex-col">
-                        <!-- Above the runs on purpose: the list says a repo failed again; this says which job keeps failing. -->
-                        <div v-if="recurring.length > 0" :class="toneTint(`danger`, `soft`, `mb-5 rounded-lg border px-4 py-3`)">
-                            <div class="flex items-center gap-2">
-                                <Icon name="exclamation-circle" class="text-sm text-danger" />
-                                <span class="text-sm font-semibold text-content">{{ t(`pipelinesView.failingRepeatedly`) }}</span>
-                            </div>
-                            <div class="mt-2 flex flex-wrap gap-1.5">
-                                <span
-                                    v-for="item in recurring"
-                                    :key="`${item.repo}:${item.branch}:${item.job}`"
-                                    :class="toneTint(`danger`, `soft`, `inline-flex items-center gap-1.5 rounded-md border bg-canvas px-2 py-1 text-xs`)"
-                                    v-tooltip.top="{
-                                        title: t(`pipelinesView.keepsFailing`),
-                                        tone: `danger`,
-                                        rows: [
-                                            { label: t(`tip.repo`), value: item.repo },
-                                            { label: t(`tip.branch`), value: item.branch },
-                                            { label: t(`tip.failedRuns`), value: item.runs },
-                                        ],
-                                    }"
-                                >
-                                    <span class="font-medium text-danger">{{ item.job }}</span>
-                                    <span class="text-2xs text-subtle">{{ t(`pipelinesView.runs`, { runs: item.runs }) }}</span>
-                                </span>
-                            </div>
+                        <!-- Above the runs on purpose: the list says a repo failed again; this says which job keeps failing. One
+                             tinted line, label then each job with its count: a bordered box of chips was a card of cards over
+                             the board's own cards, taller than what it said. -->
+                        <div
+                            v-if="recurring.length > 0"
+                            data-recurring
+                            :class="toneFill(`danger`, `soft`, `mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-lg px-4 py-2.5`)"
+                        >
+                            <span class="text-sm font-semibold text-content">{{ t(`pipelinesView.failingRepeatedly`) }}</span>
+                            <span
+                                v-for="item in recurring"
+                                :key="`${item.repo}:${item.branch}:${item.job}`"
+                                class="inline-flex items-baseline gap-1.5 text-xs"
+                                v-tooltip.top="{
+                                    title: t(`pipelinesView.keepsFailing`),
+                                    tone: `danger`,
+                                    rows: [
+                                        { label: t(`tip.repo`), value: item.repo },
+                                        { label: t(`tip.branch`), value: item.branch },
+                                        { label: t(`tip.failedRuns`), value: item.runs },
+                                    ],
+                                }"
+                            >
+                                <span class="font-mono font-medium text-danger">{{ item.job }}</span>
+                                <span class="text-subtle">{{ t(`pipelinesView.runs`, { runs: item.runs }) }}</span>
+                            </span>
                         </div>
 
                         <!-- Per-repo sections, worst first. -->

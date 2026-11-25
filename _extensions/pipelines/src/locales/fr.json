@@ -57,9 +57,9 @@
             "working": "L'agent de correction auto s'en occupe. Chaque nouvel échec sur {branch} va au même agent jusqu'à ce qu'une exécution réussisse.",
             "collecting": "Certaines tâches d’une exécution plus récente ont échoué. La correction automatique rassemble les résultats restants. Cliquez sur « Corriger maintenant » pour commencer plus tôt.",
             "failedAgain": "Une exécution plus récente sur {branch} comporte des tâches en échec. Cliquez sur « Corriger maintenant » pour lancer une nouvelle tentative.",
-            "stalled": "Le correctif est poussé, mais rien ne relancera {workflows} de lui-même. Sa ligne ci-dessus dit comment le mesurer. | Le correctif est poussé, mais rien ne relancera {workflows} d'eux-mêmes. Chaque ligne ci-dessus dit comment le mesurer.",
+            "stalled": "Le correctif est poussé, mais rien ne relancera {workflows} de lui-même. Sa ligne ci-dessous dit comment le mesurer. | Le correctif est poussé, mais rien ne relancera {workflows} d'eux-mêmes. Chaque ligne ci-dessous dit comment le mesurer.",
             "stalledUnnamed": "Le correctif est poussé, mais ce qui a échoué n'est pas repassé depuis. Seule sa propre prochaine exécution lève l'alerte.",
-            "outside": "Aucun commit ne corrige cela. Selon l'agent de correction, il vous faut une étape hors du dépôt : {step} Relancez ensuite le workflow en échec."
+            "outside": "Aucun commit ne corrige cela. L'agent de correction a besoin d'une étape de votre part hors du dépôt ; relancez ensuite ce qui a échoué :"
         },
         "title": "{branch} échoue",
         "fixNow": "Corriger maintenant",
@@ -73,12 +73,15 @@
         "resolveHeader": "Marquer {branch} comme résolu ?",
         "resolveDescription": "Tous les workflows quittent cet échec maintenant, et l'agent de correction ne reçoit plus rien. Un workflow qui échoue à nouveau le rouvre.",
         "blocker": {
-            "measuring": "en cours de nouvelle exécution sur {sha}",
-            "cancelled": "sa dernière exécution, sur {sha}, a été annulée, donc rien ne l'a mesuré : relancez-la ci-dessous",
-            "scheduled": "s'exécute selon un planning, pas à chaque push : sa prochaine exécution le mesure",
-            "byHand": "lancé à la main, pas par un push : relancez-le pour le mesurer",
-            "quiet": "ne s'est pas exécuté depuis {when} ; le suivi s'arrête de lui-même le {drop}"
-        }
+            "measuring": "Nouvelle exécution en cours sur {sha}",
+            "cancelled": "Annulé sur {sha} : relancez-le ci-dessous",
+            "scheduled": "S'exécute selon un planning, pas à chaque push",
+            "byHand": "Lancé à la main, pas par un push",
+            "quiet": "Aucune exécution depuis {when} · le suivi s'arrête le {drop}"
+        },
+        "failingSince": "En échec depuis",
+        "showAll": "Tout afficher",
+        "showLess": "Afficher moins"
     },
     "pipelineDag": {
         "step": "Étape {n}"

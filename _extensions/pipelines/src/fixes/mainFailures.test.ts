@@ -415,6 +415,14 @@ describe(`storyOf`, () => {
         expect(storyOf({ ...fixing(`landed`), ownerStep: `Fill the field in the store's dashboard.` }, [])).toBe(`outside`);
     });
 
+    // Naming a step and committing nothing is how the daemon's "no fix found" hand-back comes about: the step is still the word.
+    it(`tells a step outside the repository ahead of a hand-back, and only of one`, () => {
+        const step = `Fill the field in the store's dashboard.`;
+        const fixer = agentCard(`ci-fix-web-41`, { status: `idle` });
+        expect(storyOf({ state: `waits`, fixer, stance: fixStance(fixer), failure: failing(), ownerStep: step }, [])).toBe(`outside`);
+        expect(storyOf({ state: `reported`, fixer: undefined, stance: undefined, failure: failing(), ownerStep: step }, [])).toBe(`reported`);
+    });
+
     it(`carries the fixer's step only while its turn is its last word`, () => {
         const fixer = agentCard(`ci-fix-web-41`, { status: `landed` });
         const steps = [{ conversationId: fixer.id, step: `Fill the field.`, at: 1 }];

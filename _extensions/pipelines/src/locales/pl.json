@@ -57,9 +57,9 @@
             "working": "Agent auto-naprawy się tym zajmuje. Każdy nowy błąd na {branch} trafia do tego samego agenta, aż przebieg przejdzie.",
             "collecting": "Część zadań w nowszym przebiegu nie powiodła się. Auto-naprawa zbiera pozostałe wyniki. Wybierz „Napraw teraz”, żeby zacząć wcześniej.",
             "failedAgain": "Nowszy przebieg na {branch} ma nieudane zadania. Wybierz „Napraw teraz”, żeby rozpocząć kolejną próbę.",
-            "stalled": "Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Jego wiersz powyżej mówi, jak go zmierzyć. | Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Każdy wiersz powyżej mówi, jak go zmierzyć. | Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Każdy wiersz powyżej mówi, jak go zmierzyć.",
+            "stalled": "Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Jego wiersz poniżej mówi, jak go zmierzyć. | Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Każdy wiersz poniżej mówi, jak go zmierzyć. | Poprawka jest wypchnięta, ale nic samo nie uruchomi ponownie {workflows}. Każdy wiersz poniżej mówi, jak go zmierzyć.",
             "stalledUnnamed": "Poprawka jest wypchnięta, ale to, co się nie powiodło, od tamtej pory nie przeszło. Zgłoszenie zniknie dopiero po jego własnym kolejnym udanym uruchomieniu.",
-            "outside": "Żaden commit tego nie naprawi. Agent naprawczy mówi, że potrzebny jest Twój krok poza repozytorium: {step} Potem uruchom ponownie nieudany workflow."
+            "outside": "Żaden commit tego nie naprawi. Agent naprawczy potrzebuje Twojego kroku poza repozytorium; potem uruchom ponownie to, co się nie udało:"
         },
         "title": "{branch} nie przechodzi",
         "fixNow": "Napraw teraz",
@@ -73,12 +73,15 @@
         "resolveHeader": "Oznaczyć {branch} jako rozwiązane?",
         "resolveDescription": "Wszystkie workflowy schodzą teraz z tego zgłoszenia, a agent naprawy nie dostaje już nic więcej. Workflow, który znów się nie powiedzie, otworzy je ponownie.",
         "blocker": {
-            "measuring": "właśnie działa ponownie na {sha}",
-            "cancelled": "jego najnowsze uruchomienie, na {sha}, zostało anulowane, więc nic go nie zmierzyło: uruchom je ponownie poniżej",
-            "scheduled": "działa według harmonogramu, nie po pushu: zmierzy go jego następne uruchomienie",
-            "byHand": "uruchomiony ręcznie, nie po pushu: uruchom go ponownie, żeby go zmierzyć",
-            "quiet": "nie był uruchamiany od {when}; śledzenie skończy się samo {drop}"
-        }
+            "measuring": "Działa ponownie na {sha}",
+            "cancelled": "Anulowany na {sha}: uruchom go ponownie poniżej",
+            "scheduled": "Działa według harmonogramu, nie po pushu",
+            "byHand": "Uruchomiony ręcznie, nie po pushu",
+            "quiet": "Bez uruchomień od {when} · śledzenie skończy się {drop}"
+        },
+        "failingSince": "Nie przechodzi od",
+        "showAll": "Pokaż wszystko",
+        "showLess": "Pokaż mniej"
     },
     "pipelineDag": {
         "step": "Krok {n}"

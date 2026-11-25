@@ -24,12 +24,15 @@ flowchart LR
   (`src/graph/graphLayout.ts`). A side panel narrower than 36rem always draws Rows and shows no switch.
 - A failing main-line branch is one incident card above its repository's runs (`src/fixes/MainFailureBanner.vue`, in
   `RowGroup`'s `lead` slot rather than its list), drawn so it cannot pass for one more run: a danger rim, a bar down its
-  edge, a filled header and a square plate where rows have round status glyphs. Its header says the branch and since
-  when, then each failing workflow by name with its jobs and a link to its failing run (`failingWorkflowsOf`, from the
-  contract's `workflows`), whether or not the board lists that run: the daemon keeps a failure per workflow, so a
-  nightly that fails while every CI run passes keeps main failing over a board of green rows, and the card is where the
-  reader learns which. Then who has it (a pill that opens the agent) and the one press, then one sentence on where the
-  fix stands and the reader's move, read off the agent's live stance (`storyOf`): working, waiting on you, ready to
+  edge, a filled header and a square plate where rows have round status glyphs. Its header reads in the order a reader
+  asks: one title row holding the branch and since when, who has it (a pill that opens the agent), Mark resolved and the
+  one press; then one sentence on where the fix stands and the reader's move; then each failing workflow as an aligned
+  row of name, jobs (a link to its failing run) and what blocks it (`failingWorkflowsOf`, from the contract's
+  `workflows`), whether or not the board lists that run: the daemon keeps a failure per workflow, so a nightly that
+  fails while every CI run passes keeps main failing over a board of green rows, and the card is where the reader learns
+  which. A row's blocker and its press wrap under its jobs as one unit in a narrow pane, and in a card narrower than
+  28rem Mark resolved is its glyph alone, so the pill and the press keep one line on a phone. The sentence is read off
+  the agent's live stance (`storyOf`): working, waiting on you, ready to
   review, landed ("commit and push it: the next run on main shows whether it worked"), being measured by a run that
   started after it landed, stalled (the push happened, and no failing workflow has a run going or a push's run to come:
   each was cancelled, runs on a schedule, or has gone quiet), new failures after landing ("New failures found", with
@@ -40,10 +43,10 @@ flowchart LR
   going now; its newest run cancelled after the failure (that run is drawn in the block, with its own Re-run); a
   scheduled workflow, with Run now (`ci.dispatch`, a fresh run on the branch's head rather than the old commit again);
   or quiet for days, with when the daemon drops it by itself (`MAIN_FAILURE_STALE_MS` after it last failed) and Stop
-  tracking (`ci.forget`). Jobs that ran out of time are marked, since GitHub calls them cancelled. Each line carries its
-  own since when the block lists several, the header's since is the longest-failing workflow's (`failingSince`), the
-  agent's pill counts its attempts once there has been more than one, and Mark resolved ends the whole failure behind a
-  confirm. Auto-fix still collects a run's
+  tracking (`ci.forget`). Jobs that ran out of time are marked, since GitHub calls them cancelled. The header's since is
+  the longest-failing workflow's (`failingSince`) and each line's own is in its run's tip, so the common case no longer
+  prints one date twice; the agent's pill counts its attempts once there has been more than one, and Mark resolved ends
+  the whole failure behind a confirm. Auto-fix still collects a run's
   failures until it finishes or reaches its wait cap; the manual press starts with the failures reported so far,
   and only additional failed jobs follow automatically. A newer run with no failures reported keeps the measuring
   state. Under the header
@@ -77,7 +80,11 @@ flowchart LR
 - No commit fixes some failures: a field in a store's dashboard, a secret's value, an account setting. The fix prompt asks
   the agent to open its final message with `Owner step: …` instead of committing something for its sake; the daemon keeps
   that line per agent (`ci/owner-steps.ts`, the contract's `ownerSteps`) and the row shows "Step for you" with it, and
-  promotes Re-run, which measures the step once it is taken. On a failing main line the banner says it.
+  promotes Re-run, which measures the step once it is taken. On a failing main line the banner says it, and the step
+  outranks both what the agent holds and a "no fix found" hand-back (an agent that names a step commits nothing, which
+  the daemon hands back as no change): one sentence, then the step itself rendered as markdown (its commands are code)
+  under a rule, folded to four lines with Show all, and Continue fix drops to quiet since the step is the move. Until
+  2026-11-25 the step was spliced raw into the sentence, backticks and all, as one paragraph of up to 600 characters.
 - "Fix with agent" asks the daemon to start a fix conversation. Its id is derived from the run, so the board pairs
   runs with their fixes without a store of its own (`src/fixes/ciFixes.ts`). Ids minted before 2026-11-12
   (`ci-fix-<repo>-<run>`, later attempts `-attemptN`) are still read: a run with attempts under the old spelling keeps

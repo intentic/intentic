@@ -57,9 +57,9 @@
             "working": "El agente de arreglo automático está en ello. Cada nuevo fallo en {branch} va al mismo agente hasta que pase una ejecución.",
             "collecting": "Algunos trabajos de una ejecución más reciente han fallado. La corrección automática está recopilando los resultados restantes. Pulsa «Corregir ahora» para empezar antes.",
             "failedAgain": "Una ejecución más reciente en {branch} tiene trabajos fallidos. Pulsa «Corregir ahora» para iniciar otro intento.",
-            "stalled": "El arreglo está subido, pero nada volverá a ejecutar {workflows} por sí solo. Su línea de arriba dice cómo medirlo. | El arreglo está subido, pero nada volverá a ejecutar {workflows} por sí solos. Cada línea de arriba dice cómo medirlo.",
+            "stalled": "El arreglo está subido, pero nada volverá a ejecutar {workflows} por sí solo. Su línea de abajo dice cómo medirlo. | El arreglo está subido, pero nada volverá a ejecutar {workflows} por sí solos. Cada línea de abajo dice cómo medirlo.",
             "stalledUnnamed": "El arreglo está subido, pero lo que falló no ha vuelto a pasar desde entonces. Solo su propia próxima ejecución lo resuelve.",
-            "outside": "Ningún commit arregla esto. El agente de arreglo dice que te necesita fuera del repositorio: {step} Después vuelve a ejecutar el workflow fallido."
+            "outside": "Ningún commit arregla esto. El agente de arreglo necesita que des un paso fuera del repositorio y luego vuelvas a ejecutar lo que falló:"
         },
         "title": "{branch} está fallando",
         "fixNow": "Corregir ahora",
@@ -73,12 +73,15 @@
         "resolveHeader": "¿Marcar {branch} como resuelto?",
         "resolveDescription": "Todos los workflows salen ahora de este fallo y al agente de arreglo no se le envía nada más. Un workflow que vuelva a fallar lo reabre.",
         "blocker": {
-            "measuring": "ejecutándose de nuevo ahora en {sha}",
-            "cancelled": "su ejecución más reciente, en {sha}, se canceló, así que nada lo midió: vuelve a ejecutarla abajo",
-            "scheduled": "se ejecuta según un horario, no con un push: su próxima ejecución lo mide",
-            "byHand": "se inició a mano, no con un push: vuelve a ejecutarlo para medirlo",
-            "quiet": "no se ha ejecutado desde {when}; el seguimiento se detiene solo el {drop}"
-        }
+            "measuring": "Ejecutándose de nuevo en {sha}",
+            "cancelled": "Cancelado en {sha}: vuelve a ejecutarlo abajo",
+            "scheduled": "Se ejecuta según un horario, no con un push",
+            "byHand": "Iniciado a mano, no con un push",
+            "quiet": "Sin ejecuciones desde {when} · el seguimiento termina el {drop}"
+        },
+        "failingSince": "Falla desde",
+        "showAll": "Mostrar todo",
+        "showLess": "Mostrar menos"
     },
     "pipelineDag": {
         "step": "Paso {n}"

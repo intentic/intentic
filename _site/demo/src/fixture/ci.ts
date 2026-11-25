@@ -1,4 +1,4 @@
-import type { CiForgetParam, CiMainFailure, CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiForgetParam, CiMainFailure, CiOwnerStep, CiRepo, CiRunsResponse, PipelineJob, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { API_MAIN_FIXER_ID, WEB_MAIN_FIXER_ID } from "./fleet";
 
 // acme-shop's two repos on two hosts (web/GitHub, api/GitLab) as one board. Runs are a healthy afternoon: one running,
@@ -145,6 +145,24 @@ const ciRuns = (now: number): PipelineRun[] => [
 // without changing anything, so it waits for you. `web`'s Nightly failed its Safari e2e job in between, in a run the
 // board does not list: a push does not run it, so the banner names it and links its run.
 const mainFailureRuns = (now: number): PipelineRun[] => [
+    // Yesterday's scheduled Nightly, which no push runs: the failure names it, so its block holds it and offers Run now.
+    {
+        repo: `web`,
+        host: `github`,
+        project: `acme/shop-web`,
+        runId: 4_809,
+        workflow: `Nightly`,
+        title: `Nightly`,
+        authorName: `intentic automation`,
+        trigger: `schedule`,
+        branch: `main`,
+        sha: `4f1c8ab`,
+        status: `failed`,
+        url: `https://github.com/acme/shop-web/actions/runs/4809`,
+        createdAt: now - minutes(26 * 60),
+        durationSeconds: 1_312,
+        failedJobs: [`e2e (chromium)`, `e2e (firefox)`, `bundle-size`],
+    },
     {
         repo: `web`,
         host: `github`,
@@ -199,13 +217,23 @@ const mainFailures = (now: number): CiMainFailure[] => [
     {
         repo: `web`,
         branch: `main`,
-        since: now - minutes(32),
+        since: now - minutes(26 * 60),
         runId: 4_822,
-        jobs: [`typecheck`, `unit`, `e2e / safari`],
+        jobs: [`typecheck`, `unit`, `e2e (chromium)`, `e2e (firefox)`, `bundle-size`],
+        // CI fails on the push; the Nightly has failed since yesterday's schedule, which no push runs, so only its next
+        // scheduled run (or Run now) can measure it.
         workflows: [
-            { name: `CI`, runId: 4_822, jobs: [`typecheck`, `unit`] },
-            { name: `Nightly`, runId: 4_819, jobs: [`e2e / safari`] },
+            { name: `CI`, runId: 4_822, jobs: [`typecheck`, `unit`], since: now - minutes(32), trigger: `push` },
+            {
+                name: `Nightly`,
+                runId: 4_809,
+                jobs: [`e2e (chromium)`, `e2e (firefox)`, `bundle-size`],
+                since: now - minutes(26 * 60),
+                failedAt: now - minutes(26 * 60),
+                trigger: `schedule`,
+            },
         ],
+        attempts: 2,
         fixer: WEB_MAIN_FIXER_ID,
         decision: {
             kind: `fix-up`,
@@ -222,6 +250,7 @@ const mainFailures = (now: number): CiMainFailure[] => [
         jobs: [`test:integration`],
         workflows: [{ name: `ci`, runId: 90_314, jobs: [`test:integration`] }],
         fixer: API_MAIN_FIXER_ID,
+        attempts: 3,
         decision: {
             kind: `spent`,
             reason: `no-change`,
@@ -442,7 +471,18 @@ export const ciRunsResponse = (
         .map((run) => withCancel(run, now))
         .toSorted((left, right) => right.createdAt - left.createdAt),
     failures: mainFailing ? trackedFailures(now) : [],
+    ownerSteps: mainFailing ? ownerSteps(now) : [],
 });
+
+// What `api`'s fix agent ended on: no commit fixes an expired key, so its last word is a step outside the repository, as
+// long and as full of code as agents write them (the daemon keeps up to 600 characters, owner-steps.ts).
+const ownerSteps = (now: number): CiOwnerStep[] => [
+    {
+        conversationId: API_MAIN_FIXER_ID,
+        at: now - minutes(19),
+        step: `\`test:integration\` gets \`401 api_key_expired\` from Stripe: the test-mode key was rolled on Nov 18. In GitLab, open Settings › CI/CD › Variables for \`acme/shop-api\` and replace \`STRIPE_TEST_KEY\` with the new \`sk_test_…\` key from the Stripe dashboard (Developers › API keys, test mode). Keep it masked and protected, then re-run pipeline 90314.`,
+    },
+];
 
 const forgotten = new Set<string>();
 const failureKey = ({ repo, branch, workflow }: CiForgetParam): string => JSON.stringify([repo, branch, workflow]);

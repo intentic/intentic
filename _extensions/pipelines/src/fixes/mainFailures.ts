@@ -346,12 +346,14 @@ export const storyOf = (
     if (view.state === `failed-again` && view.run !== undefined && isPipelineInFlight(view.run.status)) {
         return `collecting`;
     }
+    // Its step outranks what it holds (a docs change landed beside a dashboard step is not the fix) and the daemon's
+    // hand-back: an agent that names a step and commits nothing is handed back as "no fix found", which buried the one
+    // thing it said under a press to give it more turns. A run row's agent reads the same way (attention.ts, agentOwes).
+    if (view.ownerStep !== undefined && (view.state === `fixing` || view.state === `waits`)) {
+        return `outside`;
+    }
     if (view.state !== `fixing`) {
         return view.state;
-    }
-    // Its step outranks what it holds: a docs change landed beside a dashboard step is not the fix.
-    if (view.ownerStep !== undefined) {
-        return `outside`;
     }
     switch (view.stance?.kind) {
         case `needs-you`:

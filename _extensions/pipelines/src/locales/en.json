@@ -57,9 +57,9 @@
             "working": "The auto-fix agent is on it. Every new failure on {branch} goes to the same agent until a run passes.",
             "collecting": "Some jobs failed on a newer run. Auto-fix is collecting the remaining results. Fix now to start sooner.",
             "failedAgain": "A newer run on {branch} has failed jobs. Fix now to start another attempt.",
-            "stalled": "The fix is pushed, but nothing will run {workflows} again on its own. Its line above says how to measure it. | The fix is pushed, but nothing will run {workflows} again on their own. Each line above says how to measure it.",
+            "stalled": "The fix is pushed, but nothing will run {workflows} again on its own. Its line below says how to measure it. | The fix is pushed, but nothing will run {workflows} again on their own. Each line below says how to measure it.",
             "stalledUnnamed": "The fix is pushed, but what failed has not passed again since. Only its own next run clears this.",
-            "outside": "No commit fixes this. The fix agent says it needs you outside the repository: {step} Then re-run the failed workflow."
+            "outside": "No commit fixes this. The fix agent needs you to take a step outside the repository, then re-run what failed:"
         },
         "title": "{branch} is failing",
         "fixNow": "Fix now",
@@ -73,12 +73,15 @@
         "resolveHeader": "Mark {branch} resolved?",
         "resolveDescription": "Every workflow comes off this failure now and the fix agent is sent nothing more. A workflow that fails again opens it again.",
         "blocker": {
-            "measuring": "running again now at {sha}",
-            "cancelled": "its newest run, at {sha}, was cancelled, so nothing measured it: re-run it below",
-            "scheduled": "runs on a schedule, not on a push: its next run measures it",
-            "byHand": "started by hand, not by a push: run it again to measure it",
-            "quiet": "has not run since {when}; tracking stops by itself on {drop}"
-        }
+            "measuring": "Running again at {sha}",
+            "cancelled": "Cancelled at {sha}: re-run it below",
+            "scheduled": "Runs on a schedule, not on a push",
+            "byHand": "Started by hand, not by a push",
+            "quiet": "No run since {when} · tracking stops {drop}"
+        },
+        "failingSince": "Failing since",
+        "showAll": "Show all",
+        "showLess": "Show less"
     },
     "pipelineDag": {
         "step": "Step {n}"

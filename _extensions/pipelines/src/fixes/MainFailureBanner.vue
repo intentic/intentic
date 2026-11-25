@@ -15,6 +15,7 @@ import {
     formatDayMonthTime,
     formatTimestamp,
     Icon,
+    Markdown,
     toneDot,
     toneFill,
     toneInk,
@@ -23,7 +24,7 @@ import {
     ui,
     useAgentRunPick,
 } from "@intentic/extension-ui";
-import { computed, onBeforeUnmount, onMounted, onUpdated, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, onUpdated, ref, watch } from "vue";
 import { host } from "../host";
 import {
     dispatchKey,
@@ -42,10 +43,11 @@ import {
 import { t } from "../i18n.js";
 
 // One incident card above the run list connects coveredRuns and owns the only fix action; nested run rows suppress duplicate actions.
-// Show branch/since, every failing workflow/jobs/run link, the fix agent and its live storyOf next step (including commit/push after land).
-// Each workflow line also says what blocks it (blockerOf) with the press that clears it: the cancelled run's own row to
-// re-run, Run now for a scheduled one, Stop tracking one nothing measures; the whole failure can be marked resolved
-// behind a confirm.
+// Read top-down in the order a reader asks: what fails and since when, who has it and the one press (one title row);
+// where the fix stands and the reader's move (storyOf, one sentence), with the agent's step outside the repository
+// rendered and folded under it; then each failing workflow as an aligned row of name, jobs (a link to its failing run)
+// and what blocks it (blockerOf) with the press that clears it: the cancelled run's own row to re-run, Run now for a
+// scheduled one, Stop tracking one nothing measures. The whole failure can be marked resolved behind a confirm.
 // Use a distinct filled card/header so main's failure cannot read as another run; raw daemon/turn errors stay in the agent conversation.
 
 const props = defineProps<{
@@ -84,6 +86,9 @@ const jobsLine = computed(() => jobsLineOf(failure.value.jobs));
 // Each workflow failing, by name, with its jobs and its run. Empty from a daemon that does not say, which leaves the
 // flat job list.
 const workflows = computed(() => failingWorkflowsOf(failure.value, props.runs, props.repo));
+// A forge that runs several workflows per push names each in a column of its own, aligned down the rows; one that runs a
+// single pipeline (GitLab) has no name to align.
+const named = computed(() => workflows.value.some((workflow) => workflow.named));
 // The workflows nothing on its way will measure, which the stalled sentence names.
 const stalledNames = computed(() => workflows.value.filter((workflow) => workflow.named && stalls(workflow.blocker)).map((workflow) => workflow.name));
 
@@ -129,9 +134,12 @@ const STORY = {
     waits: () => t(`mainFailure.story.waits`, { reason: handBack.value }),
     reported: () => t(`mainFailure.story.reported`),
     unassigned: () => t(`mainFailure.story.unassigned`),
-    outside: () => t(`mainFailure.story.outside`, { step: props.view.ownerStep ?? `` }),
+    // The step itself is drawn under this sentence, rendered (stepBox): spliced into it, its code read as raw backticks.
+    outside: () => t(`mainFailure.story.outside`),
 } as const satisfies Readonly<Record<MainFailureStory, () => string>>;
-const story = computed(() => STORY[storyOf(props.view, props.covered, props.runs)]());
+const storyKind = computed(() => storyOf(props.view, props.covered, props.runs));
+const story = computed(() => STORY[storyKind.value]());
+const outside = computed(() => storyKind.value === `outside`);
 
 // The attempt count rides in the pill once there has been more than one: a failure on its tenth attempt is stuck in a way
 // no single attempt's stance says.
@@ -168,8 +176,9 @@ const press = computed<{ label: string; primary: boolean } | undefined>(() => {
     if (props.view.state === `failed-again`) {
         return { label: t(`mainFailure.fixNow`), primary: true };
     }
+    // Over a step outside the repository, more turns are the alternative, not the move: the step is.
     if (continues.value) {
-        return { label: t(`mainFailure.continueFix`), primary: true };
+        return { label: t(`mainFailure.continueFix`), primary: props.view.ownerStep === undefined };
     }
     // Before the sandbox has decided, the press is a way to start sooner, not a demand.
     return { label: t(`mainFailure.fixWithAgent`), primary: props.view.state !== `unassigned` };
@@ -214,9 +223,18 @@ const pressFix = (): void => {
 const sinceAt = computed(() => failingSince(failure.value));
 const when = (at: number): string => (formatDate(at) === formatDate(Date.now()) ? formatClock(at) : formatDayMonthTime(at));
 const since = computed(() => when(sinceAt.value));
-// A workflow's own start, spelled only where the block names more than one: with one, it is the header's.
-const ownSince = (workflow: FailingWorkflow): string | undefined =>
-    workflow.since === undefined || workflows.value.length < 2 ? undefined : t(`mainFailure.since`, { when: when(workflow.since) });
+// A workflow's own start, in its run's tip: the header already says the longest-failing one's, and a second date on every
+// row was the same date twice in the common case.
+const tipOf = (workflow: FailingWorkflow) => ({
+    title: t(`mainFailure.openRun`),
+    tone: `danger` as const,
+    rows: [
+        { label: t(`tip.run`), value: `#${workflow.runId}` },
+        ...(workflow.since === undefined ? [] : [{ label: t(`mainFailure.failingSince`), value: when(workflow.since) }]),
+        { label: t(`mainFailure.failingJobs`), value: workflow.jobs.join(`, `) },
+    ],
+    note: workflow.listed ? undefined : t(`mainFailure.runNotListed`),
+});
 
 // What blocks each workflow, in a few words, and the press that clears it (blockerOf). A workflow whose newest run is
 // the failing one says nothing here: the story's sentence is its next step.
@@ -265,6 +283,32 @@ const resolve = (): void => {
     emit(`forget`, undefined);
 };
 
+// THE STEP outside the repository, in the agent's own words: markdown (its commands are code spans), folded to a few
+// lines so a 600-character step does not push the workflows and the runs off the screen. Measured, not guessed from its
+// length, in the same frame as the lane, since a narrower pane wraps it onto more lines.
+const stepBox = ref<HTMLElement>();
+const stepOpen = ref(false);
+const stepFolds = ref(false);
+// The last lines dissolve into the header's fill in every look, by masking the text rather than painting over it.
+const FADE = { maskImage: `linear-gradient(to bottom, black calc(100% - 1.5rem), transparent)` };
+watch(
+    () => props.view.ownerStep,
+    () => {
+        stepOpen.value = false;
+    },
+);
+const measureStep = (): void => {
+    const box = stepBox.value;
+    // Open, nothing overflows, so the last folded reading stands until it folds again.
+    if (box === undefined || stepOpen.value) {
+        return;
+    }
+    const folds = box.scrollHeight > box.clientHeight + 1;
+    if (folds !== stepFolds.value) {
+        stepFolds.value = folds;
+    }
+};
+
 // THE LANE: a trunk down from the header's glyph and an elbow into each covered row's status glyph (`data-lane-node`,
 // PipelineRunRow), drawn from where they actually sit rather than from row heights this block cannot know: a row
 // opens into its job graph, a narrow pane wraps its title. Re-measured whenever the block changes size or re-renders,
@@ -275,6 +319,7 @@ const root = ref<HTMLElement>();
 const lane = ref<{ width: number; height: number; d: string } | undefined>();
 
 const draw = (): void => {
+    measureStep();
     const el = root.value;
     const head = el?.querySelector(`[data-lane-head]`);
     if (el === undefined || head === null || head === undefined) {
@@ -337,62 +382,147 @@ onBeforeUnmount(() => {
     >
         <span aria-hidden="true" :class="toneDot(`danger`, `absolute inset-y-0 left-0 w-1`)" />
 
-        <div :class="toneFill(`danger`, `strong`, `flex flex-col gap-2 py-3.5 pr-3 pl-4`)">
-            <div class="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-2">
-                <!-- What fails, since when, and in which workflows. `flex-auto`, not `flex-1`: sized by its words, so a narrow
-                     pane wraps the pill and press onto their own line instead of squeezing the branch name to nothing. -->
-                <div class="flex min-w-0 flex-auto items-start gap-3">
-                    <!-- A square plate where every run row has a round glyph: the lane starts here. -->
-                    <span data-lane-head :class="tonePlate(`danger`, `flex size-8 shrink-0 items-center justify-center rounded-lg`)">
-                        <Icon name="exclamation-circle" class="text-sm" />
-                    </span>
-                    <div class="flex min-w-0 flex-col gap-0.5">
-                        <div class="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                            <span class="text-base font-semibold text-content">{{ t(`mainFailure.title`, { branch: failure.branch }) }}</span>
-                            <span class="text-xs text-subtle" v-tooltip.top="formatTimestamp(sinceAt)">{{ t(`mainFailure.since`, { when: since }) }}</span>
-                        </div>
+        <div :class="toneFill(`danger`, `strong`, `flex items-start gap-3 py-3.5 pr-3 pl-4`)">
+            <!-- A square plate where every run row has a round glyph: the lane starts here. -->
+            <span data-lane-head :class="tonePlate(`danger`, `flex size-8 shrink-0 items-center justify-center rounded-lg`)">
+                <Icon name="exclamation-circle" class="text-sm" />
+            </span>
 
-                        <!-- Each workflow failing, linked to its failing run: the one place the reader learns a nightly fails
-                             while every push passes, and the way to its run when the list below does not hold it. Beside it,
-                             what blocks it from passing and the press that clears it (blockerOf), so a failure nothing will
-                             measure on its own says so where it is read. -->
-                        <ul
-                            v-if="workflows.length > 0"
-                            data-workflows
-                            class="flex min-w-0 flex-col gap-1 text-xs"
-                            :aria-label="t(`mainFailure.failingJobs`)"
+            <div class="@container flex min-w-0 flex-1 flex-col gap-2">
+                <!-- What fails and since when, then who has it and the one press. Nothing else shares this row, so the press
+                     stays beside the title at any width that fits both, and wraps under it as one group where none does. -->
+                <div class="flex min-h-8 min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+                    <!-- `grow`, not `ml-auto` on the group: beside the title it pushes the group to the right edge, and wrapped
+                         under it the group starts at the left, where the eye already is. -->
+                    <div class="flex min-w-0 grow flex-wrap items-baseline gap-x-2">
+                        <span class="text-base font-semibold text-content">{{ t(`mainFailure.title`, { branch: failure.branch }) }}</span>
+                        <span class="text-xs text-subtle" v-tooltip.top="formatTimestamp(sinceAt)">{{ t(`mainFailure.since`, { when: since }) }}</span>
+                    </div>
+
+                    <div class="order-last flex min-w-0 flex-wrap items-center gap-2">
+                        <component
+                            :is="pill.link ? `a` : `span`"
+                            v-if="pill !== undefined"
+                            v-bind="pill.link ? fixerLink : {}"
+                            data-fixer
+                            class="ui-chip inline-flex shrink-0 items-center bg-card font-medium"
+                            :class="[pill.ink, pill.link ? pill.chip : `border-line`]"
+                            v-tooltip.top="
+                                pill.link
+                                    ? { title: t(`mainFailure.openFixer`), rows: [{ label: t(`tip.model`), value: view.fixer?.model ?? `` }] }
+                                    : undefined
+                            "
                         >
-                            <li
-                                v-for="workflow in workflows"
-                                :key="workflow.name"
-                                :data-workflow="workflow.name"
-                                :data-blocker="workflow.blocker.kind"
-                                class="group/row flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                            <Icon :name="pill.icon" :spin="pill.spin" class="text-2xs" />
+                            {{ pill.label }}
+                            <span v-if="attempts !== undefined" data-attempts class="font-normal text-subtle">· {{ attempts }}</span>
+                        </component>
+
+                        <!-- The run rows' own split button, moved up with the press: the caret re-points the model, and over an
+                             agent that already tried, its panel ends in Continue / Start over. -->
+                        <AgentRunButton
+                            v-if="press !== undefined"
+                            :label="press.label"
+                            :picker="picker"
+                            :tier="press.primary ? `accent` : `quiet`"
+                            :loading="busy !== undefined && busy === runKey"
+                            :disabled="busy !== undefined"
+                            @run="pressFix"
+                        />
+                    </div>
+                    <!-- Ending the whole failure by hand, for when the reader knows better than the forge: quiet, and asked
+                         first, since every workflow on it goes at once. Its glyph alone in a narrow card, where it keeps the
+                         title's line (the group above is `order-last`) and the pill and the press share the next one. -->
+                    <span class="hidden @md:contents">
+                        <Button
+                            data-resolve
+                            class="order-last"
+                            :label="t(`mainFailure.resolve`)"
+                            size="small"
+                            tier="quiet"
+                            :loading="busy === resolveKey"
+                            :disabled="busy !== undefined"
+                            @click="resolving = true"
+                        />
+                    </span>
+                    <span class="contents @md:hidden">
+                        <Button
+                            data-resolve
+                            size="small"
+                            tier="quiet"
+                            :aria-label="t(`mainFailure.resolve`)"
+                            :loading="busy === resolveKey"
+                            :disabled="busy !== undefined"
+                            v-tooltip.top="t(`mainFailure.resolve`)"
+                            @click="resolving = true"
+                        >
+                            <template #icon><Icon name="check-circle" /></template>
+                        </Button>
+                    </span>
+                </div>
+
+                <!-- Where the fix stands and the reader's move, in one sentence. -->
+                <p data-story class="text-sm text-content">{{ story }}</p>
+
+                <!-- The step itself, rendered: its commands read as code, not as backticks in a paragraph. A rule down its
+                     edge sets it apart as the agent's words without a box inside the card. -->
+                <div v-if="view.ownerStep !== undefined && outside" data-owner-step class="border-l-2 border-content/20 pl-3">
+                    <div
+                        ref="stepBox"
+                        class="overflow-hidden"
+                        :class="stepOpen ? `` : `max-h-24`"
+                        :style="stepFolds && !stepOpen ? FADE : undefined"
+                    >
+                        <Markdown :source="view.ownerStep" />
+                    </div>
+                    <button
+                        v-if="stepFolds || stepOpen"
+                        type="button"
+                        :class="ui.textButton({ size: `xs`, tone: `quiet` })"
+                        :aria-expanded="stepOpen"
+                        @click="stepOpen = !stepOpen"
+                    >
+                        {{ stepOpen ? t(`mainFailure.showLess`) : t(`mainFailure.showAll`) }}
+                        <Icon :name="stepOpen ? `chevron-up` : `chevron-down`" />
+                    </button>
+                </div>
+
+                <!-- Each workflow failing, one row each: its name in a column of its own, its jobs as the link to its failing
+                     run (the one place the reader learns a nightly fails while every push passes, and the way to its run when
+                     the list below does not hold it), and at the row's end what blocks it from passing with the press that
+                     clears it (blockerOf). That end wraps under the jobs as a unit when the pane is narrow. -->
+                <ul
+                    v-if="workflows.length > 0"
+                    data-workflows
+                    class="grid min-w-0 gap-y-1 text-xs"
+                    :class="named ? `grid-cols-facts gap-x-4` : `grid-cols-1`"
+                    :aria-label="t(`mainFailure.failingJobs`)"
+                >
+                    <li
+                        v-for="workflow in workflows"
+                        :key="workflow.name"
+                        :data-workflow="workflow.name"
+                        :data-blocker="workflow.blocker.kind"
+                        class="group/row grid min-h-7 min-w-0 items-baseline"
+                        :class="named ? `col-span-2 grid-cols-subgrid` : ``"
+                    >
+                        <span v-if="named" class="font-semibold text-content">{{ workflow.named ? workflow.name : `` }}</span>
+                        <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                            <a
+                                :href="workflow.url"
+                                target="_blank"
+                                rel="noopener"
+                                class="group inline-flex min-w-0 grow items-center gap-1.5 hover:text-link"
+                                v-tooltip.top="tipOf(workflow)"
                             >
-                                <a
-                                    :href="workflow.url"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="group inline-flex min-w-0 items-center gap-1.5 hover:text-link"
-                                    v-tooltip.top="{
-                                        title: t(`mainFailure.openRun`),
-                                        tone: `danger`,
-                                        rows: [
-                                            { label: t(`tip.run`), value: `#${workflow.runId}` },
-                                            { label: t(`mainFailure.failingJobs`), value: workflow.jobs.join(`, `) },
-                                        ],
-                                        note: workflow.listed ? undefined : t(`mainFailure.runNotListed`),
-                                    }"
-                                >
-                                    <span v-if="workflow.named" class="shrink-0 font-semibold text-content group-hover:text-link">{{ workflow.name }}</span>
-                                    <span class="min-w-0 truncate font-mono text-muted group-hover:text-link">{{
-                                        jobsLineOf(workflow.jobs, workflow.timedOut)
-                                    }}</span>
-                                    <Icon name="external-link" class="shrink-0 text-2xs text-subtle group-hover:text-link" />
-                                </a>
-                                <span v-if="ownSince(workflow) !== undefined" class="shrink-0 text-subtle">{{ ownSince(workflow) }}</span>
+                                <span class="min-w-0 truncate font-mono text-muted group-hover:text-link">{{
+                                    jobsLineOf(workflow.jobs, workflow.timedOut)
+                                }}</span>
+                                <Icon name="external-link" class="shrink-0 text-2xs text-subtle group-hover:text-link" />
+                            </a>
+                            <span class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                                 <template v-if="lines.get(workflow.name) !== undefined">
-                                    <span data-blocker-text class="min-w-0 text-content">{{ lines.get(workflow.name)?.text }}</span>
+                                    <span data-blocker-text class="text-muted">{{ lines.get(workflow.name)?.text }}</span>
                                     <Button
                                         v-for="action in lines.get(workflow.name)?.actions ?? []"
                                         :key="action.key"
@@ -405,7 +535,7 @@ onBeforeUnmount(() => {
                                     />
                                 </template>
                                 <!-- Any workflow can be let go of by hand; one whose line already offers it as its way forward
-                                     carries no second press. Quiet, and shown on the line's hover where a pointer can. -->
+                                     carries no second press. Quiet, and shown on the row's hover where a pointer can. -->
                                 <button
                                     v-if="workflow.blocker.kind !== `quiet`"
                                     type="button"
@@ -418,66 +548,18 @@ onBeforeUnmount(() => {
                                 >
                                     <Icon name="eye-slash" class="text-2xs" />
                                 </button>
-                            </li>
-                        </ul>
-                        <span
-                            v-else-if="jobs.shown.length > 0"
-                            class="min-w-0 truncate font-mono text-xs text-muted"
-                            :aria-label="t(`mainFailure.failingJobs`)"
-                            v-tooltip.top="failure.jobs.join(`, `)"
-                            >{{ jobsLine }}</span
-                        >
-                    </div>
-                </div>
-
-                <!-- Who has it, and the one press. -->
-                <div class="ml-auto flex shrink-0 items-center gap-2">
-                    <component
-                        :is="pill.link ? `a` : `span`"
-                        v-if="pill !== undefined"
-                        v-bind="pill.link ? fixerLink : {}"
-                        data-fixer
-                        class="ui-chip inline-flex shrink-0 items-center bg-card font-medium"
-                        :class="[pill.ink, pill.link ? pill.chip : `border-line`]"
-                        v-tooltip.top="
-                            pill.link
-                                ? { title: t(`mainFailure.openFixer`), rows: [{ label: t(`tip.model`), value: view.fixer?.model ?? `` }] }
-                                : undefined
-                        "
-                    >
-                        <Icon :name="pill.icon" :spin="pill.spin" class="text-2xs" />
-                        {{ pill.label }}
-                        <span v-if="attempts !== undefined" data-attempts class="font-normal text-subtle">· {{ attempts }}</span>
-                    </component>
-
-                    <!-- Ending the whole failure by hand, for when the reader knows better than the forge: quiet, and asked
-                         first, since every workflow on it goes at once. -->
-                    <Button
-                        data-resolve
-                        :label="t(`mainFailure.resolve`)"
-                        size="small"
-                        tier="quiet"
-                        :loading="busy === resolveKey"
-                        :disabled="busy !== undefined"
-                        @click="resolving = true"
-                    />
-
-                    <!-- The run rows' own split button, moved up with the press: the caret re-points the model, and over an
-                         agent that already tried, its panel ends in Continue / Start over. -->
-                    <AgentRunButton
-                        v-if="press !== undefined"
-                        :label="press.label"
-                        :picker="picker"
-                        :tier="press.primary ? `accent` : `quiet`"
-                        :loading="busy !== undefined && busy === runKey"
-                        :disabled="busy !== undefined"
-                        @run="pressFix"
-                    />
-                </div>
+                            </span>
+                        </div>
+                    </li>
+                </ul>
+                <span
+                    v-else-if="jobs.shown.length > 0"
+                    class="min-w-0 truncate font-mono text-xs text-muted"
+                    :aria-label="t(`mainFailure.failingJobs`)"
+                    v-tooltip.top="failure.jobs.join(`, `)"
+                    >{{ jobsLine }}</span
+                >
             </div>
-
-            <!-- Where the fix stands and the reader's move, aligned under the title. -->
-            <p data-story class="pl-11 text-sm text-content">{{ story }}</p>
         </div>
 
         <!-- The runs this incident speaks for, indented off the lane; hairlines between them start where they do, so none
