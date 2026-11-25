@@ -35,6 +35,7 @@ const paneOf = (rows: readonly ChatMessage[] = ROWS) => {
         conversationId: ref(`c1`),
         rowsOwed: ref(false),
         refresh: ref<TranscriptRefresh | undefined>(),
+        pending: () => false,
     };
     return { state, pane: usePaneTranscript(state) };
 };

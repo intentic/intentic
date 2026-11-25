@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, type ButtonTier } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import type { ChatMessage } from "../../../../models/conversations/transcript/transcript";
 import { useKeptTurn } from "../held/heldQueue";
@@ -7,7 +8,7 @@ import { usePaneView } from "../../../../models/conversations/panel/useChat-view
 
 /* The press that runs a turn the sandbox kept after a refusal no raise would clear, while it still waits behind this notice. */
 
-const props = defineProps<{ message: ChatMessage }>();
+const props = withDefaults(defineProps<{ message: ChatMessage; tier?: ButtonTier }>(), { tier: `quiet` });
 
 const t = useT();
 // Only a kept turn carries this press: the conversation's queue holds the words of one a person sent (ChatHeldMessages).
@@ -20,7 +21,7 @@ const { wayOut } = usePaneView();
 </script>
 
 <template>
-    <button v-if="waiting && accessWall === undefined && wayOut === undefined" type="button" class="touch-target shrink-0 font-medium text-link hover:underline" @click="send">
+    <Button v-if="waiting && accessWall === undefined && wayOut === undefined" size="small" :tier="props.tier" class="shrink-0" @click="send">
         {{ t(`agents.words.sendAgain`) }}
-    </button>
+    </Button>
 </template>

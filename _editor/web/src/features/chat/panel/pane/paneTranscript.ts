@@ -17,6 +17,7 @@ import {
 } from "../../../../models/conversations/transcript/transcript";
 import { noticeFailure } from "../../../../models/conversations/transcript/sandboxNotice";
 import { type ChatIncidents, incidentsOf } from "../../../../models/conversations/transcript/chatIncidents";
+import { type NoticeLayout, noticeLayoutOf } from "../../../../models/conversations/transcript/noticeLayout";
 
 // The transcript as one pane draws it: turns, the live bubble, each turn's pictures and documents, fork cuts, day marks,
 // the skeleton.
@@ -38,7 +39,25 @@ export interface PaneTranscriptHost {
     readonly rowsOwed: Readonly<Ref<boolean>>;
     // How the last read of this chat went, when it has not answered (TranscriptView.refresh).
     readonly refresh: Readonly<Ref<TranscriptRefresh | undefined>>;
+    // Whether a notice's wait still runs (noticeWait.ts): such a row stays in the column, off its turn's receipt.
+    readonly pending: (row: ChatMessage) => boolean;
 }
+
+// Where each notice is drawn (noticeLayout.ts): a card for what arrived, a strip for the failure a turn ended on, a line
+// for a wait still running, and the rest on each turn's receipt, reused frame to frame as the incidents are. The turn
+// still being written ends on nothing yet, and its receipt shows its count alone.
+const useNotices = (
+    turns: Readonly<Ref<readonly ChatTurn[]>>,
+    incidents: Readonly<Ref<ChatIncidents>>,
+    streaming: Readonly<Ref<boolean>>,
+    pending: (row: ChatMessage) => boolean,
+) => {
+    const liveTurn = computed(() => (streaming.value ? turns.value.at(-1)?.id : undefined));
+    const notices = computed<NoticeLayout>((previous) =>
+        noticeLayoutOf(turns.value, { incidentFolded: incidents.value.folded, liveTurn: liveTurn.value, pending }, previous),
+    );
+    return { notices, liveTurn };
+};
 
 export const usePaneTranscript = (pane: PaneTranscriptHost) => {
     const { messages, ending, awaitingDecision } = pane;
@@ -70,6 +89,7 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
     // One row per refusal however often it was tried (chatIncidents.ts): the rows it folds are not drawn, and the row
     // drawn for it carries every attempt.
     const incidents = computed<ChatIncidents>((previous) => incidentsOf(messages.value, previous));
+    const { notices, liveTurn } = useNotices(turns, incidents, streaming, pane.pending);
     // Loading as the pane draws it: a read in flight over nothing painted, or rows the agents list says this chat owes that
     // no failed read has given up on (a read that failed says so, with a press to ask again). Never the invitation to
     // start a conversation: running chats opened on that after a phone woke, until the app was relaunched.
@@ -84,6 +104,8 @@ export const usePaneTranscript = (pane: PaneTranscriptHost) => {
         turnShots,
         repeatedChecklists,
         incidents,
+        notices,
+        liveTurn,
         // The bubble currently being streamed into, by id.
         liveRow: computed(() => (streaming.value ? liveBubble.value?.id : undefined)),
         // True for the assistant bubble currently being streamed into.

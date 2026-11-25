@@ -17,6 +17,9 @@ import { useStepGroups } from "../../transcript/steps/useStepGroups";
 import ChatTranscriptSkeleton from "../../transcript/ChatTranscriptSkeleton.vue";
 import { QUIET_TRANSCRIPT_WAIT } from "../../../../models/conversations/transcript/transcriptWait";
 import ChatTurnStatus from "../../transcript/ChatTurnStatus.vue";
+import NoticeReceipt from "../../transcript/notices/NoticeReceipt.vue";
+import { useNoticeWait } from "../../transcript/notices/noticeWait";
+import { isHomeConversationId } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { useAudience } from "../../../../app/useAudience";
 import ChatSystemPrompt from "../../transcript/prompt/ChatSystemPrompt.vue";
 import ChatShotViewer from "../../transcript/shots/ChatShotViewer.vue";
@@ -57,6 +60,8 @@ provide(
     computed(() => (driveRefusal.value === undefined ? undefined : t(`chat.cardReplies.waitsOnDriver`))),
 );
 const { showToolCalls } = useToolCalls();
+// Whether a notice's wait still runs: it stays in the column while it does, and moves to its turn's receipt after.
+const waitOf = useNoticeWait();
 const { agentById } = useAgents();
 // How the last read of this chat went, when it has not answered yet (TranscriptView.refresh).
 const refresh = computed(() => conversation.value.transcript.refresh.value);
@@ -69,6 +74,8 @@ const {
     turnShots,
     repeatedChecklists,
     incidents,
+    notices,
+    liveTurn,
     isStreaming,
     liveRow,
     showTurnStatus,
@@ -96,6 +103,7 @@ const {
         return card !== undefined && (turnInFlight(card) || awaitingUser(card));
     }),
     refresh,
+    pending: (row) => waitOf(row) !== undefined,
 });
 // How long the reconnect has been going, beside the line that says so once it outlasts a blip (useElapsedWords).
 const reconnectingFor = useElapsedWords(useBusySince(() => staleness.value?.kind === `reconnecting`));
@@ -110,12 +118,18 @@ const budget = useRowBudget({
     edge,
 });
 const shownTurns = computed(() => windowTurns(turns.value, messages.value.length, budget.value));
-// The rows a turn draws. Those an incident folds away (chatIncidents.ts) leave no wrapper behind, so the notices on either
-// side still close up into one log (chat.css's meta run reads adjacent wrappers), unless a fork mark hangs above one.
+// The rows a turn draws. Those an incident folds away (chatIncidents.ts), and the notices its receipt or a fleet's card
+// holds (noticeLayout.ts), leave no wrapper behind, so the rows on either side still close up, unless a fork mark hangs
+// above one.
 const drawnRows = (turn: ChatTurn): readonly ChatMessage[] => {
     const folded = incidents.value.folded;
-    return folded.size === 0 ? turn.messages : turn.messages.filter((message) => !folded.has(message.id) || cutsAbove.value.get(message.id) !== undefined);
+    const held = notices.value.folded;
+    return folded.size === 0 && held.size === 0
+        ? turn.messages
+        : turn.messages.filter((message) => (!folded.has(message.id) && !held.has(message.id)) || cutsAbove.value.get(message.id) !== undefined);
 };
+// A home's lands are committed too, which its receipt says.
+const home = computed(() => isHomeConversationId(conversation.value.conversationId));
 // Every row is drawn: only then is the column's top the conversation's (the paging press, the fork line, the prompt).
 const whole = computed(() => budget.value >= messages.value.length);
 // The top of the conversation is on screen, so the chip that says what it was told before its first word is drawn.
@@ -226,6 +240,9 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                             repeatedChecklists.has(message.id),
                             incidents.drawn.get(message.id),
                             incidents.folded.has(message.id),
+                            notices.tiers.get(message.id),
+                            notices.groups.get(message.id),
+                            notices.folded.has(message.id),
                             checklistViews.get(message.id),
                             heldRow === message.id,
                             opening?.id === message.id,
@@ -262,11 +279,19 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                                 </template>
                             </template>
                         </ChatStepGroup>
-                        <!-- A row folded into the incident drawn after it is not drawn (chatIncidents.ts). -->
+                        <!-- A row folded into the incident drawn after it, its turn's receipt or a fleet's card is not drawn. -->
                         <ChatMessageView
-                            v-else-if="!stepGroups.folded.has(message.id) && (!repeatedChecklists.has(message.id) || isStreaming(message)) && heldRow !== message.id && !incidents.folded.has(message.id)"
+                            v-else-if="
+                                !stepGroups.folded.has(message.id) &&
+                                (!repeatedChecklists.has(message.id) || isStreaming(message)) &&
+                                heldRow !== message.id &&
+                                !incidents.folded.has(message.id) &&
+                                !notices.folded.has(message.id)
+                            "
                             :message="message"
                             :incident="incidents.drawn.get(message.id)"
+                            :notice-tier="notices.tiers.get(message.id)"
+                            :arrivals="notices.groups.get(message.id)?.rows"
                             :streaming="isStreaming(message)"
                             :status-below="statusBelow"
                             :folded="message.id === turn.id ? turn.folded : undefined"
@@ -276,6 +301,14 @@ const imprint = computed(() => (quiet ? undefined : `chat.transcript:${conversat
                             :steps="steps.tailSteps(message.id)"
                         />
                     </div>
+                    <!-- How the turn went, and what happened to its machinery behind the count (NoticeReceipt). -->
+                    <NoticeReceipt
+                        v-if="notices.receipts.get(turn.id)"
+                        :receipt="notices.receipts.get(turn.id)!"
+                        :live="liveTurn === turn.id"
+                        :incidents="incidents.drawn"
+                        :home="home"
+                    />
                     <!-- The documents the turn made or changed, for a person to open (ChatTurnDeliverables). -->
                     <ChatTurnDeliverables v-if="deliverablesOf(turn)" :deliverables="deliverablesOf(turn)!" :live="writesNow(turn)" />
                     <!-- The pictures the turn's tools showed the agent, where its answer is read (ChatTurnShots). -->

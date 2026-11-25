@@ -36,7 +36,10 @@ import ChatTurnStatus from "./ChatTurnStatus.vue";
 import { isFreshStart } from "./notices/noticeLook";
 import NoticeFreshStart from "./notices/NoticeFreshStart.vue";
 import NoticeMemory from "./notices/NoticeMemory.vue";
+import NoticeArrival from "./notices/NoticeArrival.vue";
+import NoticeStrip from "./notices/NoticeStrip.vue";
 import NoticeRow from "./notices/NoticeRow.vue";
+import { isArrival, type NoticeTier } from "../../../models/conversations/transcript/noticeLayout";
 import { isMemoryHold } from "./held/heldQueue";
 import type { ChatIncident } from "../../../models/conversations/transcript/chatIncidents";
 import ChatPromptAuthor from "./ChatPromptAuthor.vue";
@@ -66,7 +69,22 @@ const props = defineProps<{
     incident?: ChatIncident | undefined;
     // A step group's band stands for this row's own run (steps/stepGroups.ts), and how it is drawn here.
     steps?: MergedSteps | undefined;
+    // How a notice row is drawn (noticeLayout.ts); a row drawn outside a pane's layout is a plain line.
+    noticeTier?: NoticeTier | undefined;
+    // The reports that arrived back to back with this one, drawn as one card here (noticeLayout.ts ArrivalGroup).
+    arrivals?: readonly ChatMessage[] | undefined;
 }>();
+
+// A one-line row of the meta lane; an arrival's card and a turn's failure strip are surfaces of their own, which a run
+// of lines does not close up around.
+const metaLine = computed(
+    () =>
+        props.message.role === `notice` &&
+        props.message.need === undefined &&
+        props.noticeTier !== `strip` &&
+        props.noticeTier !== `arrival` &&
+        !(props.noticeTier === undefined && isArrival(props.message)),
+);
 
 // A snapshot that moved nothing is not a checklist event, so it draws no line at all — not an empty one.
 const showsTodos = computed(
@@ -353,7 +371,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
             'chat-prompt-pinned': pinned,
             'chat-doomed': doomed,
             // A one-line row of the meta lane (a notice, a background job): a run of them closes up into one log (chat.css).
-            'chat-message-meta': message.role === 'notice' && message.need === undefined,
+            'chat-message-meta': metaLine,
         }"
         :data-ask-row="askKey"
         @click="onMarkdownClick"
@@ -459,7 +477,11 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <NeedCard v-else-if="message.role === 'notice' && message.need" :need-id="message.need.id" :snapshot="message.need" />
         <!-- Where a home's memory starts over: a divider across the column, not a line down its edge. -->
         <NoticeFreshStart v-else-if="isFreshStart(message)" :message="message" />
-        <!-- A META ROW, one line whatever it says, the rest on the card it raises (NoticeRow). -->
+        <!-- What arrived for the agent, signed by its sender: one card, or one for a fleet that reported back to back. -->
+        <NoticeArrival v-else-if="noticeTier === 'arrival' || (noticeTier === undefined && isArrival(message))" :rows="arrivals ?? [message]" />
+        <!-- The failure the turn ended on, with its fix. -->
+        <NoticeStrip v-else-if="noticeTier === 'strip'" :message="message" :incident="incident" />
+        <!-- A META ROW: one event in one line, what it keeps opening in place under it (NoticeRow). -->
         <NoticeRow v-else-if="message.role === 'notice' && message.text !== ''" :message="message" :incident="incident" />
         <template v-else>
             <!-- Live marks the bubble currently receiving streamed text. -->

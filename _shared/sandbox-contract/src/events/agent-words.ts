@@ -98,7 +98,7 @@ export const childReportPrompt = (fields: ChildReportFields): string => {
         ...(fields.machine === undefined ? [] : [`${MACHINE_OPENING}\`${fields.machine}\`, not this sandbox.`]),
         ...(verification === undefined ? [] : [verification]),
         "",
-        fields.report.trim() === "" ? "(It ended without a closing report.)" : fields.report.trim(),
+        fields.report.trim() === "" ? NO_REPORT : fields.report.trim(),
         ...resultLines(fields.result),
         "",
         fields.review === undefined
@@ -114,6 +114,11 @@ const reviewClosing = (from: string, landing: string | undefined): string =>
     `${landing ?? "Any edits it made go back into your work."} Your user opened that session so this work can land: fix every ` +
     "finding it left open that holds, check its own edits rather than trusting them, and say plainly which findings you think are " +
     `wrong and why. If nothing is left open, say so in a line and stop. Ask it something with \`agents message ${from} '<text>'\`.`;
+
+// What stands for a report a child ended without; read back by the parser, so it stays unchanged too.
+const NO_REPORT = "(It ended without a closing report.)";
+// The verification line's state, as `verificationLine` writes it.
+const VERIFICATION_LINE = /^Verification: (verified|failing|unproven|no-code) —/u;
 
 // The report's second line for a child that ran on a runner; read back by the parser, so it stays unchanged too.
 const MACHINE_OPENING = "It ran on the runner ";
@@ -164,6 +169,33 @@ const reviewOf = (first: string, prompt: string): TranscriptAgentWords | undefin
         sent: prompt,
     };
 };
+
+/** What the other agent itself said, out of a prompt `agentWordsOf` recognises: the words between the opening lines and
+ *  the closing paragraph the sandbox adds to every such prompt (`said`, empty for a child that ended without a report),
+ *  and a child's verification state where its report carries one. */
+export interface AgentWordsBody {
+    readonly said: string;
+    readonly verification?: SubagentVerification["state"];
+}
+
+export const agentWordsBody = (prompt: string): AgentWordsBody | undefined => {
+    const lines = prompt.split("\n");
+    const opened = lines.indexOf("");
+    const closed = lines.lastIndexOf("");
+    if (opened === -1 || closed <= opened || agentWordsOf(prompt) === undefined) {
+        return undefined;
+    }
+    const said = lines.slice(opened + 1, closed).join("\n").trim();
+    const state = lines
+        .slice(1, opened)
+        .map((line) => VERIFICATION_LINE.exec(line)?.[1])
+        .find((found) => found !== undefined);
+    const words = said === NO_REPORT ? "" : said;
+    return isVerificationState(state) ? { said: words, verification: state } : { said: words };
+};
+
+const VERIFICATION_STATES: ReadonlySet<string> = new Set<SubagentVerification["state"]>(["verified", "failing", "unproven", "no-code"]);
+const isVerificationState = (word: string | undefined): word is SubagentVerification["state"] => word !== undefined && VERIFICATION_STATES.has(word);
 
 /** Which other agent's words a stored prompt is; undefined for every other prompt. */
 export const agentWordsOf = (prompt: string): TranscriptAgentWords | undefined => {

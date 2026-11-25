@@ -3831,7 +3831,6 @@
             "allowEverything": "Permitir todo en esta conversación",
             "allowEverythingHint": "Se deshace en Needs you → Permitido · las reglas estrictas siguen preguntando",
             "approversOnly": "Solo aprobadores",
-            "chatStaysPutInstead": "(este chat se queda quieto en vez de retomarse solo)",
             "collapseMessage": "Plegar el mensaje",
             "connect": "Conectar {name}",
             "continueWithoutDeclined": "Continuar, sin el paso que rechacé.",
@@ -5038,7 +5037,8 @@
             "nightApproved": "Tus horas de sueño estaban activas (hasta las {until}), así que el plan que el agente decidió hacer siguió adelante."
         },
         "noticeWatchStop": {
-            "couldNotStop": "No se pudo detener la vigilancia."
+            "couldNotStop": "No se pudo detener la vigilancia.",
+            "staysPut": "No se reanudará solo"
         },
         "chatCapacityLane": {
             "inDayHours": "en 1 d {hours} h",
@@ -5409,6 +5409,62 @@
                 "given": "Dado",
                 "declined": "Rechazado"
             }
+        },
+        "noticeParts": {
+            "finished": "terminó",
+            "failed": "falló",
+            "sentMessage": "envió un mensaje",
+            "fired": "se cumplió",
+            "gaveUp": "se rindió",
+            "stopped": "se detuvo",
+            "after": "tras {elapsed}",
+            "given": "hecho",
+            "declined": "rechazado",
+            "showDetails": "Mostrar detalles",
+            "hideDetails": "Ocultar detalles"
+        },
+        "noticeArrival": {
+            "reported": "{count} subagente informó | {count} subagentes informaron",
+            "finishedCount": "{count} terminaron",
+            "failedCount": "{count} fallaron",
+            "showAll": "Mostrar todo",
+            "showLess": "Mostrar menos",
+            "noReport": "Terminó sin informe.",
+            "verification": {
+                "verified": "Comprobado",
+                "failing": "Comprobación fallida",
+                "unproven": "Sin comprobar",
+                "noCode": "Sin cambios de código"
+            }
+        },
+        "noticeReceipt": {
+            "doneIn": "Hecho en {elapsed}",
+            "done": "Hecho",
+            "stopped": "Detenido",
+            "events": "{count} evento | {count} eventos",
+            "problems": "{count} problema | {count} problemas",
+            "warnings": "{count} aviso | {count} avisos",
+            "land": {
+                "developer": {
+                    "landed": "Integrado",
+                    "homeLanded": "Integrado y confirmado",
+                    "landHeld": "Listo para integrar",
+                    "landConflict": "{count} archivo no se integró | {count} archivos no se integraron",
+                    "intoParent": "En la copia del agente padre",
+                    "intoParentClash": "Choca con el agente padre"
+                },
+                "maker": {
+                    "landed": "Aceptado",
+                    "homeLanded": "Aceptado y guardado",
+                    "landHeld": "Listo para aceptar",
+                    "landConflict": "{count} archivo no se aceptó | {count} archivos no se aceptaron",
+                    "intoParent": "En el borrador del asistente padre",
+                    "intoParentClash": "Choca con el asistente padre"
+                }
+            }
+        },
+        "noticeStrip": {
+            "details": "Detalles"
         },
         "accessWall": {
             "status": "{account} no puede ejecutar esta conversación: su plan u organización no permite {provider}, y ninguna otra cuenta de {provider} de aquí puede encargarse.",

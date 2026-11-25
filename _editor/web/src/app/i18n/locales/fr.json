@@ -3831,7 +3831,6 @@
             "allowEverything": "Tout autoriser dans cette conversation",
             "allowEverythingHint": "Annulable dans Needs you → Autorisé · les règles strictes demandent toujours",
             "approversOnly": "Approbateurs seuls",
-            "chatStaysPutInstead": "(ce chat reste en place au lieu de reprendre tout seul)",
             "collapseMessage": "Replier le message",
             "connect": "Connecter {name}",
             "continueWithoutDeclined": "Continuer, sans l'étape que j'ai refusée.",
@@ -5038,7 +5037,8 @@
             "nightApproved": "Vos heures de nuit étaient actives (jusqu'à {until}) : le plan que l'agent a choisi de faire a donc été lancé."
         },
         "noticeWatchStop": {
-            "couldNotStop": "Impossible d'arrêter la surveillance."
+            "couldNotStop": "Impossible d'arrêter la surveillance.",
+            "staysPut": "Ne reprendra pas seul"
         },
         "chatCapacityLane": {
             "inDayHours": "dans 1 j {hours} h",
@@ -5409,6 +5409,62 @@
                 "given": "Fourni",
                 "declined": "Refusé"
             }
+        },
+        "noticeParts": {
+            "finished": "terminé",
+            "failed": "en échec",
+            "sentMessage": "a envoyé un message",
+            "fired": "déclenchée",
+            "gaveUp": "abandonnée",
+            "stopped": "arrêtée",
+            "after": "après {elapsed}",
+            "given": "fourni",
+            "declined": "refusé",
+            "showDetails": "Afficher les détails",
+            "hideDetails": "Masquer les détails"
+        },
+        "noticeArrival": {
+            "reported": "{count} sous-agent a rendu compte | {count} sous-agents ont rendu compte",
+            "finishedCount": "{count} terminés",
+            "failedCount": "{count} en échec",
+            "showAll": "Tout afficher",
+            "showLess": "Afficher moins",
+            "noReport": "Terminé sans rapport.",
+            "verification": {
+                "verified": "Vérifié",
+                "failing": "Vérification en échec",
+                "unproven": "Non vérifié",
+                "noCode": "Aucun code modifié"
+            }
+        },
+        "noticeReceipt": {
+            "doneIn": "Terminé en {elapsed}",
+            "done": "Terminé",
+            "stopped": "Arrêté",
+            "events": "{count} événement | {count} événements",
+            "problems": "{count} problème | {count} problèmes",
+            "warnings": "{count} avertissement | {count} avertissements",
+            "land": {
+                "developer": {
+                    "landed": "Intégré",
+                    "homeLanded": "Intégré et commité",
+                    "landHeld": "Prêt à intégrer",
+                    "landConflict": "{count} fichier non intégré | {count} fichiers non intégrés",
+                    "intoParent": "Dans la copie de l'agent parent",
+                    "intoParentClash": "En conflit avec l'agent parent"
+                },
+                "maker": {
+                    "landed": "Accepté",
+                    "homeLanded": "Accepté et enregistré",
+                    "landHeld": "Prêt à accepter",
+                    "landConflict": "{count} fichier non accepté | {count} fichiers non acceptés",
+                    "intoParent": "Dans le brouillon de l'assistant parent",
+                    "intoParentClash": "En conflit avec l'assistant parent"
+                }
+            }
+        },
+        "noticeStrip": {
+            "details": "Détails"
         },
         "accessWall": {
             "status": "{account} ne peut pas exécuter cette conversation : son forfait ou son organisation n’autorise pas {provider}, et aucun autre compte {provider} ici ne peut la prendre.",

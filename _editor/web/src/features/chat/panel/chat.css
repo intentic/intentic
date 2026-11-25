@@ -917,6 +917,26 @@
     --chat-card-text: calc(var(--chat-card-inset) + var(--chat-card-mark) + var(--chat-card-gap));
     --chat-inset: color-mix(in srgb, var(--color-content) 6%, var(--color-card));
 }
+/* WHAT ARRIVED FOR THE AGENT (NoticeArrival): a subagent's report, another chat's message, a watch that fired. It came in
+   from outside the turn, so it is a surface, signed by its sender, where the agent's own words stay bare: the two never
+   read as one voice. Faint, and flat: a step of the stone's own ink and a hairline, quieter than the person's prompt. */
+.chat-arrival {
+    --chat-arrival-fill: color-mix(in oklab, var(--color-content) 3.5%, var(--color-card));
+    border-radius: var(--radius-xl);
+    background-color: var(--chat-arrival-fill);
+    box-shadow: inset 0 0 0 1px var(--color-line);
+}
+/* A fleet's rows and a card's presses start on the title's edge; a row's own wash bleeds a little past it. */
+.chat-arrival-rows {
+    padding: 0 calc(var(--chat-card-inset) - 0.375rem) 0 calc(var(--chat-card-text) - 0.375rem);
+}
+.chat-arrival-actions {
+    padding: 0 var(--chat-card-inset) 0 calc(var(--chat-card-text) - 0.5rem);
+}
+/* A long report folds to a screenful, its last lines fading into the card's own fill. */
+.chat-arrival-fade {
+    background: linear-gradient(to bottom, transparent, var(--chat-arrival-fill));
+}
 /* An optional settled status occupies an implicit header column. */
 .chat-card-header {
     display: grid;

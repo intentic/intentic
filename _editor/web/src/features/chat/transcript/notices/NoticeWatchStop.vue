@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, type ButtonTier } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useAgents } from "../../../../models/fleet/useAgents";
@@ -9,7 +10,7 @@ import type { ChatMessage } from "../../../../models/conversations/transcript/tr
 
 /* Disarms the one watch this row names, leaving the conversation's others armed; a fired watch's row keeps no button. */
 
-const props = defineProps<{ message: ChatMessage }>();
+const props = withDefaults(defineProps<{ message: ChatMessage; tier?: ButtonTier }>(), { tier: `quiet` });
 
 const t = useT();
 const { conversation } = usePaneView();
@@ -38,10 +39,16 @@ const stop = async (): Promise<void> => {
 
 <template>
     <template v-if="armed">
-        <button type="button" class="touch-target shrink-0 font-medium text-link hover:underline" :disabled="busy" @click="stop">
+        <Button
+            size="small"
+            :tier="props.tier"
+            class="shrink-0"
+            :disabled="busy"
+            v-tooltip.top="{ title: t(`agents.words.stopWatching`), note: t(`chat.noticeWatchStop.staysPut`) }"
+            @click="stop"
+        >
             {{ t(`agents.words.stopWatching`) }}
-        </button>
+        </Button>
         <span v-if="refused !== undefined" role="alert" class="shrink-0 text-danger">{{ refused }}</span>
-        <span v-else class="shrink-0">{{ t(`chat.chatMessageView.chatStaysPutInstead`) }}</span>
     </template>
 </template>

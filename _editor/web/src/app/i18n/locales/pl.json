@@ -3831,7 +3831,6 @@
             "allowEverything": "Zezwól na wszystko w tej rozmowie",
             "allowEverythingHint": "Cofniesz w Potrzebuje Cię → Dozwolone · twarde reguły nadal pytają",
             "approversOnly": "Tylko zatwierdzający",
-            "chatStaysPutInstead": "(ten czat zostaje na miejscu zamiast sam się podejmować)",
             "collapseMessage": "Zwiń wiadomość",
             "connect": "Podłącz {name}",
             "continueWithoutDeclined": "Kontynuuj bez odrzuconego kroku.",
@@ -5038,7 +5037,8 @@
             "nightApproved": "Twoje godziny nocne trwały (do {until}), więc plan, który agent sam postanowił przygotować, został wykonany."
         },
         "noticeWatchStop": {
-            "couldNotStop": "Nie udało się zatrzymać obserwacji."
+            "couldNotStop": "Nie udało się zatrzymać obserwacji.",
+            "staysPut": "Nie wznowi się sam"
         },
         "chatCapacityLane": {
             "inDayHours": "za 1 d {hours} h",
@@ -5409,6 +5409,62 @@
                 "given": "Dane",
                 "declined": "Odmówiono"
             }
+        },
+        "noticeParts": {
+            "finished": "gotowe",
+            "failed": "nie powiodło się",
+            "sentMessage": "wysłał wiadomość",
+            "fired": "spełniony",
+            "gaveUp": "poddał się",
+            "stopped": "zatrzymany",
+            "after": "po {elapsed}",
+            "given": "gotowe",
+            "declined": "odmówiono",
+            "showDetails": "Pokaż szczegóły",
+            "hideDetails": "Ukryj szczegóły"
+        },
+        "noticeArrival": {
+            "reported": "{count} subagent zgłosił wynik | {count} subagenty zgłosiły wyniki | {count} subagentów zgłosiło wyniki",
+            "finishedCount": "gotowe: {count}",
+            "failedCount": "nieudane: {count}",
+            "showAll": "Pokaż wszystko",
+            "showLess": "Pokaż mniej",
+            "noReport": "Zakończył bez raportu.",
+            "verification": {
+                "verified": "Sprawdzone",
+                "failing": "Sprawdzenie nie przechodzi",
+                "unproven": "Niesprawdzone",
+                "noCode": "Bez zmian w kodzie"
+            }
+        },
+        "noticeReceipt": {
+            "doneIn": "Gotowe w {elapsed}",
+            "done": "Gotowe",
+            "stopped": "Zatrzymano",
+            "events": "{count} zdarzenie | {count} zdarzenia | {count} zdarzeń",
+            "problems": "{count} problem | {count} problemy | {count} problemów",
+            "warnings": "{count} ostrzeżenie | {count} ostrzeżenia | {count} ostrzeżeń",
+            "land": {
+                "developer": {
+                    "landed": "Scalono",
+                    "homeLanded": "Scalono i zatwierdzono",
+                    "landHeld": "Gotowe do scalenia",
+                    "landConflict": "Nie scalono {count} pliku | Nie scalono {count} plików | Nie scalono {count} plików",
+                    "intoParent": "W kopii agenta nadrzędnego",
+                    "intoParentClash": "Kolizja z agentem nadrzędnym"
+                },
+                "maker": {
+                    "landed": "Przyjęto",
+                    "homeLanded": "Przyjęto i zapisano",
+                    "landHeld": "Gotowe do przyjęcia",
+                    "landConflict": "Nie przyjęto {count} pliku | Nie przyjęto {count} plików | Nie przyjęto {count} plików",
+                    "intoParent": "W szkicu asystenta nadrzędnego",
+                    "intoParentClash": "Kolizja z asystentem nadrzędnym"
+                }
+            }
+        },
+        "noticeStrip": {
+            "details": "Szczegóły"
         },
         "accessWall": {
             "status": "{account} nie może prowadzić tej rozmowy: jego plan lub organizacja nie pozwala na {provider}, a żadne inne konto {provider} tutaj jej nie przejmie.",

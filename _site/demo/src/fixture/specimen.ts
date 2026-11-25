@@ -1,6 +1,7 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { childReportPrompt, peerMessagePrompt, unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
+import { watchWakePrompt, watchWakeRow } from "@intentic/sandbox-contract/events/watch-wake";
 import { RESUME_NOTES, resumeDisclosure, resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
 import { accountMovedRow, startingRow } from "@intentic/sandbox-contract/text/notice-rows";
 import { NO_PRESS } from "@intentic/sandbox-contract/schemas/agent-press";
@@ -63,6 +64,31 @@ const fleetBurst = (at: number): TranscriptRow[] => {
         heldAt(at - 60_000),
     ];
 };
+
+// A FLEET REPORTING BACK TO BACK while the agent was busy (2026-11-25): five slices, one of which failed, each with the
+// report it actually wrote. The chat draws them as one card, its outcomes a ring, one row per slice that opens into its
+// own report (`@intentic/web` NoticeArrival).
+const SLICE_REPORTS = [
+    [`simd`, `A: SIMD normalize`, false, `omen-runner`, `**Keep.** 2.1× faster on the hot path, bit-identical across 10k random vectors.`],
+    [`inv`, `B: Mat4 inverse`, false, `omen-runner`, `**Drop.** 0.98–1.02× across three runs; not worth the unsafe block.`],
+    [`slerp`, `C: Quat slerp`, true, `z440`, "`cargo test` exited 101: 2 tests failed.\n\n```\nquat::slerp::tests::shortest_path\nquat::slerp::tests::unit_length\n```"],
+    [`aabb`, `D: AABB merge`, false, `omen-runner`, `**Keep.** 1.3× faster on scenes over 5k boxes, unchanged below.`],
+    [`mul`, `E: Quat::mul calm native verdict run (fix only if it truly lands)`, false, `omen-runner`, `**Keep.** 1.8× faster with the native path; the fallback stays for wasm.`],
+] as const;
+const sliceFleet = (at: number): TranscriptRow[] =>
+    SLICE_REPORTS.map(([slug, title, failed, machine, report], index) => ({
+        ...unspokenPromptRow(
+            childReportPrompt({
+                child: `sub-${slug}`,
+                title: `Optimizations slice: ${title}`,
+                failed,
+                machine,
+                report,
+                verification: failed ? { state: `failing`, check: `cargo test` } : { state: `verified`, check: `cargo bench` },
+            }),
+        )!,
+        openedAt: at + index * 70_000,
+    }));
 
 // The Claude CLI's safeguard flag as a sandbox in use wrote it into a transcript, paragraphs and all.
 const SAFEGUARD_FLAG = [
@@ -300,6 +326,12 @@ const messages: TranscriptRow[] = [
         text: `Renderer fixed. Handing the flag parsing to a helper while I try the sh kit myself.`,
         tools: [subagent, ...repeatedReads, failedBash],
         todos: todos(1, 1),
+    },
+    ...sliceFleet(Date.now() - 3 * HOUR),
+    {
+        role: `assistant`,
+        text: `Four of five are worth keeping. C broke two tests in \`slerp\`, so I'm fixing that before anything merges.`,
+        usage: { durationMs: 252_000 },
     },
     // Failures as the fold writes them: every one coded. The sandbox's own sentence is its line; a provider's words sit
     // behind a press under their kind's line; a failure nothing named is the unclassified kind.
@@ -613,21 +645,47 @@ const messages: TranscriptRow[] = [
         text: `The CI pipeline for the workspace repo "intentic" failed on branch main. Investigate and fix it.\n\nFailed jobs: install-scripts.`,
     },
     {
-        role: `notice`,
-        text: `The watch on "CI run 316" fired after 43m: the run finished.`,
-        watchWake: { outcome: `met`, note: `CI run 316 on intentic/intentic`, elapsed: `43m`, sent: `The watch you armed fired: CI run 316 finished with status success.` },
+        ...watchWakeRow(
+            watchWakePrompt({
+                outcome: `met`,
+                id: `watch-316`,
+                note: `CI run 316 on intentic/intentic`,
+                elapsed: `43m`,
+                command: `gh run view 316 --json status,conclusion`,
+                exitCode: 0,
+                output: `{"status":"completed","conclusion":"success"}`,
+            }),
+        )!,
+        openedAt: Date.now() - 50 * 60_000,
     },
     {
-        role: `notice`,
-        text: `brisk-otter reported back: 4 tests written, all passing.`,
-        agentWords: { kind: `child`, from: `sub-brisk-otter-4k2m`, title: `Webhook tests`, machine: `omen`, sent: `Report from brisk-otter: 4 tests written, all passing.` },
+        ...unspokenPromptRow(
+            childReportPrompt({
+                child: `sub-brisk-otter-4k2m`,
+                title: `Webhook tests`,
+                failed: false,
+                machine: `omen`,
+                verification: { state: `verified`, check: `pnpm test webhooks` },
+                report: [
+                    `**4 tests written, all passing.** They cover the retry path, a malformed signature, an expired timestamp and a replayed delivery.`,
+                    ``,
+                    `The replay case found that a second delivery with the same id was accepted inside the 5-minute window; it now answers 409.`,
+                    ``,
+                    `- \`webhooks/verify.test.ts\`: 3 new cases`,
+                    `- \`webhooks/retry.test.ts\`: 1 new case`,
+                    `- \`webhooks/verify.ts\`: idempotency check before the signature`,
+                ].join(`\n`),
+            }),
+        )!,
+        openedAt: Date.now() - 48 * 60_000,
     },
     {
         role: `assistant`,
         text: ANSWER_MARKDOWN,
         todos: todos(4, -1),
+        usage: { durationMs: 728_000 },
     },
-    { role: `notice`, text: `Finished: ready to land from this agent's review.` },
+    { role: `notice`, text: `Finished: ready to land from this agent's review.`, noticeCode: { code: `landHeld` } },
     { role: `user`, text: `Continue`, sentAt: Date.now() - 20 * 60_000 },
     {
         role: `assistant`,

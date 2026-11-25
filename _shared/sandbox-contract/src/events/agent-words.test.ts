@@ -1,4 +1,4 @@
-import { agentWordsOf, agentWordsRow, childReportPrompt, peerMessagePrompt, unspokenPromptRow } from "./agent-words.js";
+import { agentWordsBody, agentWordsOf, agentWordsRow, childReportPrompt, peerMessagePrompt, unspokenPromptRow } from "./agent-words.js";
 import { watchWakePrompt } from "./watch-wake.js";
 
 const peerTitled = (title: string | undefined): string => peerMessagePrompt({ from: "sharp-shale-htw8", title, message: "the sweep is done" });
@@ -71,6 +71,24 @@ describe("another agent's words", () => {
         const stored = report().replace("Report from a subagent you started: ", "Report from a child agent you started: ");
         expect(stored.startsWith("Report from a child agent you started: ")).toBe(true);
         expect(agentWordsOf(stored)).toMatchObject({ kind: "child", from: "sub-x7", title: "Port the parser" });
+    });
+
+    it("hands back what the other agent said, without the lines the sandbox wraps it in", () => {
+        expect(agentWordsBody(peer())).toEqual({ said: "the sweep is done" });
+        const multi = report({ report: "Ported.\n\n- 12 tests pass\n- 1 skipped", machine: "omen", landing: "Held off your checkout." });
+        expect(agentWordsBody(multi)).toEqual({ said: "Ported.\n\n- 12 tests pass\n- 1 skipped" });
+        expect(agentWordsBody(report({ result: { json: '{"ok":true}' } }))?.said).toContain('{"ok":true}');
+    });
+
+    it("reads a child's verification state, and says nothing where it carried none", () => {
+        expect(agentWordsBody(report({ verification: { state: "failing", check: "pnpm test" } }))).toMatchObject({ verification: "failing" });
+        expect(agentWordsBody(report({ verification: { state: "no-code" } }))).toMatchObject({ verification: "no-code" });
+        expect(agentWordsBody(report()) ?? {}).not.toHaveProperty("verification");
+    });
+
+    it("says a report a child ended without as nothing, and answers no other prompt", () => {
+        expect(agentWordsBody(report({ report: "  " }))).toEqual({ said: "" });
+        expect(agentWordsBody("fix the bug\n\nplease\n\nnow")).toBeUndefined();
     });
 
     it("ignores every other prompt, so any reader can ask without checking first", () => {

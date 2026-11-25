@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CopyButton, type IconName, SectionHeader } from "@intentic/ui";
+import { CopyButton, SectionHeader } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { useAgents } from "../../../../models/fleet/useAgents";
@@ -7,25 +7,21 @@ import type { ChatIncident } from "../../../../models/conversations/transcript/c
 import { attemptTimes, cardCopy, otherWords, sharedLead, type WakeEntry, type WakeState, wakeEntries } from "./noticeCard";
 import NoticeFailureDetails from "./NoticeFailureDetails.vue";
 
-/* THE CARD BEHIND A NOTICE'S ONE LINE (NoticeRow.vue), raised by a hover or a press: the line whole, then only what the
-   line could not say. Somebody else's words quoted (a provider's refusal, the sandbox's own paragraph), who the wall
-   turned away while it stood (a fleet of subagents reporting into it), when it refused, and what the agent was told for
-   a row nobody typed. Each part is a heading and a few short rows, never a paragraph of ours. */
+/* WHAT A NOTICE KEEPS BEHIND ITS ONE LINE, opened in place under it (NoticeRow, NoticeStrip): the line whole where the
+   row cut it, somebody else's words quoted (a provider's refusal, the sandbox's own paragraph), who the wall turned away
+   while it stood, when it refused, and what the agent was told for a row nobody typed. Each part is a heading and a few
+   short rows, never a paragraph of ours. It used to be a card a hover raised, which nothing on the row said was there. */
 
 const props = defineProps<{
-    line: string;
-    icon: IconName;
-    // The glyph's ink, where the row's own line carries one (a failure's warning, a runtime notice's level).
-    tone?: string | undefined;
-    // The row keeps its line breaks (a runtime extension's notice), which the head keeps too.
+    // The row's sentence, given only where the row cut it short.
+    line?: string | undefined;
+    // The row keeps its line breaks (a runtime extension's notice).
     lines?: boolean;
     said?: string | undefined;
     incident?: ChatIncident | undefined;
     sent?: string | undefined;
     sentKind?: `check` | `findings` | `message`;
 }>();
-
-const emit = defineEmits<{ close: [] }>();
 
 const t = useT();
 
@@ -62,31 +58,25 @@ const SENT_HEADINGS = {
     message: () => t(`chat.noticeCard.sentMessage`),
 } as const;
 
-const copied = computed(() => cardCopy({ line: props.line, said: quoted.value, incident: props.incident, sent: props.sent }));
+const copied = computed(() => cardCopy({ line: props.line ?? ``, said: quoted.value, incident: props.incident, sent: props.sent }));
 
-// Another agent's entry opens its chat beside this one, the card going with the press.
+// Another agent's entry opens its chat beside this one.
 const { agentById, open: openAgent } = useAgents();
 const openable = (entry: WakeEntry): boolean => entry.agentId !== undefined && agentById(entry.agentId) !== undefined;
 const openEntry = (entry: WakeEntry): void => {
     const card = entry.agentId === undefined ? undefined : agentById(entry.agentId);
     if (card !== undefined) {
-        emit(`close`);
         openAgent(card, `peek`);
     }
 };
 </script>
 
 <template>
-    <div class="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-3 p-3 text-left text-2xs leading-relaxed" data-notice-card>
-        <!-- The line whole: on the row it is cut to one line, so this is where it is read. The copy of everything sits
-             beside it, so it is in reach however far the card's parts below run. -->
-        <div class="flex items-start gap-2">
-            <p class="flex min-w-0 flex-1 items-start gap-2 text-xs leading-snug text-content">
-                <span class="chat-mark"><Icon :name="icon" class="text-xs" :class="tone" /></span>
-                <span class="min-w-0 break-words" :class="{ 'whitespace-pre-line': lines }">{{ line }}</span>
-            </p>
-            <CopyButton :text="copied" :aria-label="t(`chat.failure.copyDetails`)" v-tooltip.top="t(`chat.failure.copyDetails`)" class="-mt-1 -mr-1 shrink-0" />
-        </div>
+    <div class="relative flex flex-col gap-3 pr-7 text-2xs leading-relaxed" data-notice-details>
+        <!-- Everything below as text, for a bug report or a support ticket, in reach however far its parts run. -->
+        <CopyButton :text="copied" :aria-label="t(`chat.failure.copyDetails`)" v-tooltip.top="t(`chat.failure.copyDetails`)" class="absolute -top-1 right-0" />
+
+        <p v-if="line" class="text-xs leading-snug break-words text-content" :class="{ 'whitespace-pre-line': lines }">{{ line }}</p>
 
         <NoticeFailureDetails v-if="quoted !== undefined" :said="quoted" />
 
@@ -100,7 +90,7 @@ const openEntry = (entry: WakeEntry): void => {
                         :type="openable(entry) ? `button` : undefined"
                         class="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left"
                         :class="openable(entry) && `cursor-pointer hover:bg-overlay`"
-                        v-tooltip.top="openable(entry) ? t(`chat.noticeCard.openChat`) : undefined"
+                        :aria-label="openable(entry) ? `${entry.label} · ${t(`chat.noticeCard.openChat`)}` : undefined"
                         data-notice-wake
                         @click="openEntry(entry)"
                     >
@@ -128,6 +118,5 @@ const openEntry = (entry: WakeEntry): void => {
             <SectionHeader :label="SENT_HEADINGS[sentKind ?? `message`]()" density="dense" class="px-0 py-0.5" />
             <pre class="max-h-48 overflow-auto rounded-md bg-canvas px-2 py-1.5 text-2xs leading-relaxed whitespace-pre-wrap text-muted select-text">{{ sent }}</pre>
         </section>
-
     </div>
 </template>

@@ -3831,7 +3831,6 @@
             "allowEverything": "Alles in dieser Unterhaltung erlauben",
             "allowEverythingHint": "Zurücknehmen unter Needs you → Erlaubt · harte Regeln fragen weiter",
             "approversOnly": "Nur Freigebende",
-            "chatStaysPutInstead": "(dieser Chat bleibt liegen, statt sich selbst wieder aufzunehmen)",
             "collapseMessage": "Nachricht einklappen",
             "connect": "{name} verbinden",
             "continueWithoutDeclined": "Fortfahren, ohne den Schritt, den ich abgelehnt habe.",
@@ -5038,7 +5037,8 @@
             "nightApproved": "Deine Nachtruhe galt (bis {until}), also wurde der Plan, den der Agent selbst erstellt hat, umgesetzt."
         },
         "noticeWatchStop": {
-            "couldNotStop": "Die Beobachtung konnte nicht gestoppt werden."
+            "couldNotStop": "Die Beobachtung konnte nicht gestoppt werden.",
+            "staysPut": "Wacht nicht selbst auf"
         },
         "chatCapacityLane": {
             "inDayHours": "in 1 T {hours} h",
@@ -5409,6 +5409,62 @@
                 "given": "Erhalten",
                 "declined": "Abgelehnt"
             }
+        },
+        "noticeParts": {
+            "finished": "fertig",
+            "failed": "fehlgeschlagen",
+            "sentMessage": "hat geschrieben",
+            "fired": "ausgelöst",
+            "gaveUp": "aufgegeben",
+            "stopped": "gestoppt",
+            "after": "nach {elapsed}",
+            "given": "erledigt",
+            "declined": "abgelehnt",
+            "showDetails": "Details zeigen",
+            "hideDetails": "Details ausblenden"
+        },
+        "noticeArrival": {
+            "reported": "{count} Subagent hat berichtet | {count} Subagents haben berichtet",
+            "finishedCount": "{count} fertig",
+            "failedCount": "{count} fehlgeschlagen",
+            "showAll": "Alles zeigen",
+            "showLess": "Weniger zeigen",
+            "noReport": "Ohne Abschlussbericht beendet.",
+            "verification": {
+                "verified": "Geprüft",
+                "failing": "Prüfung schlägt fehl",
+                "unproven": "Ungeprüft",
+                "noCode": "Kein Code geändert"
+            }
+        },
+        "noticeReceipt": {
+            "doneIn": "Fertig in {elapsed}",
+            "done": "Fertig",
+            "stopped": "Gestoppt",
+            "events": "{count} Ereignis | {count} Ereignisse",
+            "problems": "{count} Problem | {count} Probleme",
+            "warnings": "{count} Warnung | {count} Warnungen",
+            "land": {
+                "developer": {
+                    "landed": "Gelandet",
+                    "homeLanded": "Gelandet und committet",
+                    "landHeld": "Bereit zum Landen",
+                    "landConflict": "{count} Datei nicht gelandet | {count} Dateien nicht gelandet",
+                    "intoParent": "In der Kopie des übergeordneten Agenten",
+                    "intoParentClash": "Kollidiert mit dem übergeordneten Agenten"
+                },
+                "maker": {
+                    "landed": "Übernommen",
+                    "homeLanded": "Übernommen und gespeichert",
+                    "landHeld": "Bereit zur Übernahme",
+                    "landConflict": "{count} Datei nicht übernommen | {count} Dateien nicht übernommen",
+                    "intoParent": "Im Entwurf des übergeordneten Assistenten",
+                    "intoParentClash": "Kollidiert mit dem übergeordneten Assistenten"
+                }
+            }
+        },
+        "noticeStrip": {
+            "details": "Details"
         },
         "accessWall": {
             "status": "{account} kann diese Unterhaltung nicht ausführen: Tarif oder Organisation lassen {provider} nicht zu, und kein anderes {provider}-Konto hier kann sie übernehmen.",

@@ -3831,7 +3831,6 @@
             "allowEverything": "Allow everything in this conversation",
             "allowEverythingHint": "Undo in Needs you → Allowed · hard rules still ask",
             "approversOnly": "Approvers only",
-            "chatStaysPutInstead": "(this chat stays put instead of picking itself back up)",
             "collapseMessage": "Collapse message",
             "connect": "Connect {name}",
             "continueWithoutDeclined": "Continue, without the step I declined.",
@@ -5038,7 +5037,8 @@
             "nightApproved": "Your night hours were on (until {until}), so the plan the agent chose to make went ahead."
         },
         "noticeWatchStop": {
-            "couldNotStop": "The watch could not be stopped."
+            "couldNotStop": "The watch could not be stopped.",
+            "staysPut": "This chat won't wake itself"
         },
         "chatCapacityLane": {
             "inDayHours": "in 1d {hours}h",
@@ -5409,6 +5409,62 @@
                 "given": "Given",
                 "declined": "Declined"
             }
+        },
+        "noticeParts": {
+            "finished": "finished",
+            "failed": "failed",
+            "sentMessage": "sent a message",
+            "fired": "fired",
+            "gaveUp": "gave up",
+            "stopped": "stopped",
+            "after": "after {elapsed}",
+            "given": "done",
+            "declined": "declined",
+            "showDetails": "Show details",
+            "hideDetails": "Hide details"
+        },
+        "noticeArrival": {
+            "reported": "{count} subagent reported | {count} subagents reported",
+            "finishedCount": "{count} finished",
+            "failedCount": "{count} failed",
+            "showAll": "Show all",
+            "showLess": "Show less",
+            "noReport": "It ended without a report.",
+            "verification": {
+                "verified": "Checked",
+                "failing": "Check failing",
+                "unproven": "Unchecked",
+                "noCode": "No code changed"
+            }
+        },
+        "noticeReceipt": {
+            "doneIn": "Done in {elapsed}",
+            "done": "Done",
+            "stopped": "Stopped",
+            "events": "{count} event | {count} events",
+            "problems": "{count} problem | {count} problems",
+            "warnings": "{count} warning | {count} warnings",
+            "land": {
+                "developer": {
+                    "landed": "Landed",
+                    "homeLanded": "Landed and committed",
+                    "landHeld": "Ready to land",
+                    "landConflict": "{count} file didn't land | {count} files didn't land",
+                    "intoParent": "In the parent's checkout",
+                    "intoParentClash": "Clashes with the parent"
+                },
+                "maker": {
+                    "landed": "Accepted",
+                    "homeLanded": "Accepted and saved",
+                    "landHeld": "Ready to accept",
+                    "landConflict": "{count} file wasn't accepted | {count} files weren't accepted",
+                    "intoParent": "In the parent's draft",
+                    "intoParentClash": "Clashes with the parent"
+                }
+            }
+        },
+        "noticeStrip": {
+            "details": "Details"
         },
         "accessWall": {
             "status": "{account} can't run this conversation: its plan or organization does not allow {provider}, and no other {provider} account here can take it.",

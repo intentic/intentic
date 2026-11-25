@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Button, type ButtonTier } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 import { openWorkTerminal, useWorkTerminals } from "../../../../models/terminal/useWorkTerminals";
@@ -6,7 +7,7 @@ import type { ChatMessage } from "../../../../models/conversations/transcript/tr
 
 /* Reveals the terminal of a dependency install the daemon started, while it still runs. */
 
-defineProps<{ message: ChatMessage }>();
+const { tier = `quiet` } = defineProps<{ message: ChatMessage; tier?: ButtonTier }>();
 
 const t = useT();
 const { rows } = useWorkTerminals();
@@ -15,12 +16,7 @@ const session = computed(() => rows.value.find((row) => row.session.endsWith(`--
 </script>
 
 <template>
-    <button
-        v-if="session !== undefined"
-        type="button"
-        class="touch-target shrink-0 font-medium text-link hover:underline"
-        @click="openWorkTerminal(session)"
-    >
+    <Button v-if="session !== undefined" size="small" :tier="tier" class="shrink-0" @click="openWorkTerminal(session)">
         {{ t(`chat.chatMessageView.watchInstall`) }}
-    </button>
+    </Button>
 </template>
