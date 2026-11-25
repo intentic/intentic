@@ -46,6 +46,7 @@ const harness = () => {
     const ownerGrants = memoryOwnerGrants();
     const warned: unknown[][] = [];
     const deps: TurnSafetyDeps = {
+        config: unstubbed<TurnSafetyDeps["config"]>("config", { historyRoot: HISTORY_ROOT }),
         secretRegistry: Object.assign(() => { throw new Error("must not read values"); }, { names: () => [] }),
         hostGuards: Object.assign(() => { throw new Error("must not hydrate credentials"); }, { metadata: async () => [] }),
         credentialGates: unstubbed("gates", { list: async () => [] }),

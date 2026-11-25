@@ -201,6 +201,7 @@ export const startWorld = async (): Promise<World> => {
             env: {
                 DATABASE_URL: `postgresql://${DB.user}:${DB.password}@postgres:5432/${DB.name}`,
                 BETTER_AUTH_SECRET: betterAuthSecret,
+                SECRETS_KEY: randomBytes(32).toString(`hex`),
                 // Both are browser-facing, so both carry the outside address even though this is a container.
                 API_URL: apiUrl,
                 WEB_ORIGIN: webUrl,
@@ -212,7 +213,6 @@ export const startWorld = async (): Promise<World> => {
                 INGRESS_SIGNING_KEY,
                 INGRESS_URL,
                 INGRESS_ZONE: SANDBOX_ZONE,
-                // SECRETS_KEY stays unset, so a sandbox's connect token is stored in plain text and read back directly.
                 LOG_PRETTY: `false`,
                 MIGRATE_WITHOUT_BACKUP,
                 // Api serves its own TLS, as a dev run does; nothing verifies this pair.
