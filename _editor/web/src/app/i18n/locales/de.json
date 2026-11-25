@@ -3338,6 +3338,7 @@
             "fixWait": "Pausiert",
             "lastRead": "Zuletzt gelesen",
             "moreRoom": "+{hidden} weitere mit Platz",
+            "otherProviders": "Weitere Anbieter",
             "moreAccounts": "{count} weiteres Konto | {count} weitere Konten",
             "withRoom": "mit Kapazität",
             "nothingRoomRightNow": "Gerade hat nichts Platz.",

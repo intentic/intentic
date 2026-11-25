@@ -3338,6 +3338,7 @@
             "fixWait": "En pausa",
             "lastRead": "Última lectura",
             "moreRoom": "+{hidden} más con sitio",
+            "otherProviders": "Otros proveedores",
             "moreAccounts": "{count} cuenta más | {count} cuentas más",
             "withRoom": "con margen",
             "nothingRoomRightNow": "Ahora mismo no hay sitio en ninguno.",

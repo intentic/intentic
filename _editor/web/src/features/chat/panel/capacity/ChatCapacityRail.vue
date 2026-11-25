@@ -233,19 +233,16 @@ const staleTip = computed((): Tip | undefined => {
 });
 
 // Everything the one-line blocked row leaves out: which accounts, what each provider said, and who can fix it.
+const fixWhere = (entry: CapacityBlocked): string | undefined =>
+    entry.fix === `reconnect`
+        ? t(`chat.chatCapacityRail.reconnectOnAgentTab`)
+        : entry.fix === `verify`
+          ? t(`chat.chatCapacityRail.verifyOnAgentTab`)
+          : entry.fix === `admin`
+            ? t(`chat.chatCapacityRail.seatFromAdmin`)
+            : undefined;
 const blockedDetail = (entry: CapacityBlocked): string =>
-    [
-        ...entry.labels,
-        entry.fix === `reconnect`
-            ? t(`chat.chatCapacityRail.reconnectOnAgentTab`)
-            : entry.fix === `verify`
-              ? t(`chat.chatCapacityRail.verifyOnAgentTab`)
-              : entry.fix === `admin`
-                ? t(`chat.chatCapacityRail.seatFromAdmin`)
-                : undefined,
-    ]
-        .filter((part) => part !== undefined)
-        .join(` · `);
+    [...entry.labels, fixWhere(entry)].filter((part) => part !== undefined).join(` · `);
 
 // The same as a hover card: the fix as its headline, where it is made, and which accounts.
 const blockedTip = (entry: CapacityBlocked): Tip => {
@@ -261,6 +258,53 @@ const blockedTip = (entry: CapacityBlocked): Tip => {
     const names = entry.names.length <= 3 ? entry.names.join(`, `) : entry.count;
     return { title, tone: `warning`, rows: [{ label: t(`chat.chatCapacityRail.accounts`), value: names }], note };
 };
+// WHAT HAS NO BAR RIDES ONE MARK BESIDE THE HEADING: providers with nothing to measure, providers spent outright and
+// credentials that can't serve each took a line of the column under the bars, a line per fact the reader rarely acts on
+// here. Since 2026-11-25 they are one icon by "Usage left" with every line on its hover card (and its sentences the
+// screen reader's), so the column is only bars. With no bars at all the lines ARE the column, so they stay drawn.
+const asideInline = computed(() => measuredProviders.value.length === 0);
+const hasAside = computed(() => unmeasuredProviders.value.length > 0 || capacity.value.out.length > 0 || capacity.value.blocked.length > 0);
+const thisChat = (label: string, isMine: boolean): string => (isMine ? `${label} · ${t(`chat.chatCapacityRail.thisChat`)}` : label);
+const asideTip = computed((): Tip => {
+    const { out, blocked } = capacity.value;
+    const fixes = [...new Set(blocked.flatMap((entry) => fixWhere(entry) ?? []))];
+    return {
+        title: out.length > 0 || blocked.length > 0 ? t(`chat.chatCapacityRail.unavailable`) : t(`chat.chatCapacityRail.otherProviders`),
+        tone: out.length > 0 ? `danger` : blocked.length > 0 ? `warning` : undefined,
+        rows: [
+            ...unmeasuredProviders.value.map((entry) => ({
+                label: thisChat(entry.label, entry.mine),
+                value: [entry.rows[0]?.note, entry.ready > 1 ? plural(entry.ready) : undefined].filter((part) => part !== undefined).join(` · `),
+            })),
+            ...out.map((entry) => ({ label: thisChat(entry.label, entry.mine), value: outNote(entry), tone: `danger` as const })),
+            ...blocked.map((entry) => ({
+                label: t(`chat.chatCapacityRail.cantServe`, { count: entry.count }),
+                value: entry.reason,
+                tone: `warning` as const,
+            })),
+        ],
+        note: fixes.length === 0 ? undefined : fixes.join(` · `),
+    };
+});
+// The card as one sentence for the screen reader, with which accounts can't serve, which the card only counts.
+const asideSpoken = computed(() =>
+    [
+        asideTip.value.title,
+        ...(asideTip.value.rows ?? []).map((row) => `${row.label} · ${row.value}`),
+        ...capacity.value.blocked.map((entry) => entry.labels.join(` · `)),
+        asideTip.value.note,
+    ]
+        .filter((part) => part !== undefined && part !== ``)
+        .join(`. `),
+);
+// The mark's own ink: the worst thing the card holds, quiet when it only lists providers that publish no limits.
+const asideIcon = computed(() =>
+    capacity.value.out.length > 0
+        ? ({ name: `exclamation-circle`, tone: `text-danger` } as const)
+        : capacity.value.blocked.length > 0
+          ? ({ name: `exclamation-triangle`, tone: `text-warning` } as const)
+          : ({ name: `info-circle`, tone: `text-subtle` } as const),
+);
 // The usage column's outline while the accounts are read: the lanes each of two providers' accounts usually carries
 // (a week and its session; one monthly pool).
 const OUTLINE_LANES = [[`week`, `session`], [`month`]] as const;
@@ -305,6 +349,20 @@ const OUTLINE_LANES = [[`week`, `session`], [`month`]] as const;
                 density="dense"
                 class="shrink-0 px-3 py-2"
             >
+                <!-- What has no bar (asideTip): one mark by the heading, every line on its hover card. Focusable, so the
+                     keyboard opens the same card. -->
+                <template v-if="!asideInline && hasAside" #info>
+                    <span
+                        v-tooltip.right="asideTip"
+                        tabindex="0"
+                        class="ml-1.5 flex shrink-0 items-center rounded-sm text-[0.65rem] outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        :class="asideIcon.tone"
+                        data-capacity-aside
+                    >
+                        <Icon :name="asideIcon.name" aria-hidden="true" />
+                        <span class="sr-only">{{ asideSpoken }}</span>
+                    </span>
+                </template>
                 <template #actions>
                     <!-- Readings the age leaves out: a quiet mark by the number it qualifies, the reasons on hover. -->
                     <span v-if="staleNote !== undefined" v-tooltip.left="staleTip" class="flex shrink-0 items-center gap-0.5 text-2xs text-warning">
@@ -436,10 +494,8 @@ const OUTLINE_LANES = [[`week`, `session`], [`month`]] as const;
                     </div>
 
                     <!-- One line each, grouped: providers with nothing to measure, then what cannot run. -->
-                    <div
-                        v-if="unmeasuredProviders.length > 0 || capacity.out.length > 0 || capacity.blocked.length > 0"
-                        class="flex flex-col gap-1.5"
-                    >
+                    <!-- Drawn only while no bars stand above them; otherwise they ride the heading's mark (asideTip). -->
+                    <div v-if="asideInline && hasAside" class="flex flex-col gap-1.5">
                         <!-- One line stands for every account of a provider with nothing to measure, so its count is how many it
                          has with room, as a quiet badge on that line: until 2026-11-25 a second line said "+N more with room"
                          under it, N leaving out the rows a capped list would have drawn and this line never does. -->

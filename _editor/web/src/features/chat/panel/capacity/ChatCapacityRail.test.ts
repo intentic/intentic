@@ -157,6 +157,33 @@ it(`names a provider that has fallen off the list, and when it comes back`, () =
     expect(el.querySelector(`[aria-label="Plan headroom"]`)?.textContent).toMatch(/Nothing has room right now/);
 });
 
+// Lines with no bar (a provider that publishes no limits, one spent outright) cost the column a row each under the bars;
+// while bars stand there they ride one mark by the heading instead, said in full to a screen reader.
+it(`folds what has no bar into the heading's mark while bars are drawn`, () => {
+    const el = mount(
+        [
+            {
+                id: `a`,
+                label: `spent@example.com`,
+                usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, resetsAt: NOW_SECONDS + 90_000, gates: `all` }] },
+            },
+        ],
+        {
+            ...NO_ROUTED,
+            grok: [{ name: `grok-1`, label: `grok` }],
+            gemini: [{ name: `g-1`, label: `g`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 40, gates: `all` }] } }],
+        },
+    );
+
+    expect(barWidths(el)).toEqual([`60%`]);
+    const mark = el.querySelector(`[data-capacity-aside]`);
+    expect(mark).not.toBeNull();
+    expect(drawn(el)).not.toContain(`no published limits`);
+    expect(drawn(el)).not.toContain(`Claude Code`);
+    expect(mark?.textContent).toContain(`Grok · no published limits`);
+    expect(mark?.textContent).toMatch(/Unavailable.*Claude Code · spent/);
+});
+
 // An account past the red line but not yet exhausted keeps its row; steering is by tone (danger red) rather than
 // by dropping it, which read as the account having gone missing.
 it(`draws an account that is nearly spent in the warning tone rather than dropping it: danger is the contract's spent line`, () => {
