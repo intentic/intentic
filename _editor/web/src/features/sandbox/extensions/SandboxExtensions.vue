@@ -23,9 +23,10 @@ import { useT } from "@intentic/ui/i18n";
 // The sandbox hub's Extensions section, laid out as the Capabilities page is, less the rail the hub already provides:
 // the two lists as tabs with the section's verbs at the strip's end, one filter spanning whichever list is open, and an
 // entry picked from either list opened as its own page in the list's place, with the way back named after the list
-// (`?ext=`). Installed lists what is here as rows, as Capabilities lists what is connected; Browse draws the registry as
-// Capabilities draws its catalog. The tab rides the URL (`?view=browse|installed`) rather than component state, so a
-// reload or pasted link lands on the same view; a bare URL opens the view last picked here, Browse until one has been.
+// (`?ext=`). Both lists are drawn as Capabilities draws its catalog, tiles in one grid, so the section reads as one
+// catalog in two halves: Installed what is here, each tile keeping its switch; Browse what the registry publishes. The
+// tab rides the URL (`?view=browse|installed`) rather than component state, so a reload or pasted link lands on the same
+// view; a bare URL opens the view last picked here, Browse until one has been.
 
 const t = useT();
 
@@ -120,7 +121,7 @@ const viewOptions = computed(() => [
 ]);
 
 // Work started from this section, kept in the operations ledger rather than here (extensionWork.ts): the section's own
-// verbs, the installed rows' and Browse's installs. Whatever ended is said in the notice region until put away, which
+// verbs, the installed tiles' and Browse's installs. Whatever ended is said in the notice region until put away, which
 // is also how an outcome that ended while the reader was elsewhere waits for them; an install whose dialog is open is
 // that dialog's to say.
 const section = useOperations<unknown>(SECTION);
@@ -377,7 +378,11 @@ const dismissWork = (notice: NoticeModel): void => {
         />
 
         <!-- How many installed extensions have a newer commit and when that was checked; absent until first check runs. -->
-        <p v-if="manage && updatesCheckedAt !== undefined && !detailOpen" class="text-right text-2xs text-subtle">
+        <!-- A flex line rather than right-aligned text: its presses are block-level, and would otherwise each take a line. -->
+        <p
+            v-if="manage && updatesCheckedAt !== undefined && !detailOpen"
+            class="flex flex-wrap items-center justify-end gap-x-1 text-2xs text-subtle"
+        >
             <template v-if="updatable > 0">
                 <button v-if="view === `installed`" type="button" :class="ui.textButton({ size: `xs` })" @click="show(`browse`)">
                     {{ t(`sandbox.sandboxExtensions.updatesToInstall`, { count: updatable }, updatable) }}

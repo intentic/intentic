@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Tip } from "@intentic/ui";
 import { computed } from "vue";
-import CatalogTile from "../../../components/CatalogTile.vue";
+import CatalogTile from "../../../components/catalog/CatalogTile.vue";
 import { checksProblem, checksTip, type DiscoverListing, splitListingName } from "../../../models/sandbox/discoverListing";
 import { useT } from "@intentic/ui/i18n";
 

@@ -14,6 +14,8 @@ import { useTerminalPanel } from "../../../models/terminal/useTerminalPanel";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { useOperations } from "../../../workbench/operations/operations";
 import { auditBrief, updateBrief } from "../../../models/sandbox/extensionBrief";
+import CatalogGrid from "../../../components/catalog/CatalogGrid.vue";
+import CatalogSkeleton from "../../../components/catalog/CatalogSkeleton.vue";
 import DiscoverCard from "./DiscoverCard.vue";
 import DiscoverDetail from "./DiscoverDetail.vue";
 import { type DiscoverListing, listingSections, toListing } from "../../../models/sandbox/discoverListing";
@@ -183,7 +185,7 @@ const install = async (listing: DiscoverListing): Promise<void> => {
     const pinned = pointer?.ref;
     const updateOf = listing.state.kind === `update` && pinned !== undefined ? listing.state.installedId : undefined;
     // One at a time per listing: the daemon takes one add per id anyway, and a second press would only queue a clone
-    // of what is already arriving. An update also waits on anything the installed row or its drawer has under way.
+    // of what is already arriving. An update also waits on anything the installed tile or its page has under way.
     if (
         pointer === undefined ||
         listing.state.action === undefined ||
@@ -246,9 +248,6 @@ const backToOfficial = (): void => {
     resetRegistry();
     changing.value = false;
 };
-
-// The Capabilities catalog's grid, column for column, so the two catalogs wrap at the same widths.
-const GRID = `grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4`;
 
 // What to say when nothing matches, kept distinct from the error notice: a registry that failed to read has not 'listed
 // no extensions'. Only drawn once the registry has answered (<Await>).
@@ -339,17 +338,7 @@ const emptyNote = computed<string | undefined>(() => {
                 <div role="status" aria-busy="true">
                     <span class="sr-only">{{ t(`sandbox.extensionsBrowse.readingRegistry`) }}</span>
                     <Section :label="t(`sandbox.words.verified`)">
-                        <div class="@container">
-                            <div :class="GRID" aria-hidden="true">
-                                <div v-for="tile in 6" :key="tile" class="flex h-[2.875rem] items-stretch overflow-hidden rounded-lg bg-card shadow-sm">
-                                    <span class="skeleton block w-11 shrink-0 rounded-none" />
-                                    <div class="flex min-w-0 flex-1 flex-col justify-center gap-1.5 px-2.5">
-                                        <span class="skeleton block h-3" :class="[`w-24`, `w-32`, `w-20`][tile % 3]" />
-                                        <span class="skeleton block h-2 w-4/5" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <CatalogSkeleton />
                     </Section>
                 </div>
             </template>
@@ -358,18 +347,15 @@ const emptyNote = computed<string | undefined>(() => {
             <div v-if="sections.length > 0 || emptyNote !== undefined" class="flex flex-col gap-6">
                 <!-- Verified leads: the one claim on this page a human made. The other heading states what it's not, in the same size. -->
                 <Section v-for="section in sections" :key="section.id" :label="section.label">
-                    <!-- Container query: how many tiles fit is a fact about this pane, not the screen. -->
-                    <div class="@container">
-                        <div :class="GRID">
-                            <DiscoverCard
-                                v-for="listing in section.listings"
-                                :key="listing.entry.name"
-                                :listing="listing"
-                                :installing="installsInFlight.has(listing.entry.name)"
-                                @click="openListing(listing)"
-                            />
-                        </div>
-                    </div>
+                    <CatalogGrid>
+                        <DiscoverCard
+                            v-for="listing in section.listings"
+                            :key="listing.entry.name"
+                            :listing="listing"
+                            :installing="installsInFlight.has(listing.entry.name)"
+                            @click="openListing(listing)"
+                        />
+                    </CatalogGrid>
                 </Section>
 
                 <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-8`)">

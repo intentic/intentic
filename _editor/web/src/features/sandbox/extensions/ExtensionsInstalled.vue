@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, PendingWorkspaceExtension } from "@intentic/sandbox-contract/schemas/extension-updates";
-import { Await, Button, ui, type NoticeModel, Row, RowGroup, RowNote, SkeletonRows, StatusBadge } from "@intentic/ui";
+import { Await, Button, InfoHint, type NoticeModel, Section, ui } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { type ExtensionSection, sectionsOf } from "../../extensions/extensionCategories";
@@ -9,18 +9,22 @@ import { hostStateWord } from "../../extensions/extensionState";
 import { useExtensionList } from "../../extensions/useExtensionList";
 import { reloadExtensions } from "../../../extension-host/useExtensionHost";
 import { dismissOperation, useOperations } from "../../../workbench/operations/operations";
+import CatalogGrid from "../../../components/catalog/CatalogGrid.vue";
+import CatalogSkeleton from "../../../components/catalog/CatalogSkeleton.vue";
+import ExtensionCard from "./ExtensionCard.vue";
 import ExtensionDetail from "./ExtensionDetail.vue";
 import ExtensionRemoveDialog from "./ExtensionRemoveDialog.vue";
 import { openEntryOf } from "./extensionRoute";
-import ExtensionRow from "./ExtensionRow.vue";
+import ExtensionTile from "./ExtensionTile.vue";
 import { extensionBusy, ROWS } from "./extensionWork";
 import { useT } from "@intentic/ui/i18n";
 
 // Every extension this sandbox has (first-party, baked, git-installed, workspace), the half of the Extensions section
-// answering 'what do I have and is it working' (Browse is the other half). Drawn as Capabilities draws what is already
-// connected: rows grouped under section labels, each opening its own page in the list's place (ExtensionDetail). Built
-// to be scanned: the nominal case is silent, exceptions pin to a group at the top, and sections group by
-// manifest-declared purpose.
+// answering 'what do I have and is it working' (Browse is the other half). Drawn as Browse draws the registry, so the
+// section reads as one catalog: tiles in the catalog grid under section labels (ExtensionTile), each opening its own page
+// in the list's place (ExtensionDetail) and keeping its switch. Built to be scanned: the nominal case is silent,
+// exceptions pin to a group at the top, and sections group by manifest-declared purpose. What has no page to open
+// (waiting for approval, not loadable, running unlisted) is a card as wide as the list, since its words are read whole.
 
 const t = useT();
 
@@ -111,6 +115,8 @@ const sections = computed<ExtensionSection[]>(() => [
           ]),
     ...sectionsOf(healthy.value),
 ]);
+// A group that IS a state heads itself in that state's ink: danger once anything in it failed, else a warning.
+const attentionTone = computed(() => (attention.value.some((entry) => entry.state.variant === `danger`) ? `danger` : `warning`));
 
 // Three distinct empty reasons: an attention row still counts as a match, so 'nothing matches' would be visibly false
 // while one sits above. Only drawn once the list is read (<Await>), so none of them speaks for a list still on its way.
@@ -131,7 +137,7 @@ const emptyNote = computed<string | undefined>(() => {
 // The row verbs, kept in the operations ledger under the extension's id (extensionWork.ts) rather than here: switching to
 // Browse unmounts this list while the daemon stops, starts or removes what the press asked, and the section's notice
 // region (SandboxExtensions) reads how each ended from the ledger. Each answers its own sentence, which is also its
-// receipt when it ends with the section closed, or nothing where the row says it by itself (the switch, which then
+// receipt when it ends with the section closed, or nothing where the tile says it by itself (the switch, which then
 // raises none). A press puts the earlier answers away, as the one notice region it speaks in always did.
 const rows = useOperations<NoticeModel | undefined>(ROWS);
 const verb = async (id: string, what: string, failed: string, task: () => Promise<NoticeModel | undefined>, quiet = false) => {
@@ -249,7 +255,7 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-6">
-        <!-- A picked extension takes the list's place, as a picked connection does in Capabilities. -->
+        <!-- A picked extension takes the list's place, as a picked listing does in Browse. -->
         <ExtensionDetail
             v-if="opened"
             :key="opened.extension.id"
@@ -262,82 +268,96 @@ const confirmRemove = async (): Promise<void> => {
             @back="closeExtension"
         />
         <template v-else>
-            <!-- Written in this workspace and not approved in its current shape: nothing of it runs until the yes, so it leads. -->
-            <RowGroup v-if="waiting.length > 0" :label="t(`sandbox.extensionsInstalled.waitingForApproval`)">
-                <RowNote icon="exclamation-circle" tone="warning" :label="t(`sandbox.extensionsInstalled.waitingCaption`)" />
-                <Row v-for="extension in waiting" :key="extension.id">
-                    <template #title>
-                        <span class="block truncate">{{ extension.id }}</span>
-                    </template>
-                    <template #description>
-                        <span class="block truncate">.intentic/config/workspace-extensions/{{ extension.dir }}</span>
-                    </template>
-                    <template #meta><StatusBadge variant="warning" :label="t(`sandbox.extensionsInstalled.pendingBadge`)" size="xs" /></template>
-                    <template v-if="manage" #control>
-                        <Button
-                            tier="accent"
-                            size="small"
-                            :label="t(`sandbox.extensionsInstalled.approve`)"
-                            :loading="extensionBusy(extension.id)"
-                            @click="approveExtension(extension)"
-                        />
-                    </template>
-                    <!-- The same vocabulary and marks the update card reads out: what a yes allows, and what it no longer asks for. -->
-                    <template #below>
-                        <div class="flex flex-col gap-1 pb-2">
-                            <p v-if="extension.powers.added.length === 0" class="text-2xs text-subtle">
-                                {{ t(`sandbox.extensionsInstalled.asksForNothing`) }}
+            <!-- Written in this workspace and not approved in its current shape: nothing of it runs until the yes, so it leads.
+                 Why it waits is how the section works, so it is the (i)'s; what a yes allows is on each card, to be read
+                 before the press. -->
+            <Section v-if="waiting.length > 0" :label="t(`sandbox.extensionsInstalled.waitingForApproval`)" tone="warning">
+                <template #info>
+                    <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`sandbox.extensionsInstalled.waitingForApproval`) })">
+                        <span class="text-xs text-content">{{ t(`sandbox.extensionsInstalled.waitingCaption`) }}</span>
+                    </InfoHint>
+                </template>
+                <div class="flex flex-col gap-2">
+                    <ExtensionCard
+                        v-for="extension in waiting"
+                        :key="extension.id"
+                        :name="extension.manifest.name"
+                        :prefix="extension.manifest.publisher"
+                        :line="`.intentic/config/workspace-extensions/${extension.dir}`"
+                        :art="extension.manifest.art"
+                        :logo="extension.manifest.logo"
+                        :icon="extension.manifest.icon"
+                    >
+                        <template v-if="manage" #control>
+                            <Button
+                                tier="accent"
+                                size="small"
+                                :label="t(`sandbox.extensionsInstalled.approve`)"
+                                :loading="extensionBusy(extension.id)"
+                                @click="approveExtension(extension)"
+                            />
+                        </template>
+                        <!-- The same vocabulary and marks the update card reads out: what a yes allows, and what it no longer asks for. -->
+                        <p v-if="extension.powers.added.length === 0" class="text-subtle">
+                            {{ t(`sandbox.extensionsInstalled.asksForNothing`) }}
+                        </p>
+                        <template v-else>
+                            <p class="text-muted">
+                                {{
+                                    extension.approvedBefore
+                                        ? t(`sandbox.extensionsInstalled.newPowersSinceApproved`)
+                                        : t(`sandbox.extensionsInstalled.whatItAsksFor`)
+                                }}
                             </p>
-                            <template v-else>
-                                <p class="text-2xs text-muted">
-                                    {{
-                                        extension.approvedBefore
-                                            ? t(`sandbox.extensionsInstalled.newPowersSinceApproved`)
-                                            : t(`sandbox.extensionsInstalled.whatItAsksFor`)
-                                    }}
-                                </p>
-                                <ul class="flex flex-col gap-0.5">
-                                    <li v-for="power in extension.powers.added" :key="power" class="text-2xs text-content">+ {{ power }}</li>
-                                </ul>
-                            </template>
-                            <ul v-if="extension.powers.removed.length > 0" class="flex flex-col gap-0.5">
-                                <li v-for="power in extension.powers.removed" :key="power" class="text-2xs text-subtle">− {{ power }}</li>
+                            <ul class="flex flex-col gap-0.5">
+                                <li v-for="power in extension.powers.added" :key="power" class="text-content">+ {{ power }}</li>
                             </ul>
-                        </div>
-                    </template>
-                </Row>
-            </RowGroup>
+                        </template>
+                        <ul v-if="extension.powers.removed.length > 0" class="flex flex-col gap-0.5">
+                            <li v-for="power in extension.powers.removed" :key="power" class="text-subtle">− {{ power }}</li>
+                        </ul>
+                    </ExtensionCard>
+                </div>
+            </Section>
 
             <!-- Sections render nothing while the read is out, so the wait takes the list's own shape instead of a sentence: the
-                 list as it last looked in this sandbox, or until then a group of placeholder rows. A failed read says so in the
-                 section's notice region (`notice`), so nothing is drawn here for it. -->
+                 list as it last looked in this sandbox, or until then a section of placeholder tiles. A failed read says so in
+                 the section's notice region (`notice`), so nothing is drawn here for it. -->
             <Await :of="loaded" imprint="sandbox.extensions.installed" :label="t(`sandbox.extensionsInstalled.readingSandboxsExtensions`)">
                 <template #fallback>
-                    <!-- The list is grouped by what each extension is for, so the heading is a bar: no group is known yet. -->
-                    <RowGroup>
-                        <template #label><span class="skeleton block h-2.5 w-32" aria-hidden="true" /></template>
-                        <div role="status" aria-busy="true">
-                            <span class="sr-only">{{ t(`sandbox.extensionsInstalled.readingSandboxsExtensions`) }}</span>
-                            <SkeletonRows :rows="3" description control />
-                        </div>
-                    </RowGroup>
+                    <div role="status" aria-busy="true">
+                        <span class="sr-only">{{ t(`sandbox.extensionsInstalled.readingSandboxsExtensions`) }}</span>
+                        <!-- The list is grouped by what each extension is for, so the heading is a bar: no group is known yet. -->
+                        <Section>
+                            <template #label><span class="skeleton block h-2.5 w-32" aria-hidden="true" /></template>
+                            <CatalogSkeleton :control="manage" />
+                        </Section>
+                    </div>
                 </template>
                 <template #failed />
-                <!-- The sections and the empty note as one box (never empty once read: no healthy row means a note), spaced as
+                <!-- The sections and the empty note as one box (never empty once read: no healthy tile means a note), spaced as
                      the column it sits in. -->
                 <div class="flex flex-col gap-6">
-                    <RowGroup v-for="section in sections" :key="section.id" :label="section.label">
-                        <ExtensionRow
-                            v-for="entry in section.entries"
-                            :key="entry.extension.id"
-                            :data-extension="entry.extension.id"
-                            :entry="entry"
-                            :pending="extensionBusy(entry.extension.id, extensionIdOf(entry.extension.manifest))"
-                            :manage="manage"
-                            @toggle="(enabled) => toggle(entry.extension, enabled)"
-                            @open="openExtension(entry.extension.id)"
-                        />
-                    </RowGroup>
+                    <!-- The pinned group heads itself in the worst ink it holds, as a group that IS a state does. -->
+                    <Section
+                        v-for="section in sections"
+                        :key="section.id"
+                        :label="section.label"
+                        :tone="section.id === `attention` ? attentionTone : undefined"
+                    >
+                        <CatalogGrid>
+                            <ExtensionTile
+                                v-for="entry in section.entries"
+                                :key="entry.extension.id"
+                                :data-extension="entry.extension.id"
+                                :entry="entry"
+                                :pending="extensionBusy(entry.extension.id, extensionIdOf(entry.extension.manifest))"
+                                :manage="manage"
+                                @toggle="(enabled) => toggle(entry.extension, enabled)"
+                                @open="openExtension(entry.extension.id)"
+                            />
+                        </CatalogGrid>
+                    </Section>
 
                     <div v-if="emptyNote !== undefined" :class="ui.emptyState(`flex flex-col items-center gap-2 py-6`)">
                         <span>{{ emptyNote }}</span>
@@ -367,33 +387,33 @@ const confirmRemove = async (): Promise<void> => {
                 </div>
             </Await>
 
-            <!-- Unenumerated workspace extensions are listed with their reason. -->
-            <RowGroup v-if="invalid.length > 0" :label="t(`sandbox.extensionsInstalled.notLoadable`)">
-                <Row v-for="entry in invalid" :key="entry.dir">
-                    <template #title>
-                        <span class="block truncate">.intentic/config/workspace-extensions/{{ entry.dir }}</span>
-                    </template>
-                    <template #description>
-                        <span class="text-danger">{{ entry.error }}</span>
-                    </template>
-                    <template #meta><StatusBadge variant="danger" :label="t(`sandbox.extensionsInstalled.invalid`)" size="xs" /></template>
-                </Row>
-            </RowGroup>
+            <!-- Unenumerated workspace extensions are listed with their reason, read whole. -->
+            <Section v-if="invalid.length > 0" :label="t(`sandbox.extensionsInstalled.notLoadable`)" tone="danger">
+                <div class="flex flex-col gap-2">
+                    <ExtensionCard
+                        v-for="entry in invalid"
+                        :key="entry.dir"
+                        :name="entry.dir"
+                        :line="`.intentic/config/workspace-extensions/${entry.dir}`"
+                    >
+                        <p class="text-danger">{{ entry.error }}</p>
+                    </ExtensionCard>
+                </div>
+            </Section>
 
-            <!-- Running in this app build, absent from the daemon's list: no row to sit in, no switch to offer. -->
-            <RowGroup v-if="unlisted.length > 0" :label="t(`sandbox.extensionsInstalled.runningNotListed`)">
-                <Row v-for="status in unlisted" :key="status.id">
-                    <template #title>
-                        <span class="block truncate">{{ status.extensionId }}</span>
-                    </template>
-                    <template v-if="status.detail" #description>
-                        <span class="text-warning">{{ status.detail }}</span>
-                    </template>
-                    <template #meta>
-                        <StatusBadge :variant="status.state === `error` ? `danger` : `warning`" :label="hostStateWord(status.state)" size="xs" />
-                    </template>
-                </Row>
-            </RowGroup>
+            <!-- Running in this app build, absent from the daemon's list: no page to open, no switch to offer. -->
+            <Section v-if="unlisted.length > 0" :label="t(`sandbox.extensionsInstalled.runningNotListed`)" tone="warning">
+                <div class="flex flex-col gap-2">
+                    <ExtensionCard v-for="status in unlisted" :key="status.id" :name="status.extensionId">
+                        <template #line>
+                            <span class="first-letter:uppercase" :class="status.state === `error` ? `text-danger` : `text-warning`">{{
+                                hostStateWord(status.state)
+                            }}</span>
+                        </template>
+                        <p v-if="status.detail" class="text-warning">{{ status.detail }}</p>
+                    </ExtensionCard>
+                </div>
+            </Section>
         </template>
 
         <!-- Removal takes state the owner configured themselves, so it is never one click: the dialog reads the plan

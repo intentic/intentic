@@ -2,7 +2,7 @@ import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extens
 import { t } from "@intentic/ui/i18n";
 
 // An install running from a source checkout instead of its pinned copy (dev mode), or pointed at one that is held, as
-// one sentence. The Installed row says it while closed and the extension's page leads with it, because what runs is not
+// one sentence. The Installed tile says it while closed and the extension's page leads with it, because what runs is not
 // what the commit on the page names, and that is the first thing to know about it.
 export const devLineOf = (extension: ExtensionSummary): string | undefined => {
     const current = extension.dev;

@@ -43,8 +43,9 @@ import CapabilityContext from "./connect/CapabilityContext.vue";
 import CapabilityDraftRow from "./connect/CapabilityDraftRow.vue";
 import CapabilityEffects from "./connect/CapabilityEffects.vue";
 import CapabilitySetupForm from "./connect/CapabilitySetupForm.vue";
-import CatalogDetail from "../../components/CatalogDetail.vue";
-import CatalogTile from "../../components/CatalogTile.vue";
+import CatalogDetail from "../../components/catalog/CatalogDetail.vue";
+import CatalogGrid from "../../components/catalog/CatalogGrid.vue";
+import CatalogTile from "../../components/catalog/CatalogTile.vue";
 import CapabilityInstanceRow from "./connect/CapabilityInstanceRow.vue";
 import CapabilityRail from "./connect/CapabilityRail.vue";
 import CapabilityRenameDialog from "./connect/CapabilityRenameDialog.vue";
@@ -540,8 +541,7 @@ onBeforeUnmount(() => {
                     <template v-else>
                         <!-- Label alone: the category's own sentence is already the page description once the rail points at it. -->
                         <Section v-for="group in groupedCatalog" :key="group.label" :label="inCategory ? undefined : group.label">
-                            <!-- Container query, not viewport: how many tiles fit is a fact about this pane, not the screen. -->
-                            <div class="grid grid-cols-1 gap-2 @xl:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
+                            <CatalogGrid>
                                 <CatalogTile
                                     v-for="tile in group.entries"
                                     :key="tile.entry.id"
@@ -579,7 +579,7 @@ onBeforeUnmount(() => {
                                         <CapabilityEffects :effects="badgeEffects(tile.entry)" :compact="true" />
                                     </template>
                                 </CatalogTile>
-                            </div>
+                            </CatalogGrid>
                         </Section>
                     </template>
 

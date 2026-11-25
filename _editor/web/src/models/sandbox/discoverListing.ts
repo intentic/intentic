@@ -36,7 +36,7 @@ export interface InstallOutcome {
     readonly problem: string | undefined;
     /** Its switch is off: an update keeps the owner's off. */
     readonly off: boolean;
-    /** It declares settings, which its Installed row is where to fill in. */
+    /** It declares settings, which its page on the Installed tab is where to fill in. */
     readonly settings: boolean;
 }
 

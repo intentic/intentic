@@ -4,7 +4,7 @@ import type { ExtensionSummary } from "@intentic/sandbox-contract/schemas/extens
 import ToggleSwitch from "primevue/toggleswitch";
 import { useT } from "@intentic/ui/i18n";
 
-// An extension's on/off switch, the same on its Installed row and at the head of its page. An essential extension's
+// An extension's on/off switch, the same on its Installed tile and at the head of its page. An essential extension's
 // switch stays drawn, on and disabled, because a control that vanishes reads as a bug.
 
 const t = useT();
