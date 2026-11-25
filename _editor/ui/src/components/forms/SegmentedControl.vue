@@ -120,7 +120,14 @@ const nameOf = (option: { label: string; title?: TooltipValue; markTitle?: Toolt
 // shuffle the pill's width under the pointer. Sized a step below the label (3xs, 1.35em ⇒ 13.5px) so it sits INSIDE
 // the pill's 16px line box: at the label's own size it filled that box edge to edge and read as a second control
 // rather than a count on one. The rail's is bigger because it floats in a tile's corner, owing no line its height.
-const CHIP = `ml-1 inline-flex h-[1.35em] min-w-[1.35em] items-center justify-center rounded-full px-[0.3em] text-3xs font-semibold leading-none tabular-nums`;
+// `text-box` trims the number's line to cap height over the baseline: centring the untrimmed line centred the
+// font's ascent and descent, which left the digit a pixel above the plate's middle. `shrink-0` keeps the plate round
+// in a tab the strip is squeezing.
+const CHIP = `ml-1.5 inline-flex h-[1.35em] min-w-[1.35em] shrink-0 items-center justify-center rounded-full px-[0.3em] text-3xs font-semibold leading-none tabular-nums [text-box:trim-both_cap_alphabetic]`;
+// What a tab or pill holds (glyph, label, count) is one row centred on the label's line, so the plate sits level with
+// the word. Left inline, the plate stood on the label's baseline by its own digit and hung its padding below the word.
+// A title's count is the exception: a quiet number that belongs on its word's baseline.
+const ROW = computed(() => (variant === `title` ? `inline-flex items-baseline` : `inline-flex items-center`));
 // A title's count is a quiet number on its word's baseline: a plate beside a title in the bar read as a second control.
 const TITLE_COUNT = `ml-1 text-xs tabular-nums text-muted`;
 
@@ -240,8 +247,8 @@ const optionClass = (active: boolean): string => (variant === `underline` ? unde
             :class="[optionClass(model === option.value), option.disabled === true && `cursor-not-allowed opacity-50`]"
             @click="option.disabled === true || (model = option.value)"
             @keydown="navigate($event, index)"
-        >
-            <Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-sm" /><!--
+        ><span :class="ROW"
+            ><Icon v-if="option.icon !== undefined" :name="option.icon" class="mr-1.5 text-sm" /><!--
             The same fill Avatar gives a person, shrunk to what a pill can carry: no face, just enough colour to tie
             this option to the marks it filters to.
          --><span
@@ -256,7 +263,7 @@ const optionClass = (active: boolean): string => (variant === `underline` ? unde
                 ><Icon :name="option.mark" :spin="option.markSpin === true" /></span
             ><span v-else-if="option.badge !== undefined && option.badge > 0" :class="variant === `title` ? TITLE_COUNT : [CHIP, countBadgePlate()]">{{
                 countBadgeText(option.badge)
-            }}</span>
+            }}</span></span>
         </button>
         <span
             v-if="ruleStyle !== undefined"
