@@ -66,6 +66,22 @@ describe(`sandbox list cache retention`, () => {
         // it while idle. Asserts the explicit option that guards the browser.
         expect(queryClient.getQueryCache().find({ queryKey: [`sandbox`, `list`] })?.options.gcTime).toBe(Number.POSITIVE_INFINITY);
     });
+
+    it(`keeps a list written before any fetch past the default gc window`, () => {
+        jest.useFakeTimers();
+        try {
+            const sandbox = useSandbox();
+            // As a window opened from this device's memory seeds it (recovery/directMode.ts): a write, and no fetch to
+            // carry the list's own gcTime. Evicted, the open sandbox read as gone (its logo the bare server glyph) and the
+            // next navigation sent the reader to Home, told it was not on their account.
+            queryClient.setQueryData([`sandbox`, `list`], [summary(`a`)]);
+            jest.advanceTimersByTime(60 * 60_000);
+            expect(sandbox.sandboxes.value.map((row) => row.id)).toEqual([`a`]);
+            expect(sandbox.listAnswered.value).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
 });
 
 describe(`useSandbox list/mutation race`, () => {

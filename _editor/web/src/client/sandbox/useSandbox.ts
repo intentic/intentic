@@ -45,10 +45,15 @@ const sandboxListQuery = {
     queryFn: async (): Promise<SandboxSummary[]> => listed((await apiClient.sandbox.list()).sandboxes),
     // 30s dedups the shell's per-navigation refetch; the list only changes via local writes or a daemon announce.
     staleTime: 30_000,
-    // Pinned: the default gcTime would evict this observer-less entry after idle minutes and wipe daemonUrl
-    // mid-session.
-    gcTime: Infinity,
 };
+
+// PINNED, HOWEVER THE ENTRY IS MADE. Nothing observes it, so the default gcTime evicts it after five idle minutes, and
+// the mirror below reads an evicted list as an empty one: no active sandbox, no daemonUrl. Pinning it on the fetch alone
+// (until 2026-11-25) left out an entry a write made first, which is how a window opened without the platform gets its
+// list (recovery/directMode.ts seeds it, and never fetches while the platform is away): five minutes in, the open
+// sandbox's logo fell back to the bare server glyph, and the next navigation found the sandbox "not on your account",
+// cleared the selection and sent the reader to Home's first run.
+queryClient.setQueryDefaults(SANDBOX_LIST_KEY, { gcTime: Infinity });
 
 // THE LIST, ASKED BESIDE THE SESSION CHECK (2026-11-18). Every returning page load waited on the platform three times in
 // a row: the session check, then this list (asked by the liveness loop and the shell's gate once the check had answered),
