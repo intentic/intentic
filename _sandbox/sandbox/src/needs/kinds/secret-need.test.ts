@@ -117,7 +117,11 @@ describe("secret need", () => {
                 return { pending: true };
             },
         });
-        const met = await kind.provide(needOf({ kind: "secret", name: "VPN_PASSWORD" }), "vpn-value-never-shown", { device: "rog", mode: "each-use" });
+        const met = await kind.provide(needOf({ kind: "secret", name: "VPN_PASSWORD", hosts: ["vpn.example.com"] }), "vpn-value-never-shown", {
+            keepOn: { device: "rog", mode: "each-use" },
+            // A computer's keyring keeps its own list, so the card's hosts are not read for it.
+            hosts: ["vpn.example.com"],
+        });
         expect(met).toEqual({
             result:
                 "VPN_PASSWORD was sent to the keyring on rog, where it waits for that computer's next unlock: once a person there unlocks the keyring and says yes, it is kept there and shared with this sandbox. Nothing was stored in the sandbox.",
@@ -125,6 +129,48 @@ describe("secret need", () => {
         });
         expect([sent, kept]).toEqual([[{ name: "VPN_PASSWORD", value: "vpn-value-never-shown", device: "rog", mode: "each-use" }], []]);
         expect(JSON.stringify(met)).not.toContain("vpn-value-never-shown");
+    });
+
+    it("carries the hosts the agent proposed onto the card, each once", async () => {
+        const { kind } = harness();
+        expect(await kind.resolve({ kind: "secret", name: "STRIPE_KEY", hosts: ["api.stripe.com", "files.stripe.com", "api.stripe.com"] }, context)).toMatchObject({
+            kind: "raise",
+            subject: { hosts: ["api.stripe.com", "files.stripe.com"] },
+        });
+    });
+
+    // The order of events a guard start and a store make, and what the guard was started with.
+    const guarded = (start: "started" | "kept" | "failed") => {
+        const steps: string[] = [];
+        const kind = secretNeed({
+            registry: async () => [],
+            keep: async (name) => void steps.push(`keep ${name}`),
+            startGuard: async (name, hosts) => {
+                steps.push(`guard ${name} ${hosts.join(",")}`);
+                return start;
+            },
+        });
+        return { kind, steps };
+    };
+    const proposed = needOf({ kind: "secret", name: "STRIPE_KEY", hosts: ["api.stripe.com", "files.stripe.com"] });
+
+    it("starts the guard with the hosts the person kept, before the value is stored, and never with one nobody proposed", async () => {
+        const { kind, steps } = guarded("started");
+        const met = await kind.provide(proposed, "sk_live_never_shown", { hosts: ["api.stripe.com", "evil.example"] });
+        expect(steps).toEqual(["guard STRIPE_KEY api.stripe.com", "keep STRIPE_KEY"]);
+        expect(met.result).toBe("STRIPE_KEY is stored. Its host guard is on: it goes unasked only to api.stripe.com, and a use anywhere else asks a person first.");
+    });
+
+    it("leaves the guard alone when the person kept no host, and says what became of one already on or not written", async () => {
+        const none = guarded("started");
+        expect((await none.kind.provide(proposed, "sk", { hosts: [] })).result).toBe("STRIPE_KEY is stored.");
+        expect(none.steps).toEqual(["keep STRIPE_KEY"]);
+        expect((await guarded("kept").kind.provide(proposed, "sk", { hosts: ["api.stripe.com"] })).result).toBe(
+            "STRIPE_KEY is stored. STRIPE_KEY already had its host guard on, which was left as it is: `secrets hosts STRIPE_KEY` shows where it may go.",
+        );
+        expect((await guarded("failed").kind.provide(proposed, "sk", { hosts: ["api.stripe.com"] })).result).toBe(
+            "STRIPE_KEY is stored. Its host guard could not be set, so it is off: `secrets hosts STRIPE_KEY on` turns it on.",
+        );
     });
 
     it("counts a name a computer's keyring shares as stored, so an ask for it is met, not raised", async () => {

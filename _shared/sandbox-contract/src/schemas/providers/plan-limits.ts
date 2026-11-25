@@ -264,6 +264,7 @@ export const AgentReplySchema = z.discriminatedUnion("kind", [
                 "Once allows this call alone; always allows what the request's always-label names (a tool, a rule, a secret) for the rest of the conversation; everything allows this call and every later request in this conversation that an allow-once could settle, until it is taken back on Grants; no blocks it. A request that always asks (alwaysAsks) reads everything as once.",
             ),
         feedback: z.string().optional().describe("Why not, which goes back to the model as the reason."),
+        keep: z.literal(true).optional().describe("With always: the request's keepLabel answer rather than its alwaysLabel one."),
         // Whole, not a patch: effort or an account named for one model means nothing on another.
         child: ChildRunSchema.optional().describe(
             "For a request to start a subagent: what to start it on instead of what the agent asked for. It replaces the whole run (model, account, effort and the rest), not only the fields it names. Ignored with a no, and on any other request.",

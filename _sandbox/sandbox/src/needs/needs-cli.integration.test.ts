@@ -219,6 +219,17 @@ describe("the asking commands speak the needs contract", () => {
         });
     });
 
+    it("secrets ask --host proposes each host it goes to once, a URL read as its host", async () => {
+        server.answer = raised({ state: "open", message: "Asked a person: The STRIPE_KEY secret.", need: OPEN_NEED });
+        const hosts = ["--host", "https://API.stripe.com/v1", "--host", "files.stripe.com", "--host", "api.stripe.com"];
+        const result = await run(server.port, "secrets", ["ask", "STRIPE_KEY", ...hosts, "--why", "the billing job charges cards"]);
+        expect(result.code).toBe(3);
+        expect(NeedRaiseSchema.parse(server.seen[0]?.body)).toEqual({
+            ask: { kind: "secret", name: "STRIPE_KEY", hosts: ["api.stripe.com", "files.stripe.com"] },
+            why: "the billing job charges cards",
+        });
+    });
+
     it("secrets ask --multiline asks for a value with lines", async () => {
         server.answer = raised({ state: "open", message: "Asked a person: The DEV_ENV secret.", need: OPEN_NEED });
         const result = await run(server.port, "secrets", ["ask", "DEV_ENV", "--multiline", "--why", "the dev server reads dev.env"]);

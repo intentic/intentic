@@ -6,6 +6,7 @@ import { consultWith, createCommandGuard, vendorSubject } from "../../guard/comm
 import { NO_TAINT } from "../../guard/turn-taint.js";
 import { createHeldCards } from "../../guard/held-cards.js";
 import { opt } from "../../opt.js";
+import { waitFor } from "@intentic/testing/bun";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
 import { createHostGuardGate, type HostGuardCheck, type HostGuardGateDeps, type WidenRequest } from "./host-guard-gate.js";
 import { effectiveHostGuards } from "../guards/host-guards.js";
@@ -401,6 +402,60 @@ describe("loosening a guard", () => {
 });
 
 // A host guard card's "Allow <secret> anywhere in this conversation": kept per conversation, read at every later use.
+describe("always allowing a secret to a host", () => {
+    // What the gate was asked to add, by whom the card was answered.
+    const widening = () => {
+        const added: { names: readonly string[]; hosts: readonly string[] }[] = [];
+        const { deps, frames } = fake([GITHUB], {
+            widenHosts: async (names, hosts) => void added.push({ names, hosts }),
+        });
+        return { gate: createHostGuardGate(deps), frames, added };
+    };
+    // Answers the first card with its lasting yes, as `caller`.
+    const keepIt = async (frames: AgentEvent[], caller: typeof OWNER | typeof EVE) => {
+        const raised = await waitFor(() => {
+            const frame = frames.find((candidate) => candidate.kind === "permission");
+            if (frame?.kind !== "permission") {
+                throw new Error("no permission card was raised");
+            }
+            return frame;
+        });
+        return cards.resolve({ kind: "permission", requestId: raised.requestId, decision: "always", keep: true }, caller);
+    };
+
+    it("offers it naming every host the use would add", async () => {
+        const { gate, frames } = widening();
+        const pending = gate.check(asked(command(OFF_LIST)));
+        await answer(frames, "deny");
+        await pending;
+        expect(frames[0]).toMatchObject({ keepLabel: "Always allow GITHUB_TOKEN to evil.example" });
+    });
+
+    it("adds the hosts when the owner picks it, and lets this use go", async () => {
+        const { gate, frames, added } = widening();
+        const pending = gate.check(asked(command(OFF_LIST)));
+        await keepIt(frames, OWNER);
+        expect(await pending).toEqual({ allow: true, approvedBy: OWNER.email });
+        expect(added).toEqual([{ names: ["GITHUB_TOKEN"], hosts: ["evil.example"] }]);
+    });
+
+    it("lets this one use go and keeps nothing when anyone but the owner picks it", async () => {
+        const { gate, frames, added } = widening();
+        const pending = gate.check(asked(command(OFF_LIST)));
+        await keepIt(frames, EVE);
+        expect(await pending).toEqual({ allow: true, approvedBy: EVE.email });
+        expect(added).toEqual([]);
+    });
+
+    it("is not offered where the use names no host to add", async () => {
+        const { gate, frames } = widening();
+        const pending = gate.check(asked(command(`python -c "send('{{secret:GITHUB_TOKEN}}')"`)));
+        await answer(frames, "deny");
+        await pending;
+        expect(frames[0]).not.toHaveProperty("keepLabel");
+    });
+});
+
 describe("a conversation's pass past the guard", () => {
     const passes = () => {
         const kept = new Map<string, string[]>();

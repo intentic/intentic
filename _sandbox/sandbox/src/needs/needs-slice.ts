@@ -43,7 +43,8 @@ import { hostPowerNeed } from "./kinds/host-power-need.js";
 import { runDeviceAgentFlow } from "../hosts/device-reports.js";
 import { releaseNeed } from "./kinds/release-need.js";
 import { keepOnDevice } from "./kinds/secret-keep-on.js";
-import { secretNeed } from "./kinds/secret-need.js";
+import { type GuardStart, secretNeed } from "./kinds/secret-need.js";
+import { startGuard } from "../secrets/guards/host-guards.js";
 import { needChannelOf, needChannelText } from "./need-channel.js";
 import { createNeeds, type Needs, type NeedsDeps } from "./needs.js";
 import { fileNeedsStore, needsDocument } from "./needs-store.js";
@@ -130,7 +131,19 @@ const secretNeedOf = (whole: NeedsSliceDeps["whole"]) =>
         keep: (name, value) => whole().sandboxSecrets.set(name, value),
         deviceHeld: async () => (await whole().deviceSecrets.listed()).map((entry) => entry.pointer.name),
         keepOn: (name, value, keepOn) => keepOnDevice(whole(), name, value, keepOn),
+        startGuard: (name, hosts) => startHostGuard(whole(), name, hosts),
     });
+
+// An unreadable or unwritable guard file is answered as failed, never read as every guard off: the value is still stored,
+// and the agent is told its guard is off and how to turn it on.
+const startHostGuard = async (services: Pick<Services, "hostGuards" | "secretHostGuards">, name: string, hosts: readonly string[]): Promise<GuardStart> => {
+    try {
+        return await startGuard(services.secretHostGuards, services.hostGuards, name, hosts);
+    } catch {
+        // allow(silent-catch): answered as "failed", which the agent reads; the value is stored either way.
+        return "failed";
+    }
+};
 
 // A host-power need over the computer's facts as the hub holds them, its agent op run as the Devices view runs it.
 const hostPowerNeedOf = (whole: NeedsSliceDeps["whole"]) =>
@@ -327,7 +340,7 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             return receipt.delivered === "queued" ? "queued" : "turn";
         },
         continueWhenMet: async () => (await whole().sandboxSettings.get()).continueWhenNeedMet,
-        provideSecret: (need, value, keepOn) => secret.provide(need, value, keepOn),
+        provideSecret: (need, value, given) => secret.provide(need, value, given),
         onTurnEnded: (listener) => whole().events.subscribe("run.settled", ({ conversationId }) => listener(conversationId)),
         beginCheckPass: sites.begin,
         subscribeWorldChanges: worldChangesOf(whole, logger),

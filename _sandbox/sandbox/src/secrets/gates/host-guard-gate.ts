@@ -28,6 +28,9 @@ export interface HostGuardGateDeps extends CardDeps {
     readonly ownerEmail: () => Promise<string | undefined>;
     // Secrets a conversation may send past their guard, answered on this gate's own card; absent keeps every use asking.
     readonly grants?: SecretPasses;
+    // Adds hosts to these secrets' host guards for good: the send card's "Always allow <secret> to <host>", the owner's
+    // own answer, since adding a host loosens a guard. Absent offers no such answer.
+    readonly widenHosts?: (names: readonly string[], hosts: readonly string[]) => Promise<void>;
     readonly hold: HoldDeps;
 }
 
@@ -300,6 +303,21 @@ const passed = async (deps: HostGuardGateDeps, conversationId: string, names: re
     return names.every((name) => granted.includes(name));
 };
 
+// "Always allow <secret> to <host>": the hosts go on each secret's list, so every later use there goes unasked, in any
+// conversation. Adding a host loosens a guard, which is the owner's alone (secret-hosts.routes.ts), so anyone else's pick
+// of it lets this one use go and keeps nothing. Kept before the use goes, so the very next one reads it.
+const keepHosts = async (deps: HostGuardGateDeps, names: readonly string[], hosts: readonly string[] | undefined, by: string | undefined): Promise<void> => {
+    if (hosts === undefined || deps.widenHosts === undefined) {
+        return;
+    }
+    const owner = await deps.ownerEmail();
+    if (owner !== undefined && by?.toLowerCase() !== owner.toLowerCase()) {
+        return;
+    }
+    // allow(silent-catch): the owner's yes for this use stands either way; a host not kept only asks again next time.
+    await deps.widenHosts(names, hosts).catch(() => undefined);
+};
+
 // The send card for one use: raised, and settled with the person's answer; `ended` settles it unanswered.
 const askToSend = async (
     deps: HostGuardGateDeps,
@@ -311,6 +329,8 @@ const askToSend = async (
     const sentence = sentenceOf(reading, input.target);
     const names = reading.guarded.map((entry) => entry.name);
     const program = programAskOf(input.target, reading.guarded);
+    // Only where the use names its hosts: a script or a window has none to add.
+    const hosts = reading.destination === "outside" && deps.widenHosts !== undefined ? reading.hosts : undefined;
     const raised = await raiseRequest(deps, card, {
         kind: "permission",
         // `deny` in the abort stand-in reads a stopped turn as "not sent", never as a yes nobody gave.
@@ -324,6 +344,7 @@ const askToSend = async (
             ...opt("program", program),
             explain: sentence,
             ...opt("alwaysLabel", deps.grants === undefined ? undefined : `Allow ${both(names)} anywhere in this conversation`),
+            ...opt("keepLabel", hosts === undefined ? undefined : `Always allow ${both(names)} to ${both(hosts)}`),
         }),
         approves: (reply) => reply.decision !== "deny",
         signal: ended,
@@ -347,7 +368,9 @@ const askToSend = async (
             outcome: { decision: "declined", ...opt("feedback", feedback) },
         };
     }
-    if (raised.reply.decision === "always") {
+    if (raised.reply.decision === "always" && raised.reply.keep === true) {
+        await keepHosts(deps, names, hosts, raised.caller?.email);
+    } else if (raised.reply.decision === "always") {
         // Kept before the use goes, so the very next one reads it; a write that fails costs only a second card.
         // allow(silent-catch): the person's yes for this use stands either way; a grant not kept only asks again next time.
         await deps.grants?.add(card.conversationId, names, raised.caller?.email).catch(() => undefined);

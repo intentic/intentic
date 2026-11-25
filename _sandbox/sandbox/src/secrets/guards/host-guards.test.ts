@@ -1,6 +1,7 @@
 import { CapabilityContributionSchema } from "@intentic/extension-manifest";
 import { contributionHosts } from "../../capabilities/contributions.js";
-import { effectiveHostGuards, guardForName, readHosts } from "./host-guards.js";
+import type { SecretHostGuard } from "@intentic/sandbox-contract/schemas/secrets";
+import { addGuardHosts, effectiveHostGuards, guardForName, readHosts, startGuard, type StoredHostGuard } from "./host-guards.js";
 import { commandDestination } from "../secret-destinations.js";
 
 // The guards in force and what one use's destination means against them: the owner's setting over a connector's
@@ -113,5 +114,50 @@ describe("contributionHosts", () => {
     it("leaves out a template whose field is unanswered or not a host, rather than guessing", () => {
         expect(contributionHosts(card(["${url}"]), { token: "t" })).toEqual([]);
         expect(contributionHosts(card(["${url}"]), { url: "not a host" })).toEqual([]);
+    });
+});
+
+// The two writes a card makes: a secret asked for with hosts starting guarded, and a send card's lasting yes adding hosts.
+const writes = () => {
+    const written: StoredHostGuard[] = [];
+    return { written, store: { set: async (setting: StoredHostGuard) => void written.push(setting) } };
+};
+const inForce =
+    (...guards: SecretHostGuard[]) =>
+    async (): Promise<readonly SecretHostGuard[]> =>
+        guards;
+
+describe("startGuard", () => {
+    it("turns a secret's guard on with the kept hosts where none is on, and leaves one somebody set alone", async () => {
+        const off = writes();
+        expect(await startGuard(off.store, inForce({ ...OWNER_GITHUB, guard: false, source: "owner" }), "GITHUB_TOKEN", ["api.github.com", "api.github.com"])).toBe("started");
+        expect(off.written).toEqual([{ subject: "GITHUB_TOKEN", kind: "secret", guard: true, hosts: ["api.github.com"] }]);
+        const on = writes();
+        expect(await startGuard(on.store, inForce({ ...OWNER_GITHUB, source: "owner" }), "GITHUB_TOKEN", ["uploads.github.com"])).toBe("kept");
+        expect(on.written).toEqual([]);
+    });
+});
+
+describe("addGuardHosts", () => {
+    it("adds hosts to each guarded credential once, a connector's default becoming the owner's own list", async () => {
+        const { written, store } = writes();
+        const github: SecretHostGuard = { subject: "github", kind: "capability", guard: true, hosts: ["api.github.com"], source: "connector" };
+        await addGuardHosts(store, inForce(github, { ...OWNER_GITHUB, source: "owner" }), ["github/token", "github/refresh", "GITHUB_TOKEN"], ["evil.example", "api.github.com"]);
+        expect(written).toEqual([
+            { subject: "github", kind: "capability", guard: true, hosts: ["api.github.com", "evil.example"] },
+            { subject: "GITHUB_TOKEN", kind: "secret", guard: true, hosts: ["api.github.com", "evil.example"] },
+        ]);
+    });
+
+    it("leaves a guard that is off, one it cannot see (a keyring's), and one the hosts would push past the cap", async () => {
+        const { written, store } = writes();
+        const full = Array.from({ length: 64 }, (_, index) => `h${String(index)}.example`);
+        await addGuardHosts(
+            store,
+            inForce({ ...OWNER_GITHUB, guard: false, source: "owner" }, { subject: "NPM_TOKEN", kind: "secret", guard: true, hosts: full, source: "owner" }),
+            ["GITHUB_TOKEN", "NPM_TOKEN", "VPN_PASSWORD"],
+            ["evil.example"],
+        );
+        expect(written).toEqual([]);
     });
 });

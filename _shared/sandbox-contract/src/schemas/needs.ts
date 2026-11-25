@@ -4,6 +4,8 @@ import { AutomationSchema } from "./automations.js";
 import { HostPowerFindingSchema } from "./host-power.js";
 import { entryId } from "./internal.js";
 import { PASS_SCOPES } from "../protocol/doors/pass-scopes.js";
+import { SECRET_HOSTS_MAX } from "../policy/secret-hosts.js";
+import { SecretHostSchema } from "./secrets.js";
 
 // A need: something an agent cannot finish its task without that only a person can provide (a connection, a secret's
 // value, wider reach, a tool in the image). Unlike a parked card it outlives the turn that raised it: the sandbox keeps
@@ -73,6 +75,8 @@ export const SECRET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 // Group 1 is the name in both forms, so every reader that only needs the name reads both alike.
 export const SECRET_REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)(?:\|(file))?\}\}/;
 
+// A secret's host guard list as a card starts it (needs/kinds/secret-need.ts in the sandbox).
+const SecretHostsSchema = z.array(SecretHostSchema).max(SECRET_HOSTS_MAX);
 export const SecretNeedSchema = z.object({
     kind: z.literal("secret"),
     name: z.string().regex(SECRET_NAME).describe("The name it is stored under, and what `{{secret:NAME}}` will resolve."),
@@ -89,6 +93,12 @@ export const SecretNeedSchema = z.object({
         .boolean()
         .optional()
         .describe("A value with lines (a key file, a whole .env): the card takes it in a box with lines and keeps it exactly as pasted."),
+    // The agent's proposal: what a person keeps on the card starts the secret guarded, rather than off until someone acts.
+    hosts: SecretHostsSchema.min(1)
+        .optional()
+        .describe(
+            "Where it will be sent, as the agent proposes it. The card shows each host for the person to keep or drop, and the secret's host guard starts on with the ones they keep: it goes unasked only there, and anywhere else asks first.",
+        ),
 });
 export type SecretNeed = z.infer<typeof SecretNeedSchema>;
 
@@ -411,6 +421,9 @@ export const NeedSecretInputSchema = NeedIdParamSchema.extend({
         })
         .optional()
         .describe("Keep it in the keyring on one of your computers instead of in the sandbox."),
+    hosts: SecretHostsSchema.optional().describe(
+        "The hosts you let it go to unasked, of those the agent proposed: its host guard starts on with them. Absent or empty leaves its host guard as it is, and a guard already on is never widened from here. Ignored with keepOn, whose keyring keeps its own list.",
+    ),
 });
 export const NeedsQuerySchema = z.object({
     conversationId: z.string().optional().describe("One conversation's needs. Absent is every conversation's."),

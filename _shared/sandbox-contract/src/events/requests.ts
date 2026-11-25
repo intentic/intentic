@@ -116,6 +116,14 @@ export const PermissionAskSchema = z.object({
         .describe(
             "The wording for an always-allow answer. Present only when there is something an always could actually remember; without it the only answers are once and no.",
         ),
+    // A second, lasting yes beside `alwaysLabel`, kept by the card's own gate past this conversation (a host added to a
+    // secret's host guard). Answered as `always` with `keep`; a runtime that knows nothing of it never offers it.
+    keepLabel: z
+        .string()
+        .optional()
+        .describe(
+            "The wording for a lasting answer the card's own gate keeps beyond this conversation, such as adding a host to a secret's host guard. Present only where there is one; only the owner's pick of it is kept, and anyone else's allows this once.",
+        ),
     alwaysAsks: z
         .literal(true)
         .optional()

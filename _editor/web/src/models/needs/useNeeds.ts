@@ -31,10 +31,23 @@ export function useNeeds() {
         onSuccess: settled,
     });
     // The value goes to the daemon's secret store through its own route and is never kept here past the call. With
-    // `keepOn` it is kept in the keyring on one of the owner's computers instead, and the sandbox holds a pointer.
+    // `keepOn` it is kept in the keyring on one of the owner's computers instead, and the sandbox holds a pointer; with
+    // `hosts`, its host guard starts on with them.
     const provideSecret = useMutation({
-        mutationFn: ({ id, value, keepOn }: { id: string; value: string; keepOn?: { device: string; mode: KeyringShareMode } | undefined }) =>
-            sandboxRpc.needs.provideSecret(keepOn === undefined ? { id, value } : { id, value, keepOn }),
+        mutationFn: ({
+            id,
+            value,
+            keepOn,
+            hosts,
+        }: {
+            id: string;
+            value: string;
+            keepOn?: { device: string; mode: KeyringShareMode } | undefined;
+            hosts?: readonly string[] | undefined;
+        }) => {
+            const given = keepOn === undefined ? { id, value } : { id, value, keepOn };
+            return sandboxRpc.needs.provideSecret(hosts === undefined ? given : { ...given, hosts: [...hosts] });
+        },
         onSuccess: settled,
     });
 

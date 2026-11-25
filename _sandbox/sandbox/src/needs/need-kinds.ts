@@ -23,6 +23,13 @@ export type Resolved =
 // value, and how that keyring answers this sandbox for it.
 export type SecretKeepOn = NonNullable<z.infer<typeof NeedSecretInputSchema>["keepOn"]>;
 
+// What a person gave on a secret's card beside its value: a computer's keyring to keep it in instead, and the hosts it
+// may go to unasked, of those the agent proposed (kinds/secret-need.ts).
+export interface SecretGiven {
+    readonly keepOn?: SecretKeepOn | undefined;
+    readonly hosts?: readonly string[] | undefined;
+}
+
 // A need met: the daemon's sentence on how, and what the agent can do with it now and next turn.
 export interface Met {
     readonly result: string;

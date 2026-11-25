@@ -31,7 +31,7 @@ import {
 import { type CredentialGatesStore, fileCredentialGates } from "./credential-gates.js";
 import { type CredentialGrants, credentialReleasesDocument, fileCredentialGrants } from "./credential-grants.js";
 import { createHostGuardGate, type HostGuardGate } from "./gates/host-guard-gate.js";
-import { effectiveHostGuards, fileSecretHostGuards, type SecretHostGuardsStore, secretHostGuardsDocument } from "./guards/host-guards.js";
+import { addGuardHosts, effectiveHostGuards, fileSecretHostGuards, type SecretHostGuardsStore, secretHostGuardsDocument } from "./guards/host-guards.js";
 import { type SecretRegistry, secretRegistryOf } from "./secret-registry.js";
 import { fileSandboxSecrets, notifyingSandboxSecrets, type SandboxSecrets, sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { fileSecretUses, secretUsesDocument, type SecretUsesStore } from "./secret-uses.js";
@@ -232,6 +232,7 @@ export const createSecretsSlice = ({
                     }
                 },
             },
+            widenHosts: (names, hosts) => addGuardHosts(secretHostGuards, hostGuards, names, hosts),
             ...cards,
             hold,
         }),

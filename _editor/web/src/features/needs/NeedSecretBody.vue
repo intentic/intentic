@@ -62,6 +62,13 @@ const onComputer = computed(() => where.value === `computer` && device.value !==
 // A locked keyring takes a value in only once it is unlocked: its inbox key is inside the vault.
 const lockedThere = computed(() => onComputer.value && online.value.find((keyring) => keyring.machine === device.value)?.locked === true);
 
+// The hosts the agent said it goes to, each kept until the person drops it: what is kept starts its host guard on, so a
+// use anywhere else asks first. A computer's keyring keeps its own list, so none are offered for a value kept there.
+const kept = ref<readonly string[]>([...(props.subject.hosts ?? [])]);
+const toggleHost = (host: string): void => {
+    kept.value = kept.value.includes(host) ? kept.value.filter((held) => held !== host) : [...kept.value, host];
+};
+
 // How it will be used and what a good one looks like, as facts beside the box it goes in.
 const facts = computed<CardFact[]>(() => [
     ...(props.subject.where === undefined ? [] : [{ key: `where`, label: t(`needs.secret.usedFor`), value: props.subject.where }]),
@@ -80,11 +87,12 @@ const save = async (): Promise<void> => {
     const id = props.need.id;
     const machine = device.value;
     const keepOn = onComputer.value && machine !== undefined ? { device: machine, mode: mode.value } : undefined;
+    const hosts = keepOn === undefined && kept.value.length > 0 ? [...kept.value] : undefined;
     const waits = lockedThere.value;
     const ended = await answer({
         tag: `save`,
         failed: t(`needs.secret.couldNotSave`),
-        task: () => needs.provideSecret.mutateAsync({ id, value: given, keepOn }),
+        task: () => needs.provideSecret.mutateAsync({ id, value: given, keepOn, hosts }),
     });
     // The card folds once the need is met, so where the value is waiting is said where the reader will still see it.
     if (ended?.state === `done` && keepOn !== undefined && waits) {
@@ -141,6 +149,24 @@ const storedElsewhere = async (): Promise<void> => {
                 <span class="text-2xs text-subtle">{{ keyringModeExplained(mode, device ?? ``) }}</span>
                 <span v-if="lockedThere" class="text-2xs text-warning">{{ t(`needs.secret.lockedThere`, { machine: device ?? `` }) }}</span>
             </template>
+        </div>
+
+        <!-- Where it may go unasked, of the hosts the agent named; the guard starts with the ones left on. -->
+        <div v-if="!onComputer && subject.hosts !== undefined" class="flex flex-col gap-1" data-goes-to>
+            <span class="text-2xs text-subtle">{{ t(`needs.secret.goesOnlyTo`) }}</span>
+            <div class="flex flex-wrap gap-1" role="group" :aria-label="t(`needs.secret.goesOnlyTo`)">
+                <button
+                    v-for="host of subject.hosts"
+                    :key="host"
+                    type="button"
+                    :class="ui.chip({ on: kept.includes(host) })"
+                    :aria-pressed="kept.includes(host)"
+                    @click="toggleHost(host)"
+                >
+                    <Icon name="globe" class="text-2xs" />{{ host }}
+                </button>
+            </div>
+            <span class="text-2xs text-subtle">{{ kept.length === 0 ? t(`needs.secret.goesAnywhere`) : t(`needs.secret.asksElsewhere`) }}</span>
         </div>
 
         <span v-if="onComputer" class="text-2xs text-subtle">{{ t(`needs.secret.keptOn`, { name: subject.name, machine: device ?? `` }) }}</span>

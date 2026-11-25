@@ -148,3 +148,44 @@ export const readHosts = (guards: readonly SecretHostGuard[], names: readonly st
     const outside = destination.hosts.filter((host) => guarded.some((entry) => !hostAllowed(entry.hosts, host)));
     return outside.length === 0 ? { destination: "inside", guarded } : { destination: "outside", guarded, hosts: outside };
 };
+
+// A secret asked for with the hosts it goes to starts guarded, as a connector's own credential does (needs/kinds/
+// secret-need.ts): on, with the hosts a person kept on the card. Only where no guard is on yet, since one somebody set is
+// theirs and is neither narrowed nor widened from a card; turning a guard on is a tightening anybody may make
+// (secret-hosts.routes.ts).
+export const startGuard = async (
+    store: Pick<SecretHostGuardsStore, "set">,
+    guards: () => Promise<readonly SecretHostGuard[]>,
+    name: string,
+    hosts: readonly string[],
+): Promise<"started" | "kept"> => {
+    const { subject, kind } = gateTargetOf(name);
+    const current = (await guards()).find((guard) => guard.subject === subject && guard.kind === kind);
+    if (current?.guard === true) {
+        return "kept";
+    }
+    await store.set({ subject, kind, guard: true, hosts: [...new Set(hosts)] });
+    return "started";
+};
+
+// Adds hosts to each named secret's host guard, the send card's lasting answer (gates/host-guard-gate.ts keepHosts): over
+// the guard in force, so a connector's default list becomes the owner's own with the hosts added. A name whose guard is
+// off, or comes from a keyring on the owner's computers (not among `guards`), is left alone, and so is one whose list
+// would pass the cap, which asks again rather than drop a host somebody kept. One write per credential: two fields of
+// one capability share its guard.
+export const addGuardHosts = async (
+    store: Pick<SecretHostGuardsStore, "set">,
+    guards: () => Promise<readonly SecretHostGuard[]>,
+    names: readonly string[],
+    hosts: readonly string[],
+): Promise<void> => {
+    const inForce = await guards();
+    const subjects = new Map(names.map(gateTargetOf).map((target) => [`${target.kind}:${target.subject}`, target]));
+    for (const { subject, kind } of subjects.values()) {
+        const current = inForce.find((guard) => guard.subject === subject && guard.kind === kind);
+        const next = [...new Set([...(current?.hosts ?? []), ...hosts])];
+        if (current?.guard === true && next.length <= SECRET_HOSTS_MAX) {
+            await store.set({ subject, kind, guard: true, hosts: next });
+        }
+    }
+};

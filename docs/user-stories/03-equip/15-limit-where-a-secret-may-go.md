@@ -26,7 +26,12 @@ into a web page is held to the page's host, and one the agent writes into a call
 that server's host. With nobody to ask, in an unattended turn, it is refused, and the agent is
 told how to use the secret without a card. On with no hosts listed, every use asks.
 
-The card's Allow once has a caret beside it with the wider yeses. "Allow <secret> anywhere in this conversation" lets that
+A secret the agent asks me for doesn't have to start unguarded. When it knows where the value will go, its card lists
+those hosts beside the box I paste into, each one on; I drop any I don't want, and the secret is saved with its guard
+already on, set to the hosts I kept. With the judge unreachable, a use anywhere else still waits for me.
+
+The card's Allow once has a caret beside it with the wider yeses. "Always allow <secret> to <host>" adds that host to the
+secret's list for good, when I am the one who picks it. "Allow <secret> anywhere in this conversation" lets that
 one conversation send the secret past its guard from then on, and "Allow everything in this conversation" answers every
 card the conversation would raise next (hard rules excepted). Both are listed on Needs you → Allowed and taken back
 there; another conversation still asks.

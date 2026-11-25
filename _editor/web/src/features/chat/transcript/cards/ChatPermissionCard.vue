@@ -91,13 +91,16 @@ const toggleFromSentence = (): void => {
 type Allowing = Exclude<Extract<AgentReply, { kind: `permission` }>[`decision`], `deny`>;
 
 // Allowing a start carries the owner's pick with it, when there is one; the daemon starts the child on that instead.
-const allow = (decision: Allowing = `once`): Promise<void> => {
+// `keep` answers the card's lasting yes (its keepLabel) rather than its always-label one.
+const allow = (decision: Allowing = `once`, keep?: true): Promise<void> => {
     const pick = livePick.value;
-    return props.reply(pick === undefined ? { kind: `permission`, decision } : { kind: `permission`, decision, child: pick });
+    const answer = keep === undefined ? { kind: `permission` as const, decision } : { kind: `permission` as const, decision, keep };
+    return props.reply(pick === undefined ? answer : { ...answer, child: pick });
 };
 
 // THE ALLOW MENU. Allow once stays the one-press default; the wider yeses fold behind its caret, narrowest first: what
-// this card's own gate can remember (a rule, a tool, a secret, installs), then everything in this conversation. A card
+// this card's own gate can remember (a rule, a tool, a secret, installs), then what it keeps past this conversation (a
+// host added to a secret's host guard, only the owner's pick of which is kept), then everything in this conversation. A card
 // that always asks (a hard rule, a restart other conversations feel, an owner-only change) offers no "everything",
 // since no standing yes would answer it. Each row answers at once: picking a scope is the decision, not a setting.
 // Nor does an agent on this computer itself (local/agents/): a yes to everything there is the run-without-asking
@@ -105,6 +108,7 @@ const allow = (decision: Allowing = `once`): Promise<void> => {
 const menu = ref<{ show: (event: Event) => void }>();
 const wider = computed<MenuItem[]>(() => [
     ...(card.value.alwaysLabel === undefined ? [] : [{ label: card.value.alwaysLabel, icon: `lock`, command: () => void allow(`always`) }]),
+    ...(card.value.keepLabel === undefined ? [] : [{ label: card.value.keepLabel, icon: `globe`, command: () => void allow(`always`, true) }]),
     ...(card.value.alwaysAsks === true || computerAgents.value
         ? []
         : [

@@ -373,7 +373,8 @@ const ENTRIES: readonly GuidanceEntry[] = [
         text:
             "When the task needs something this sandbox does not have, ask for it on a card rather than describing setup " +
             'for the owner: `capabilities request <entry> --why "…"` for a connection, `secrets ask NAME --why "…"` for a ' +
-            "secret, `environment propose <tool>` for a tool, `grants request` for reach this conversation's role " +
+            "secret (with `--host <host>` for each host it will be sent to, so it starts guarded), `environment propose <tool>` " +
+            "for a tool, `grants request` for reach this conversation's role " +
             "withholds. The answer continues this conversation by itself, so carry on with what does not need it and never poll.",
     },
     { id: "remember", text: REMEMBER },

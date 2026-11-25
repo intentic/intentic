@@ -1,6 +1,6 @@
 import type { Need, NeedAsk, NeedSubject, SecretNeed } from "@intentic/sandbox-contract/schemas/needs";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
-import type { AskContext, Met, NeedKindHandler, Resolved, SecretKeepOn } from "../need-kinds.js";
+import type { AskContext, Met, NeedKindHandler, Resolved, SecretGiven, SecretKeepOn } from "../need-kinds.js";
 
 // A secret's value the agent needs (docs/architecture/needs.md). The agent names it and says where it will go; a person
 // pastes the value into the card, and it goes straight to the store the reference resolves from. The value never
@@ -16,7 +16,26 @@ export interface SecretNeedDeps {
     // Sends a value to the keyring on one of the owner's computers to keep, storing nothing here: answers whether it
     // waits there for that computer's next unlock, or throws with why it could not go.
     readonly keepOn?: (name: string, value: string, keepOn: SecretKeepOn) => Promise<{ readonly pending: boolean }>;
+    // Starts a secret's host guard on with the hosts a person kept on the card, only where no guard is on yet: a guard
+    // somebody already set is theirs, and is never narrowed or widened from a card. Answers what became of it.
+    readonly startGuard?: (name: string, hosts: readonly string[]) => Promise<GuardStart>;
 }
+
+// A guard started with the person's hosts; one already on, left as it was; or the guard file could not be written.
+export type GuardStart = "started" | "kept" | "failed";
+
+// What the agent is told of the guard, after the sentence saying the value is stored.
+const guardWords = (subject: SecretNeed, hosts: readonly string[], start: GuardStart): string => {
+    const list = hosts.join(", ");
+    switch (start) {
+        case "started":
+            return ` Its host guard is on: it goes unasked only to ${list}, and a use anywhere else asks a person first.`;
+        case "kept":
+            return ` ${subject.name} already had its host guard on, which was left as it is: \`secrets hosts ${subject.name}\` shows where it may go.`;
+        case "failed":
+            return ` Its host guard could not be set, so it is off: \`secrets hosts ${subject.name} on\` turns it on.`;
+    }
+};
 
 // How the agent spends it, honestly per runtime: a loop whose shell fills a reference in at execution (the Claude Code
 // loop; Codex, Cursor and Pi through their hooks) is told to write one; any other is told it won't be filled.
@@ -42,7 +61,7 @@ const keptOnWords = (subject: SecretNeed, keepOn: SecretKeepOn, pending: boolean
     ],
 });
 
-export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly provide: (need: Need, value: string, keepOn?: SecretKeepOn) => Promise<Met> } => {
+export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly provide: (need: Need, value: string, given?: SecretGiven) => Promise<Met> } => {
     const stored = async (name: string): Promise<boolean> =>
         (await deps.registry()).some((secret) => secret.name === name && secret.source !== "device") || ((await deps.deviceHeld?.()) ?? []).includes(name);
 
@@ -70,6 +89,9 @@ export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly p
         };
         if (ask.multiline === true) {
             subject.multiline = true;
+        }
+        if (ask.hosts !== undefined && ask.hosts.length > 0) {
+            subject.hosts = [...new Set(ask.hosts)];
         }
         return { kind: "raise", subject, title: titleOf(subject) };
     };
@@ -100,19 +122,26 @@ export const secretNeed = (deps: SecretNeedDeps): NeedKindHandler & { readonly p
             }
             return { refused: `${subject.name} is not stored yet: paste its value into the card, or add it on the Secrets view.` };
         },
-        provide: async (need, value, keepOn) => {
+        provide: async (need, value, given = {}) => {
             const subject = subjectOf(need);
             if (subject === undefined) {
                 throw new Error("Not a secret need.");
             }
+            const { keepOn } = given;
+            // A computer's keyring keeps its own list of where a value may go, so the card's hosts are not read for it.
             if (keepOn !== undefined) {
                 if (deps.keepOn === undefined) {
                     throw new Error("This sandbox cannot send a value to a computer's keyring.");
                 }
                 return keptOnWords(subject, keepOn, (await deps.keepOn(subject.name, value, keepOn)).pending);
             }
+            // Only hosts the agent proposed: the card offers those, and a person keeps or drops them, never adds one.
+            const hosts = [...new Set(given.hosts ?? [])].filter((host) => subject.hosts?.includes(host) === true);
+            // Before the value is stored, so its first use already meets the guard.
+            const start = hosts.length === 0 || deps.startGuard === undefined ? undefined : await deps.startGuard(subject.name, hosts);
             await deps.keep(subject.name, value);
-            return { result: `${subject.name} is stored${subject.replace === true ? ", in place of the value that was refused" : ""}.`, use: useOf(subject.name, undefined, subject.multiline === true) };
+            const kept = `${subject.name} is stored${subject.replace === true ? ", in place of the value that was refused" : ""}.`;
+            return { result: start === undefined ? kept : `${kept}${guardWords(subject, hosts, start)}`, use: useOf(subject.name, undefined, subject.multiline === true) };
         },
         nextTurn: () => false,
         key: (subject: NeedSubject) => (subject.kind === "secret" ? subject.name : ""),

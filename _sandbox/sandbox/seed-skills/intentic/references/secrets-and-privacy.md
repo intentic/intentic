@@ -9,7 +9,9 @@ unknown name fails and lists the names that exist. In a file you write, keep the
 - **One nobody has stored**: `secrets ask NAME --why "…"` puts a masked field on a card in the chat, and the answer
   comes back once it is stored (`--link` where to get one, `--hint` what it looks like, `--replace` for a stored one
   being refused, `--where` how it will be used, `--multiline` for a key file or a whole `.env`, kept exactly as pasted).
-  Never a request to paste it into chat.
+  Never a request to paste it into chat. When you know where it will be sent, add `--host api.example.com` (repeatable,
+  `*.example.com` for every host under a domain): the card shows each for the person to keep or drop, and the secret
+  starts with its host guard on, set to the ones kept, so a use anywhere else asks first.
 - **A value with lines or quotes** (an SSH key, a `.env`): write `{{secret:name|file}}` instead. It becomes the path of a
   private file holding the value byte for byte, so nothing in the value can change the command:
   `--env-file {{secret:name|file}}`, `set -a; . {{secret:name|file}}; set +a`, `cp {{secret:name|file}} dev.env`. The
@@ -52,6 +54,7 @@ refused. `secrets gates` shows the gate and the guard on one line per secret; `s
 A secret refused or carded for where it was going has its host guard on: `secrets hosts NAME` says where it may go, so
 aim one plain `curl`/`wget`/`git` command straight at those hosts. To let it go somewhere new for good,
 `secrets hosts NAME add HOST` asks the owner on a card, as does `secrets hosts NAME off`; `on` and `remove` need nobody.
+A send card itself also offers "Always allow NAME to HOST", which adds the host for good when the owner picks it.
 
 ## Secrets kept on the owner's computers
 
