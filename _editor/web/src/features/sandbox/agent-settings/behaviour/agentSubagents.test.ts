@@ -116,42 +116,37 @@ test("says nothing of the kind while spawning runs", async () => {
     expect(host.textContent).not.toContain(`bound only`);
 });
 
-// 2026-10-20: ten children went onto one account at once and stopped together. The plan is on by default, and the room it
-// keeps for the owner's own chats is a number of points, which the switch going off leaves nothing to bound.
-test("the allowance plan opens on, writes its own key, and its reserve is bounded and only asked while it is on", async () => {
+// 2026-10-20: ten children went onto one account at once and stopped together. The plan is always on (its switch was
+// retired 2026-11-25), and the room it keeps for the owner's own chats is a number of points.
+test("the room kept for you opens on its default, writes its own key, and is bounded", async () => {
     const host = mount();
-    const toggle = host.querySelector<HTMLInputElement>(
-        `[aria-label="Plan fan-outs by allowance"] input, input[aria-label="Plan fan-outs by allowance"]`,
-    );
-    expect(toggle?.checked).toBe(true);
+    expect(host.querySelector(`[aria-label="Plan fan-outs by allowance"]`)).toBeNull();
     const reserve = numberBox(host, `Room kept for you`);
     expect(reserve.value).toBe(`10`);
+    expect(reserve.disabled).toBe(false);
     reserve.value = `80`;
     reserve.dispatchEvent(new Event(`change`));
     await nextTick();
     expect(patch.mock.calls).toEqual([[{ subagentReservePercent: 50 }]]);
-    toggle?.click();
-    await nextTick();
-    expect(patch.mock.calls[1]).toEqual([{ subagentBudget: false }]);
-    expect(numberBox(host, `Room kept for you`).disabled).toBe(true);
 });
 
-// Simple keeps what a person weighs: how many at once, and the room kept for them with the switch it depends on.
-test("Simple keeps how many at once and the room kept for you, and Advanced adds the other ceilings", async () => {
+// Simple keeps what a person weighs, the room kept for them; every ceiling, the width included, is Advanced's, since a
+// spawned child past the width already waits for memory and allowance.
+test("Simple keeps the room kept for you, and Advanced adds every ceiling", async () => {
     const host = mount();
     const pick = (label: string): void =>
         [...host.querySelectorAll<HTMLElement>(`button`)].find((button) => button.textContent?.trim() === label)?.click();
 
     pick(`Simple`);
     await nextTick();
-    expect(numberBox(host, `Subagents at once`)).not.toBeNull();
     expect(numberBox(host, `Room kept for you`)).not.toBeNull();
-    for (const label of [`Subagents per conversation`, `Nesting depth`, `Wait for a reset`]) {
+    for (const label of [`Subagents at once`, `Subagents per conversation`, `Nesting depth`, `Wait for a reset`]) {
         expect(numberBox(host, label), label).toBeNull();
     }
 
     pick(`Advanced`);
     await nextTick();
+    expect(numberBox(host, `Subagents at once`)).not.toBeNull();
     expect(numberBox(host, `Nesting depth`)).not.toBeNull();
     expect(storedValue(`intentic:agent-tools-detail`)).toBe(JSON.stringify({ subagents: `advanced` }));
 });

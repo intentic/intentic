@@ -7549,11 +7549,9 @@
         "agentSubagents": {
             "keepRoomForYou": "Margen reservado para ti",
             "keepRoomForYouDescription": "Puntos de cada ventana de cuota, sobre 100, que los subagentes dejan para tus propios chats.",
-            "maximumDelegatedAgentsRunning": "Máximo de agentes delegados que una conversación ejecuta en paralelo. En todo el sandbox, decide la memoria libre.",
+            "maximumDelegatedAgentsRunning": "Máximo de subagentes que una conversación ejecuta en paralelo; los demás esperan a que termine uno. La memoria libre y la cuota ya frenan a los subagentes, así que esto cuenta sobre todo en cuentas de pago por token y en los subagentes propios de Claude Code.",
             "maximumDelegationDepth": "Profundidad máxima de delegación.",
             "nestingDepth": "Profundidad de anidamiento",
-            "planByAllowance": "Planificar los despliegues según la cuota",
-            "planByAllowanceDescription": "Iniciar un subagente solo donde la cuota de una cuenta pueda sostenerlo, en la cuenta que conserve más margen después. El resto espera como pendiente y arranca solo cuando vuelve a haber margen.",
             "spawnSubagents": "Lanzar subagentes",
             "spawnedSubagentSpends": "Un subagente lanzado funciona como una conversación propia, en cualquier proveedor conectado, y gasta las mismas cuentas conectadas que este.",
             "spawningRefusedOutright": "Lanzar subagentes está rechazado de plano, así que los límites de abajo solo acotan los subagentes que un entorno inicia dentro de su proceso.",

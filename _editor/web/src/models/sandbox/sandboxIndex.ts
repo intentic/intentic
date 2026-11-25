@@ -225,7 +225,6 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
             t(`sandbox.agentSubagents.subagentsAtOnce`),
             t(`sandbox.agentSubagents.subagentsPerConversation`),
             t(`sandbox.agentSubagents.nestingDepth`),
-            t(`sandbox.agentSubagents.planByAllowance`),
             t(`sandbox.agentSubagents.keepRoomForYou`),
             t(`sandbox.search.agentSubagents`),
         ],

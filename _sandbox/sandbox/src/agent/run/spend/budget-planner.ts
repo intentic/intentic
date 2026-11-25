@@ -260,13 +260,12 @@ export const claimBudget = (deps: PlannerDeps, input: ClaimInput, now: () => num
     serialized(input.provider, async () => {
         const at = now();
         const plan = await planAccounts(deps, input, at);
-        const settings = await deps.sandboxSettings.get();
         if (plan.accounts.length === 0) {
             // Nothing ready reads a figure: the old path decides (the spent gate, the credential's own pick).
             return { go: true };
         }
         const best = choose(plan.accounts, plan.child, plan.reserve);
-        const pick = best ?? (settings.subagentBudget === false || input.childrenRunning === 0 ? leastShort(plan.accounts, plan.child, plan.reserve) : undefined);
+        const pick = best ?? (input.childrenRunning === 0 ? leastShort(plan.accounts, plan.child, plan.reserve) : undefined);
         if (pick === undefined) {
             const projections = plan.accounts.map((account) => leastShort([account], plan.child, plan.reserve)).filter((projection) => projection !== undefined);
             return { go: false, projections, ...opt("retryAt", soonestReopening(projections, at)) };

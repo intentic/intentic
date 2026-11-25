@@ -98,11 +98,6 @@ describe("the fan-out planner", () => {
         expect((await claimBudget(deps(), { provider: "claude", model: OPUS, accounts: judged(full), childId: "sub-b", childrenRunning: 1 }, () => NOW)).go).toBe(false);
     });
 
-    it("never holds a child with the budget switched off, but still places it", async () => {
-        const full = [claude("radarsu", 90, 4, 55), claude("artur", 80, 4, 71)];
-        expect(await claimBudget(deps({ subagentBudget: false }), { provider: "claude", model: OPUS, accounts: judged(full), childId: "sub-a", childrenRunning: 5 }, () => NOW)).toMatchObject({ go: true, account: "artur" });
-    });
-
     it("judges a routed provider's ready accounts as one pool, placing nothing", async () => {
         const codex = [claude("codex-a.json", 50, 2, 10), claude("codex-b.json", 100, 2, 10)];
         const claim = await claimBudget(deps(), { provider: "codex", model: "gpt-6.1-sol", accounts: judged(codex, "gpt-6.1-sol"), childId: "sub-c", childrenRunning: 0 }, () => NOW);

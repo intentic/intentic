@@ -150,7 +150,11 @@ on each spawn: both are required, and no setting picks them. So "spawn the cheap
   subagents a runtime starts in-process (Claude Code's own Agent tool), which run inside the parent's turn and
   which the spawn rule does not cover. A spawn past **Subagents at once** waits as pending and starts by itself when
   one of the parent's children ends; past **Subagents per conversation** it is refused, a count that survives a
-  restart.
+  restart. All three sit under **Advanced**: free memory and the allowance plan already hold spawned subagents back,
+  so the width binds mostly on pay-per-token accounts and the in-process ones.
+- Spawned subagents are always planned by allowance: one starts only where an account can carry it, and the rest wait
+  as pending. **Room kept for you** (Simple) is how many points of each window, out of 100, they leave for the owner's
+  own chats; 0 keeps none.
 - A subagent the sandbox has no memory for yet waits as pending, its row saying since when, why and where it stands
   among the subagents waiting for room, and starts by itself once there is room; work people send goes first. It
   waits up to six hours, then ends unstarted with nothing spent and its parent is woken to hear it. Its wait counts

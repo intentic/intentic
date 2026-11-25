@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Button, Notice, Row, RowGroup, RowNote, ui } from "@intentic/ui";
-import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 import { useSandboxSettings } from "../../../../models/sandbox/useSandboxSettings";
@@ -15,14 +14,15 @@ import { here, page } from "../../../../lib/routes/links";
 
 // Three ceilings over one activity, starting subagents, and how long a subagent refused for a spent allowance waits for
 // its reset before it stops instead (childRerunHorizonHours): how wide one fan-out is, the lifetime budget per conversation,
-// and how deep delegation nests. Then the allowance plan (subagentBudget, subagentReservePercent): whether the daemon starts
-// a subagent only where an account can carry it, and how much of each window it leaves for the owner's own chats. They bound every subagent, spawned or started in-process by the runtime's own Agent
-// tool. Raising only the width just hits the per-conversation ceiling later. Bounds mirror SandboxSettingsSchema so the
-// box never accepts a number the save would reject. Whether it may spawn one at all (a conversation of its own, on any
-// provider) is a guardrail, set on Guardrails beside every other thing it may do without asking; it led this group
+// and how deep delegation nests. Then how much of each allowance window the daemon's plan leaves for the owner's own
+// chats (subagentReservePercent); the plan itself is always on (its switch, subagentBudget, was retired 2026-11-25). They
+// bound every subagent, spawned or started in-process by the runtime's own Agent tool. Bounds mirror SandboxSettingsSchema
+// so the box never accepts a number the save would reject. Whether it may spawn one at all (a conversation of its own, on
+// any provider) is a guardrail, set on Guardrails beside every other thing it may do without asking; it led this group
 // until 2026-10-16, and the group still says when it is refused, since that changes what these bound.
-// Simple keeps the two a person weighs (how many at once, how much of the allowance is left for them) and the switch
-// the second depends on; Advanced adds the lifetime ceiling, the nesting depth and the wait for a reset.
+// Simple keeps the one a person weighs, how much of the allowance is left for them. Advanced adds the ceilings: the width
+// left Simple on 2026-11-25, since a spawned child past it already waits for memory (child-room.ts) and allowance
+// (budget-planner.ts) and the width now binds mostly on unmetered providers and the runtime's in-process subagents.
 const t = useT();
 const level = useDetailLevel(`subagents`);
 const advanced = computed(() => level.value === `advanced`);
@@ -61,8 +61,9 @@ const postureLabel = computed(() => postures().find((option) => option.value ===
             </template>
         </Row>
 
-        <!-- First ceiling a fan-out hits; the assistant stops rather than retries here, so a low number serializes work instead of failing it. -->
+        <!-- A spawn past it waits for a sibling to end rather than failing, so a low number serializes work. -->
         <Row
+            v-if="advanced"
             icon="users"
             :title="t(`sandbox.agentSubagents.subagentsAtOnce`)"
             :description="t(`sandbox.agentSubagents.maximumDelegatedAgentsRunning`)"
@@ -163,17 +164,6 @@ const postureLabel = computed(() => postures().find((option) => option.value ===
                 />
             </template>
         </Row>
-        <!-- The daemon's own answer to a fan-out wider than an account carries: it places each child, and holds the rest as pending. -->
-        <Row icon="usage" :title="t(`sandbox.agentSubagents.planByAllowance`)" :description="t(`sandbox.agentSubagents.planByAllowanceDescription`)">
-            <template #control>
-                <ToggleSwitch
-                    :model-value="settings?.subagentBudget ?? true"
-                    :disabled="settings === undefined"
-                    :aria-label="t(`sandbox.agentSubagents.planByAllowance`)"
-                    @update:model-value="(subagentBudget: boolean) => patch({ subagentBudget })"
-                />
-            </template>
-        </Row>
         <Row icon="user" :title="t(`sandbox.agentSubagents.keepRoomForYou`)" :description="t(`sandbox.agentSubagents.keepRoomForYouDescription`)">
             <template #control>
                 <input
@@ -181,7 +171,7 @@ const postureLabel = computed(() => postures().find((option) => option.value ===
                     :min="RESERVE.min"
                     :max="RESERVE.max"
                     :value="settings?.subagentReservePercent ?? RESERVE.default"
-                    :disabled="settings === undefined || settings.subagentBudget === false"
+                    :disabled="settings === undefined"
                     :aria-label="t(`sandbox.agentSubagents.keepRoomForYou`)"
                     :class="ui.input({ size: `sm` }, 'w-20 text-right')"
                     @change="

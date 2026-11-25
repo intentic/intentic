@@ -182,4 +182,7 @@ export const SETTINGS_HISTORY = [
     ...dropAll(["iqSearch", "iqSearchHoldout"]),
     // Personas were renamed roles (2026-11-18): the switch that matches a new chat to one moves with them.
     rename("personaRouting", "roleRouting"),
+    // Planning fan-outs by allowance became the only way (2026-11-25): off, a second child started on an account that could
+    // not carry it, ran its allowance out and waited for the reset anyway. `subagentReservePercent` at 0 is the loosest plan.
+    ...dropAll(["subagentBudget"]),
 ] as const;
