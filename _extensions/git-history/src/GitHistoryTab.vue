@@ -607,7 +607,7 @@ const runPending = async (): Promise<void> => {
                 <p v-else-if="searching && matched.length === 0" class="px-3 py-3 text-2xs text-subtle">
                     {{ t(`gitHistoryTab.noLoadedCommitMatches`) }}
                 </p>
-                <div v-if="graphRows.length > 0">
+                <template v-if="graphRows.length > 0">
                     <!-- A @container per row: which columns fit depends on this panel's width, which the reader controls. -->
                     <div v-for="{ row, commit } in graphRows" :key="commit.sha" class="@container">
                         <!-- allow(substitutes): a commit graph's row: its lanes run through the row at a fixed height (ROW_H) the graph is drawn to, which <DisclosureRow>'s header and drawer cannot hold -->
@@ -782,8 +782,8 @@ const runPending = async (): Promise<void> => {
                                                 @click="openFileDiff(commit, row.file)"
                                                 @dblclick="openFileDiff(commit, row.file, 'keep')"
                                             >
-                                                <span class="w-2.5 shrink-0"></span>
-                                                <ChangeStatusMark :status="row.file.status" />
+                                                <!-- ml-4: a folder row's chevron (w-2.5) and its gap (1.5), so names line up under their folder. -->
+                                                <ChangeStatusMark :status="row.file.status" class="ml-4" />
                                                 <span class="min-w-0 flex-1 truncate text-content/90">{{ row.name }}</span>
                                                 <DiffStat :additions="row.file.additions" :deletions="row.file.deletions" />
                                             </button>
@@ -793,7 +793,7 @@ const runPending = async (): Promise<void> => {
                             </div>
                         </div>
                     </div>
-                </div>
+                </template>
             </Await>
             <!-- Pulls in the next page when this comes into view; absent on the last page, which is how the observer knows to stop. -->
             <div v-if="hasMore" ref="sentinel" class="px-3 py-2 text-2xs text-subtle">

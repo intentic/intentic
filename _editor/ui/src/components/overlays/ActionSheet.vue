@@ -46,7 +46,7 @@ const afterHide = (): void => {
             >
                 <Icon :name="action.icon" class="w-5 shrink-0 text-base" :class="action.danger === true ? `` : `text-muted`" />
                 <span class="min-w-0 flex-1">
-                    <span class="block">{{ action.label }}</span>
+                    {{ action.label }}
                     <span v-if="action.note !== undefined" class="mt-0.5 block text-xs text-muted">{{ action.note }}</span>
                 </span>
             </button>

@@ -59,8 +59,7 @@ onMounted(() => void toTail());
             <p v-for="(line, index) in lines" :key="index" class="whitespace-pre-wrap break-all">{{ line }}</p>
         </div>
         <p v-if="running && note" class="flex items-center gap-1.5 text-2xs text-muted">
-            <Icon name="refresh" spin />
-            <span>{{ note }}</span>
+            <Icon name="refresh" spin />{{ note }}
         </p>
     </div>
 </template>
