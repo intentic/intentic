@@ -126,37 +126,35 @@ watch(
 
 <template>
     <div
-        class="ui-code"
+        class="ui-code flex flex-col gap-1.5"
         :class="{ 'ui-code-wrap': wrap, 'ui-code-clamp': clamped, 'ui-code-scroll': scrolled, 'ui-code-copyable': copyable }"
         :style="maxLines === undefined ? undefined : { '--ui-code-clamp-lines': maxLines }"
     >
-        <div class="flex flex-col gap-1.5">
-            <!-- Only a label gets a row of its own; an unlabelled block needs no empty chrome row above it. -->
-            <div v-if="label" class="text-2xs font-medium text-muted">{{ label }}</div>
-            <div ref="block" class="relative">
-                <div v-if="html" v-html="html"></div>
-                <pre
-                    v-else
-                    class="overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
-                    :class="{ 'whitespace-pre-wrap': wrap, 'break-words': wrap }"
-                    >{{ code }}</pre>
-                <!-- `bg-canvas`, not transparent: it sits over the code surface; the block's right padding keeps text clear of it. -->
-                <!-- The wrapper, not the button, carries `relative`: Button's root always sets it too, and class order, not source order, decides which one wins. -->
-                <!-- `flex`, not a bare block: a block-level chip sits on the text line and inherits its leading, which throws off the corner inset. -->
-                <!-- Nudged left of the scrollbar's width in scroll mode; a utility class here beats code.css's `@layer components`. -->
-                <div v-if="copyable" class="absolute top-1.5 flex" :class="scrolled ? `right-5` : `right-1.5`">
-                    <CopyButton :text="code" :label="t(`ui.action.copy`)" class="bg-canvas" @copied="emit(`copied`)" />
-                </div>
-                <!-- The fade signals there's more; a hard cut mid-command would read as a rendering bug. -->
-                <div
-                    v-if="clamped && overflowing"
-                    class="pointer-events-none absolute inset-x-px bottom-px h-6 rounded-b-md bg-linear-to-t from-canvas to-transparent"
-                ></div>
+        <!-- Only a label gets a row of its own; an unlabelled block needs no empty chrome row above it. -->
+        <div v-if="label" class="text-2xs font-medium text-muted">{{ label }}</div>
+        <div ref="block" class="relative">
+            <div v-if="html" v-html="html"></div>
+            <pre
+                v-else
+                class="overflow-x-auto rounded-md border border-line bg-canvas px-3 py-2 font-mono text-xs text-content"
+                :class="{ 'whitespace-pre-wrap': wrap, 'break-words': wrap }"
+                >{{ code }}</pre>
+            <!-- `bg-canvas`, not transparent: it sits over the code surface; the block's right padding keeps text clear of it. -->
+            <!-- The wrapper, not the button, carries `relative`: Button's root always sets it too, and class order, not source order, decides which one wins. -->
+            <!-- `flex`, not a bare block: a block-level chip sits on the text line and inherits its leading, which throws off the corner inset. -->
+            <!-- Nudged left of the scrollbar's width in scroll mode; a utility class here beats code.css's `@layer components`. -->
+            <div v-if="copyable" class="absolute top-1.5 flex" :class="scrolled ? `right-5` : `right-1.5`">
+                <CopyButton :text="code" :label="t(`ui.action.copy`)" class="bg-canvas" @copied="emit(`copied`)" />
             </div>
-            <button v-if="toggleable" type="button" :class="ui.textButton({ size: `xs`, tone: `quiet` })" @click="expanded = !expanded">
-                {{ expanded ? t(`ui.action.showLess`) : t(`ui.code.showAll`) }}
-                <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
-            </button>
+            <!-- The fade signals there's more; a hard cut mid-command would read as a rendering bug. -->
+            <div
+                v-if="clamped && overflowing"
+                class="pointer-events-none absolute inset-x-px bottom-px h-6 rounded-b-md bg-linear-to-t from-canvas to-transparent"
+            ></div>
         </div>
+        <button v-if="toggleable" type="button" :class="ui.textButton({ size: `xs`, tone: `quiet` })" @click="expanded = !expanded">
+            {{ expanded ? t(`ui.action.showLess`) : t(`ui.code.showAll`) }}
+            <Icon :name="expanded ? `chevron-up` : `chevron-down`" />
+        </button>
     </div>
 </template>
