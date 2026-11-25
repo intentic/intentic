@@ -367,6 +367,8 @@ describe(`VERSIONED_STATE_PATHS`, () => {
     // Spelled out rather than derived, so adding a tracked entry is a visible edit here, not a silent side effect.
     it(`tracks exactly the configuration files plus the agent's own authored output`, () => {
         expect(VERSIONED_STATE_PATHS.toSorted()).toEqual([
+            // A project's checkout hooks, committed with its code like run.json (schemas/checkout-hooks.ts).
+            `${STATE_DIR}/checkout.json`,
             `${STATE_DIR}/config/approvals/`,
             // Which folders each named area holds: editing one moves what everyone granted it can see, so the
             // change belongs in a diff rather than only in a screen.

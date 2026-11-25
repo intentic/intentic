@@ -1,6 +1,7 @@
 //! Runs the Node daemon as a child and keeps it running. A crash restarts it with backoff while netd holds every
-//! socket, once what the dead daemon left in its process group is gone; a Node netd found stuck is killed, the kill
-//! written down (`netd-kills.jsonl`), and restarted the same way. A restart into a sandbox stalling on memory waits for
+//! socket, once what the dead daemon left in its process group is gone; a Node netd found stuck has its threads and a
+//! diagnostic report kept (evidence.rs), is killed, the kill written down (`netd-kills.jsonl`) naming them, and is
+//! restarted the same way. A restart into a sandbox stalling on memory waits for
 //! it to ease (memguard). A deliberate stop (exit 0) or a refused config (exit 78) ends netd too, as they ended the
 //! container.
 
@@ -16,6 +17,7 @@ use tokio::process::{Child, Command};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::watch;
 
+use crate::evidence::{self, Evidence};
 use crate::fallback::{Fallback, Launch};
 use crate::memguard::{self, Container};
 use crate::records::{self, NetdKill, NetdKillKind};
@@ -153,9 +155,14 @@ pub async fn supervise(
             () = raised(&mut stop) => terminate(&mut child, node).await,
             () = told(&mut stuck) => {
                 let verdict = *stuck.borrow_and_update();
+                let at = records::now_ms();
+                let evidence = match node {
+                    Some(pid) => Some(evidence::gather(pid, container.records_dir(), at).await),
+                    None => None,
+                };
                 let status = kill_stuck(&mut child).await;
                 if let Some(verdict) = verdict {
-                    record(container, killed(verdict, node)).await;
+                    record(container, killed(verdict, node, at, evidence)).await;
                 }
                 status
             }
@@ -185,15 +192,17 @@ pub async fn supervise(
     }
 }
 
-// What the kill of a stuck Node says: which verdict, the Node's pid, and how long it had been silent by the kill.
-fn killed(verdict: Verdict, pid: Option<u32>) -> NetdKill {
+// What the kill of a stuck Node says: which verdict, the Node's pid, when netd moved on it, how long it had been silent
+// by the kill, and what netd kept of it first.
+fn killed(verdict: Verdict, pid: Option<u32>, at: u64, evidence: Option<Evidence>) -> NetdKill {
     NetdKill {
-        at: records::now_ms(),
+        at,
         kind: verdict.kind,
         pid,
         silent_ms: Some(records::millis(verdict.since.elapsed())),
         held_ms: None,
         psi: None,
+        evidence,
     }
 }
 
@@ -255,6 +264,7 @@ async fn hold_while_short(container: &Container, stop: &mut watch::Receiver<bool
             silent_ms: None,
             held_ms: Some(records::millis(held)),
             psi: None,
+            evidence: None,
         },
     )
     .await;
@@ -307,7 +317,8 @@ async fn terminate(child: &mut Child, pid: Option<u32>) -> std::io::Result<ExitS
     }
 }
 
-// SIGKILL, never SIGTERM: Node's SIGTERM handler runs on the very event loop that is stuck, and were the loop to turn
+// What it was doing is kept first (evidence.rs), so the kill is not all that is known of it. SIGKILL, never SIGTERM:
+// Node's SIGTERM handler runs on the very event loop that is stuck, and were the loop to turn
 // again the handler would stop the daemon cleanly, exit 0, and take netd and the container down with it.
 async fn kill_stuck(child: &mut Child) -> std::io::Result<ExitStatus> {
     tracing::error!("killing the stuck daemon; it restarts as after a crash");
@@ -315,10 +326,12 @@ async fn kill_stuck(child: &mut Child) -> std::io::Result<ExitStatus> {
     child.wait().await
 }
 
-/// Ends what a crashed daemon left in its process group. Whatever it started without a group of its own (a pooled
-/// agent, the translator, a turn's runtime mid-answer, an `intentic` run) outlives it, nothing in the next daemon adopts
+/// Ends what a crashed daemon left in its process group. Whatever it started without a group of its own (the
+/// translator, an `intentic` run) outlives it, nothing in the next daemon adopts
 /// it, and that daemon's own sweep reads only its own group, so each would run on beside its replacement. What is meant
 /// to outlive a restart starts in a group of its own (a service, an X display, a tmux pane), and this never reaches it.
+/// Agent runtimes (a pooled ACP agent, a turn's Codex or Pi) lead groups of their own too, so the daemon can stop each
+/// with everything it started; the next daemon's boot sweep ends the ones a crash left, by their generation stamp.
 async fn reclaim(group: u32) {
     let Ok(group) = i32::try_from(group) else {
         return;
@@ -663,6 +676,10 @@ mod tests {
         assert_eq!(kills[0]["pid"], first.unwrap());
         assert!(kills[0]["silentMs"].as_u64().unwrap() >= 300_000);
         assert!(kills[0].get("psi").is_none(), "no pressure to read");
+        // Kept before the kill: the threads it had, beside the record; no report, since a shell asks for none.
+        let capture = kills[0]["evidence"]["capture"].as_str().unwrap();
+        assert!(dir.join("logs").join(capture).is_file(), "{capture}");
+        assert!(kills[0]["evidence"].get("signal").is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

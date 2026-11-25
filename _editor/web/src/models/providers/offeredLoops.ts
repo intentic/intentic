@@ -14,6 +14,7 @@ const knownLoop = (value: string): value is AgentLoop => value !== `native` && A
 
 /** The loops a provider is offered on, its default first; more than one is a choice. */
 export const offeredLoopsFrom = (advertised: AdvertisedLoops, provider: AgentProvider): readonly AgentLoop[] => {
+    // compat(daemon<1.335.0): providers.list `loops`
     if (advertised === undefined) {
         // Every daemon before the field ran each provider natively and through Claude Code, and nothing else.
         const [own, ...rest] = loopsOf(provider);

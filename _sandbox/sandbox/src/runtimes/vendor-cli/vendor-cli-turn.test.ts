@@ -137,7 +137,7 @@ test("the first account nothing refused serves, its own CLI process, on the mode
     expect(h.ran).toEqual([
         {
             id: "kimi-cli:a",
-            launch: { argv: ["/opt/cli/bin/cli", "acp"], env: { KIMI_CODE_HOME: "/auth/homes/a", KIMI_CODE_NO_AUTO_UPDATE: "1" } },
+            launch: { argv: ["/opt/cli/bin/cli", "acp"], env: { KIMI_CODE_HOME: "/auth/homes/a", KIMI_CODE_NO_AUTO_UPDATE: "1" }, dialect: "kimi" },
             options: { model: "kimi-k2" },
         },
     ]);
@@ -151,7 +151,7 @@ test("a turn naming no account passes over one whose allowance the records call 
     expect(h.ran[0]?.id).toBe("kimi-cli:b");
 });
 
-test("Grok Build runs its own agent, unshared, with its ask-user tool switched off", async () => {
+test("Grok Build runs its own agent, unshared, read through its dialect", async () => {
     const h = harness([account("g")]);
     await run(h, turn({ agent: "grok" }), GROK_BUILD);
     expect(h.ran[0]).toEqual(
@@ -160,7 +160,7 @@ test("Grok Build runs its own agent, unshared, with its ask-user tool switched o
             launch: {
                 argv: ["/opt/cli/bin/cli", "agent", "--no-leader", "stdio"],
                 env: { GROK_HOME: "/auth/homes/g", GROK_DISABLE_AUTOUPDATER: "1" },
-                sessionMeta: { askUserQuestion: false },
+                dialect: "grok",
             },
         }),
     );

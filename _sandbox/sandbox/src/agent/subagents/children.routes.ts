@@ -9,6 +9,7 @@ import type { Services } from "../../composition.js";
 import { childLandingWords } from "../../conversations/land/child-lands.js";
 import { type ChildActionResult, type ChildSupervisor, childReportOf, pendingQuestionOf, supervisorFor } from "./children.js";
 import { childResultOf } from "./child-records.js";
+import { receiptedSupervisor } from "./retries/call-receipts.js";
 import { HALF_A_MOVE } from "./child-words.js";
 import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 import { markSpentByHand, unmarkSpentByHand } from "../../usage/spent-by-hand.js";
@@ -51,6 +52,8 @@ const SpawnBodySchema = z.object({
     on: z.string().min(1).optional(),
     // Other children of this conversation it starts after, once their work is in its checkout (child-after.ts).
     after: z.array(z.string().min(1)).max(16).optional(),
+    // The failed child of this conversation this spawn retries, which links it into that child's chain (retry-chains.ts).
+    retryOf: z.string().min(1).optional(),
 });
 
 // Wait's default and ceiling: long enough for a real child, short enough that a forgotten wait still returns.
@@ -160,6 +163,21 @@ const heldWorkRoute =
         return c.json(result, result.ok ? 200 : 409);
     };
 
+/* A shell's `Idempotency-Key` names one spawn, send or cancel across its retries: a retry under the same key is answered
+   with what the first call did (call-receipts.ts), and the same key asking something else is refused. Absent, each call
+   acts as before. */
+const IDEMPOTENCY_HEADER = "idempotency-key";
+
+// The conversation's supervisor, its moves answered once per key where the request names one.
+const keyedSupervisor = (services: Services, c: Context<AppEnv>, conversationId: string): ChildSupervisor | undefined => {
+    const supervisor = supervisorFor(services.conversations, conversationId);
+    if (supervisor === undefined) {
+        return undefined;
+    }
+    const deps = { conversations: services.conversations, historyRoot: services.config.historyRoot, logger: services.logger };
+    return receiptedSupervisor(deps, conversationId, c.req.header(IDEMPOTENCY_HEADER), supervisor);
+};
+
 const createChildrenRoutes = (services: Services) => ({
     /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is queued, before any wait for memory. */
     spawn: async (c: Context<AppEnv>): Promise<Response> => {
@@ -167,7 +185,7 @@ const createChildrenRoutes = (services: Services) => ({
         if (conversationId === undefined) {
             return c.json({ ok: false, message: "No conversation to file the child under: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." }, 400);
         }
-        const supervisor = supervisorFor(services.conversations, conversationId);
+        const supervisor = keyedSupervisor(services, c, conversationId);
         if (supervisor === undefined) {
             return c.json(
                 { ok: false, message: "This conversation may not spawn agents: no turn with full agency has run on it (or the daemon restarted since)." },
@@ -187,9 +205,9 @@ const createChildrenRoutes = (services: Services) => ({
             );
         }
         // The prompt, provider and model it must name, then each knob only where one was named.
-        const { description, harness, effort, on, after, ...named } = parsed.data;
+        const { description, harness, effort, on, after, retryOf, ...named } = parsed.data;
         const knobs = { ...opt("description", description), ...opt("harness", harness), ...opt("effort", effort), ...opt("on", on) };
-        const result = await supervisor.spawn({ ...named, ...knobs, ...opt("after", after) });
+        const result = await supervisor.spawn({ ...named, ...knobs, ...opt("after", after), ...opt("retryOf", retryOf) });
         return c.json(result, result.ok ? 200 : 409);
     },
     /** GET /children/providers — what a child could be started on right now, and what still has allowance. */
@@ -251,7 +269,7 @@ const createChildrenRoutes = (services: Services) => ({
         if (conversationId === undefined) {
             return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." }, 400);
         }
-        const supervisor = supervisorFor(services.conversations, conversationId);
+        const supervisor = keyedSupervisor(services, c, conversationId);
         if (supervisor === undefined) {
             return c.json({ ok: false, message: "This conversation may not supervise agents: no turn with full agency has run on it." }, 403);
         }
@@ -268,7 +286,7 @@ const createChildrenRoutes = (services: Services) => ({
         if (conversationId === undefined) {
             return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp (INTENTIC_TURN_OWNER is unset)." }, 400);
         }
-        const supervisor = supervisorFor(services.conversations, conversationId);
+        const supervisor = keyedSupervisor(services, c, conversationId);
         if (supervisor === undefined) {
             return c.json({ ok: false, message: "This conversation may not supervise agents: no turn with full agency has run on it." }, 403);
         }

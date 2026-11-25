@@ -27,6 +27,15 @@ mod windows;
 #[cfg(windows)]
 pub use windows::finder::finder;
 
+/// A security descriptor naming this process's user alone: the control endpoint's ([`crate::control`]).
+#[cfg(windows)]
+pub(crate) fn owner_only_descriptor() -> Result<windows::secure::Descriptor, String> {
+    windows::secure::Descriptor::new(&format!(
+        "D:P(A;;GA;;;{})",
+        windows::secure::current_user_sid()?
+    ))
+}
+
 /// `service status`'s answer, for `/info`.
 #[cfg(windows)]
 pub fn windows_status() -> serde_json::Value {

@@ -161,6 +161,7 @@ const advertisedFor = (name: string): ReadonlySet<string> | undefined => adverti
 // An unknown daemon or route answers true; a feature only hides on positive evidence it's missing.
 // A route a daemon from before a rename advertises under its old name, at the same address: personas became roles on
 // 2026-11-18 (roles.contract.ts keeps the paths), so `roles.list` is served by a daemon that says `personas.list`.
+// compat(daemon<1.425.0): the roles.* route names (personas.* before the rename)
 const formerNameOf = (name: string): string | undefined => (name.startsWith(`roles.`) ? `personas.${name.slice(`roles.`.length)}` : undefined);
 
 const supportedIn = (known: ReadonlySet<string> | undefined, name: string): boolean => {

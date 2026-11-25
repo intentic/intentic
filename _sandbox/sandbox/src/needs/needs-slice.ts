@@ -21,7 +21,7 @@ import { composeEnvironment } from "../environment/overlay.js";
 import { onRuntimeChange } from "../seams/runtime-feed.js";
 import { versionedRepoWrite } from "../seams/config-commits/settings-versions.js";
 import { deliverWake } from "../seams/wake-delivery.js";
-import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
+import { oweToListenerChannel } from "../extensions/listener/listener-outbox.js";
 import { needRaised, needResolved } from "../push/notifications.js";
 import { defineSlice } from "../seams/slice.js";
 import { capabilityNeed } from "./kinds/capability-need.js";
@@ -158,8 +158,8 @@ const notifyNeed =
         void services.pushSender.notifyIfAway(raised, askedAudience((id) => services.agents.entry(id), need.conversationId));
         const channel = needChannelOf(entry?.identity.origin);
         if (channel !== undefined) {
-            void deliverToListenerChannel(services, channel, needChannelText(need)).catch((error: unknown) =>
-                logger.warn({ err: error, conversationId: need.conversationId, provider: channel.provider }, "needs: the channel did not take the ask"),
+            void oweToListenerChannel(services, channel, needChannelText(need)).catch((error: unknown) =>
+                logger.warn({ err: error, conversationId: need.conversationId, provider: channel.provider }, "needs: the ask could not be journalled for its channel"),
             );
         }
     };

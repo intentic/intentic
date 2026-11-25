@@ -119,12 +119,27 @@ export interface ListenerDispatchFrame {
 }
 
 // The body the daemon POSTs to a gateway's loopback /deliver: a message to post outside any live turn, into a channel by
-// the provider's own id, and into the thread inside it the conversation lives in, when it lives in one.
+// the provider's own id, and into the thread inside it the conversation lives in, when it lives in one. `id` names the
+// reply in the daemon's outbox (listener-outbox.ts), the same on every retry: a gateway declaring DELIVER_ID_FEATURE
+// posts one id once and answers a repeat with what the first post answered. Added 2026-11-24, optional: an older
+// daemon sends none, and an older gateway drops it.
 export const ListenerDeliverSchema = z.object({
     channelId: z.string().min(1),
     text: z.string().min(1),
     thread: z.string().min(1).optional(),
+    id: z.string().min(1).max(200).optional(),
 });
+
+// The header a gateway's POST /listeners/<provider>/dispatch names the message by, the same on every retry of it: the
+// daemon admits one key once, and answers a repeat as it answered the first. A 200 from /dispatch (a stream's status
+// included, since its headers wait for the admission) means the message is in the daemon's durable inbox, or matched
+// nothing. `?answer=channel` on a plain dispatch gives each matched turn the channel-answer sink a held wake's answer
+// takes: a message whose live stream died with the gateway is answered in its thread. An older daemon ignores both.
+export const LISTENER_DISPATCH_KEY_HEADER = "idempotency-key";
+
+// What a gateway's status snapshot can declare it does, so a daemon newer than the gateway knows what it may rely on.
+// `deliver-id`: /deliver posts a given `id` once, so a retry after an answer that never came cannot post it twice.
+export const DELIVER_ID_FEATURE = "deliver-id";
 export type ListenerDeliver = z.infer<typeof ListenerDeliverSchema>;
 
 // The body of POST /listeners/<provider>/stop: which conversation's running turn to stop, and who in the channel asked,
@@ -160,6 +175,8 @@ export type ListenerPairing = z.infer<typeof ListenerPairingSchema>;
 // by id.
 export const ListenerStatusSchema = ActivityStatusSchema.extend({
     pairing: z.record(z.string(), ListenerPairingSchema).optional(),
+    // What this gateway build does beyond the routes every gateway serves (DELIVER_ID_FEATURE); absent from an older one.
+    features: z.array(z.string()).optional(),
 });
 export type ListenerStatus = z.infer<typeof ListenerStatusSchema>;
 

@@ -9,6 +9,7 @@ import type { CredentialGate } from "../../secrets/gates/credential-gate.js";
 import { brokerRoutes, type ExpandedRoute, GATEWAY_PLACEHOLDER } from "./broker-routes.js";
 import { effectiveRules, evaluateRules, ruleIdentity } from "./broker-rules.js";
 import type { BrokerSessions } from "./broker-session.js";
+import { createOpenCalls, credentialPrint, type OpenCall, type OpenCalls } from "../credentials/open-calls.js";
 
 // The credential gateway: where a brokered credential is attached to a request, and the only place it ever is. A request
 // arrives on the loopback listener at `/<session>/<path>`; the signed session names the card and the upstream, the card's
@@ -68,6 +69,11 @@ export interface GatewayDeps {
     readonly prompts: RulePrompts;
     readonly used: (use: GatewayUse) => void;
     readonly fetch?: typeof fetch;
+    // Whether the conversation may still spend this capability (credential-reach.ts), for the sweep of open calls; the
+    // credential gate asks it of each new one. Absent, nobody is limited.
+    readonly reaches?: (conversationId: string | undefined, capability: string) => Promise<boolean>;
+    // How many calls the gateway carries at once, and the open ones it cuts (open-calls.ts).
+    readonly openCalls?: OpenCalls;
 }
 
 const DETAIL_MAX = 80;
@@ -128,8 +134,39 @@ const errorCode = (error: unknown): string => {
     return typeof cause?.code === "string" ? cause.code : "the connection failed";
 };
 
+// The card's credential as it stands, so a call admitted under one is cut once it is replaced.
+const cardPrint = (card: GatewayCard): string =>
+    credentialPrint(
+        Object.entries(card.config)
+            .toSorted(([a], [b]) => a.localeCompare(b))
+            .flat(),
+    );
+
+// Why an open call through the gateway may no longer run, or undefined while it may.
+const staleness =
+    (deps: GatewayDeps) =>
+    async (call: OpenCall): Promise<string | undefined> => {
+        const card = await deps.card(call.subject);
+        if (card === undefined) {
+            return `the connected card "${call.subject}" was removed, or no longer routes its credential through the gateway`;
+        }
+        if (cardPrint(card) !== call.print) {
+            return `the connected card "${call.subject}" was given another credential`;
+        }
+        if (deps.reaches !== undefined && !(await deps.reaches(call.conversationId, call.subject))) {
+            return `this conversation may no longer use "${call.subject}"`;
+        }
+        return undefined;
+    };
+
+// An event stream (server-sent events) stays open for as long as its client reads it, so it has its own pool.
+const poolOf = (request: Request): OpenCall["pool"] =>
+    request.method.toUpperCase() === "GET" && (request.headers.get("accept") ?? "").includes("text/event-stream") ? "stream" : "call";
+
 export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise<Response>) => {
-    const fetchImpl = deps.fetch ?? fetch;
+    const openCalls = deps.openCalls ?? createOpenCalls();
+    openCalls.watch(staleness(deps));
+    const serve = serveGateway(deps);
     return async (request) => {
         const url = new URL(request.url);
         const { token, rest } = splitPath(url.pathname);
@@ -148,6 +185,35 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
                 `The connected card "${capability}" behind this address is gone, or no longer routes its credential through the gateway.`,
             );
         }
+        const admitted = openCalls.admit({ subject: capability, conversationId, pool: poolOf(request), print: cardPrint(card) }, request.signal);
+        if (admitted === undefined) {
+            return refused(
+                429,
+                `Too many requests through the credential gateway are open at once${conversationId === undefined ? "" : " for this conversation"}; wait for one to finish, then retry.`,
+            );
+        }
+        try {
+            return admitted.hold(await serve(request, admitted.signal, url, token, rest, session, card));
+        } catch (error) {
+            admitted.release();
+            throw error;
+        }
+    };
+};
+
+const serveGateway = (deps: GatewayDeps) => {
+    const fetchImpl = deps.fetch ?? fetch;
+    return async (
+        request: Request,
+        // The request's own, joined with the gateway's cut of the call.
+        signal: AbortSignal,
+        url: URL,
+        token: string,
+        rest: string,
+        session: NonNullable<Awaited<ReturnType<BrokerSessions["verify"]>>>,
+        card: GatewayCard,
+    ): Promise<Response> => {
+        const { capability, conversationId } = session;
         const route = brokerRoutes(card.broker, card.config).find(
             (candidate) => candidate.index === session.route && candidate.upstream.href === session.upstream,
         );
@@ -213,7 +279,7 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
                 method,
                 target: where,
                 conversationId,
-                signal: request.signal,
+                signal,
             });
             if (!answer.allow) {
                 return refused(403, answer.reason);
@@ -228,7 +294,7 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
             lane: "gateway",
             detail,
             conversationId,
-            signal: request.signal,
+            signal,
         });
         if (!released.allow) {
             return refused(403, released.reason);
@@ -271,7 +337,7 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
                 // Followed by the client, through relocated(): a redirect followed here would carry the credential to
                 // wherever the service pointed.
                 redirect: "manual",
-                signal: request.signal,
+                signal,
             } as RequestInit);
         } catch (error) {
             // The host and a code only: an error's own text can quote the URL, and a path-borne credential is in it.

@@ -1,13 +1,16 @@
 import { type AgentCapabilities, client, type ClientApp, type ClientConnection, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { withTimeout } from "@intentic/base/async";
+import { z } from "zod";
+import { opt } from "../../opt.js";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import type { SessionModels } from "@intentic/acp-events/model";
 import type { SessionModes } from "@intentic/acp-events/modes";
+import { type AcpDialect, type ChildStop, type DialectReader, dialectOf, type Json, plainReader } from "@intentic/acp-events/dialects";
 import { routeSessions, type SessionRouting, type TurnHooks } from "./acp-routing.js";
 import { type AcpTerminals, createAcpTerminals } from "./acp-terminal.js";
-import { type AcpLaunch, spawnAcpProcess } from "./acp-spawn.js";
+import { type AcpLaunch, spawnAcpProcess, stopAcpProcess } from "./acp-spawn.js";
 
 // One warm subprocess per agent capability, kept across turns since ACP multiplexes sessions over one connection;
 // reaped when idle, respawned after an exit or config change. Turn-scoped hooks bind per session id, so concurrent
@@ -47,6 +50,13 @@ export interface AcpConnection {
     // 15 s, so a helper's sessions left open made an idle process busier by the hour and held its idle reap off.
     readonly release: (sessionId: string) => void;
     readonly kill: () => void;
+    // What the agent says beyond the protocol (AcpLaunch.dialect), and this process's reading of it: which subagents and
+    // background tasks each session has running, and whether the agent owes a session a wake-up of its own.
+    readonly dialect: AcpDialect | undefined;
+    readonly reader: DialectReader;
+    // Ends what a session still has running through the dialect's own stop methods, each probed once per process first
+    // with params that name no child, so an agent without one is never sent a stop it cannot read.
+    readonly stopChildren: (sessionId: string) => void;
 }
 
 export interface AcpConnections {
@@ -153,12 +163,63 @@ const serveTerminals = (app: ClientApp, terminals: AcpTerminals, terminalContext
             return {};
         });
 
+// JSON-RPC's own error shape, as a refused request rejects with it.
+const RefusalSchema = z.object({ code: z.number(), data: z.json().optional() });
+
+// What `stopChildren` does, shared with the in-process fixture. A probe or a stop the agent refuses is only said: the
+// child then runs on, as it would have without a stop to send.
+export const childStopper = (
+    connection: Pick<AcpConnection, "agent" | "alive" | "dialect" | "reader">,
+    refused: (reason: string) => void,
+): ((sessionId: string) => void) => {
+    const probes = new Map<ChildStop, Promise<boolean>>();
+    const supported = (stop: ChildStop): Promise<boolean> => {
+        const known = probes.get(stop);
+        if (known !== undefined) {
+            return known;
+        }
+        const probed = connection.agent.request<Json>(stop.method, stop.probe).then(
+            (result) => stop.supported({ result }),
+            (error: Error) => {
+                const parsed = RefusalSchema.safeParse(error);
+                return parsed.success && stop.supported({ error: { code: parsed.data.code, ...opt("data", parsed.data.data) } });
+            },
+        );
+        probes.set(stop, probed);
+        return probed;
+    };
+    const send = async (stop: ChildStop | undefined, sessionId: string, ids: readonly string[]): Promise<void> => {
+        if (stop === undefined || ids.length === 0 || !(await supported(stop))) {
+            return;
+        }
+        await Promise.all(ids.map((id) => connection.agent.request(stop.method, stop.params(sessionId, id))));
+    };
+    return (sessionId) => {
+        const live = connection.reader.live(sessionId);
+        if (!connection.alive() || connection.dialect === undefined) {
+            return;
+        }
+        void Promise.all([send(connection.dialect.subagentStop, sessionId, live.subagents), send(connection.dialect.taskStop, sessionId, live.tasks)]).catch(
+            (error: Error) => refused(error.message),
+        );
+    };
+};
+
 export const createAcpConnections = (logger: Services["logger"], terminalRun: TerminalRunner): AcpConnections => {
     const pool = new Map<string, Pooled>();
 
     const connect = async (id: string, launch: AcpLaunch, cwd: string): Promise<AcpConnection> => {
         const proc = spawnAcpProcess(launch, cwd);
-        const routing: SessionRouting = { turns: new Map(), abandoned: new Set(), models: new Map(), thoughts: new Map(), modes: new Map() };
+        const dialect = dialectOf(launch.dialect);
+        const reader = dialect?.reader() ?? plainReader();
+        const routing: SessionRouting = {
+            turns: new Map(),
+            abandoned: new Set(),
+            models: new Map(),
+            thoughts: new Map(),
+            modes: new Map(),
+            ...opt("dialect", dialect === undefined ? undefined : { speaks: dialect, reader }),
+        };
         const { turns, abandoned } = routing;
         const terminals = createAcpTerminals(terminalRun);
         let dead = false;
@@ -170,7 +231,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             dead = true;
             clearTimeout(idleTimer);
             terminals.disposeAll();
-            proc.child.kill();
+            stopAcpProcess(proc);
             if (published !== undefined && pool.get(id)?.connection === published) {
                 pool.delete(id);
             }
@@ -188,6 +249,9 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
 
         proc.child.on("exit", (code) => {
             dead = true;
+            // A leader that exited on its own leaves its children in its group; stamped as the daemon's, nothing else
+            // would ever end them.
+            stopAcpProcess(proc);
             clearTimeout(idleTimer);
             if (published !== undefined && pool.get(id)?.connection === published) {
                 pool.delete(id);
@@ -266,7 +330,11 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
             },
             release: (sessionId) => releaseSession(connection, sessionId, (reason) => logger.warn({ agent: id, reason }, "acp: could not end a session nobody resumes")),
             kill,
+            dialect,
+            reader,
+            stopChildren: (sessionId) => stopChildren(sessionId),
         };
+        const stopChildren = childStopper(connection, (reason) => logger.warn({ agent: id, reason }, "acp: the agent refused to stop a child of a stopped turn"));
         published = connection;
         armIdleReap();
         return connection;
@@ -275,7 +343,7 @@ export const createAcpConnections = (logger: Services["logger"], terminalRun: Te
     return {
         acquire: async (id, launch, cwd) => {
             // Command/env/credential changes take effect on the next turn: a stale pooled process is killed and respawned.
-            const configKey = JSON.stringify([launch.argv, launch.env, launch.authenticate ?? null, launch.sessionMeta ?? null]);
+            const configKey = JSON.stringify([launch.argv, launch.env, launch.authenticate ?? null, launch.sessionMeta ?? null, launch.dialect ?? null]);
             const pooled = pool.get(id);
             if (pooled !== undefined && pooled.connection.alive() && pooled.configKey === configKey) {
                 return pooled.connection;

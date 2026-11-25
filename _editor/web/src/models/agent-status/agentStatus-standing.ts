@@ -102,6 +102,7 @@ const olderBooking = (queue: OlderCard[`queue`]): AgentNext | undefined => {
 
 /** The card with the `next` an older sandbox's fields say, the held turn first as the daemon reads it; as it came otherwise. */
 export const withNext = <T extends OlderCard>(card: T): T => {
+    // compat(daemon<1.346.0): the agent card's `next` field
     if (card.next !== undefined) {
         return card;
     }

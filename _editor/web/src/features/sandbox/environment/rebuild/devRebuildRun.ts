@@ -108,6 +108,7 @@ const ADOPT_WITHIN_S = 120;
 // yet both still block the next rebuild; going by the log's silence alone dropped such a build off the card while the
 // guard went on refusing every new one (rog, 2026-10-27). Only an older daemon, which cannot say, leaves it to the log:
 // a gate holding, or a log that grew in the last couple of minutes.
+// compat(daemon<1.367.0): the alive mark in dev-rebuild-log's read
 export const liveOnMachine = (log: DevRebuildLog): boolean => {
     if (log.missing || log.exitCode !== undefined) {
         return false;

@@ -142,6 +142,8 @@ jobs:
       platform: ${{ steps.filter.outputs.platform }}
       local-face: ${{ steps.filter.outputs.local-face }}
       signin: ${{ steps.filter.outputs.signin }}
+      advisories: ${{ steps.filter.outputs.advisories }}
+      devices-windows: ${{ steps.filter.outputs.devices-windows }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -295,11 +297,6 @@ jobs:
       # reads `**` as `*` and would skip the suites at the top of _tools/checks.
       - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
         run: node --test "_tools/scripts/**/*.test.mjs" "_tools/checks/**/*.test.mjs" "_tools/turbo-cache/**/*.test.mjs"
-      # Test code that waits on the wall clock or binds a fixed port (timing-hazards.mjs): 18 of main's 35 red stretches
-      # between 2026-10-23 and 11-05 ended with a commit taking one of these out. A report, never a failure: every
-      # occurrence is in the step summary and the first ten are annotations on their lines. Checkout only, under a second.
-      - if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
-        run: node _tools/scripts/verify/timing-hazards.mjs
 
   # Independently report range-based push checks: introduced tidy violations, assertion strength, changed-file lint and install-aware checks.
   # `--report`: only a check manifest.mjs lists in CI_BLOCKING fails it; the rest are annotations and a step summary (verify-push.mjs's header).
@@ -946,6 +943,71 @@ jobs:
           name: local-face-results
           path: _tools/e2e/.cache/local-face-results/
           retention-days: 7
+
+  # Known security advisories against what pnpm-lock.yaml and every Cargo.lock pin (dependency-advisories.sh says how
+  # and why osv-scanner). On `advisories` (affected.mjs): a lockfile, an osv-scanner.toml exception or the scan
+  # changed. REPORTED, NOT FAILED: nothing `needs` it and its scan step continues on error, so a match is a warning
+  # and a table in the step summary while the job passes (a failing job on main wakes the CI fix agent, and an
+  # advisory published against a pinned version is not the push's doing). nightly.yml runs the same scan over main
+  # every night, for the advisories published against versions nobody touched.
+  advisories:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.advisories == 'true' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 10
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - run: bash _tools/scripts/verify/dependency-advisories.sh
+        continue-on-error: true
+
+  # THE _devices PACKAGES' UNIT SUITES ON WINDOWS. They run on people's Windows machines and carry their win32
+  # branches (paths, processes, the keyring, the desktop), which every other lane tests on Linux only. On
+  # `devices-windows` (affected.mjs): a _devices package or anything it is built from changed.
+  #
+  # On the one interactive Windows runner windows-smoke.yml uses (docs/ops/ci-runner-windows.md), and NON-BLOCKING
+  # while it proves itself: nothing `needs` it, and its test step continues on error, so a failing suite is a warning
+  # in a passing job rather than a failing main that wakes the CI fix agent for a lane still being shaken out. That runner can be asleep or busy with a
+  # smoke tier, and a job waiting for it holds the run open until GitHub gives up on it, so a newer push supersedes a
+  # waiting one (concurrency below), and the repository variable WINDOWS_UNIT_LANE=off stands the lane down while the
+  # machine is away. Unit files only (`suites --unit`): the integration suites stand up what this box does not carry.
+  devices-windows:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.devices-windows == 'true' && vars.WINDOWS_UNIT_LANE != 'off' }}
+    runs-on: [self-hosted, windows-desktop]
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-devices-windows
+      cancel-in-progress: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      # Node and pnpm as windows-smoke.yml installs them, into the same named store, so the two jobs share one
+      # node_modules on this kept checkout (that file says why the store is named and why there is no `cache: pnpm`).
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+      - run: pnpm install --frozen-lockfile --store-dir "$env:RUNNER_TOOL_CACHE/pnpm-store" --filter "{./_devices/*}..."
+      # turbo builds what the suites import first (`test` depends on `^build`); `--unit` reaches each package's
+      # `suites`. One package at a time: the box is a person's desktop as well as a runner.
+      - id: suites
+        continue-on-error: true
+        run: pnpm turbo run test --filter "./_devices/*" --concurrency=1 -- --unit
+      - if: ${{ steps.suites.outcome == 'failure' }}
+        shell: pwsh
+        run: Write-Output "::warning title=devices-windows::a _devices unit suite failed on Windows; the log of the step above names it"
 
   # NO verify-site. The marketing site's closure (`./_site/*...`) is wholly inside verify-core's, which typechecks,
   # builds and tests every site package already; the one task it held that verify-core did not was the web's suite,

@@ -156,6 +156,7 @@ export const passkeyOffered = async (target: SandboxTarget): Promise<boolean> =>
     if (!browserSupportsPasskeys()) {
         return false;
     }
+    // compat(daemon<1.268.0): the passkey route
     try {
         return (await ask(`POST /system/passkeys/assert/options`, target, undefined)).available;
     } catch {

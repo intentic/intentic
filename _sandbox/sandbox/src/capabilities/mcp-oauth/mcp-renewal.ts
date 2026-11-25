@@ -3,6 +3,7 @@ import { opt } from "../../opt.js";
 import type { CapabilitiesStore } from "../capabilities-store.js";
 import { expiryOf, type TokenAnswer, tokenRequest, type TokenResult } from "./mcp-oauth-client.js";
 import { encodeMcpSession, type McpSession, mcpSessionOf } from "./mcp-session.js";
+import type { OAuthFetch } from "./oauth-fetch.js";
 
 // A signed-in MCP connection's bearer, kept fresh: renewed with its refresh token shortly before it lapses, or at once
 // when its server has just refused it, and the renewed session written back over the one it came from. Whoever needs a
@@ -22,7 +23,8 @@ export type McpBearer =
 export interface RenewalDeps {
     readonly store: Pick<CapabilitiesStore, "get" | "upsert">;
     readonly logger: Pick<Logger, "warn">;
-    readonly fetch: typeof fetch;
+    // The guarded fetch for the MCP server a session is for (oauth-fetch.ts): a refresh token goes nowhere else.
+    readonly oauthFetch: (resource: string) => OAuthFetch;
     readonly now: () => number;
 }
 
@@ -48,7 +50,7 @@ const renew = async (deps: RenewalDeps, id: string, token: string, session: McpS
         answer = await tokenRequest(
             session,
             { grant_type: "refresh_token", refresh_token: session.refreshToken, resource: session.resource, ...opt("scope", session.scope) },
-            deps.fetch,
+            deps.oauthFetch(session.resource),
         );
     } catch (error) {
         // Unreachable for now: the token in hand may still be honoured, and the next request tries again.

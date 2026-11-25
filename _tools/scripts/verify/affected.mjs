@@ -100,6 +100,10 @@ const LOOSE = {
     // The sign-in gate's spec, fakes and stack live in @intentic/e2e, which neither the api nor the web depends on. The
     // N-1 check (`e2e-compat`) is built on that stack and runs on the same trigger, so its own harness is named too.
     signin: /^(_tools\/e2e\/(signin|compat)\/|\.github\/workflows\/ci\.yml)/,
+    // The lockfiles the advisory scan reads, its exceptions (osv-scanner.toml beside a lockfile), and the scan itself.
+    advisories: /(?:^|\/)(?:pnpm-lock\.yaml|Cargo\.lock|osv-scanner\.toml)$|^_tools\/scripts\/verify\/dependency-advisories\.sh$/,
+    // Every _devices package by the graph (ROOTS below); by path, the runner the lane runs the suites with.
+    "devices-windows": /^_tools\/testing\/bin\/suites\.mjs$/,
     "ci-base-changed": /^_tools\/ci-base\//,
     // ci-desktop's FROM is ci-base's mutable `latest`; a ci-base change forces a rebuild here too.
     "ci-desktop-changed": /^_tools\/ci-(desktop|base)\//,
@@ -125,6 +129,9 @@ const ROOTS = {
     "local-face": ["@intentic/desktop-app", "@intentic/local-files"],
     // A person signing in crosses exactly these two: the web build's pages and router, and the api's auth and handoff.
     signin: ["@intentic/api", "@intentic/web"],
+    // The packages that run on a person's own computer, Windows among them: ci.yml's devices-windows lane runs their unit
+    // suites on the Windows runner. Read from the graph by directory, as that job's `./_devices/*` filter is.
+    "devices-windows": [...graph.packages.values()].filter(({ dir }) => dir.startsWith("_devices/")).map(({ name }) => name),
 };
 for (const [trigger, names] of Object.entries(ROOTS)) {
     for (const name of names) {

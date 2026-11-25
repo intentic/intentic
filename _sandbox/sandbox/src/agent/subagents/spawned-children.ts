@@ -41,6 +41,9 @@ const ChildSpecSchema = z.object({
     run: z.object({ id: z.string() }).optional(),
     // Its parent's role, which every later turn of it wears too (child-spec.ts wearingParent).
     actsAs: z.string().optional(),
+    // The child it retries, and its retry chain's task id (retry-chains.ts).
+    retryOf: z.string().optional(),
+    taskId: z.string().optional(),
 });
 type ChildSpecOnFile = z.infer<typeof ChildSpecSchema>;
 
@@ -108,6 +111,8 @@ export const specOnFile = (spec: ChildSpawnSpec): ChildSpecOnFile => {
         opt("result", spec.result),
         opt("run", spec.run),
         opt("actsAs", spec.actsAs),
+        opt("retryOf", spec.retryOf),
+        opt("taskId", spec.taskId),
         opt("fallbacks", spec.fallbacks?.map((fallback) => ({ ...fallback }))),
         opt("paths", spec.paths === undefined ? undefined : [...spec.paths]),
     );
@@ -129,6 +134,8 @@ export const specFromFile = (onFile: ChildSpecOnFile): ChildSpawnSpec => ({
     ...opt("result", onFile.result === undefined ? undefined : { schema: onFile.result.schema }),
     ...opt("run", onFile.run),
     ...opt("actsAs", onFile.actsAs),
+    ...opt("retryOf", onFile.retryOf),
+    ...opt("taskId", onFile.taskId),
     ...opt("paths", onFile.paths),
     ...opt(
         "fallbacks",

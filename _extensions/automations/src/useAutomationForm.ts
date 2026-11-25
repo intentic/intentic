@@ -735,10 +735,9 @@ export function useAutomationForm(
             case `once`:
                 return { kind: `once`, at: instantOf(form.onceAt) };
             case `event`:
-                return {
-                    kind: `event`,
-                    ...(original?.trigger.kind === `event` && original.trigger.dailyMax !== undefined ? { dailyMax: original.trigger.dailyMax } : {}),
-                };
+                // The form edits nothing of an event trigger: `dailyMax` and `signature` are set from the CLI or the
+                // file and kept as they were, so an edit here never lifts a cap or unsigns a webhook.
+                return original?.trigger.kind === `event` ? { ...original.trigger } : { kind: `event` };
             case `workspace`:
                 return { kind: `workspace`, event: form.workspaceEvent, ...(form.repo.trim() !== `` ? { repo: form.repo.trim() } : {}) };
             case `listener`:

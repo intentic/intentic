@@ -161,7 +161,8 @@ SPAWN AND SUPERVISE
                                        it is over: the next turn asks the provider, and is refused again,
                                        once, if it was not
   agents spawn --provider <id> --model <id> [--effort <tier>] [--on <runner|here>]
-               [--harness native|claude-code] [--description "one line"] [--after <id>,<id>] '<task>'
+               [--harness native|claude-code] [--description "one line"] [--after <id>,<id>]
+               [--retry-of <id>] '<task>'
                                        spawn a subagent; prints its id and returns immediately.
                                        --provider and --model are REQUIRED: a subagent spends a real
                                        allowance and nothing is chosen for you. \`agents providers\`
@@ -172,6 +173,8 @@ SPAWN AND SUPERVISE
                                        --after names other subagents of yours: it waits, pending, and
                                        starts by itself once each has finished and its work is in
                                        your checkout
+                                       --retry-of names the failed subagent of yours it replaces: once three
+                                       in a row of that retry chain have failed, a further retry is refused
   agents links                         the owner's other sandboxes this conversation may hand tasks to, whether
                                        each answers now, and the terms each holds its tasks to
   agents delegate <link> [--description "one line"] '<task>'
@@ -994,7 +997,7 @@ const providers = async (argv = []) => {
 };
 
 const spawn = async (argv) => {
-    const { flags, positional } = parseFlags(argv, ["provider", "model", "effort", "harness", "description", "on", "after"]);
+    const { flags, positional } = parseFlags(argv, ["provider", "model", "effort", "harness", "description", "on", "after", "retry-of"]);
     const prompt = positional.join(" ").trim();
     if (prompt === "") {
         return die(`agents: spawn needs a task\n\n${USAGE}`);
@@ -1015,6 +1018,8 @@ const spawn = async (argv) => {
         ...(flags.on !== undefined ? { on: flags.on } : {}),
         // The siblings it starts after, comma-separated as the usage spells them.
         ...(flags.after !== undefined ? { after: flags.after.split(",").map((id) => id.trim()).filter((id) => id !== "") } : {}),
+        // The failed child it retries, which links it into that child's retry chain.
+        ...(flags["retry-of"] !== undefined ? { retryOf: flags["retry-of"] } : {}),
     });
     const { status, text } = await call("POST", "/children/spawn", body);
     if (status !== 200) {

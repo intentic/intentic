@@ -4,7 +4,8 @@ import type { ConversationActors } from "../../conversations/actor/conversation-
 import { deliverWake, type WakeDoors } from "../../seams/wake-delivery.js";
 import type { AccountReopened } from "../../usage/serviceability/state-log.js";
 import { ROSTER } from "../../conversations/actor/subagent-roster.js";
-import { CAPACITY_FAILED } from "./child-records.js";
+import { CAPACITY_FAILED, CHILDREN } from "./child-records.js";
+import { chainOf } from "./retries/retry-chains.js";
 import type { SubagentRecord } from "./subagents.js";
 import { parentsWaitingOn } from "./waiting/subagent-waits.js";
 
@@ -17,9 +18,10 @@ import { parentsWaitingOn } from "./waiting/subagent-waits.js";
    parent's 1800 s wait short for children that had failed on a runner's workspace prep or were long replaced): one
    paused for a re-run, or one whose failure was that provider's capacity (child-records.ts CAPACITY_FAILED), and each
    failed one once per ending, since a second account coming back is no news about it. A failed child the parent has
-   since replaced is no news either: a later child of the same parent, started after it ended, for the same task (a
-   row is named by its spawn's task line, child-spec.ts taskLine). Nothing on the record links a respawn to the child it
-   replaces, so the task is the link. */
+   since replaced is no news either: a later child of the same parent that retries it, or another of its retry chain
+   started after it ended (retry-chains.ts, the link a spawn's `retryOf` makes); else, for a respawn that named no
+   retry, a later child started after it ended for the same task, read off its spawn's task line (child-spec.ts
+   taskLine). */
 
 export interface CapacityNoticeDeps {
     readonly conversations: Pick<ConversationActors, "holdings">;
@@ -38,11 +40,29 @@ const noticeOf = (event: AccountReopened, children: readonly string[]): string =
     `${children.length === 1 ? "is" : "are"} failed or paused: send ${children.length === 1 ? "it" : "them"} a follow-up, or ` +
     "cancel a booked re-run and spawn again, rather than waiting for the re-run's own time.";
 
+// Whether a later child of the same parent retries this failed one by its chain (see the note at the top).
+const retriedInChain = (conversations: CapacityNoticeDeps["conversations"], record: SubagentRecord, endedAt: number): boolean => {
+    const kid = conversations.holdings(CHILDREN).get(record.id);
+    if (kid === undefined) {
+        return false;
+    }
+    const task = chainOf(record.id, kid);
+    return conversations
+        .holdings(CHILDREN)
+        .entries()
+        .some(([id, other]) => id !== record.id && other.parent === kid.parent && (other.spec.retryOf === record.id || (chainOf(id, other) === task && other.startedAt >= endedAt)));
+};
+
 // Whether a later child of the same parent took over this failed one's task (see the note at the top).
 const replaced = (conversations: CapacityNoticeDeps["conversations"], record: SubagentRecord): boolean => {
     const { endedAt, description } = record;
+    if (endedAt === undefined) {
+        return false;
+    }
+    if (retriedInChain(conversations, record, endedAt)) {
+        return true;
+    }
     return (
-        endedAt !== undefined &&
         description !== undefined &&
         conversations
             .holdings(ROSTER)

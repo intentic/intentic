@@ -422,6 +422,13 @@ export const BuildStampSchema = z.object({
 // GET /health: the "is a daemon there" probe every flow uses (launch scripts, /setup, the browser's loopback probe,
 // the platform's hosted gate, the onboarding lane), served raw before any authentication. `ic` reads it too, in Rust
 // (_hosts/ic/src/health.rs), which cannot import this and reads only `boot`, `state` and `announce` loosely.
+const IoPoolStateSchema = z.object({
+    state: z.enum(["answering", "stalled"]),
+    pendingMs: z.number().optional(),
+    lastMs: z.number().optional(),
+    stalls: z.number(),
+});
+
 export const DaemonHealthSchema = z.object({
     ok: z.literal(true),
     // The sandbox id, so a loopback probe can confirm it reached this daemon and not an unrelated process. Absent on a
@@ -446,6 +453,10 @@ export const DaemonHealthSchema = z.object({
     // The answer to a machine agent's challenge (`?proof=&proofKey=`), present only on the loopback port and only for a
     // credential this daemon issued: what tells the real daemon from another listener there (protocol/doors/loopback-proof.ts).
     proof: z.string().optional(),
+    // Whether libuv's thread pool, which every fs, dns and zlib call shares, still takes work: `stalled` with how long the
+    // probe's stat has waited (a network mount holding every thread, most likely), the last stat's time, and the stalls
+    // since boot. Absent on a daemon from before the probe.
+    ioPool: IoPoolStateSchema.optional(),
 });
 export type DaemonHealth = z.infer<typeof DaemonHealthSchema>;
 
@@ -469,5 +480,6 @@ export const DaemonHealthReadingSchema = z.object({
         .object({ proofs: z.array(z.string()).catch([]) })
         .optional()
         .catch(undefined),
+    ioPool: IoPoolStateSchema.optional().catch(undefined),
 });
 export type DaemonHealthReading = z.infer<typeof DaemonHealthReadingSchema>;

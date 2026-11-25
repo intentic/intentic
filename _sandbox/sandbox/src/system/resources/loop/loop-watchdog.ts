@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, readlinkSync } from "node:fs";
 import type { Logger } from "pino";
 import { readPressure } from "../cgroup.js";
+import { ioPoolState, startIoPoolProbe } from "./io-pool-probe.js";
 import type { PerfTracker, SpanActivity } from "../perf.js";
 
 // Detects why the event loop stalled: in-process (CPU burns, PSI quiet), environmental (PSI screams, no daemon fault),
@@ -8,7 +9,8 @@ import type { PerfTracker, SpanActivity } from "../perf.js";
 // snapshot per stall at recovery, rate-limited per window since thrash arrives in bursts. Once the services exist it also
 // names what the daemon was doing (`attribute`): the perf spans running across the stall or ending inside it, longest
 // first (perf.ts `during`). A span that ended inside the stall is the likeliest culprit of an in-process one, since the
-// blocking work is usually the last thing it did; one still running only says the stall caught it waiting.
+// blocking work is usually the last thing it did; one still running only says the stall caught it waiting. It runs the
+// thread pool's probe beside it (io-pool-probe.ts), whose state each stall line carries.
 
 const TICK_MS = 500;
 // A loop this daemon runs (timers, SSE heartbeats, SDK stream parsing) is never legitimately away this long.
@@ -101,6 +103,8 @@ export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
     let suppressedSince: number | undefined;
     let suppressedCount = 0;
     let perf: Pick<PerfTracker, "during"> | undefined;
+    // Its twin for libuv's thread pool, which a hung network mount fills while the loop still turns.
+    const ioPool = startIoPoolProbe(logger);
     const timer = setInterval(() => {
         const now = process.hrtime.bigint();
         const tickMs = Number(now - last) / 1e6;
@@ -137,6 +141,8 @@ export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
             heapTotalMb: Math.round(memory.heapTotal / 1048576),
             externalMb: Math.round(memory.external / 1048576),
             rssMb: Math.round(memory.rss / 1048576),
+            // Whether libuv's thread pool answers (io-pool-probe.ts): a pool held by a hung mount stalls every fs call.
+            ioPool: ioPoolState(),
             ...(suppressedCount > 0 ? { earlierStallsSuppressed: suppressedCount } : {}),
         };
         const at = Date.now();
@@ -155,7 +161,10 @@ export const startLoopWatchdog = (logger: Logger): LoopWatchdog => {
     // The watchdog must never be what keeps the daemon alive.
     timer.unref();
     return {
-        stop: () => clearInterval(timer),
+        stop: () => {
+            clearInterval(timer);
+            ioPool.stop();
+        },
         attribute: (tracker) => {
             perf = tracker;
         },

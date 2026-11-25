@@ -100,6 +100,7 @@ const nameOf = (role: Role): string => role.label ?? role.id;
 // since a chat pointed somewhere by hand while the reading ran is a thing the record should show.
 const roleClause = (route: ChatRoute, worn: Worn, matched: Role | undefined): readonly string[] => {
     // A daemon from before personas were renamed roles answers the half as `persona`.
+    // compat(daemon<1.425.0): `role` on the chat route answer
     const verdict = route.role ?? route.persona;
     if (verdict === undefined) {
         return [];
@@ -201,6 +202,7 @@ export const useChatRoute = (conversation: () => Conversation): ChatRouting => {
                 model: want.model,
                 role: want.role,
                 // The same half under its name before personas were renamed roles, which a daemon from before reads.
+                // compat(daemon<1.425.0): `role` on the chat route request
                 persona: want.role,
             })
             .catch((): ChatRoute | undefined => undefined);

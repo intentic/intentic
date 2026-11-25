@@ -197,6 +197,7 @@ const restartLine = computed(() => {
     if (swapping.value) {
         return t(`sandbox.devRebuildProgress.restartingOnNewImage`);
     }
+    // compat(daemon<1.364.0): the swap gate (hold mark) a policy needs
     return props.policy === undefined ? t(`sandbox.devRebuildProgress.keepsWorking`) : undefined;
 });
 

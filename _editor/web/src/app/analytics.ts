@@ -7,6 +7,8 @@ import { analyticsAvailable, analyticsChoice, internalHere, noteInternalSwitch }
 import { desktopApp } from "./environments/desktop";
 import { environment } from "./environments/environment";
 import { addressRedactor, eventPrivacy, type RoutePatternOf } from "./eventPrivacy";
+import type { AnalyticsEvent, EventProperties } from "./analyticsEvents/eventRegistry";
+import { createBurstCap, validEvent } from "./analyticsEvents/validate";
 import { replayPrivacy } from "./replayPrivacy";
 
 // PostHog capture/replay/pageviews/track load at first idle via /wire; queue early milestones only while capture is allowed.
@@ -245,19 +247,26 @@ const identify = (posthog: PostHog, current: User): void => {
     noteSignUp(current);
 };
 
-// Funnel milestone events from call sites. No-op until `initAnalytics` has run (no key in dev); otherwise
-// uninitialized `posthog.capture` logs a console error per call.
-export const track = (event: string, properties?: Milestone): void => {
-    if (!enabled || analyticsChoice.value !== `allow`) {
+// One event at most BURST_LIMIT times a minute (analyticsEvents/validate.ts).
+const underBurstCap = createBurstCap();
+
+// Funnel milestone events from call sites: only a name analyticsEvents/eventRegistry.ts lists, with exactly the properties
+// its schema names, checked again here before anything is queued (a dev build warns about what it drops, even with
+// analytics off). No-op until `initAnalytics` has run (no key in dev); otherwise uninitialized `posthog.capture` logs a
+// console error per call.
+export const track = <E extends AnalyticsEvent>(event: E, properties: EventProperties<E>): void => {
+    const checked = validEvent(event, properties);
+    if (checked === undefined || !enabled || !allowed || analyticsChoice.value !== `allow` || !underBurstCap(event)) {
         return;
     }
-    if (!allowed) {return;}
     if (client === undefined) {
-        early.push([event, properties]);
+        early.push([event, checked]);
         return;
     }
-    client.capture(event, properties);
+    client.capture(event, checked);
 };
+/** `track`'s own type, for a module that takes the capture as a seam its tests replace. */
+export type Track = typeof track;
 
 // THE FUNNEL'S TWO MILESTONES THE SDK CANNOT SEE (2026-10-15). `signed_up` is an account's first arrival: the platform
 // says when the account was made (User.createdAt), and an account made within SIGN_UP_WINDOW_MS of being seen here is a
@@ -268,9 +277,10 @@ export const track = (event: string, properties?: Milestone): void => {
 const SIGN_UP_WINDOW_MS = 30 * 60_000;
 // The account signed in on this page, for the once-per-account flags.
 let account: string | undefined;
-const onceKey = (milestone: string, userId: string): string => deviceKey(`intentic-milestone-${milestone}-${userId}`);
+type Once = `signed_up` | `first_turn_completed`;
+const onceKey = (milestone: Once, userId: string): string => deviceKey(`intentic-milestone-${milestone}-${userId}`);
 
-const once = (milestone: string, userId: string, properties: Milestone): void => {
+const once = <E extends Once>(milestone: E, userId: string, properties: EventProperties<E>): void => {
     if (!enabled || !allowed || storedValue(onceKey(milestone, userId)) !== undefined) {
         return;
     }

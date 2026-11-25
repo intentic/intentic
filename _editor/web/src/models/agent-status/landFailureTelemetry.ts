@@ -1,5 +1,5 @@
 import type { AgentSummary, LandConflict } from "@intentic/sandbox-contract/schemas/agents";
-import { track } from "../../app/analytics";
+import { type Track, track } from "../../app/analytics";
 import { landFailureCode } from "./agentStatus-attention";
 
 type FailureAgent = Pick<AgentSummary, `id` | `landFailure` | `status` | `attention` | `conflictCauses` | `diff`>;
@@ -11,7 +11,7 @@ interface FailureProperties {
 
 // Observe server summaries, not component renders: the same agent can have several cards and a review open at once.
 // Only categories and counts leave the editor; git's message and the refused paths can contain workspace content.
-export const createLandFailureObserver = (capture: (event: string, properties: FailureProperties) => void) => {
+export const createLandFailureObserver = (capture: Track) => {
     const seen = new Map<string, string>();
     return (agent: FailureAgent, sandbox: string | undefined, conflicts?: readonly LandConflict[]): void => {
         const key = JSON.stringify([sandbox, agent.id]);

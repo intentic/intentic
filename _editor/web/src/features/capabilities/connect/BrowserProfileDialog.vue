@@ -159,6 +159,7 @@ const cast = useScreencast({
     },
     socket: {
         // A daemon from before this route answered pings says nothing back, and a still sign-in page sends no frames.
+        // compat(daemon<1.327.0): pong on /system/browser-profile
         staleCheck: "once-ponged",
         // A session that couldn't be minted is said, and asked again on the ladder rather than left as a dead window.
         onMintFailed: (error) => {

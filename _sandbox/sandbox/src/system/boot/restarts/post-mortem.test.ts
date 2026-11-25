@@ -214,6 +214,22 @@ test("the night's runaway, killed at the end of a thrash that began with netd's 
     expect(postMortem.summary).toMatch(/; a process killed for memory earlier in the run, 19m 18s before it ended, is not counted as its cause$/u);
 });
 
+test("what netd kept of the daemon before killing it is named in the sentence", () => {
+    const base: NetdKill = { at: at("03:00:00"), kind: "stuck", pid: DAEMON_PID, silentMs: 300_000 };
+    const blocked: NetdKill = {
+        ...base,
+        evidence: { capture: "netd-stuck.1.111.json", state: "D", wchan: "cifs_wait_mtu_credits", signal: "SIGUSR2" },
+    };
+    expect(assemblePostMortem(input({ kernel: [], netd: [blocked] })).postMortem.summary).toBe(
+        "netd killed the daemon after its event loop stopped answering for 300 s (its main thread was in uninterruptible sleep (a blocking call in the kernel, often disk or a network mount) in cifs_wait_mtu_credits, every thread is in netd-stuck.1.111.json, no Node report came on SIGUSR2, so its event loop never turned again)",
+    );
+    // A start hung before its hello answers the signal: its report is named.
+    const hung: NetdKill = { ...base, kind: "no-hello", evidence: { state: "S", signal: "SIGUSR2", report: "/var/logs/report.20261124.010101.111.0.001.json" } };
+    expect(assemblePostMortem(input({ kernel: [], netd: [hung] })).postMortem.summary).toBe(
+        "netd killed a daemon it restarted that never said hello (its main thread was asleep, Node's report is report.20261124.010101.111.0.001.json)",
+    );
+});
+
 test("the span reaches back past every boot netd killed before its hello, to the run that began it", () => {
     const stuckRun = at("02:18:38");
     const failed = [at("02:42:30"), at("02:45:30")];

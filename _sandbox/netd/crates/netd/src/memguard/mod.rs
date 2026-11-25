@@ -377,6 +377,11 @@ impl Container {
         self.holds_restarts
     }
 
+    /// Where the records go, for what is kept beside them (evidence.rs); none for a test's.
+    pub fn records_dir(&self) -> Option<PathBuf> {
+        self.records.dir().map(Path::to_path_buf)
+    }
+
     /// Appends what netd did to the daemon to `netd-kills.jsonl`.
     pub fn record(&self, line: &NetdKill) {
         self.records.append(NETD_KILLS_FILE, line);

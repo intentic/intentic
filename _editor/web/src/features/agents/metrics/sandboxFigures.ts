@@ -187,6 +187,7 @@ export const sessionTip = (t: TypedT, card: CardUsage): Tip => ({
 
 // Warned exactly when the daemon would hold a person's turn: the same figures and the same thresholds, read off one
 // reading. A reading without `memoryRoom` (a daemon older than it) warns of nothing: no threshold is guessed here.
+// compat(daemon<1.313.0): `memoryRoom` on the metrics reading
 export const memoryShort = (sandbox: SandboxMetrics[`sandbox`]): boolean => {
     const room = sandbox.memoryRoom;
     return (

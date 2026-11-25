@@ -14,6 +14,7 @@ import { type Choices, SKIPPABLE, STEP_IDS, type StepId } from "../tour/steps";
 
 const NONE: Choices = { hidden: false, skipped: [] };
 
+// compat(daemon<1.332.0): the settings.gettingStarted routes
 const daemonKeeps = (): boolean => supportsRoute(`settings.gettingStarted`) && supportsRoute(`settings.setGettingStarted`);
 
 const storageKey = (sandboxId: string | undefined): string => `intentic.gettingStarted.${sandboxId ?? `local`}`;

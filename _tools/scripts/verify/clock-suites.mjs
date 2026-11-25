@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
-import { INTEGRATION_NAME } from "../../constants/src/test-suites.mjs";
+import { INTEGRATION_NAME, MANUAL_NAME } from "../../constants/src/test-suites.mjs";
 
 export const DEFAULT_ZONES = ["Pacific/Kiritimati", "Pacific/Niue"];
 
@@ -46,7 +46,8 @@ export const clockFiles = (dir) => {
     }
     return listed.stdout
         .split("\0")
-        .filter((path) => TEST_FILE.test(path) && !path.includes("/node_modules/"))
+        // A manual suite spends real model allowance, so no gate re-runs it, in any zone.
+        .filter((path) => TEST_FILE.test(path) && !MANUAL_NAME.test(path) && !path.includes("/node_modules/"))
         .filter((path) => timeSensitive(readFileSync(path, "utf8")))
         .map((path) => relative(dir, path))
         .sort();

@@ -36,6 +36,7 @@ const health = async (daemonUrl: string): Promise<{ readonly sandboxId: string |
 };
 
 // A daemon from before Reconnect answers the route it does not serve with a 404, which is the attach fallback's cue.
+// compat(daemon<1.323.0): POST /platform/relink
 const relink = async (entry: RememberedSandbox, bearer: string, request: RelinkRequest): Promise<RelinkAnswer | `unsupported`> => {
     const response = await fetch(`${entry.daemonUrl}/platform/relink`, {
         method: `POST`,

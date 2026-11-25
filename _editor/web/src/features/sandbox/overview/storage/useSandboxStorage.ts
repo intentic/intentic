@@ -51,7 +51,7 @@ const cleanEach = async (categories: readonly StorageCategoryId[]): Promise<Stor
 
 export function useSandboxStorage() {
     const { canShip } = useTier();
-    // Maintainer-floored at the daemon, and absent from a daemon older than the card.
+    // compat(daemon<1.309.0): the system.storage route is absent from older daemons; maintainer-floored at the daemon too.
     const available = computed(() => canShip.value && supportsRoute(`system.storage`));
     const read = rpcQuery(`system.storage`, undefined, { unpersisted: true });
     const { query, error } = useSandboxQuery({ ...read, enabled: available, staleTime: 0 });

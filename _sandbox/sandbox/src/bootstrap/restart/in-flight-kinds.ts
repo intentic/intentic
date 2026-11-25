@@ -6,6 +6,7 @@ import { backgroundJobsInFlight, keptJobsInFlight } from "../../agent/tools/jobs
 import { watchesInFlight } from "../../agent/verification/watchers.js";
 import { automationInboxesInFlight, interruptedFiresInFlight } from "../../automations/fire-resume.js";
 import type { Services } from "../../composition.js";
+import { owedRepliesInFlight } from "../../extensions/listener/listener-outbox.js";
 import { type InFlight, type InFlightFailed, type LeftWork, readLeftWork } from "../../seams/restart/in-flight.js";
 import { workflowsInFlight } from "../../workflows/workflow-runner.js";
 import type { BootPhase } from "../boot-phase.js";
@@ -25,6 +26,8 @@ const IN_FLIGHT: readonly InFlight<Services>[] = [
     interruptedFiresInFlight,
     // After the fires, which take back the inbox rows they had already admitted.
     automationInboxesInFlight,
+    // Replies owed to a gateway's channel, tried again until it takes them; after the fires, whose answers add to them.
+    owedRepliesInFlight,
     // After the background jobs, whose lost ends a watch on one reads at its first look.
     watchesInFlight,
     workflowsInFlight,

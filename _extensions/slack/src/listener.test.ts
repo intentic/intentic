@@ -4,7 +4,7 @@ import { waitFor } from "@intentic/testing/bun";
 import type { SlackConnection } from "./client.js";
 import { type GatewayCtx, type ListenerDispatchFrame, type ListenerStop, type ListenerStopAnswer, stopButtonId } from "@intentic/connector-runtime";
 import { STATUS_BLOCK_ID } from "./card.js";
-import { createSlackListener, type SlackEnvelope, type SlackMessage, toHistory, tsToIso, welcomeText } from "./listener.js";
+import { ACK_DEADLINE_MS, createSlackListener, type SlackEnvelope, type SlackMessage, toHistory, tsToIso, welcomeText } from "./listener.js";
 
 const SELF = "U0BOT";
 
@@ -332,4 +332,78 @@ test("⏹️ on a request whose turn is running stops it as the person who react
     await waitFor(() => expect(ephemeral).toEqual([{ channel: "C1", user: "U2", thread_ts: "1755102030.001900", text: "Stopping it now." }]));
     expect(dispatched).toEqual([]);
     finish();
+});
+
+// Slack hears a message once its envelope is acked: an event is acked only once the gateway has kept what it carries
+// (its spool, or the daemon's inbox), so a gateway that dies first is sent it again, and every other envelope at once.
+
+// An envelope that records when it was acked.
+const ackedEnvelope = (event: object, type = "events_api") => {
+    let acks = 0;
+    const received: SlackEnvelope = {
+        ack: async () => {
+            acks += 1;
+        },
+        type,
+        // SAFETY: the listener narrows the event by its own `type`, as it does Slack's; the fixtures carry those shapes.
+        body: { event: event as never, team_id: "T1" },
+    };
+    return { received, acks: () => acks };
+};
+
+test("a message is acked once the daemon client says it is kept, not before, and only once", async () => {
+    const base = fakeCtx();
+    const kept = Promise.withResolvers<void>();
+    const finished = Promise.withResolvers<void>();
+    let onKept: (() => void) | undefined;
+    const ctx: GatewayCtx = {
+        ...base.ctx,
+        daemon: {
+            ...base.ctx.daemon,
+            dispatchStreaming: async (_message, _onFrame, options) => {
+                onKept = options?.onKept;
+                kept.resolve();
+                await finished.promise;
+            },
+        },
+    };
+    const connection = fakeConnection();
+    const { received, acks } = ackedEnvelope(messageEvent({ text: `<@${SELF}> help` }));
+    createSlackListener(ctx, () => new Map([["app", connection]])).onEvent(connection, received);
+    await kept.promise;
+    expect(acks()).toBe(0);
+    onKept?.();
+    expect(acks()).toBe(1);
+    // The turn ending later acks nothing more.
+    finished.resolve();
+    await waitFor(() => expect(acks()).toBe(1));
+});
+
+test("an envelope nothing wakes on is acked as soon as it is handled", async () => {
+    const { ctx, dispatched } = fakeCtx();
+    const connection = fakeConnection();
+    const ours = ackedEnvelope(messageEvent({ user: SELF }));
+    const listener = createSlackListener(ctx, () => new Map([["app", connection]]));
+    listener.onEvent(connection, ours.received);
+    await waitFor(() => expect(ours.acks()).toBe(1));
+    const unknown = ackedEnvelope({}, "hello");
+    listener.onEvent(connection, unknown.received);
+    expect(unknown.acks()).toBe(1);
+    expect(dispatched).toEqual([]);
+});
+
+test("an event whose keeping outlasts Slack's patience is acked by the deadline anyway", async () => {
+    jest.useFakeTimers();
+    try {
+        const base = fakeCtx();
+        const ctx: GatewayCtx = { ...base.ctx, daemon: { ...base.ctx.daemon, dispatch: () => new Promise<void>(() => {}) } };
+        const connection = fakeConnection();
+        const { received, acks } = ackedEnvelope(messageEvent());
+        createSlackListener(ctx, () => new Map([["app", connection]])).onEvent(connection, received);
+        expect(acks()).toBe(0);
+        jest.advanceTimersByTime(ACK_DEADLINE_MS);
+        expect(acks()).toBe(1);
+    } finally {
+        jest.useRealTimers();
+    }
 });

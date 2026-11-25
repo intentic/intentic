@@ -41,10 +41,12 @@ on:
           - demo-routes
           - provider-canary
           - capabilities
+          - automation-evals
           - verify-providers
           - update-survival
           - mobile
           - tidy
+          - advisories
           - ci-audit
           - nav-trend
           - verify-clocks
@@ -726,6 +728,38 @@ jobs:
           CLOUDFLARE_E2E_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_E2E_ACCOUNT_ID }}
           CLOUDFLARE_E2E_ZONE: ${{ secrets.CLOUDFLARE_E2E_ZONE }}
 
+  # HOW A REAL AGENT HANDLES "SET UP AN AUTOMATION" (_sandbox/sandbox/src/evals/automation-requests): plain-English
+  # requests run as real Claude turns in this checkout's image and graded from the daemon's records. It spends model
+  # allowance on every run, so the schedule runs it only once the repository variable INTENTIC_EVAL_AUTOMATIONS is "1";
+  # a dispatch with `only: automation-evals` runs it regardless, which is the same explicit ask.
+  automation-evals:
+    if: ${{ inputs.only == 'automation-evals' || ((inputs.only || 'all') == 'all' && vars.INTENTIC_EVAL_AUTOMATIONS == '1') }}
+    runs-on: [self-hosted, intentic]
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+        - /var/run/docker.sock:/var/run/docker.sock
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    timeout-minutes: 120
+    env:
+      SUITES_SILENCE_MS: "1800000"
+      INTENTIC_EVAL_CLAUDE_TOKEN: ${{ secrets.INTENTIC_EVAL_CLAUDE_TOKEN || secrets.ANTHROPIC_API_KEY }}
+      INTENTIC_EVAL_TRIALS: ${{ vars.INTENTIC_EVAL_TRIALS || '1' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - uses: ./.github/actions/pnpm-setup
+      # This checkout's image, as the e2e job builds it: the prompts and CLIs under test are the ones on main.
+      - run: pnpm build:sandbox
+      - run: pnpm eval:automations
+      - if: always()
+        run: docker image prune -f --filter until=12h || true
+
   # THE UPDATE PROMISES, DRILLED ON A REAL SANDBOX — verify-update-survival.sh connects a sandbox on the
   # published stable image, plants sentinels in /work and /history, then updates, rolls back, forces a FAILED
   # update (a build whose daemon cannot boot) and an update that fails its PROBATION (a build that crashes once up,
@@ -807,6 +841,29 @@ jobs:
       # the self-hosted fleet is six processes on one box, and a check that needs nothing from it should want
       # nothing from it.
       - run: node _tools/checks/run.mjs --gate=tidy --report
+
+  # Known security advisories against main's lockfiles (dependency-advisories.sh), every night: an advisory is published
+  # against a version nobody touched, which ci.yml's `advisories` job, run when a lockfile changes, never sees. REPORTED,
+  # NOT FAILED, as there: the scan step continues on error, so a match is a warning and a table in the step summary,
+  # and the job passes rather than waking the CI fix agent for something no commit did.
+  advisories:
+    if: ${{ (inputs.only || 'all') == 'all' || inputs.only == 'advisories' }}
+    runs-on: [self-hosted, intentic]
+    timeout-minutes: 10
+    container:
+      image: ghcr.io/intentic/ci-base:latest
+      volumes:
+        - /ci-cache:/ci-cache
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          clean: false
+      - run: bash _tools/scripts/verify/dependency-advisories.sh
+        continue-on-error: true
 
   # Run clock-sensitive test files in Kiritimati (UTC+14) and Niue (UTC-11); UTC-only jobs cannot expose local-zone/calendar-day bugs.
   # clock-suites.mjs selects files and runs both zones outside turbo, avoiding cached UTC results; neither zone observes DST.

@@ -4,6 +4,7 @@ import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { namespaceTargetOf, type NamespaceEntryReference, nsenterArgv } from "../../workload/namespace-entry.js";
 import { spawnAs } from "../../workload/workload-class.js";
+import { stopTree } from "../../workload/process-group.js";
 import type { z } from "zod";
 import { outputTail } from "../stdio/child-output.js";
 import { InitializeAnswerSchema, type MuseNotification, type MuseParams } from "./muse-wire.js";
@@ -68,7 +69,8 @@ const KILL_GRACE_MS = 2_000;
 type MuseSpawn = (command: string, args: readonly string[], env: Readonly<Record<string, string>>, spawnDepth: number) => ChildProcessWithoutNullStreams;
 
 const spawnMuse: MuseSpawn = (command, args, env, spawnDepth) =>
-    spawnAs({ class: "agentRuntime", spawnDepth }, command, args, { env: { ...env }, stdio: ["pipe", "pipe", "pipe"] });
+    // Detached, so it leads a process group and its stop reaches what it started too.
+    spawnAs({ class: "agentRuntime", spawnDepth }, command, args, { env: { ...env }, stdio: ["pipe", "pipe", "pipe"], detached: true });
 
 // The child's stdio as the SDK's transport: decoded text in, frames out, and the end of its input as the close.
 const stdioTransport = (child: ChildProcessWithoutNullStreams): DuplexTransport => {
@@ -131,12 +133,10 @@ export const spawnMuseHost =
             // allow(silent-catch): a connection already broken has nothing to flush; the exit wait and kill below still run.
             await connection.close().catch(() => undefined);
             const gone = await Promise.race([exited.then(() => true), sleep(CLOSE_GRACE_MS).then(() => false)]);
+            // The whole group either way: a host that drained and exited can still leave what it started running.
+            stopTree(child, KILL_GRACE_MS);
             if (!gone) {
-                child.kill("SIGTERM");
-                const stopped = await Promise.race([exited.then(() => true), sleep(KILL_GRACE_MS).then(() => false)]);
-                if (!stopped) {
-                    child.kill("SIGKILL");
-                }
+                await Promise.race([exited, sleep(KILL_GRACE_MS)]);
             }
         };
         try {

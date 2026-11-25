@@ -53,6 +53,22 @@ repository `root`: its ▷ is on the Files toolbar, since the root has no row in
 as `root--<name>`. The root repository tracks this one file, so an agent's edit lands like code. Don't move the file
 into a subfolder: a folder that isn't a repository of its own is never offered a Run.
 
+## A conversation's own checkout: `.worktreeinclude` and `.intentic/checkout.json`
+
+Each conversation works in its own checkout, which starts with the tracked files only (plus the mirrored
+`node_modules`, `.venv` and `dist`). Two files at the repository's root fill the gap:
+
+- `.worktreeinclude`, gitignore-style lines naming ignored files to copy from the main checkout into every new one
+  (`.env*`, `config/local.json`). Only files git ignores are copied, within a size budget; `..` lines are refused.
+- `.intentic/checkout.json`, `{"setup": {"command": "…"}, "archive": {"command": "…"}}` (optional `files` to pin and
+  `timeoutSeconds`). `setup` runs once from the new checkout's root before the conversation's first turn, and its
+  output is told to that turn; `archive` runs before the checkout is removed, and a failing one keeps the checkout.
+  Neither runs until the owner approves its exact command and the files it names under Approvals, so editing the
+  script asks again. Write one only when the project needs it, and tell the owner it waits for their approval.
+
+Ignored files only a checkout held (an `.env.local` it wrote, a dev database) are moved to the trash, never deleted,
+when the checkout is removed; the Storage card lists them under Trash.
+
 ## What Start finds without one
 
 With no sandbox target in `.intentic/run.json`, the repository's own Start runs the first of these it has (the daemon's `/opt/sandbox/dist/panels/run-plan.js`, in every sandbox;

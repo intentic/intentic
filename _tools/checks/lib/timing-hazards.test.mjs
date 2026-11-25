@@ -1,7 +1,7 @@
 // Pins what counts as a timing or port hazard, since a rule that names harmless code teaches people to ignore it.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { annotationsOf, codeOf, hazardsIn, scan, summaryOf } from "./timing-hazards.mjs";
+import { codeOf, hazardsIn } from "./timing-hazards.mjs";
 
 const rules = (path, text) => hazardsIn(path, text).map(({ rule, line }) => `${rule}@${line}`);
 
@@ -54,24 +54,31 @@ test("code quoted in a string, or commented out, is not code", () => {
     assert.deepEqual(rules("src/a.test.ts", "expect(rank(`await sleep(2000); // replica`)).toBe(2);\n// await Bun.sleep(900);"), []);
 });
 
-test("the summary lists every occurrence and annotations stop at GitHub's ten a step", () => {
-    const found = scan(["b.test.ts", "a.test.ts"], (path) => (path === "a.test.ts" ? "await Bun.sleep(500);\n".repeat(12) : "await Bun.sleep(200);"));
-    assert.equal(found[0].path, "a.test.ts");
-    const summary = summaryOf(found);
-    assert.match(summary, /\| `real-sleep` \| 13 \| 2 \|/u);
-    assert.match(summary, /`b\.test\.ts:1` real-sleep/u);
-    const annotations = annotationsOf(found);
-    assert.equal(annotations.length, 11);
-    assert.match(annotations[0], /^::warning file=a\.test\.ts,line=1,title=timing hazard \(real-sleep\)::/u);
-    assert.match(annotations[10], /3 more in the step summary/u);
-    assert.match(summaryOf([]), /None found/u);
+test("a loop that sleeps between looks is a polling loop, anchored to the loop once", () => {
+    const text = ["test(\"x\", async () => {", "    while (!ready()) {", "        await Bun.sleep(20);", "        await Bun.sleep(20);", "    }", "});"].join("\n");
+    assert.deepEqual(rules("src/a.integration.test.ts", text), ["polling-loop@2"]);
+    assert.deepEqual(rules("src/a.test.ts", "for (const item of items) {\n    await check(item);\n}"), []);
 });
 
-test("a file the checkout lacks is skipped rather than failing the scan", () => {
-    assert.deepEqual(
-        scan(["gone.test.ts"], () => {
-            throw new Error("ENOENT");
-        }),
-        [],
-    );
+test("a module loaded inside a unit test's body counts, and not at module scope, in a hook or in an integration test", () => {
+    const text = ["const top = await import(\"./a.js\");", "beforeAll(async () => {", "    await import(\"./b.js\");", "});", "it(\"loads\", async () => {", "    const { c } = await import(\"./c.js\");", "});"].join("\n");
+    assert.deepEqual(rules("src/a.test.ts", text), ["in-test-import@6"]);
+    assert.deepEqual(rules("src/a.integration.test.ts", text), []);
+});
+
+test("a per-test timeout counts unless a comment on its line or the one above says why", () => {
+    const text = [
+        "test(\"slow\", async () => {",
+        "    await run();",
+        "}, 20_000);",
+        "test(\"explained\", async () => {",
+        "    // builds the image first",
+        "}, 20_000);",
+        "test(\"inline\", async () => {",
+        "}, 20_000); // cold cargo build",
+        "test(\"option\", { timeout: 5_000 }, async () => {",
+        "    await waitFor(() => done(), { timeout: 2_000 });",
+        "});",
+    ].join("\n");
+    assert.deepEqual(rules("src/a.integration.test.ts", text), ["timeout-without-reason@3", "timeout-without-reason@9"]);
 });

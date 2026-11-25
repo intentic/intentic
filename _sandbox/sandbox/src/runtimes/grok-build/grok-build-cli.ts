@@ -25,9 +25,9 @@ export const GROK_BUILD: VendorCli = {
         argv: [binary, "agent", "--no-leader", "stdio"],
         // GROK_DISABLE_AUTOUPDATER: the engine store's pin is the version that runs.
         env: { GROK_HOME: home, GROK_DISABLE_AUTOUPDATER: "1" },
-        // Its ask-user tool answers through an xAI extension method this client does not speak, so the model would ask
-        // nobody; off, the model carries on with what it has (capability record GROK_BUILD: questions false).
-        sessionMeta: { askUserQuestion: false },
+        // What it says beyond ACP (its subagents, background tasks, and its ask-user tool's `_x.ai/ask_user_question`,
+        // answered on the question card) is read by its dialect (@intentic/acp-events dialects/grok.ts).
+        dialect: "grok",
     }),
     login: {
         argv: (binary) => [binary, "login", "--device-auth"],

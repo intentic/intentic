@@ -16,6 +16,7 @@ import { storageCategoryLabel } from "./storageCategories";
 export function useDiskPressure() {
     const { canShip } = useTier();
     // Maintainer-floored at the daemon, like the Disk card, and absent from a daemon older than the watch.
+    // compat(daemon<1.391.0): the system.diskPressure route
     const available = computed(() => canShip.value && supportsRoute(`system.diskPressure`));
     const { query } = useSandboxQuery({ ...rpcQuery(`system.diskPressure`), enabled: available });
     // The Disk card's own clean run (useSandboxStorage), so the card opened meanwhile holds its buttons and says what

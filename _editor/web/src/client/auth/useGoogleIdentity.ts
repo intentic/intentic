@@ -7,6 +7,7 @@ import { environment } from "../../app/environments/environment";
 import { googleCredentialKey, removeStoredValue, storedValue, storeValue } from "../../app/storage/browserStorage";
 import { pageAccount } from "../../lib/accounts/accountBoundary";
 import { idTokenClaims } from "./googleToken";
+import type { EventProperties } from "../../app/analyticsEvents/eventRegistry";
 
 // Slim slice of Google Identity Services used to mint an ID token in the browser: a Google-signed JWT (audience =
 // the web client id) the sandbox daemon verifies against Google's JWKS. The platform never holds or forges it.
@@ -206,7 +207,7 @@ const ensureInitialized = async (): Promise<void> => {
 
 // Loaded on fire rather than imported: analytics reads the page's environment at import time, and this module also
 // runs where there is no page (session tests, workers).
-const reportGate = (properties: Record<string, unknown>): void => {
+const reportGate = (properties: EventProperties<`sandbox_signin_gate`>): void => {
     void import("../../app/analytics").then(({ track }) => track(`sandbox_signin_gate`, properties)).catch(() => undefined);
 };
 

@@ -12,6 +12,7 @@ import { wslEnvironment } from "../environments/wsl.js";
 import { completeSetup, prepareSetup } from "../install.js";
 import { machineId } from "../machine-id.js";
 import { ensureResident, readResidentPid } from "../resident/resident.js";
+import { stopRemotedAt } from "./remote/remoted-control.js";
 import { auditPath, configPath, type HostLink, readLinks, readLinkStates, removeLinks, unreachableIn, upsertLink } from "./config.js";
 
 // device: setup (redeem a pairing and stay connected) and uninstall (disconnect, keep the audit log); no OAuth, only the pairing token.
@@ -186,6 +187,19 @@ export const linkNamed = (urls: readonly string[], value: string): string => {
     return holding[0] ?? value;
 };
 
+// remoted outlives the agent for the next one to adopt (remote/remoted.ts), so with no link left it is asked to leave
+// here: an agent no longer running would never stop it, and it ends only after its idle wait by itself.
+const stopLeftRemoted = async (say: Narration): Promise<void> => {
+    const stopped = await stopRemotedAt();
+    if (stopped.kind === "stopped") {
+        say.note(`Stopped intentic-remoted (pid ${stopped.pid}), which served people's remote terminals and screens.`);
+    } else if (stopped.kind === "still-running") {
+        say.warn(
+            `intentic-remoted (pid ${stopped.pid}) may still be running; it leaves by itself within ten minutes, or end it: ${process.platform === "win32" ? `taskkill /PID ${stopped.pid} /F` : `kill ${stopped.pid}`}`,
+        );
+    }
+};
+
 // Drops the named link (or all), then reconciles the resident agent so it keeps running for what's left and retires only
 // when nothing remains. `forGood` is the top-level `uninstall`, which retires it whatever this device hosts; `recordStays`
 // false is its `--delete-data`, which says what becomes of the record itself. Narrates through `say` and answers the
@@ -206,6 +220,9 @@ export const deviceUninstall = async (
         await rm(configPath, { force: true });
     }
     await ensureResident(say.note, { forGood });
+    if (left.length === 0) {
+        await stopLeftRemoted(say);
+    }
     const urls = dropped.map((link) => link.sandboxUrl).join(", ");
     if (left.length > 0) {
         say.note(`Still connected to ${plural(left.length, "sandbox", "sandboxes")}.`);

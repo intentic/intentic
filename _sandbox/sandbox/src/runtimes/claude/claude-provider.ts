@@ -16,6 +16,7 @@ import type { AnswerWatch } from "../../usage/drift/answer-vocabulary.js";
 import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 import { claudeWarm, type ClaudeWarmDeps } from "./claude-warm.js";
 import { assertAgentExecutionContext } from "../../workload/agent-execution.js";
+import { stallGuarded } from "../decorators/stall-guard.js";
 
 // Everything Claude contributes to the daemon (listed in runtimes/runtime-table.ts). Claude is the anchor module:
 // its adapter is the Claude Code loop, which also serves Kimi and the routed providers under the claude-code harness.
@@ -59,11 +60,19 @@ export const claudeHeadroom = (claude: ClaudeSlice, watch: AnswerWatch): Headroo
 // What the Claude Code loop's adapter reads: the harness arm's own deps, and the stores its probes ask.
 export type ClaudeCodeDeps = HarnessPlanDeps & Pick<Services, "claudeStore" | "config" | "sessions">;
 
+// The Claude Code loop has no watchdog of its own: a CLI gone silent with nothing open is ended by the stall guard and
+// re-run on backoff as an outage. Laid over the deps' loop rather than the slice's, since agent/ may not import it.
+const stallGuardedLoop = <T extends Pick<Services, "agent">>(services: T): T => ({
+    ...services,
+    agent: (request: Parameters<Services["agent"]>[0]) =>
+        stallGuarded(request, services.agent, { said: (why) => `Claude Code stopped responding: ${why}. It was stopped; send again to retry.` }),
+});
+
 const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code", ClaudeCodeDeps> = {
     runtime: "claude-code",
     // Serves helpers too: the harness arm and the Claude Code loop read `policy.sealed` (harness-plan.ts, agent.ts).
     sealed: true,
-    preflight: (services, input, context, installed) => planHarnessTurn(services, input, context, installed),
+    preflight: (services, input, context, installed) => planHarnessTurn(stallGuardedLoop(services), input, context, installed),
     // In-process (Agent SDK, no CLI binary), so only a credential can be missing, and which one depends on the turn.
     // Answers the weaker question the picker needs: is any way in configured.
     health: async (services) => {

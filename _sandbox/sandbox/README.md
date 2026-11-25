@@ -63,7 +63,7 @@ value import closing a cycle between two of them fails too (standing ones: `_too
 | agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
 | orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
 | composition | boot wiring and whole-daemon self-checks, which import every layer and are imported by none | `bootstrap/` `invariants/` `harness/` |
-| (none) | in no layer: the boundary check places no module here | `e2e/` |
+| (none) | in no layer: the boundary check places no module here | `e2e/` `evals/` |
 <!-- <<< end of generated layers.json -->
 
 Beside `src/`, the image copies a few directories as they are: `bin/` (the command runners and asking CLIs),

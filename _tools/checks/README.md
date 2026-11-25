@@ -148,7 +148,9 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [test-programs](test-programs.mjs) | a test outside a type-check program, its budget or build order |
 | [workflows](workflow-policy.mjs) | a workflow crossing the fork boundary or a permission ceiling |
 | [release-notes](release-headings.mjs) | release headings the writer and parsers spell differently |
-| [contract-shrink](contract-shrink.mjs) | a shrunk wire contract with no breaking-change declaration |
+| [contract-shrink](contract-shrink.mjs) | a shrunk wire contract with no breaking-change declaration; and, against the last release tag with no waiver, a shrunk door whose far end lags in the field (machine agent, phone app, browser extension, runner, netd wires: `lib/release-doors.mjs`) |
+| [remoted-protocol](remoted-protocol.mjs) | remoted's control protocol moved without keeping the one main speaks, or remoted and the machine agent declare different ones |
+| [compat-tags](compat-tags.mjs) | a `compat(peer<x.y.z): why` tag at or below that peer's floor (a dead fallback), naming a peer with no floor (`lib/peer-floors.mjs`), or malformed |
 | [hooks-armed](hooks-armed.mjs) | a non-executable git hook, re-armed in place |
 | [invariant-registry](invariant-registry.mjs) | a daemon subsystem with no runtime invariant or stated reason (ratcheted: `baselines/invariant-registry.json`) |
 | [daemon-boundaries](daemon-boundaries.mjs) | a new whole-`Services` taker, cycle between daemon subsystems, or cycle between the subunits of a unit `layers.json` lists in `subunits` (`agent/`, `conversations/`: `daemon-subunits.json`) |
@@ -171,6 +173,8 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [paths](path-literals.mjs) | hand-spelled roots and `../..`-counted ones |
 | [vocabulary](vocabulary.mjs) | a retired word spelled again |
 | [terminal-output](terminal-output.mjs) | `ic` or `intentic-machine` printing to a person around its renderer, `ui.rs` or `ui.ts` (ratcheted) |
+| [daemon-sync-io](daemon-sync-io.mjs) | a new synchronous `node:fs` or `child_process` call in a daemon module `main.ts` reaches (worker-only modules and suites excluded; ratcheted) |
+| [timing-hazards](timing-hazards.mjs) | a new real sleep, wall-clock assertion, fixed port, polling loop, in-test import or unexplained per-test timeout in test code (ratcheted) |
 | [silent-catch](silent-catch.mjs) | a new handler that throws an error away unnarrowed |
 | [code-shape](code-shape.mjs) | a new file over 600 lines, or a file, a function over 100 lines or a function over the complexity caps growing past its baseline (ratcheted: `baselines/code-shape.json`) |
 | [daemon-doors](daemon-doors.mjs) | the editor reaching the daemon's JSON routes around `sandboxRaw`: a path spelled to `sandboxJson`/`sandboxRequest`, or a fetch of a `rawRouteUrl` path (ratcheted: `baselines/daemon-doors.json`, empty) |

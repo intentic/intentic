@@ -3,10 +3,12 @@ import { parseJsonOr } from "@intentic/base/json";
 import { z } from "zod";
 import { opt } from "../../opt.js";
 import type { McpSession } from "./mcp-session.js";
+import type { OAuthFetch } from "./oauth-fetch.js";
 
 // The OAuth client legs of an MCP sign-in: registering this sandbox with the authorization server (RFC 7591), the
 // authorization request with PKCE and a resource indicator (OAuth 2.1, RFC 8707), and trading a code or a refresh token
-// at the token endpoint. Each answers in data; only an unreachable endpoint throws.
+// at the token endpoint. Each answers in data; only an unreachable endpoint throws. The daemon's callers hand each one
+// the sign-in's guarded fetch (oauth-fetch.ts), never a bare one: these posts carry the code, the verifier and tokens.
 
 const ANSWER_MS = 15_000;
 
@@ -56,7 +58,7 @@ export type Registration = { readonly client: RegisteredClient } | { readonly re
 export const registerClient = async (
     endpoint: string,
     input: { readonly redirectUri: string; readonly clientName: string },
-    fetchImpl: typeof fetch = fetch,
+    fetchImpl: OAuthFetch,
 ): Promise<Registration> => {
     const response = await fetchImpl(endpoint, {
         method: "POST",
@@ -132,7 +134,7 @@ const FINAL_ERRORS = new Set(["invalid_grant", "invalid_client", "unauthorized_c
 export const tokenRequest = async (
     client: RegisteredClient & Pick<McpSession, "tokenEndpoint">,
     form: Readonly<Record<string, string>>,
-    fetchImpl: typeof fetch = fetch,
+    fetchImpl: OAuthFetch,
 ): Promise<TokenResult> => {
     const body = new URLSearchParams(form);
     const headers = new Headers({ "content-type": "application/x-www-form-urlencoded", accept: "application/json" });

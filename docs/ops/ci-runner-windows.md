@@ -8,11 +8,14 @@ flowchart LR
     rel["release.yml<br/>windows-verify"] --> smoke
     night["nightly.yml<br/>desktop-windows, deep"] --> smoke
     smoke --> runner(["windows-desktop runner<br/>logon task"])
+    lane["ci.yml<br/>devices-windows"] --> runner
+    runner --> units["_devices unit suites"]
     runner --> app["installer and app<br/>tier 1"]
     runner -.-> docker["Docker Desktop<br/>tiers 2 and 3"]
 ```
 
 - The installer is cross-built on the Linux fleet in `ci-desktop` with cargo-xwin. This machine only runs it, through [`desktop-smoke-windows`](../../_tools/desktop-smoke-windows). Tier 1 installs it, fires an `intentic://` link before and after launch, and uninstalls it; it starts no container, so it gates the release, and runs from `ci.yml` on a `windows_smoke` dispatch. It still needs a machine Intentic can run on: the app starts a setup only when `ic docker prepare --dry-run` answers `ready`, so the box needs Docker Desktop or Intentic's engine. Anywhere else the link opens the app's own checklist instead, and both "ran the setup" assertions fail after 120 seconds. That happened to jurek on 2026-11-24 until Virtual Machine Platform was turned on and `ic docker prepare --yes` installed the engine. Tiers 2 and 3 connect a sandbox and run a turn, so they need Docker and a connected account. Main gets all of them nightly with `deep: true`.
+- `ci.yml`'s `devices-windows` job also runs here: the `_devices` packages' unit suites (`suites --unit`), whenever a `_devices` package or anything it is built from changes. It installs into the smoke tier's named pnpm store and does not pause the fleet. While it proves itself, a failing suite is a warning in a passing job, and a newer push cancels one still waiting for this machine. When the machine is away for a while, set the repository variable `WINDOWS_UNIT_LANE=off`, or every such push leaves a job queued until GitHub drops it.
 - The label is its own because `runs-on` is an AND over labels: a Windows box carrying `intentic` would be handed the Linux fleet's container jobs.
 - A service runs in session 0, which has no desktop, and every tier-1 assertion reads a window title. [`setup-windows-runner.ps1`](../../_tools/scripts/ci/setup-windows-runner.ps1) therefore registers a logon task that starts the listener windowless through `intentic-launch.exe` and re-runs every few minutes, so a dead listener comes back without anyone signing in.
 - Every Intentic app this account starts is a test, so the script sets the user variable `INTENTIC_TELEMETRY_INTERNAL=1`, and the app tags each analytics event `internal: true` (the desktop app's README, Product analytics). A user variable, because every smoke run uninstalls the app and takes its config folder with it.

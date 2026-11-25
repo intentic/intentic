@@ -2,7 +2,7 @@ import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import type { PushNotification } from "@intentic/sandbox-contract/schemas/push";
 import type { Services } from "../composition.js";
-import { deliverToListenerChannel } from "../extensions/listener/listener-deliver.js";
+import { oweToListenerChannel } from "../extensions/listener/listener-outbox.js";
 import { opt } from "../opt.js";
 
 // WHAT FOLLOWS A PERSON'S ANSWER TO A HELD WAKE, beyond running it or not. The hold pushed an ask to the owner's lock
@@ -40,7 +40,7 @@ export const withdrawApprovalPush = async (services: Pick<Services, "heldWakes" 
 // A rejected hold, already taken off the queue by the caller: the ask comes off the lock screen, the run history says
 // a person declined it (a hold that vanished without a trace reads like one the daemon lost), and the sender is told.
 export const declineHeldWake = async (
-    services: Pick<Services, "heldWakes" | "pushSender" | "automations" | "logger"> & Parameters<typeof deliverToListenerChannel>[0],
+    services: Pick<Services, "heldWakes" | "pushSender" | "automations" | "logger"> & Parameters<typeof oweToListenerChannel>[0],
     held: AutomationApproval,
 ): Promise<void> => {
     await withdrawApprovalPush(services, held.automationId);
@@ -57,10 +57,10 @@ export const declineHeldWake = async (
 
 // Said where the request came from, through the delivery a channel's answer takes; a channel that cannot take it is
 // logged, since the decline itself already stands.
-const tellOrigin = async (services: Parameters<typeof deliverToListenerChannel>[0], origin: AgentOrigin, automationId: string): Promise<void> => {
+const tellOrigin = async (services: Parameters<typeof oweToListenerChannel>[0], origin: AgentOrigin, automationId: string): Promise<void> => {
     try {
-        await deliverToListenerChannel(services, origin, HELD_WAKE_DECLINED);
+        await oweToListenerChannel(services, origin, HELD_WAKE_DECLINED);
     } catch (error) {
-        services.logger.warn({ err: error, automation: automationId, provider: origin.provider }, "held wake: the channel did not take the answer");
+        services.logger.warn({ err: error, automation: automationId, provider: origin.provider }, "held wake: the decline could not be journalled for its channel");
     }
 };

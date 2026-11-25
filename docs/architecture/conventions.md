@@ -122,6 +122,17 @@ The same rule one level up: a domain concept (a turn the daemon starts, a promis
 
 2026-10-12: a second sweep the same day found these concepts each wired two to five ways, and in each the split had already opened a gap. The run-role model settings did nothing on two of three turn doors. Idle-stop could not see an approved post's due time. A device restart guard counted only live turns, and `app_start` skipped the command judge. A retired `drafts` skill stayed installed next to the approvals skill that replaced it. The device agent believed a dead cutover for 30 minutes where `ic` gave up after 90 seconds.
 
+## Version skew
+
+A far end updates on its own schedule: a self-hosted daemon, a phone app, a browser extension, a machine agent. So code keeps branches for older copies of them, and each such branch says which, so that raising a floor finds them.
+
+- **A fallback for an older far end is tagged** `// compat(daemon<1.268.0): <what the older daemon lacks>` (`/* … */`, `<!-- … -->` and `#` comments too), on the line above the branch. The version is the first release that has what the other branch needs, taken from git (`git log -S` for the route or field, then `git tag --contains <sha> --sort=v:refname`), never guessed; a branch whose release cannot be found stays untagged rather than tagged wrong.
+- **A peer is named only once it has a floor**: a constant the code enforces, below which the far end is told to update. Today that is `daemon` alone (`OLDEST_SUPPORTED_DAEMON`, [`daemon-floor.ts`](../../_shared/sandbox-contract/src/state/daemon-floor.ts)); [`peer-floors.mjs`](../../_tools/checks/lib/peer-floors.mjs) lists them, and a new floor joins there.
+- [`compat-tags.mjs`](../../_tools/checks/compat-tags.mjs) fails a tag at or below its peer's floor (the branch is dead: delete it and keep the other), a tag naming a peer with no floor, and one that does not parse. Raising a floor is the change that lists, and deletes, the branches it retired.
+- **A door whose far end lags does not shrink against the last release.** [`contract-shrink.mjs`](../../_tools/checks/contract-shrink.mjs) compares the machine agent's, the phone app's, the browser extension's and runners' doors, and a sandbox netd's wires, with the newest `vX.Y.Z` tag, and no `!` commit or `Breaking-Note:` lets those through: a shrink there passes only as a retirement ([`release-doors.mjs`](../../_tools/checks/lib/release-doors.mjs) `RETIRED`) whose far end's floor has reached the release that stopped using the surface. A far end with no floor cannot shrink at all, so its change is made compatible: the old shape kept beside the new, a field made optional rather than removed.
+
+2026-11-24: an audit counted about two hundred "older daemon" and "predates" branches in the editor and the daemon, none tied to the floor, so a raised floor found none of them.
+
 ## Code style
 
 - oxlint ([`.oxlintrc.json`](../../.oxlintrc.json)) runs on every edit through [`lint-edit.mjs`](../../_tools/oxlint/lint-edit.mjs), which fixes what it can and reports only what the edit added.

@@ -5,6 +5,7 @@ import { contributionFor, contributionRegistry } from "../contributions.js";
 import type { Services } from "../../composition.js";
 import { createGateway, type GatewayCard, type GatewayUse } from "./broker-gateway.js";
 import { brokerOf } from "./broker-routes.js";
+import { reachAllows } from "../../secrets/credential-reach.js";
 
 // The credential gateway's listener: the daemon's own socket on 127.0.0.1, beside netd rather than behind it, so nothing
 // the tunnel or the published loopback port relays can ever reach it. An address it issued is therefore useful only to
@@ -67,6 +68,7 @@ export const startCredentialGateway = async (services: Services, logger: Logger,
         credentialGate: services.credentialGate,
         prompts: services.rulePrompts,
         used: useRecorder(services),
+        reaches: async (conversationId, capability) => reachAllows(await services.credentialReach(conversationId), "capability", capability),
     });
     const server = createAdaptorServer({ fetch: handle, hostname: "127.0.0.1", port });
     await new Promise<void>((resolve) => {

@@ -86,6 +86,7 @@ const routedAccounts = (provider: AgentProvider): TranslatorAccounts[keyof Trans
 // Every connection a provider holds (native and routed are one list to the reader, as they are to the daemon's
 // accountFactsOf), each with its freshest raw reading: never one the refusals were laid on, since judging a refusal on
 // such a reading would let a pinned 100% feed itself forever. Assembled from the stores; what an older daemon leaves.
+// compat(daemon<1.428.0): the daemon's judged capacity (usage.capacity)
 const assembledFacts = (provider: AgentProvider): readonly AccountFacts[] =>
     [...(providerAccounts.value[provider] ?? []).map(accountFacts), ...routedAccounts(provider).map(routedAccountFacts)].map((facts) => ({
         ...facts,

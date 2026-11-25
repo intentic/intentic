@@ -131,6 +131,7 @@ const policy = computed((): SwapPolicy | undefined => {
     if (idleSwap.wait.value?.phase === `waiting`) {
         return `idle`;
     }
+    // compat(daemon<1.364.0): the hold mark in dev-rebuild-log's read
     if (run.hold === undefined) {
         return undefined;
     }

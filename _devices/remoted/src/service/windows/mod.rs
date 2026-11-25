@@ -8,7 +8,7 @@ pub mod finder;
 pub mod helper;
 mod launch;
 mod scm;
-mod secure;
+pub(super) mod secure;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

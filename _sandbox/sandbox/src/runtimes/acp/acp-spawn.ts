@@ -2,7 +2,9 @@ import type { ChildProcessByStdio } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk/unstable";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { DialectId } from "@intentic/acp-events/dialects";
 import { spawnAs } from "../../workload/workload-class.js";
+import { stopTree } from "../../workload/process-group.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { webStream } from "@intentic/base/web-stream";
 import { outputTail } from "../stdio/child-output.js";
@@ -46,8 +48,12 @@ export interface AcpLaunch {
     // an env var every command it runs would inherit. Sent with the first method the agent advertises.
     readonly authenticate?: { readonly meta: Readonly<Record<string, unknown>> };
     // Sent as `_meta` on every session/new and session/load, for an agent that reads per-session switches there (Grok
-    // Build's `askUserQuestion`). Part of the process's identity like the rest, so a change respawns it.
+    // Build reads `askUserQuestion`, which the daemon no longer turns off since its dialect answers the tool). Part of
+    // the process's identity like the rest, so a change respawns it.
     readonly sessionMeta?: AcpSessionMeta;
+    // The agent's dialect (@intentic/acp-events dialects `dialectOf`): what it says beyond the protocol, read. Absent,
+    // plain ACP.
+    readonly dialect?: DialectId;
 }
 
 // Per-session switches, scalar values only: what an agent reads off session/new's `_meta` is a flag or a name.
@@ -66,10 +72,15 @@ export const spawnAcpProcess = (launch: AcpLaunch, cwd: string): AcpProcess => {
         cwd,
         // Stamped as the DAEMON's rather than any one turn's, because that is what a pooled agent is: it
         // deliberately outlives the turn that warmed it (acp-connection.ts), so the in-life sweep must never
-        // read one as abandoned. A pool process a previous daemon left is no sweep's either: it stays in that
-        // daemon's process group, which intentic-netd ends once the daemon has crashed (supervise.rs).
+        // read one as abandoned.
         env: { ...process.env, ...launch.env, ...workloadStamp(DAEMON_OWNER) },
         stdio: ["pipe", "pipe", "pipe"],
+        // The leader of a process group of its own, so stopping it (stopAcpProcess) ends the whole tree: `npx`'s real
+        // agent and the MCP servers that agent started, which a signal to the wrapper alone left running (2026-11-24).
+        // Out of the daemon's group, so intentic-netd's group kill after a crash no longer reaches it: the next
+        // daemon's boot sweep does (system/boot/generation-sweep.ts), by the earlier run's generation every process
+        // of the tree inherited from the daemon's environment, ending the group it leads.
+        detached: true,
     });
     const stderr = outputTail(STDERR_TAIL);
     stderr.follow(child.stderr);
@@ -79,3 +90,6 @@ export const spawnAcpProcess = (launch: AcpLaunch, cwd: string): AcpProcess => {
     );
     return { child, stream, stderrTail: stderr.text };
 };
+
+/** Stops an agent process and everything it started; also sweeps what a leader that exited on its own left behind. */
+export const stopAcpProcess = (proc: AcpProcess, graceMs?: number): void => stopTree(proc.child, graceMs);

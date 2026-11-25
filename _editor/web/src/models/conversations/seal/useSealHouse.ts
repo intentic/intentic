@@ -21,6 +21,7 @@ let read: HouseRead | undefined;
 
 const houseRead = (): HouseRead => {
     read ??= effectScope(true).run((): HouseRead => {
+        // compat(daemon<1.395.0): the seal.house route
         const { query } = useSandboxQuery<SealHouse>({ ...rpcQuery(`seal.house`), enabled: computed(() => supportsRoute(`seal.house`)) });
         return {
             house: computed(() => query.data.value),

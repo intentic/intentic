@@ -330,9 +330,9 @@ export const GROK_BUILD: AgentCapabilities = {
     ...ACP,
     runtime: "grok-build",
     effort: true,
-    // Its ask-user tool reaches its own client through an xAI protocol extension, not form elicitation, so the daemon
-    // switches the tool off for every session it opens (grok-build-cli.ts) rather than leave the model asking nobody.
-    questions: false,
+    // Its ask-user tool asks through an xAI protocol extension (`_x.ai/ask_user_question`), not form elicitation; the
+    // daemon answers it on the question card through Grok's dialect (@intentic/acp-events dialects/grok-questions.ts).
+    questions: true,
 };
 
 // Pi driven over its RPC mode: above the ACP floor and below the Claude Code ceiling. Real mid-turn steering, an effort

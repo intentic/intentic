@@ -10,6 +10,7 @@ import { cardDeps } from "../conversations/actor/card-deps.js";
 import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import { createExtensionMcpEndpoint, createExtensionToolsEndpoint } from "../extensions/backend/extension-mcp.js";
 import { createMcpRemoteEndpoint } from "../capabilities/mcp-oauth/mcp-remote.js";
+import { reachAllows } from "../secrets/credential-reach.js";
 import { HOST_PEER, hostPeerRoutes } from "../hosts/host-peer.js";
 import { createDevicesEndpoint, hostDevicesDeps } from "../hosts/devices/devices-server.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
@@ -67,7 +68,11 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
                 phone: phoneRoutes.mcp,
                 tools: createExtensionToolsEndpoint(services),
                 extension: createExtensionMcpEndpoint(services),
-                remote: createMcpRemoteEndpoint({ capabilities: services.capabilities, bearer: services.mcpSignIns.bearer }),
+                remote: createMcpRemoteEndpoint({
+                    capabilities: services.capabilities,
+                    bearer: services.mcpSignIns.bearer,
+                    reaches: async (conversationId, capability) => reachAllows(await services.credentialReach(conversationId), "capability", capability),
+                }),
             },
             async (tool, result, conversationId) => {
                 // allow(silent-catch): an unavailable settings store costs cleaning, never an already completed tool call.

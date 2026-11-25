@@ -45,6 +45,7 @@ import { type LiveRun, liveRunOf } from "../../conversations/actor/conversation-
 import { opt } from "../../opt.js";
 import { type ActiveTurn, SteeringQueue } from "../checkpoints/agent-steering.js";
 import { takeCheckpointNote } from "../checkpoints/checkpoint-worktree.js";
+import { setupNotesOf } from "../../conversations/worktrees/lifecycle/checkout-hooks.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
 import { breakPolicyFor } from "./turn/break-policy.js";
 import { stopResumeAt } from "./turn/turn-resume.js";
@@ -471,7 +472,7 @@ const baseRequestOf = (
     return {
         execution: turn.execution,
         spec: {
-            prompt: turn.history.length > 0 ? withRuntimeHistory(prompt, turn.history) : prompt,
+            prompt: turn.history.length > 0 ? withRuntimeHistory(prompt, turn.history, input.conversationId) : prompt,
             cwd: turn.cwd,
             // Which agent the children this turn spawns belong to; absent for a turn with no conversation.
             ...opt("conversationId", input.conversationId),
@@ -602,13 +603,12 @@ const preflight = async (
         ...opt("children", childrenOf(services, input, localCwd)),
         ...opt("workflows", workflowsOf(services, input, localCwd)),
     };
-    const handoffNotes = [...going.notes, ...(handoffNote === undefined ? [] : [handoffNote])];
     return {
         context,
         isolation,
         effectiveCwd,
         frames,
-        handoffNotes,
+        handoffNotes: [...setupNotesOf(input.conversationId), ...going.notes, ...(handoffNote === undefined ? [] : [handoffNote])],
         handedOff: going.handedOff,
         freshStart: going.freshStart,
         coldTrimStamps: going.stamps,

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { perDaemon } from "./durable/daemon-memory.js";
 import { addListenerMessage, consumeInbox, type ListenerEntry } from "./durable/inbox-store.js";
-import { channelAnswerSink } from "../extensions/listener/listener-deliver.js";
+import { channelAnswerSink } from "../extensions/listener/listener-outbox.js";
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { ListenerMessage, ListenerStop, ListenerStopAnswer } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import type { Trigger } from "@intentic/sandbox-contract/schemas/automations";
@@ -297,15 +297,18 @@ const fireBatch = async (services: Services, id: string, payload: string, contex
     );
 };
 
+// Where a message came from, as the conversation it wakes records it and its answer finds its way back.
+export const listenerOriginOf = (message: ListenerMessage, automationId: string): AgentOrigin => ({
+    automationId,
+    provider: message.provider,
+    channelId: message.channelId,
+    ...opt("threadId", message.thread),
+    author: message.author.name,
+});
+
 // What one message brings to the thread it fires on, for one automation and the lane its sender resolved to.
 const messageContext = (message: ListenerMessage, automationId: string, thread: string, lane: SenderLane, stream: TurnStream | undefined): MessageContext => ({
-    origin: {
-        automationId,
-        provider: message.provider,
-        channelId: message.channelId,
-        ...opt("threadId", message.thread),
-        author: message.author.name,
-    },
+    origin: listenerOriginOf(message, automationId),
     title: titleOf(message),
     thread,
     ttlMs: message.thread === undefined ? CHANNEL_SESSION_TTL_MS : THREAD_SESSION_TTL_MS,

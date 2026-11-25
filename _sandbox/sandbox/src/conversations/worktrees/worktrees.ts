@@ -1,5 +1,5 @@
 import { lstat, mkdir, readdir, realpath, rename, rm, rmdir, symlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { pathExists, pathPresence } from "@intentic/base/fs";
 import { currentGitCaller, defaultGit, gitCallerWith, type GitRunner, withGitCaller } from "@intentic/base/git";
 import { keyedLock } from "@intentic/base/async";
@@ -12,7 +12,6 @@ import { mainLineRev } from "../../git/main-line-tip.js";
 import { reserveCompositionSpace, selectedComposition } from "./composition-space.js";
 import type { HistorySpace } from "../../system/resources/storage/checkout-space.js";
 import type { PerfTracker } from "../../system/resources/perf.js";
-import { ensureLines } from "../../store/plain-files/text-file.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import { adminFor, freshAdminFor, healSharedCheckoutLinks, type LinkHeal, linkOne } from "../../workspace/layout/worktree-links.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
@@ -22,6 +21,10 @@ import { claudeStoreOf, type StoreOwner } from "../../sessions/session-store.js"
 import { mirroredDirs, overlaysDir, PACKAGE_STORE, type TurnIsolation } from "./isolation.js";
 import { coneForScope } from "./worktree-cone.js";
 import { addWorktree } from "./checkout-aside.js";
+import { mirrorLinks } from "./mirror-links.js";
+import { keepLocalFiles } from "./lifecycle/local-files.js";
+import { includeIntoCheckout } from "./lifecycle/worktree-include.js";
+import { type HookPlace, runArchiveHooks, runSetupHooks } from "./lifecycle/checkout-hooks.js";
 import type { Fence } from "@intentic/sandbox-contract/policy/fence-paths";
 
 // A conversation's isolated checkout: one git worktree per workspace repo, root at <worktreesRoot>/<id>/, nested repos
@@ -186,12 +189,15 @@ export const createAgentWorktrees = (
 ): AgentWorktrees => {
     const { workspace, worktreesRoot, historyRoot, isolation, logger, perf } = options;
 
+    const { removedLink, excludeMirrors, secureLinks } = mirrorLinks(git, logger);
     const conversationDir = (id: string): string => join(worktreesRoot, id);
     // Dependency overlays (isolation.ts) live outside the checkout; every teardown path below must drop both.
     // They hold only what a turn wrote over the main tree's node_modules: disk space, never work worth keeping.
     const overlaysFor = (id: string): string => overlaysDir(historyRoot, id);
     const worktreeDir = (id: string, repo: string): string => (repo === "root" ? conversationDir(id) : join(conversationDir(id), repo));
     const mainDir = (repo: string): string => (repo === "root" ? workspace.root : join(workspace.root, repo));
+    const hookPlaces = (id: string, repos: readonly { readonly repo: string }[]): HookPlace[] =>
+        repos.map(({ repo }) => ({ checkout: worktreeDir(id, repo), main: mainDir(repo), repo, id, historyRoot, logger }));
 
     // Is there still a repository behind this checkout: every git command against one without it fails permanently
     // (`fatal: not a git repository`); asked before retire tries to preserve anything. A worktree's admin dir lives in
@@ -288,6 +294,8 @@ export const createAgentWorktrees = (
         // A crash between branch creation and checkout leaves the branch without a dir; attach it, don't recreate.
         const cone = coneForScope(fence, scope, repo);
         await addWorktree(main, target, branch, base, await branchExists(main, branch), { historyRoot, logger, id, repo, target }, cone, git);
+        // The ignored files the repository's `.worktreeinclude` names, copied from the main checkout (worktree-include.ts).
+        await includeIntoCheckout({ main, target, id, repo, logger }, git, cone);
         // The state dir needs nothing here: tracked slice checks out normally; untracked binds via the namespace.
         return { repo, base };
     };
@@ -317,17 +325,6 @@ export const createAgentWorktrees = (
             } catch (pruneError) {
                 logger.warn({ err: pruneError, main }, "agents: worktree prune failed");
             }
-        }
-    };
-
-    // Drops one mirror symlink, answering whether it went; what follows each call relies on the link being gone.
-    const removedLink = async (target: string, repo: string, mirror: string): Promise<boolean> => {
-        try {
-            await rm(target, { force: true });
-            return true;
-        } catch (error) {
-            logger.warn({ err: error, repo, mirror }, "agents: could not remove a mirror link");
-            return false;
         }
     };
 
@@ -411,55 +408,6 @@ export const createAgentWorktrees = (
         }
     };
 
-    // Which of these mirror paths git will actually ignore. A mirror is a SYMLINK, and a directory-only gitignore rule
-    // (`node_modules/`) matches a directory but never a symlink, so the answer differs by what stands there when asked;
-    // every caller below asks about links that already exist. check-ignore exits 1 for "none of them", not failure.
-    const ignoredLinks = async (worktree: string, links: readonly string[]): Promise<Set<string>> => {
-        if (links.length === 0) {
-            return new Set();
-        }
-        const { stdout } = await git(worktree, ["check-ignore", ...links]).catch((error: unknown) => {
-            // A failed check answers "none ignored" too, which drops the links: tooling lost, never a mirror committed.
-            if ((error as { code?: unknown }).code !== 1) {
-                logger.warn({ err: error, worktree }, "agents: could not ask git which mirror links it ignores");
-            }
-            return { stdout: "" };
-        });
-        return new Set(stdout.split("\n").filter((path) => path !== ""));
-    };
-
-    // Git's own exclude file for a repo: never committed, never pushed, and shared by every worktree of it (git reads
-    // it from the common dir, not the per-worktree one). Anchored, file-matching lines here cover the symlink form that
-    // a repo's own `node_modules/` cannot, so no `git add -A` — the pre-turn anchor's or an agent's own — can commit a
-    // mirror onto the branch and hand the land a symlink it can never apply over the user's real directory.
-    const MIRROR_EXCLUDE_NOTE = "# intentic: dependency and build dirs mirrored into agent worktrees.";
-
-    const excludeFileOf = async (main: string): Promise<string | undefined> => {
-        const { stdout } = await git(main, ["rev-parse", "--git-common-dir"]).catch((error: unknown) => {
-            logger.warn({ err: error, main }, "agents: could not locate the repo's exclude file for its mirror links");
-            return { stdout: "" };
-        });
-        const common = stdout.trim();
-        return common === "" ? undefined : join(resolve(main, common), "info", "exclude");
-    };
-
-    const excludeMirrors = async (main: string, mirrors: readonly string[]): Promise<void> => {
-        if (mirrors.length === 0) {
-            return;
-        }
-        const path = await excludeFileOf(main);
-        if (path === undefined) {
-            return;
-        }
-        // Queued on the file, which every worktree of the repo shares and project-installs grows too. The owner's own
-        // exclude lines live here as well: content that exists but cannot be read is never written over.
-        await ensureLines(
-            path,
-            mirrors.map((rel) => `/${rel}`),
-            { note: MIRROR_EXCLUDE_NOTE },
-        ).catch((error: unknown) => logger.warn({ err: error, main }, "agents: mirror exclude not written, left as it is"));
-    };
-
     // Mirrors one repo's untracked dependency/build-output dirs from main checkout into the worktree; idempotent, safe
     // to re-run on every ensure.
     // Best-effort: a failed link costs that package's tooling, never the turn.
@@ -514,33 +462,6 @@ export const createAgentWorktrees = (
             // a `git add -A` inside it must not stage the whole store onto the branch.
             await excludeMirrors(main, [PACKAGE_STORE]);
         }
-    };
-
-    // Every link git would stage, asked of the links as they now stand rather than of whatever preceded them: the
-    // question only has an answer once the symlink exists. Excluding them locally settles it for any repo whose rule is
-    // merely directory-only; a repo that actively un-ignores the path (a tracked `!` rule outranks info/exclude) keeps
-    // no link at all, since a committed mirror blocks every land afterwards with a conflict neither side can clear.
-    // Only symlinks are dropped: a real install the agent made is a directory and stays.
-    const secureLinks = async (main: string, worktree: string, mirrors: readonly string[], repo: string): Promise<void> => {
-        const already = await ignoredLinks(worktree, mirrors);
-        const stageable = mirrors.filter((rel) => !already.has(rel));
-        if (stageable.length === 0) {
-            return;
-        }
-        await excludeMirrors(main, stageable);
-        const covered = await ignoredLinks(worktree, stageable);
-        await Promise.all(
-            stageable
-                .filter((rel) => !covered.has(rel))
-                .map(async (rel) => {
-                    const target = join(worktree, rel);
-                    if ((await lstat(target).catch(undefinedIfMissing))?.isSymbolicLink() !== true) {
-                        return;
-                    }
-                    logger.warn({ repo, mirror: rel }, "agents: mirror left unlinked, this repo un-ignores it");
-                    await removedLink(target, repo, rel);
-                }),
-        );
     };
 
     // Runs once the whole composition is on disk: a nested repo's worktree dir must exist before links land in it.
@@ -605,12 +526,14 @@ export const createAgentWorktrees = (
     // checkout removed before the ref parks since that's what makes it deletable.
     // Preserves again first, under the lock: pass 1 ran without it, and the wait for it can sit behind a land while a
     // kept job or background process is still writing. Without this, `worktree remove --force` takes what landed in
-    // that window while the branch claims the work was kept. A failing preserve throws, so nothing is removed.
+    // that window while the branch claims the work was kept. A failing preserve throws, so nothing is removed. Ignored
+    // files the branch cannot carry are set aside into the trash first (keepLocalFiles).
     // Best-effort: a ref that fails to park just leaves a branch behind for the next boot sweep to pick up.
     const releaseOne = (id: string, repo: string, title: string | undefined): Promise<void> =>
         withRepoLock(repo, async () => {
             const main = mainDir(repo);
             await preserveOne(id, repo, title);
+            await keepLocalFiles({ worktree: worktreeDir(id, repo), main, historyRoot, id, repo, logger }, git);
             await removeCheckout(main, worktreeDir(id, repo));
             await parkAgentRefs(main, new Set([id]), git).catch((error: unknown) =>
                 logger.warn({ err: error, repo, id }, "agents: branch park failed"),
@@ -645,6 +568,8 @@ export const createAgentWorktrees = (
         const joined = new Map<string, { repo: string; base: string }>();
         await Promise.all([
             ...leaving.map(async ({ repo }) => {
+                // Run, never blocking: a turn waits on this, and the owner moved the repo out by editing the selection.
+                await runArchiveHooks(hookPlaces(id, [{ repo }])).catch((error) => logger.warn({ err: error, id, repo }, "agents: a leaving repo's archive hook failed"));
                 await preserveOne(id, repo, undefined);
                 await releaseOne(id, repo, undefined);
                 logger.info({ id, repo }, "agents: repo left the conversation's composition");
@@ -728,6 +653,9 @@ export const createAgentWorktrees = (
                 // a fenced conversation's folders exist on disk closes before its first turn can run.
                 await sparsenComposition(id, repos, fence, checkoutPaths);
                 await linkComposition(id, repos, namespaced);
+                // Once, on the new checkout, before its first turn: the repositories' approved setup hooks (checkout-hooks.ts).
+                // Not for a runner's mirror, whose turn and builds run on the runner.
+                await (buildsHere === false ? undefined : runSetupHooks(hookPlaces(id, repos)));
                 return { cwd: conversationDir(id), branch, repos, fence, elsewhere: [] };
             } finally {
                 releaseSpace();
@@ -751,6 +679,9 @@ export const createAgentWorktrees = (
             // standing, not a branch missing their work.
             // Pass 1 takes no repo lock: it only touches this agent's own worktree (index, HEAD, its own ref), so
             // archiving one agent never serializes behind the fleet.
+            // An approved archive hook runs before anything is touched, and one that fails throws with every checkout
+            // still standing (checkout-hooks.ts); revoking its approval is how the owner lets the retire go without it.
+            await runArchiveHooks(hookPlaces(id, recorded));
             await Promise.all(recorded.map(({ repo }) => preserveOne(id, repo, title)));
             // Pass 2 needs the repo lock (admin area), but only per repo, so nested repos release concurrently with
             // each other.

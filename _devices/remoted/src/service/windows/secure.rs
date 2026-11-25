@@ -10,7 +10,7 @@ use windows::Win32::Security::Authorization::{
 use windows::Win32::Security::{
     DACL_SECURITY_INFORMATION, GetTokenInformation, OWNER_SECURITY_INFORMATION,
     PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SetFileSecurityW,
-    TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+    TOKEN_ELEVATION, TOKEN_QUERY, TOKEN_USER, TokenElevation, TokenUser,
 };
 use windows::Win32::System::Registry::{
     HKEY, HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_DWORD, RegCloseKey,
@@ -78,6 +78,30 @@ pub fn owner_sid(path: &Path) -> Result<String, String> {
         let out = sid_string(owner);
         let _ = LocalFree(Some(HLOCAL(sd.0)));
         out
+    }
+}
+
+/// The SID of the user this process runs as.
+pub fn current_user_sid() -> Result<String, String> {
+    let mut token = HANDLE::default();
+    // SAFETY: this process's token, queried into a buffer sized by the first call, and closed.
+    unsafe {
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token)
+            .map_err(|e| e.to_string())?;
+        let mut len = 0u32;
+        let _ = GetTokenInformation(token, TokenUser, None, 0, &mut len);
+        let mut buffer = vec![0u64; (len as usize).div_ceil(8)];
+        let read = GetTokenInformation(
+            token,
+            TokenUser,
+            Some(buffer.as_mut_ptr().cast()),
+            len,
+            &mut len,
+        );
+        let _ = CloseHandle(token);
+        read.map_err(|e| e.to_string())?;
+        let user = &*buffer.as_ptr().cast::<TOKEN_USER>();
+        sid_string(user.User.Sid)
     }
 }
 
@@ -155,6 +179,9 @@ impl Descriptor {
         }
     }
 }
+
+// SAFETY: the descriptor is this value's own allocation, read-only once made, and freed only by Drop.
+unsafe impl Send for Descriptor {}
 
 impl Drop for Descriptor {
     fn drop(&mut self) {

@@ -16,6 +16,8 @@ import { type ServerTool, subagentTools, subagentWaitServer } from "../../agent/
 import { noteJobShell, openBackgroundJob } from "../../agent/tools/jobs/background-jobs.js";
 import { callDeadlineMs, parentSubagentTools } from "../../agent/subagents/waiting/parent-forward.js";
 import { parentSubagentCall } from "./parent-subagents.js";
+import { receiptedSupervisor } from "../../agent/subagents/retries/call-receipts.js";
+import { pino } from "pino";
 import { runnerSubagentsDoor } from "./runner-subagents.routes.js";
 
 /* A turn the parent placed on a runner supervises its subagents at the parent: both halves over real HTTP. The runner's
@@ -63,8 +65,15 @@ const parentSupervisor = (): ChildSupervisor =>
 
 // The tools a turn of the conversation gets at the parent, with each wait's end counted, so a test can see the runner's
 // dropped link end the wait parked at the parent.
-const parentTools = (conversationId: string, signal: AbortSignal): readonly ServerTool[] =>
-    subagentTools({ conversationId, conversations: parentFleet.conversations, signal, children: parentSupervisor(), wholeReports: true }).map((tool) =>
+// Its spawn, send and cancel answered once per runner call id, as the door's own tools are (runner-subagents.routes.ts).
+const parentTools = (conversationId: string, signal: AbortSignal, callId?: string): readonly ServerTool[] =>
+    subagentTools({
+        conversationId,
+        conversations: parentFleet.conversations,
+        signal,
+        children: receiptedSupervisor({ conversations: parentFleet.conversations, historyRoot: logsDir, logger: pino({ level: "silent" }) }, conversationId, callId, parentSupervisor()),
+        wholeReports: true,
+    }).map((tool) =>
         tool.name === "wait"
             ? {
                   ...tool,
@@ -208,6 +217,7 @@ const runnerTurn = async (conversationId: string, url = parentUrl, toldOld = new
                 },
             },
             toldOld,
+            cutOff: new Map(),
         }),
     );
     return { call: await connect(server), fleet, localSpawns, localSends, warned, stop: () => turn.abort() };
@@ -410,3 +420,40 @@ test("a child the runner spawned itself under an older parent is still sent to o
     expect(parentSends).toEqual([CHILD]);
 });
 
+
+/* 2026-11-24: a link that drops after the parent took a spawn, but before its answer reached the runner, left the turn to
+   retry it as a new call, which started a second child. The retry now goes out as the same call, answered from its
+   receipt. */
+test("a spawn retried after the link dropped on its answer is answered with the child it started, not a second one", async () => {
+    let dropNext = true;
+    const flaky = serve({
+        port: 0,
+        hostname: "127.0.0.1",
+        fetch: async (request) => {
+            const url = new URL(request.url);
+            const answer = await fetch(`${parentUrl}${url.pathname}`, { method: request.method, headers: request.headers, body: await request.text() });
+            if (dropNext) {
+                dropNext = false;
+                // The parent acted; the answer is lost on the way back.
+                return new Response("bad gateway", { status: 502 });
+            }
+            return answer;
+        },
+    });
+    await new Promise<void>((resolve) => flaky.once("listening", resolve));
+    try {
+        // SAFETY: a server listening on TCP returns an AddressInfo.
+        const runner = await runnerTurn(PLACED, `http://127.0.0.1:${(flaky.address() as AddressInfo).port}`);
+        const cut = json((await runner.call("spawn", SPAWN))[0]);
+        expect(cut).toMatchObject({ ok: false, outcome: "unreachable", message: expect.stringContaining("exactly the same arguments") });
+        expect(parentSpawns).toHaveLength(1);
+        const retried = json((await runner.call("spawn", SPAWN))[0]);
+        expect(retried).toMatchObject({ ok: true, child: CHILD, note: expect.stringContaining("nothing was done again") });
+        expect(parentSpawns).toHaveLength(1);
+        // Answered, the call is done with: the same ask again is a new spawn.
+        await runner.call("spawn", SPAWN);
+        expect(parentSpawns).toHaveLength(2);
+    } finally {
+        await new Promise<void>((resolve) => flaky.close(() => resolve()));
+    }
+});

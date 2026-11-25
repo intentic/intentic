@@ -81,6 +81,7 @@ export const useAccessRequests = (enabled: MaybeRefOrGetter<boolean>) => {
     const { query, loaded } = useSandboxQuery<AccessRequests>({
         queryKey: ACCESS_REQUESTS.of(),
         queryFn: () => sandboxRaw(`GET /members/requests`),
+        // compat(daemon<1.365.0): GET /members/requests
         enabled: computed(() => toValue(enabled) && supportsRoute(`GET /members/requests`)),
     });
     const dismiss = async (email: string): Promise<void> => {

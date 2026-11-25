@@ -3,6 +3,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { Log } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import type { RemoteAllow, RemoteMonitor, RemoteStartInput, RemoteStartResult } from "@intentic/sandbox-contract/schemas/device-remote";
+import { DEV_VERSION } from "@intentic/sandbox-contract/state/versions";
 import { ORPCError } from "@orpc/server";
 import { type DaemonBase, resolveDaemonBase } from "../../daemon-base.js";
 import { MACHINE_VERSION } from "../../version.js";
@@ -11,7 +12,8 @@ import { type HostLink, readLinks } from "../config.js";
 import { machineIndicator, onPauseChanged, type PersonKind, type PersonOnScreen, readPausedAt } from "../indicator.js";
 import { SWITCH_LABELS } from "../policy.js";
 import { runningBeforeSignIn } from "../session.js";
-import { realRemotedIo, resolveRemoted } from "./remoted-binary.js";
+import { realRemotedIo, REMOTED_BIN_ENV, resolveRemoted } from "./remoted-binary.js";
+import { connectRemoted, controlProtocolsOf, remotedEndpoint, remotedLogPath } from "./remoted-control.js";
 import {
     allowFrom,
     allowsAnything,
@@ -27,7 +29,8 @@ import {
     withUplink,
     writeRemotedStatus,
 } from "./remoted-files.js";
-import { createRemotedProcess, type RemotedProcess, type SpawnRemoted, spawnRemoted } from "./remoted.js";
+import { createRemotedProcess, type RemotedControlSeams, type RemotedProcess, type SpawnRemoted } from "./remoted.js";
+import { detachRemoted, spawnRemoted } from "./remoted-spawn.js";
 
 /* PEOPLE'S REMOTE ACCESS ON THIS COMPUTER, AS THE AGENT KEEPS IT (2026-11-20). The daemon calls `remoteStart` on a link
    when a person in its editor opens this computer's screen or a terminal, and `remoteStop` when nobody there needs it
@@ -58,6 +61,8 @@ export interface RemoteSeams {
     readonly binary: (log: Log) => Promise<string>;
     readonly resolveBase: (sandboxUrl: string) => Promise<DaemonBase>;
     readonly spawn: SpawnRemoted;
+    // Adopting a remoted that outlived the agent before this one (remoted.ts); without it remoted is this agent's child.
+    readonly control?: RemotedControlSeams;
     // The person's pause, as the `paused` file says it; a pause that cannot be read is a pause.
     readonly paused: () => Promise<boolean>;
     readonly people: (people: readonly PersonOnScreen[], log: Log) => void;
@@ -77,7 +82,8 @@ export interface Remote {
     // call takes up what remoted.json held when the agent last ran.
     readonly keepLinks: (links: readonly HostLink[]) => Promise<void>;
     readonly pausedChanged: () => Promise<void>;
-    // The agent is leaving: remoted is stopped, its uplinks kept for the next agent.
+    // The agent is leaving: remoted is left running for the next agent to adopt (or stopped, when it is this agent's
+    // child), its uplinks kept for the next agent.
     readonly shutdown: () => Promise<void>;
     readonly status: () => RemotedStatus | undefined;
 }
@@ -369,6 +375,8 @@ const keepLinks = async (state: RemoteState, links: readonly HostLink[]): Promis
     const linked = new Set(links.map((link) => link.sandboxUrl));
     const gone = new Set([...state.held].filter((id) => !linked.has(id)));
     if (gone.size === 0) {
+        // A remoted started again after an exit (or by another hand) while no uplink is left is stopped here too.
+        await state.serial(async () => await settleRemoted(state));
         return;
     }
     await state.serial(async () => {
@@ -382,6 +390,7 @@ export const createRemote = (seams: RemoteSeams, log: Log): Remote => {
     let queue: Promise<unknown> = Promise.resolve();
     const process = createRemotedProcess({
         spawn: seams.spawn,
+        control: seams.control,
         configPath: seams.configPath,
         log,
         onStatus: watchPeople(seams, log),
@@ -413,7 +422,11 @@ export const createRemote = (seams: RemoteSeams, log: Log): Remote => {
             }
         },
         // Not queued: the agent is leaving, and a remoteStart still waiting on a download must not hold it here.
-        shutdown: async () => await haltRemoted(state),
+        shutdown: async () => {
+            clearInterval(state.urlWatch);
+            state.urlWatch = undefined;
+            await process.release();
+        },
         status: () => process.status(),
     };
 };
@@ -424,6 +437,16 @@ const realSeams = (): RemoteSeams => ({
     // uplink token remoted carries to a stranger on the loopback port would be a person's session handed to it.
     resolveBase: async (sandboxUrl) => await resolveDaemonBase(sandboxUrl, (await readLinks()).find((link) => link.sandboxUrl === sandboxUrl)?.token),
     spawn: spawnRemoted,
+    control: {
+        endpoint: remotedEndpoint(),
+        connect: connectRemoted,
+        detach: detachRemoted(remotedLogPath),
+        protocolsOf: controlProtocolsOf,
+        // A release's remoted is its agent's version; a source build or an override is whatever was built.
+        build: MACHINE_VERSION === DEV_VERSION || (process.env[REMOTED_BIN_ENV] ?? "") !== "" ? undefined : MACHINE_VERSION,
+        // Before sign-in its remoted has no desktop: it ends with this agent, at the handover, and is never adopted.
+        detachable: () => !runningBeforeSignIn(),
+    },
     paused: async () => (await readPausedAt()) !== undefined,
     // Before anyone signs in there is no screen to put a notice on (session.ts); terminals work there all the same.
     people: (people, log) => {

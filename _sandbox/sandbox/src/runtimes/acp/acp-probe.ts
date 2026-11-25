@@ -1,7 +1,7 @@
 import { type AgentCapabilities, client, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { withTimeout } from "@intentic/base/async";
 import type { AcpAgentConfig } from "@intentic/sandbox-contract/schemas/capabilities";
-import { acpLaunchOf, spawnAcpProcess } from "./acp-spawn.js";
+import { acpLaunchOf, spawnAcpProcess, stopAcpProcess } from "./acp-spawn.js";
 
 /* One-shot ACP probe for the `agent` capability handler: spawn the command, initialize, report what the agent advertises, kill. */
 
@@ -35,6 +35,6 @@ export const probeAcpAgent = async (config: AcpAgentConfig, cwd: string): Promis
             agentName: init.agentInfo?.name,
         };
     } finally {
-        proc.child.kill();
+        stopAcpProcess(proc);
     }
 };

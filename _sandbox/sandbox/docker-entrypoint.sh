@@ -360,4 +360,11 @@ semi_space_mb=16
 # exec, so netd takes this shell's place and the container's stop signal reaches it, which hands Node its graceful
 # shutdown. It is PID 1 itself only where nothing else is (the hosted runner's `init: false`); a local container's
 # PID 1 is docker's tini (`--init`), and a Fly machine's is Fly's own init, each forwarding the signal to netd.
-exec /opt/sandbox/netd/intentic-netd -- node --max-old-space-size="$heap_mb" --max-semi-space-size="$semi_space_mb" --report-on-fatalerror --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js
+#
+# Diagnostic reports, in the history volume's logs/: one on a fatal error (the heap run out), and one when netd, about to
+# kill a daemon it found stuck, sends SIGUSR2 (netd's evidence.rs; nothing in the daemon handles SIGUSR2 itself). Node
+# answers that signal on the event loop, so a loop truly stuck writes nothing, and netd's capture of its threads is the
+# evidence then. The boot after reads both (system/boot/restarts) and keeps only the newest reports
+# (diagnostic-reports.ts). Without the environment: a report lies on the volume for days, and the daemon's environment
+# holds its credentials.
+exec /opt/sandbox/netd/intentic-netd -- node --max-old-space-size="$heap_mb" --max-semi-space-size="$semi_space_mb" --report-on-fatalerror --report-on-signal --report-signal=SIGUSR2 --report-exclude-env --report-directory="$HISTORY_ROOT/logs" /opt/sandbox/dist/main.js

@@ -6,7 +6,8 @@ import type { AppEnv } from "../../app-env.js";
 import { memoryCapabilitiesStore } from "../capabilities-slice.testing.js";
 import { mcpToolsOf } from "../mcp-tools.js";
 import { type FakeOAuthMcp, startFakeOAuthMcp } from "./mcp-oauth.testing.js";
-import { createMcpRemoteEndpoint } from "./mcp-remote.js";
+import { createOpenCalls, type OpenCalls } from "../credentials/open-calls.js";
+import { createMcpRemoteEndpoint, MCP_BODY_MAX, type RemoteDeps } from "./mcp-remote.js";
 import { createMcpSignIns } from "./mcp-sign-ins.js";
 import { encodeMcpSession, mcpSessionOf } from "./mcp-session.js";
 
@@ -115,4 +116,85 @@ const placeholderSession = () => ({
     redirectUri: "https://sandbox-test.sbx.example/oauth/mcp/callback",
     resource: "https://x.example/mcp",
     accessToken: "at",
+});
+
+// The door alone, over a pasted-token connection and an upstream stand-in, for its limits and cuts.
+const bareDoor = async (overrides: Partial<RemoteDeps> = {}) => {
+    const store = memoryCapabilitiesStore();
+    await store.upsert({ id: "tracker", kind: "mcp", config: { url: "https://tracker.example/mcp", token: "tok-1" } });
+    let stillValid: Parameters<OpenCalls["watch"]>[0] = async () => undefined;
+    const calls = createOpenCalls({ call: { perConversation: 4, perDoor: 8 }, stream: { perConversation: 1, perDoor: 4 } });
+    const openCalls: OpenCalls = {
+        ...calls,
+        watch: (check) => {
+            stillValid = check;
+            return () => undefined;
+        },
+    };
+    const sent: string[] = [];
+    // A GET opens an event stream that stays open until it is cut; a POST is answered at once.
+    const upstream = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        sent.push(init?.method ?? "GET");
+        const signal = init?.signal;
+        if (init?.method === "GET") {
+            const body = new ReadableStream<Uint8Array>({ start: (controller) => signal?.addEventListener("abort", () => controller.error(signal.reason)) });
+            return new Response(body, { headers: { "content-type": "text/event-stream" } });
+        }
+        return Response.json({ jsonrpc: "2.0", id: 1, result: {} });
+    };
+    const remote = createMcpRemoteEndpoint({
+        capabilities: store,
+        bearer: async () => ({ bearer: "tok-1" }),
+        fetch: Object.assign(upstream, { preconnect: fetch.preconnect }),
+        openCalls,
+        ...overrides,
+    });
+    const app = new Hono<AppEnv>().all("/mcp/:conversation", (c) =>
+        remote({ kind: "remote", capability: "tracker" }, c, { name: "tracker", conversationId: c.req.param("conversation"), signal: c.req.raw.signal }),
+    );
+    return { app, store, sent, sweep: () => calls.sweep(stillValid) };
+};
+
+test("the door refuses a request body past its cap before forwarding it", async () => {
+    const { app, sent } = await bareDoor();
+    const huge = "x".repeat(MCP_BODY_MAX + 1);
+    const refused = await app.request("/mcp/c1", { method: "POST", headers: { "content-type": "application/json" }, body: huge });
+    expect(refused.status).toBe(413);
+    expect(sent).toEqual([]);
+    const small = await app.request("/mcp/c1", { method: "POST", body: "{}" });
+    expect(small.status).toBe(200);
+    await small.text();
+});
+
+test("the door holds one event stream per conversation, and cuts it once the connection is replaced or removed", async () => {
+    let reach = true;
+    const { app, store, sweep } = await bareDoor({ reaches: async () => reach });
+    const stream = await app.request("/mcp/c1", { method: "GET" });
+    expect(stream.status).toBe(200);
+    expect((await app.request("/mcp/c1", { method: "GET" })).status).toBe(429);
+    // Calls are a pool of their own; this one is read to its end, which frees its slot.
+    const answered = await app.request("/mcp/c1", { method: "POST", body: "{}" });
+    expect(answered.status).toBe(200);
+    await answered.text();
+    const reading = stream.text();
+    expect(await sweep()).toBe(0);
+    await store.upsert({ id: "tracker", kind: "mcp", config: { url: "https://tracker.example/mcp", token: "tok-2" } });
+    expect(await sweep()).toBe(1);
+    await expect(reading).rejects.toThrow("given another token");
+
+    const next = await app.request("/mcp/c1", { method: "GET" });
+    const nextReading = next.text();
+    reach = false;
+    expect(await sweep()).toBe(1);
+    await expect(nextReading).rejects.toThrow("may no longer use");
+    // A conversation outside the reach is refused at the door too.
+    const outside = await app.request("/mcp/c2", { method: "POST", body: "{}" });
+    expect(outside.status).toBe(403);
+    expect(await outside.text()).toContain("may no longer use");
+
+    reach = true;
+    const last = (await app.request("/mcp/c1", { method: "GET" })).text();
+    await store.remove("tracker");
+    expect(await sweep()).toBe(1);
+    await expect(last).rejects.toThrow("was removed");
 });

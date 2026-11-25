@@ -1,4 +1,5 @@
 import {
+    LISTENER_DISPATCH_KEY_HEADER,
     type ListenerDispatchFrame,
     type ListenerMessage,
     ListenerMessageSchema,
@@ -9,8 +10,7 @@ import {
     ListenerStopSchema,
 } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import type { Context } from "hono";
-import { stream } from "hono/streaming";
-import { DEBOUNCE_MS, dispatchListenerMessage, reportListenerFailure, stopChannelTurn } from "../../automations/listeners.js";
+import { DEBOUNCE_MS, dispatchListenerMessage, listenerOriginOf, reportListenerFailure, stopChannelTurn } from "../../automations/listeners.js";
 import { PAYLOAD_MAX } from "../../automations/fire/run-fire.js";
 import type { TurnStream } from "../../automations/fire/fire-options.js";
 import type { Services } from "../../composition.js";
@@ -20,6 +20,8 @@ import { readBoundedJson } from "../../http/bounded-body.js";
 import { listenerOwnership, listenerStateOf } from "./listener-state.js";
 import { setListenerStatus } from "../../capabilities/status/listener-status.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
+import { admitOnce } from "./dispatch-keys.js";
+import { channelAnswerSink } from "./listener-outbox.js";
 
 // Control surface for an extension's listener gateway; the gateway holds the provider connection, not the daemon.
 // Five routes: /state (reconcile), /dispatch (inbound events, optional ndjson stream), failure/status reports, and /stop
@@ -47,6 +49,51 @@ const listenerCaller = async (services: Services, c: Context<AppEnv, "/listeners
     return owner === caller.id ? caller : c.json({ error: `extension "${caller.id}" does not own this provider's listener` }, 403);
 };
 
+// One message dispatched with its turns' frames streamed back as ndjson. The frames go into a pipe the response reads,
+// and the response is answered only once the message is admitted: its 200 is the gateway's word that the message is
+// durably in the inbox (the contract's dispatch key note).
+const streamedDispatch = async (services: Services, message: ListenerMessage, key: string | undefined): Promise<Response> => {
+    const pipe = new TransformStream<string, string>();
+    const writer = pipe.writable.getWriter();
+    let tail: Promise<unknown> = Promise.resolve();
+    const writeLine = (line: string): void => {
+        // allow(silent-catch): a gateway that hung up takes no more frames, and the turn goes on without it
+        tail = tail.then(() => writer.write(`${line}\n`)).catch(() => {});
+    };
+    const sinks = new Map<string, Promise<void>>();
+    const makeStream = (automationId: string): TurnStream => {
+        const gate = Promise.withResolvers<void>();
+        sinks.set(automationId, gate.promise);
+        const write = (frame: ListenerDispatchFrame): void => writeLine(JSON.stringify(frame));
+        return {
+            delta: (text) => {
+                if (text !== "") {
+                    write({ automationId, delta: text });
+                }
+            },
+            // Forwarded verbatim, unlike the Visitor chat's: it lands in the owner's channel, sentence intact.
+            failed: (reason) => write({ automationId, failed: reason }),
+            opened: (turn) => write({ automationId, opened: turn }),
+            step: (step) => write({ automationId, step }),
+            plan: (plan) => write({ automationId, plan }),
+            held: (reason) => write({ automationId, held: reason }),
+            queued: (reason) => write({ automationId, queued: reason }),
+            steered: () => write({ automationId, steered: true }),
+            end: () => {
+                write({ automationId, end: true });
+                void tail.finally(gate.resolve);
+            },
+        };
+    };
+    // A repeat of an admitted key streams nothing: the first request's stream carries that message's turns.
+    const matched = (await admitOnce(services, message.provider, key, () => dispatchListenerMessage(services, message, DEBOUNCE_MS, makeStream))) ?? [];
+    void Promise.all(matched.map((id) => sinks.get(id) ?? Promise.resolve()))
+        .then(() => tail)
+        // allow(silent-catch): closing a pipe the gateway already hung up on has nobody left to tell
+        .finally(() => writer.close().catch(() => {}));
+    return new Response(pipe.readable.pipeThrough(new TextEncoderStream()), { headers: { "content-type": "application/x-ndjson" } });
+};
+
 export const createListenerRoutes = (services: Services) => ({
     // Reconcile feed: enabled listener automations plus the calling extension's own connector configs (bot tokens
     // included); polled to connect.
@@ -60,8 +107,9 @@ export const createListenerRoutes = (services: Services) => ({
         return c.json(state);
     },
 
-    // One inbound event routed to matching listener automations; plain calls fire-and-return.
+    // One inbound event routed to matching listener automations; plain calls answer once it is admitted.
     // `?stream=1` holds an ndjson response, one frame stream per matched automation, closed once every turn ends.
+    // A request naming a key the daemon admitted lately is answered without admitting it again (dispatch-keys.ts).
     dispatch: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
         const caller = await listenerCaller(services, c);
         if (caller instanceof Response) {
@@ -81,43 +129,15 @@ export const createListenerRoutes = (services: Services) => ({
         if (message.provider !== provider) {
             return c.json({ error: "provider mismatch" }, 400);
         }
+        const key = c.req.header(LISTENER_DISPATCH_KEY_HEADER);
         if (c.req.query("stream") !== "1") {
-            await dispatchListenerMessage(services, message);
+            // A message whose live stream died with the gateway, retried: its answer goes into its thread, as a held wake's.
+            const answerSink =
+                c.req.query("answer") === "channel" ? (automationId: string) => channelAnswerSink(services, listenerOriginOf(message, automationId))?.stream : undefined;
+            await admitOnce(services, provider, key, () => dispatchListenerMessage(services, message, DEBOUNCE_MS, answerSink));
             return c.json({ ok: true });
         }
-        c.header("content-type", "application/x-ndjson");
-        return stream(c, async (ndjson) => {
-            const sinks = new Map<string, Promise<void>>();
-            const makeStream = (automationId: string): TurnStream => {
-                const gate = Promise.withResolvers<void>();
-                sinks.set(automationId, gate.promise);
-                let tail: Promise<unknown> = Promise.resolve();
-                const write = (frame: ListenerDispatchFrame): void => {
-                    tail = tail.then(() => ndjson.writeln(JSON.stringify(frame))).catch(() => {});
-                };
-                return {
-                    delta: (text) => {
-                        if (text !== "") {
-                            write({ automationId, delta: text });
-                        }
-                    },
-                    // Forwarded verbatim, unlike the Visitor chat's: it lands in the owner's channel, sentence intact.
-                    failed: (reason) => write({ automationId, failed: reason }),
-                    opened: (turn) => write({ automationId, opened: turn }),
-                    step: (step) => write({ automationId, step }),
-                    plan: (plan) => write({ automationId, plan }),
-                    held: (reason) => write({ automationId, held: reason }),
-                    queued: (reason) => write({ automationId, queued: reason }),
-                    steered: () => write({ automationId, steered: true }),
-                    end: () => {
-                        write({ automationId, end: true });
-                        void tail.finally(gate.resolve);
-                    },
-                };
-            };
-            const matched = await dispatchListenerMessage(services, message, DEBOUNCE_MS, makeStream);
-            await Promise.all(matched.map((id) => sinks.get(id) ?? Promise.resolve()));
-        });
+        return streamedDispatch(services, message, key);
     },
 
     // Fatal source failure (bad credential, missing intent), surfaced on the provider's automations and activity feed.

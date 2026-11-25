@@ -40,6 +40,7 @@ export const providerSwitchOffs = sandboxRef<Readonly<Record<string, SwitchOffs>
 // leaves out keep what this window held.
 export const setProviderRefusals = (provider: string, refusals: readonly ProviderRefusal[], switchOffs: SwitchOffs | undefined): void => {
     providerRefusals.value = { ...providerRefusals.value, [provider]: refusals };
+    // compat(daemon<1.419.1): the refusals' `switchOffs`
     if (switchOffs !== undefined) {
         providerSwitchOffs.value = { ...providerSwitchOffs.value, [provider]: switchOffs };
     }

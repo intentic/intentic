@@ -1,8 +1,10 @@
-export type SuiteKind = "unit" | "integration";
+export type SuiteKind = "unit" | "integration" | "eval";
 export const INTEGRATION_MARKERS: readonly string[];
+export const MANUAL_MARKERS: readonly string[];
 export const SUITE_TIMEOUTS: Readonly<Record<SuiteKind, number>>;
-export const SUITE_KINDS: readonly SuiteKind[];
+export const SUITE_KINDS: readonly Exclude<SuiteKind, "eval">[];
 export const INTEGRATION_NAME: RegExp;
+export const MANUAL_NAME: RegExp;
 export function suiteKindOf(file: string): SuiteKind;
 export const STOOD_DOWN_FILE: string;
 export const CI_LANE: string;

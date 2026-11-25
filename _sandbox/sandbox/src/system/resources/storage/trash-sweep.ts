@@ -7,7 +7,7 @@ import { type Chore, DAY_MS, HOUR_MS } from "../../chore-clock.js";
 
 // THE HISTORY VOLUME'S TRASH, EMPTIED BY AGE (2026-10-05). What the daemon sets aside instead of deleting it (a deleted
 // repo's git dir, history.ts; a checkout of a repo that went, worktrees.ts; a checkout no conversation owns,
-// orphan-checkouts.ts) is removed for good once it has sat there as long as a conversation's set-aside directory does,
+// orphan-checkouts.ts; the ignored files only a retired checkout held, local-files.ts) is removed for good once it has sat there as long as a conversation's set-aside directory does,
 // checked hourly. Before this only the conversations' own quarantine was ever emptied, and only at boot: everything
 // else in the trash stayed until a person cleaned it from the Storage view. The conversations' quarantine keeps its own
 // rules (store/conversation-units.ts): this sweep runs its prune, never removes anything under it.

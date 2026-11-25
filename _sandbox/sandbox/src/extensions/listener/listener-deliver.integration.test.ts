@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { fileWebchatOutbox } from "../../webchat/webchat-outbox.js";
-import { channelAnswerSink, deliverToListenerChannel, gatewayDeliveryOf } from "./listener-deliver.js";
+import { deliverToListenerChannel, gatewayDeliveryOf } from "./listener-deliver.js";
+import { channelAnswerSink } from "./listener-outbox.js";
 
 // The core-door half of "speak as the agent". A Visitor chat has no gateway extension and never will, so without this
 // leg `place` on a visitor's conversation reported "nothing is listening" and the words reached only the transcript.

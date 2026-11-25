@@ -1,6 +1,7 @@
 import type {
     ContentBlock,
     SessionUpdate,
+    ToolCall,
     ToolCallContent as AcpToolCallContent,
     ToolCallLocation as AcpToolCallLocation,
     ToolKind as AcpToolKind,
@@ -24,6 +25,10 @@ export type TerminalExit = (terminalId: string) => number | undefined;
 export interface UpdateReading {
     readonly terminalExit?: TerminalExit;
     readonly pathOf?: PathReading;
+    // The agent's dialect's rewrite of a tool update before its card is read (dialects/, `normalizeToolUpdate`).
+    readonly normalizeToolUpdate?: (update: ToolCallUpdate) => ToolCallUpdate;
+    // The same for a call as it opens (`normalizeToolCall`).
+    readonly normalizeToolCall?: (call: ToolCall) => ToolCall;
 }
 
 // ToolKind mirrors ACP's kind vocabulary verbatim; an unrecognized kind falls back to the shared name→kind table over
@@ -117,18 +122,20 @@ export const sessionUpdateEvent = (update: SessionUpdate, cwd: string, reading: 
             const text = textOf(update.content);
             return text === "" ? undefined : { kind: "thinking", text };
         }
-        case "tool_call":
+        case "tool_call": {
+            const call = reading.normalizeToolCall?.(update) ?? update;
             return toolCard({
-                id: update.toolCallId,
-                name: update.title,
-                category: categoryOf(update.kind, update.title),
-                status: update.status ?? "in_progress",
-                input: update.rawInput,
-                locations: mapLocations(update.locations, cwd, pathOf),
-                content: mapContent(update.content, cwd, pathOf),
+                id: call.toolCallId,
+                name: call.title,
+                category: categoryOf(call.kind, call.title),
+                status: call.status ?? "in_progress",
+                input: call.rawInput,
+                locations: mapLocations(call.locations, cwd, pathOf),
+                content: mapContent(call.content, cwd, pathOf),
             });
+        }
         case "tool_call_update":
-            return toolCallUpdated(update, cwd, reading.terminalExit ?? noTerminals, pathOf);
+            return toolCallUpdated(reading.normalizeToolUpdate?.(update) ?? update, cwd, reading.terminalExit ?? noTerminals, pathOf);
         case "plan":
             // ACP's plan is a progress checklist (entries with status), the TodoWrite shape.
             return { kind: "todos", items: update.entries.map((entry) => ({ content: entry.content, status: entry.status })) };

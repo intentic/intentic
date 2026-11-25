@@ -10,6 +10,7 @@ import type { CapabilityKind, CapabilityProbe, CapabilitySummary } from "@intent
 import type { NoticeModel } from "@intentic/ui";
 import { t } from "@intentic/ui/i18n";
 import type { Component } from "vue";
+import type { Track } from "../../../app/analytics";
 import LinkPairing from "../../../components/LinkPairing.vue";
 import type { PairedLink } from "../../../components/linkPairing";
 import { browserGrants, machineAway, machineGrants, phoneGrants } from "../../../models/capabilities/connections";
@@ -68,7 +69,7 @@ export interface SaveContext {
     readonly hosted: boolean;
     readonly ownsSandbox: boolean;
     readonly preflight: (input: AddCapabilityInput) => Promise<CapabilityProbe>;
-    readonly capture: (event: string, properties: { readonly hosted: boolean }) => void;
+    readonly capture: Track;
 }
 
 export interface PairingSlot {

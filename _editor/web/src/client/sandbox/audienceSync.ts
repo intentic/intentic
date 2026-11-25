@@ -17,6 +17,7 @@ import { adoptSandboxWords, type Audience, keepAudienceWith, type SandboxWords, 
 // heard from. Started once per window (main.ts).
 
 // A daemon older than these routes is never asked: this browser's last words stay on screen there.
+// compat(daemon<1.318.0): the settings.audience and settings.setAudience routes
 const daemonKeeps = (): boolean => supportsRoute(`settings.audience`) && supportsRoute(`settings.setAudience`);
 
 const audienceKey = rpcKey(`settings.audience`);
@@ -24,6 +25,7 @@ const audienceKey = rpcKey(`settings.audience`);
 // What a read says this person sees. A daemon from before the mode keeps only a person's own choice and says no mode;
 // with nothing kept there, this browser's last words stand, as they always did against it.
 const wordsOf = (kept: MemberAudience): SandboxWords | undefined => {
+    // compat(daemon<1.395.0): the audience read's `mode` field
     if (kept.mode === undefined) {
         return kept.audience === undefined ? undefined : { audience: kept.audience, override: kept.audience };
     }

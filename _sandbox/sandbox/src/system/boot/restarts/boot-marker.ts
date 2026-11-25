@@ -12,6 +12,7 @@ import { processIdentity, type ProcessIdentity, sameProcess } from "../../resour
 import { readJsonMarkerSync } from "../../../store/plain-files/json-marker.js";
 import { buildInfo, buildText } from "../build-info.js";
 import { bootHistoryDocument } from "./boot-history.js";
+import { pruneDiagnosticReports } from "./diagnostic-reports.js";
 import { type Assembled, collectPostMortem, notePostMortem, postMortemForRecord, type PostMortemSources } from "./post-mortem.js";
 import {
     describePreviousRun,
@@ -54,18 +55,24 @@ export interface ExitMarker extends ProcessIdentity {
     readonly stopReason?: string;
 }
 
-// Diagnostic reports --report-on-fatalerror writes next to the logs, named report.<date>.<time>.<pid>.<thread>.<sequence>.json
+// Diagnostic reports --report-on-fatalerror (and --report-on-signal) write next to the logs, named report.<date>.<time>.<pid>.<thread>.<sequence>.json
 // (report.20261123.225125.111.0.001.json). 2026-11-23: the match here wanted `.<pid>.0.json`, a name Node never writes,
 // so a daemon that ran out of heap was filed as "killed without warning, nothing on file names the hand" with its
 // report lying beside the log. A pid comes round again (the daemon is pid 111 in every container it boots in), so a
 // report is the run's only when its own header names that pid and a dump at or after the run's start.
 const REPORT_NAME = /^report\.\d+\.\d+\.(\d+)\.\d+\.\d+\.json$/u;
 
+// A report netd asked for with SIGUSR2 before killing a stuck daemon (netd's evidence.rs) is no fatal error: its header's
+// trigger is "Signal", and the stuck kill is named from netd-kills.jsonl instead. A report the kill cut short does not
+// parse, but its header was written first.
+const SIGNAL_TRIGGER = /"trigger"\s*:\s*"Signal"/u;
+
 const ReportOnDisk = z.looseObject({
     header: z.looseObject({
         processId: z.number(),
         dumpEventTimeStamp: z.coerce.number(),
         event: z.string().optional(),
+        trigger: z.string().optional(),
     }),
     javascriptHeap: z.looseObject({ totalMemory: z.number().optional() }).optional(),
 });
@@ -76,12 +83,21 @@ interface FatalReports {
     readonly event?: string;
 }
 
-const readReport = (path: string): z.infer<typeof ReportOnDisk> | undefined => {
+type ReportRead = { readonly report?: z.infer<typeof ReportOnDisk>; readonly signal: boolean };
+
+const readReport = (path: string): ReportRead => {
+    let text: string;
     try {
-        const parsed = ReportOnDisk.safeParse(JSON.parse(readFileSync(path, "utf8")));
-        return parsed.success ? parsed.data : undefined;
+        text = readFileSync(path, "utf8");
     } catch {
-        return undefined;
+        return { signal: false };
+    }
+    try {
+        const parsed = ReportOnDisk.safeParse(JSON.parse(text));
+        return parsed.success ? { report: parsed.data, signal: parsed.data.header.trigger === "Signal" } : { signal: false };
+    } catch {
+        // allow(silent-catch): a report cut short is still told by the header it begins with
+        return { signal: SIGNAL_TRIGGER.test(text.slice(0, 4096)) };
     }
 };
 
@@ -99,7 +115,8 @@ const fatalReports = (dir: string, pid: number, startedAt: number): FatalReports
         return { names: [] };
     }
     const ours = named
-        .map((name) => ({ name, report: readReport(join(dir, name)) }))
+        .map((name) => ({ name, ...readReport(join(dir, name)) }))
+        .filter(({ signal }) => !signal)
         // A report that cannot be read still names this pid; one that can is held to its own pid and time.
         .filter(({ report }) => report === undefined || (report.header.processId === pid && report.header.dumpEventTimeStamp >= startedAt))
         .toSorted((a, b) => a.name.localeCompare(b.name));
@@ -264,6 +281,8 @@ export const claimBootMarker = (
         return { claimed: false, markExited: () => undefined };
     }
     reportPreviousRun(logsDir, logger, previous, now, tmpMarker, options.postMortem);
+    // Read above; past this boot only the newest are worth their room.
+    pruneDiagnosticReports(logsDir);
     try {
         writeFileSync(tmpMarker, String(process.pid));
     } catch (error) {

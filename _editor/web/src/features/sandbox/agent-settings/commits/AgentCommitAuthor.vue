@@ -64,6 +64,7 @@ const suggested = computed(() => (kept.value === undefined ? state.value?.sugges
         </Row>
 
         <!-- Each person's own, through routes an older daemon lacks: there nothing would keep it, so it is not offered. -->
+        <!-- compat(daemon<1.395.0): the settings.commitIdentity routes -->
         <template v-if="supported">
             <Row icon="user" :title="t(`sandbox.agentCommitAuthor.yours`)" :description="t(`sandbox.agentCommitAuthor.yoursNote`)">
                 <template #below>

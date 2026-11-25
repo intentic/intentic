@@ -544,6 +544,7 @@ export const pageWakeDeps = (): WakeDeps => ({
         sandboxRaw(`POST /speech/wake`, { input: { device, holdMs } }).then(
             ({ granted }) => granted,
             // A daemon from before the claim has nobody to share a wake with but its own devices: act on it.
+            // compat(daemon<1.338.0): POST /speech/wake
             () => true,
         ),
     lock: pageLock,

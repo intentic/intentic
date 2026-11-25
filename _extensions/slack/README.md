@@ -20,6 +20,9 @@ flowchart LR
 - The gateway holds one Socket Mode socket per Slack app, and only while an enabled Slack automation exists; the
   daemon holds no Slack connection. Socket Mode is an outbound WebSocket, so no public URL is needed, for events and
   for button presses alike. A revoked token is fatal and pauses reconnecting for a backoff period.
+- An event envelope is acked once what it carries is kept (connector-runtime's dispatch spool, or the daemon's inbox),
+  or after 2.5 s whatever happens, since Slack redelivers what is not acked within three; a gateway that dies before
+  then is sent it again. Every other envelope is acked at once.
 - A message is for the app when it mentions it, is a direct message, or is written in a thread the app answers in:
   this process's memory first, then the app's own earlier posts in the thread, so a restart forgets nothing that
   matters. Each Slack thread is one conversation; a top-level mention's conversation lives in the thread its answer

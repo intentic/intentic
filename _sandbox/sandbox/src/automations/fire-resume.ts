@@ -6,7 +6,7 @@ import { consumeEntry, type JournalEntry, resumeBars, spendAttempt } from "../st
 import type { Services } from "../composition.js";
 import { defineInFlight } from "../seams/restart/in-flight.js";
 import { opt } from "../opt.js";
-import { channelAnswerSink } from "../extensions/listener/listener-deliver.js";
+import { channelAnswerSink } from "../extensions/listener/listener-outbox.js";
 import { fireOnThread } from "./fire/automation-fire.js";
 import { resumable } from "./scheduler.js";
 import type { ThreadFireOptions, ThreadPlace } from "./fire/fire-options.js";

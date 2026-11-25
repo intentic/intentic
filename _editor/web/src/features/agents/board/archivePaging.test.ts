@@ -116,4 +116,5 @@ it(`adds a page at a time, and stops offering when there is nothing left behind 
     await settle();
     expect(archiveCards(board)).toHaveLength(70);
     expect(tailRow(board)).toBeNull();
+    // 70 real cards rendered in jsdom can pass the default bound on a busy CI runner.
 }, 60_000);

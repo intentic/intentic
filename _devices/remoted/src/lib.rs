@@ -3,6 +3,7 @@
 //! the pieces up on their own.
 
 pub mod config;
+pub mod control;
 pub mod daemon;
 pub mod environments;
 pub mod http;

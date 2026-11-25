@@ -111,6 +111,7 @@ const keeps = (device: Device): number => (device.sandboxes ?? []).filter((box) 
 // "Run commands" as well as "Manage sandboxes on this device", and making one only the second, so a machine with the
 // first alone was offered a press its agent refused ("Manage sandboxes ... is switched off"). An older daemon does not
 // say (`manages` absent), and is offered as before, where the refusal still names the switch.
+// compat(daemon<1.346.0): `manages` on a device row
 const takesNew = (device: Device): boolean => listed(device) && device.manages !== false;
 
 // WHICH SIDE OF A PC A NEW SANDBOX IS MADE FROM. Windows and its WSL distros drive one engine, but only the side whose

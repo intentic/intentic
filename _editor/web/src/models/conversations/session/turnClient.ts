@@ -676,6 +676,7 @@ export class TurnClient {
         host.selection.apply({ kind: `sent` });
         const body = turnRequestBody({
             messageId: uuid(),
+            // compat(daemon<1.323.0): agent.run `continues`
             text: continuationFor(host.transcript.messages.value),
             conversationId: host.conversationId,
             title: host.title.value,

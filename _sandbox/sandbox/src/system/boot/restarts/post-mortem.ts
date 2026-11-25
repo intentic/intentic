@@ -11,6 +11,7 @@ import { bootHistoryDocument } from "./boot-history.js";
 import { epochOfKernel, type KernelLog, kernelZeroEpochMs, memcgIsDaemonLeaf, memcgIsOurs, readContainerId, readKernelLog } from "./kernel-oom.js";
 import { type MemoryTrail, neverStartedBoots, readDaemonSamples, readMemoryTrail, readTrail } from "./memory-trail.js";
 import { rolledBackText } from "./rolled-back.js";
+import { evidenceKill, evidenceText } from "./stuck-evidence.js";
 import { RESTARTS_FILE, RUN_ENDINGS, type RunEnding, spanOf } from "./restart-record.js";
 
 /* WHY THE RUN BEFORE THIS ONE ENDED, NAMED FROM WHAT WAS LEFT ON FILE (2026-11-05). A job's `integra replay-client` grew
@@ -328,7 +329,11 @@ const netdText = (netd: readonly NetdKill[]): string | undefined => {
         ...(rolled?.from === undefined ? [] : [rolledBackText(rolled.from, rolled.failures ?? 0, rolled.error)]),
         ...(gaveUp ? ["the last build that booted failed too, so netd went back to the installed build"] : []),
     ];
-    return parts.length === 0 ? undefined : parts.join(", ");
+    const kept = evidenceText(evidenceKill(netd));
+    if (parts.length === 0) {
+        return undefined;
+    }
+    return kept === undefined ? parts.join(", ") : `${parts.join(", ")} (${kept})`;
 };
 
 // One kill in the sentence every place tells a kill in (memory-kill-words.ts), with what only the post-mortem knows of

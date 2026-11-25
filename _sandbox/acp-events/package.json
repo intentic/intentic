@@ -98,6 +98,28 @@
                 "@intentic/src": "./src/elicitation.ts",
                 "default": "./dist/elicitation.js"
             }
+        },
+        "./dialects": {
+            "types": "./dist/dialects/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/dialects/index.ts",
+                "default": "./dist/dialects/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/dialects/index.ts",
+                "default": "./dist/dialects/index.js"
+            }
+        },
+        "./dialects/replay": {
+            "types": "./dist/dialects/replay.testing.d.ts",
+            "import": {
+                "@intentic/src": "./src/dialects/replay.testing.ts",
+                "default": "./dist/dialects/replay.testing.js"
+            },
+            "require": {
+                "@intentic/src": "./src/dialects/replay.testing.ts",
+                "default": "./dist/dialects/replay.testing.js"
+            }
         }
     },
     "scripts": {

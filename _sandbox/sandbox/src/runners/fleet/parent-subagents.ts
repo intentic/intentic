@@ -35,7 +35,14 @@ export type ParentSubagentAnswer =
 export interface ParentSubagentCallOptions {
     readonly timeoutMs: number;
     readonly signal?: AbortSignal;
+    // This call's id, kept across its retries, for a tool the parent answers once per call (call-receipts.ts).
+    readonly callId?: string;
 }
+
+// The runner's id for one `spawn`, `send` or `cancel` call, kept across its retries, so the parent answers a retry with
+// what the first call did rather than doing it again. Optional both ways: a parent that does not read it acts on every
+// call as before, and a call without it is acted on as before. Both ends are this package, so it is named here.
+export const RUNNER_SUBAGENT_CALL_HEADER = "x-intentic-call-id";
 
 // A tool's arguments as the SDK handed them to its handler, already checked against the tool's own schema.
 const ToolArgsSchema = z.looseObject({});
@@ -69,12 +76,20 @@ const doorAnswer = (status: number, body: string): ParentSubagentAnswer => {
 
 export const parentSubagentCall =
     (identity: RunnerIdentity): ParentSubagentCall =>
-    async (tool, args, conversationId, { timeoutMs, signal }) => {
+    async (tool, args, conversationId, { timeoutMs, signal, callId }) => {
         const timeout = AbortSignal.timeout(timeoutMs);
+        const headers = new Headers({
+            authorization: `Bearer ${identity.token}`,
+            "content-type": "application/json",
+            [RUNNER_FLEET_CONVERSATION_HEADER]: conversationId,
+        });
+        if (callId !== undefined) {
+            headers.set(RUNNER_SUBAGENT_CALL_HEADER, callId);
+        }
         try {
             const response = await fetch(runnerSubagentsUrl(identity.parentUrl, tool), {
                 method: "POST",
-                headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json", [RUNNER_FLEET_CONVERSATION_HEADER]: conversationId },
+                headers,
                 body: JSON.stringify(args),
                 signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
             });

@@ -5,11 +5,13 @@ import { z } from "zod";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { childSupervisor } from "../../agent/subagents/children.js";
+import { receiptedSupervisor } from "../../agent/subagents/retries/call-receipts.js";
 import { subagentTools, type ServerTool } from "../../agent/subagents/waiting/subagent-wait.js";
 import { workflowTools } from "../../agent/subagents/workflows/script-run-tools.js";
 import { scriptRunDoor } from "../../agent/subagents/workflows/script-runs.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { PARENT_RUN_TOOLS } from "../../agent/subagents/waiting/parent-forward.js";
+import { RUNNER_SUBAGENT_CALL_HEADER } from "./parent-subagents.js";
 import { placedOnRunner, type RunnerFleetDeps } from "./runner-fleet.routes.js";
 
 /* THE PARENT'S SUBAGENTS DOOR FOR ITS RUNNERS (2026-11-23). A turn this sandbox placed on a runner runs there as a local
@@ -23,8 +25,11 @@ import { placedOnRunner, type RunnerFleetDeps } from "./runner-fleet.routes.js";
    bearer, the runner proved the turn is that conversation's, and this sandbox chose to run that conversation there. The
    runner mounted these tools only where the turn's role may delegate, as it would here. */
 
-/** The tools a turn of `conversationId` running here would get, over this sandbox's registry; `signal` ends a wait. */
-export type ParentToolsFor = (conversationId: string, signal: AbortSignal) => readonly ServerTool[];
+/**
+ * The tools a turn of `conversationId` running here would get, over this sandbox's registry; `signal` ends a wait, and
+ * `callId`, the runner's id for this call, answers a retry of a spawn, send or cancel from its receipt (call-receipts.ts).
+ */
+export type ParentToolsFor = (conversationId: string, signal: AbortSignal, callId?: string) => readonly ServerTool[];
 
 const ArgsSchema = z.looseObject({});
 
@@ -57,7 +62,7 @@ export const runnerSubagentsDoor =
         }
         const name = c.req.param("tool") ?? "";
         // The runner's dropped link aborts the request, which ends a wait parked on it.
-        const tool = PARENT_RUN_TOOLS.has(name) ? toolsFor(placed, c.req.raw.signal).find((candidate) => candidate.name === name) : undefined;
+        const tool = PARENT_RUN_TOOLS.has(name) ? toolsFor(placed, c.req.raw.signal, c.req.header(RUNNER_SUBAGENT_CALL_HEADER)).find((candidate) => candidate.name === name) : undefined;
         if (tool === undefined) {
             return noTool(c, name);
         }
@@ -77,14 +82,19 @@ export const runnerSubagentsDoor =
 /** The tools a turn of this conversation gets here, on this sandbox's children engine and workflow runs. */
 const parentToolsFor =
     (services: Services): ParentToolsFor =>
-    (conversationId, signal) => {
+    (conversationId, signal, callId) => {
         // This sandbox's copy of the conversation's checkout, as the parent turn's own tree is named here.
         const parent = { conversationId, cwd: services.agentWorktrees.conversationDir(conversationId) };
         return subagentTools({
             conversationId,
             conversations: services.conversations,
             signal,
-            children: childSupervisor(services, parent),
+            children: receiptedSupervisor(
+                { conversations: services.conversations, historyRoot: services.config.historyRoot, logger: services.logger },
+                conversationId,
+                callId,
+                childSupervisor(services, parent),
+            ),
             extraTools: workflowTools(scriptRunDoor(services, parent), signal),
             logsDir: join(services.config.historyRoot, "logs"),
             // Bounded on the runner, where the rest is kept for its turn to retrieve (agent/subagents/waiting/parent-forward.ts).

@@ -168,6 +168,34 @@ test("a report the same pid left in an earlier run is not this death's", async (
     expect(lines[0]).not.toHaveProperty("fatalReports");
 });
 
+// The report netd asks for with SIGUSR2 before it kills a stuck daemon: the stuck kill is not a fatal error, whole or cut
+// short by the kill.
+test("a report the dead pid wrote on netd's signal is no fatal error", async () => {
+    const { dir, lines, logger } = await setup();
+    const died = deadPid();
+    await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: died, startTimeTicks: 1, startedAt: 1_000 }));
+    await writeFile(
+        join(dir, `report.20261124.010101.${died}.0.001.json`),
+        JSON.stringify({ header: { processId: died, dumpEventTimeStamp: "5000", trigger: "Signal", event: "SIGUSR2" } }),
+    );
+    await writeFile(join(dir, `report.20261124.010102.${died}.0.002.json`), `{\n  "header": {\n    "event": "SIGUSR2",\n    "trigger": "Signal",\n    "file`);
+    claimBootMarker(dir, logger);
+    expect(lines[0]).toMatchObject({ previous: { ended: "killed" } });
+    expect(lines[0]).not.toHaveProperty("fatalReports");
+});
+
+test("a boot keeps only the newest diagnostic reports", async () => {
+    const { dir, logger } = await setup();
+    const died = deadPid();
+    await writeFile(join(dir, "daemon-exit.json"), JSON.stringify({ state: "running", pid: died, startTimeTicks: 1, startedAt: 1_000 }));
+    const names = Array.from({ length: 12 }, (_, index) => `report.20261124.0101${String(index).padStart(2, "0")}.${died}.0.001.json`);
+    await Promise.all(names.map((name) => writeFile(join(dir, name), fatalReport(died, 5_000))));
+    claimBootMarker(dir, logger);
+    // The newest was read first: the death is still named a crash, from the reports pruning keeps.
+    expect((await restarts(dir)).at(-1)?.previous).toMatchObject({ ended: "crashed" });
+    expect(names.map((name) => existsSync(join(dir, name)))).toEqual([false, false, ...Array.from({ length: 10 }, () => true)]);
+});
+
 test("a marker whose owner is still running is a co-tenant, not a corpse, and its record is left alone", async () => {
     const { dir, lines, logger } = await setup();
     const identity = self();

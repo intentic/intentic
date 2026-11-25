@@ -43,6 +43,10 @@ export const fakeCodexProcess = () => {
             return child;
         },
         killed: false,
+        // In memory, so it leads no process group: stopping it signals it alone (process-group.ts stopTree).
+        pid: undefined,
+        exitCode: null,
+        signalCode: null,
         kill: () => {
             kills += 1;
             return true;

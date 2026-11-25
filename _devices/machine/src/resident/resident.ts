@@ -372,7 +372,8 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
         }
         // Its supervisor no longer takes them down with it (KillMode=process): this agent's own commands end here.
         await stopRunningCommands();
-        // remoted leaves by itself once this process's end closes its stdin; asked first, it says so in the log.
+        // remoted is left running for the next agent to adopt, so people's terminals outlive this restart; one that is
+        // this agent's own child (before sign-in, or a remoted from before adoption) is stopped.
         await machineRemote(log).shutdown();
         await trial.clean();
         await release();

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -5,7 +6,7 @@ import type { ActivityEvent } from "@intentic/sandbox-contract/schemas/activity"
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
-import type { ListenerDispatchFrame } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
+import { LISTENER_DISPATCH_KEY_HEADER, type ListenerDispatchFrame } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { Hono } from "hono";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
@@ -23,6 +24,8 @@ import { HELD_NOTICE, PAYLOAD_MAX } from "../../automations/fire/run-fire.js";
 import { listenerStateOf } from "./listener-state.js";
 import { listenerStatus } from "../../capabilities/status/listener-status.js";
 import { createListenerRoutes } from "./listener.routes.js";
+import { owedReplies } from "./listener-outbox.js";
+import { listenerInboxRows } from "../../automations/durable/inbox-store.js";
 import type { TurnStarter } from "../../seams/turn-starter.js";
 import { drivenBy } from "../../seams/turn-starter.testing.js";
 import { testConfig } from "../../env.config.testing.js";
@@ -337,4 +340,51 @@ test("stop refuses a conversation another provider's channel started, or none at
     // Another provider's gateway cannot press Stop on discord's conversations at all.
     expect((await postJson(stopApp(services, undefined, stopped), "/listeners/discord/stop", body, "slack-token")).status).toBe(403);
     expect(stopped).toEqual([]);
+});
+
+// A gateway retries a message until the daemon admits it, naming it by one key: a retry whose first try was admitted
+// (its answer lost on the way back) must not wake the automation a second time.
+test("a dispatch retried under the same key is admitted once", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
+    await services.automations.upsert(listenerAutomation("k-once"));
+    const prompts: string[] = [];
+    const app = appFor(services, fakeWake(prompts));
+    const retried = (key: string) =>
+        app.request("/listeners/discord/dispatch", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-intentic-extension": "discord-token", [LISTENER_DISPATCH_KEY_HEADER]: key },
+            body: JSON.stringify(message({ id: "k1", content: "only-once-please" })),
+        });
+    expect((await retried("key-1")).status).toBe(200);
+    expect((await retried("key-1")).status).toBe(200);
+    await waitFor(async () => expect((await services.automations.get("k-once"))?.runs).toHaveLength(1), SETTLES);
+    expect(prompts.join("\n").split("only-once-please")).toHaveLength(2);
+});
+
+// The stream's status is the gateway's word that the message is safe: it may stop keeping its own copy then.
+test("a streamed dispatch answers only once the message is in the daemon's durable inbox", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
+    await services.automations.upsert(listenerAutomation("k-stream"));
+    // The history volume is the shared test config's, so the message is told apart from other runs' by its own id.
+    const id = `k2-${randomUUID()}`;
+    const res = await postJson(appFor(services, fakeWake([])), "/listeners/discord/dispatch?stream=1", message({ id, mentioned: true }));
+    expect(res.status).toBe(200);
+    // Still inside the debounce: nothing has fired, so the inbox row is what holds the message.
+    expect((await listenerInboxRows(services)).filter((row) => row.line.includes(id))).toHaveLength(1);
+    await framesOf(res);
+});
+
+// A message whose live stream died with the gateway, replayed plain: its answer is owed to its thread, as a held wake's.
+test("a replayed dispatch asking for a channel answer owes the turn's words to the message's thread", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
+    await services.automations.upsert(listenerAutomation("k-replay"));
+    // Told apart from other runs' replies on the shared test history by its own words.
+    const answer = `late answer ${randomUUID()}`;
+    const app = appFor(services, fakeWake([], [{ kind: "delta", text: answer }, { kind: "done" }]));
+    const res = await postJson(app, "/listeners/discord/dispatch?answer=channel", message({ id: `k3-${randomUUID()}`, mentioned: true, thread: "th-1" }));
+    expect(res.status).toBe(200);
+    await waitFor(
+        async () => expect((await owedReplies(services)).filter((reply) => reply.text === answer)).toMatchObject([{ provider: "discord", channelId: "c1", thread: "th-1" }]),
+        SETTLES,
+    );
 });

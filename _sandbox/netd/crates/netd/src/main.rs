@@ -3,6 +3,7 @@
 
 mod cgroup;
 mod connect;
+mod evidence;
 mod fallback;
 mod feed;
 mod guard;

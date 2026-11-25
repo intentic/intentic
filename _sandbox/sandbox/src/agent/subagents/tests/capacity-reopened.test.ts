@@ -3,7 +3,8 @@ import { waitFor } from "@intentic/testing/bun";
 import { memoryFleet } from "../../../conversations/registry/agents-registry.testing.js";
 import { fakeTurns } from "../../../seams/turn-starter.testing.js";
 import { capacityNoticer } from "../capacity-reopened.js";
-import { settleChild } from "../child-records.js";
+import { CHILDREN, settleChild } from "../child-records.js";
+import type { ChildRecord } from "../children.js";
 import { noteSpawnedChild, openSpawnedChild, resetSubagents, settleSpawnedChild, waitForSubagent } from "../subagents.js";
 
 /* 2026-10-17: the second Claude account came back while the parent sat in its wait; only a log line said so. */
@@ -104,4 +105,26 @@ test("names a failed child once per ending, however many accounts come back; a p
     expect(turns.steers[1]?.text).toContain("child `sub-paused` on claude is failed or paused");
     settleSpawnedChild(actors, "sub-busy", { status: "completed", report: "done" });
     await parked;
+});
+
+// 2026-11-24: the retry chain links a respawn to the child it replaces, whatever the respawn's task line says.
+test("says nothing of a failed child a later spawn retried by name, though its task line reads otherwise", async () => {
+    parentWith("sub-old", "sub-other");
+    const spec = { prompt: "task", provider: "claude", model: "sonnet" } as const;
+    // SAFETY: the chain reads only the parent, the spec and when it started.
+    const kid = (fields: Partial<ChildRecord>): ChildRecord => ({ parent: "parent-1", spec, startedAt: 0, ...fields }) as ChildRecord;
+    actors.holdings(CHILDREN).hold("parent-1", "sub-old", kid({}), "sub-old");
+    settleChild(actors, "sub-old", { status: "failed", report: "", error: "limit", capacity: true });
+    settleChild(actors, "sub-other", { status: "failed", report: "", error: "limit", capacity: true });
+    openSpawnedChild({ conversationId: "parent-1", conversations: actors, subagentsDir: undefined }, { id: "sub-retry", description: "worded anew", provider: "claude" });
+    actors.holdings(CHILDREN).hold("parent-1", "sub-retry", kid({ spec: { ...spec, retryOf: "sub-old", taskId: "sub-old" }, startedAt: Date.now() }), "sub-retry");
+    const parked = waitForSubagent(actors, "parent-1", { target: "sub-retry", until: ["finished"], timeoutMs: 1_000 });
+    const turns = fakeTurns({ live: true });
+    noticer(turns)(back);
+    await waitFor(() => expect(turns.steers).toHaveLength(1));
+    expect(turns.steers[0]?.text).toContain("child `sub-other` on claude");
+    expect(turns.steers[0]?.text).not.toContain("sub-old");
+    settleSpawnedChild(actors, "sub-retry", { status: "completed", report: "done" });
+    await parked;
+    actors.holdings(CHILDREN).clear();
 });

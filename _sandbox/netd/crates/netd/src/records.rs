@@ -16,6 +16,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
+use crate::evidence::Evidence;
+
 pub const MEMORY_KILLS_FILE: &str = "memory-kills.jsonl";
 pub const NETD_KILLS_FILE: &str = "netd-kills.jsonl";
 pub const PRESSURE_FILE: &str = "pressure.jsonl";
@@ -116,6 +118,9 @@ pub struct NetdKill {
     pub held_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub psi: Option<Psi>,
+    /// `stuck` / `no-hello`: what netd kept of the daemon before the kill (evidence.rs).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<Evidence>,
 }
 
 /// One of the processes a pressure sample names (`PressureTopSchema`).
@@ -173,6 +178,11 @@ impl Records {
             dir: None,
             warned: Mutex::default(),
         }
+    }
+
+    /// The directory the records go to; none for records that go nowhere.
+    pub fn dir(&self) -> Option<&Path> {
+        self.dir.as_deref()
     }
 
     /// Appends `line` to `file` and flushes it to the disk.
@@ -321,6 +331,7 @@ mod tests {
                 silent_ms: Some(300_000),
                 held_ms: None,
                 psi: None,
+                evidence: None,
             })
             .unwrap()
         };

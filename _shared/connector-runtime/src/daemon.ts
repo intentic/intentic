@@ -1,12 +1,15 @@
 import type { ExtensionProcessApi } from "@intentic/extension-api/runtime";
-import type {
-    ListenerDispatchFrame,
-    ListenerMessage,
-    ListenerStatus,
-    ListenerStop,
-    ListenerStopAnswer,
-} from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
-import { type ListenerState, listenerRouteUrl, ListenerStateSchema } from "@intentic/sandbox-contract/listener-protocol";
+import {
+    LISTENER_DISPATCH_KEY_HEADER,
+    type ListenerDispatchFrame,
+    type ListenerMessage,
+    type ListenerState,
+    type ListenerStatus,
+    type ListenerStop,
+    type ListenerStopAnswer,
+    listenerRouteUrl,
+    ListenerStateSchema,
+} from "@intentic/sandbox-contract/listener-protocol";
 import { parsedJsonLines } from "@intentic/base/json-lines";
 import { chunksOf } from "@intentic/base/web-stream";
 import type { Logger } from "./log.js";
@@ -42,10 +45,23 @@ export interface SpeakOptions {
     readonly signal?: AbortSignal | undefined;
 }
 
+// What a dispatch may say beyond the message itself.
+export interface DispatchOptions {
+    // Names the message to the daemon, the same on every retry of it, so a retry it already admitted is not admitted
+    // twice (the contract's LISTENER_DISPATCH_KEY_HEADER). The dispatch spool sets it.
+    readonly key?: string | undefined;
+    // A replayed message whose live stream is gone: the daemon answers it in its channel's thread instead.
+    readonly answer?: "channel" | undefined;
+    // Called once the message is safe: admitted by the daemon, or kept in the gateway's own spool (dispatch-spool.ts) to
+    // be retried until it is. A platform that must acknowledge what it delivered (Slack's Socket Mode) does so here.
+    readonly onKept?: (() => void) | undefined;
+}
+
 export interface DaemonClient<TConfig> {
     readonly state: () => Promise<DaemonState<TConfig>>;
-    readonly dispatch: (message: ListenerMessage) => Promise<void>;
-    readonly dispatchStreaming: (message: ListenerMessage, onFrame: (frame: ListenerDispatchFrame) => void) => Promise<void>;
+    // Answers once the daemon admitted the message, or, through the spool, once it is kept to be retried.
+    readonly dispatch: (message: ListenerMessage, options?: DispatchOptions) => Promise<void>;
+    readonly dispatchStreaming: (message: ListenerMessage, onFrame: (frame: ListenerDispatchFrame) => void, options?: DispatchOptions) => Promise<void>;
     // A person in the channel asking to stop the turn a conversation is running; the daemon decides whether they may.
     readonly stop: (stop: ListenerStop) => Promise<ListenerStopAnswer>;
     // Reports never reject: a connector fires them and moves on, so a report the daemon did not take is logged here.
@@ -66,6 +82,41 @@ const refusal = async (route: string, res: Response, log: Logger): Promise<Error
         return "";
     });
     return new Error(`${route} returned ${res.status}${detail === "" ? "" : `: ${detail.slice(0, 200)}`}`);
+};
+
+// The two dispatch calls: a message posted to /dispatch, plain or with its turns' frames streamed back.
+const dispatchCalls = (provider: string, daemon: DaemonDoor, log: Logger): Pick<DaemonClient<unknown>, "dispatch" | "dispatchStreaming"> => {
+    const url = listenerRouteUrl("dispatch", provider);
+    const dispatchHeaders = (options: DispatchOptions): Record<string, string> =>
+        options.key === undefined ? { "content-type": "application/json" } : { "content-type": "application/json", [LISTENER_DISPATCH_KEY_HEADER]: options.key };
+    return {
+        dispatch: async (message, options = {}) => {
+            const query = options.answer === undefined ? "" : `?answer=${options.answer}`;
+            const res = await daemon.request(`${url}${query}`, { method: "POST", headers: dispatchHeaders(options), body: JSON.stringify(message) });
+            await res.text();
+            if (!res.ok) {
+                throw new Error(`${url} returned ${res.status}`);
+            }
+            options.onKept?.();
+        },
+        dispatchStreaming: async (message, onFrame, options = {}) => {
+            const res = await daemon.request(`${url}?stream=1`, { method: "POST", headers: dispatchHeaders(options), body: JSON.stringify(message) });
+            if (!res.ok || res.body === null) {
+                await res.text().catch(() => undefined);
+                throw new Error(`${url}?stream returned ${res.status}`);
+            }
+            // Today's daemon answers a stream only once the message is in its inbox; an older one a moment before.
+            options.onKept?.();
+            // A line that is not JSON costs that line, logged, and never the frames after it: the reply is still
+            // streaming into the owner's channel.
+            const skipped = (line: string): void => log.warn({ line: line.slice(0, 200) }, `${url}?stream sent a line that is not JSON`);
+            for await (const frame of parsedJsonLines(chunksOf(res.body), skipped)) {
+                // SAFETY: only the daemon writes these frames (the contract keeps them a type, not a schema), and a line
+                // that did not parse never reaches here.
+                onFrame(frame as ListenerDispatchFrame);
+            }
+        },
+    };
 };
 
 export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor, log: Logger): DaemonClient<TConfig> => {
@@ -91,28 +142,7 @@ export const createDaemonClient = <TConfig>(provider: string, daemon: DaemonDoor
             // The schema checks the feed's frame; a connector's config is its own shape, read by the connector.
             return ListenerStateSchema.parse(await res.json()) as DaemonState<TConfig>;
         },
-        dispatch: async (message) => {
-            const res = await daemon.request(url("dispatch"), { method: "POST", headers: jsonHeaders, body: JSON.stringify(message) });
-            await res.text();
-            if (!res.ok) {
-                throw new Error(`${listenerRouteUrl("dispatch", provider)} returned ${res.status}`);
-            }
-        },
-        dispatchStreaming: async (message, onFrame) => {
-            const res = await daemon.request(`${url("dispatch")}?stream=1`, { method: "POST", headers: jsonHeaders, body: JSON.stringify(message) });
-            if (!res.ok || res.body === null) {
-                await res.text().catch(() => undefined);
-                throw new Error(`${listenerRouteUrl("dispatch", provider)}?stream returned ${res.status}`);
-            }
-            // A line that is not JSON costs that line, logged, and never the frames after it: the reply is still
-            // streaming into the owner's channel.
-            const skipped = (line: string): void => log.warn({ line: line.slice(0, 200) }, `${listenerRouteUrl("dispatch", provider)}?stream sent a line that is not JSON`);
-            for await (const frame of parsedJsonLines(chunksOf(res.body), skipped)) {
-                // SAFETY: only the daemon writes these frames (the contract keeps them a type, not a schema), and a line
-                // that did not parse never reaches here.
-                onFrame(frame as ListenerDispatchFrame);
-            }
-        },
+        ...dispatchCalls(provider, daemon, log),
         stop: async (stop) => {
             const res = await daemon.request(url("stop"), { method: "POST", headers: jsonHeaders, body: JSON.stringify(stop) });
             if (!res.ok) {

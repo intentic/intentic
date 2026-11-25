@@ -16,6 +16,8 @@ export { WorkspaceEventKindSchema, WorkspaceEventSchema, type WorkspaceEventKind
 // the sandbox was down still lands, late, on the next poll
 // event: fires when an external system POSTs /automations/{id}/fire; its auth token lives outside the manifest
 // (.intentic/secrets/doors.json), never in this versioned, widely-readable file
+// `signature` additionally requires the provider's own signature, its secret named, not held, here; a signed
+// webhook also drops a redelivery of a call it already took (src/automations/fire/webhook-signature.ts)
 // listener: fires from a realtime source's own connection (an extension's gateway), no cron, no token, never reachable
 // via /fire. `channelId`/`eventType`/`mentioned` narrow it; absent means unfiltered. `provider`/`eventType` are open
 // strings validated at upsert against installed extensions' declared vocabulary
@@ -24,6 +26,21 @@ export { WorkspaceEventKindSchema, WorkspaceEventSchema, type WorkspaceEventKind
 // ci: the daemon's own pipeline receiver; `channelId` is the workspace repo, `branch` narrows further since a fleet
 // pushes one branch per agent
 // workspace: fires from the sandbox's own codebase (WorkspaceEventKindSchema)
+
+// How a webhook's sender signs what it sends, by the provider's own scheme: github (X-Hub-Signature-256), linear
+// (Linear-Signature), sentry (Sentry-Hook-Signature), stripe (Stripe-Signature) and standard-webhooks
+// (webhook-id/webhook-timestamp/webhook-signature, what Svix, Clerk, Resend and others send).
+export const WEBHOOK_SIGNATURE_SCHEMES = ["github", "linear", "sentry", "stripe", "standard-webhooks"] as const;
+export const WebhookSignatureSchemeSchema = z.enum(WEBHOOK_SIGNATURE_SCHEMES);
+export type WebhookSignatureScheme = z.infer<typeof WebhookSignatureSchemeSchema>;
+export const WebhookSignatureSchema = z.object({
+    scheme: WebhookSignatureSchemeSchema.describe("Which provider's signing scheme the sender uses."),
+    secret: z
+        .string()
+        .regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)
+        .describe("The name of the sandbox secret holding the signing secret the provider showed, like GITHUB_WEBHOOK_SECRET. The value itself is never stored here."),
+});
+export type WebhookSignature = z.infer<typeof WebhookSignatureSchema>;
 
 export const TriggerSchema = z.discriminatedUnion("kind", [
     z.object({
@@ -64,6 +81,11 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
             .positive()
             .optional()
             .describe("How many webhook calls a day may wake the agent, across every caller. Absent is a modest default rather than unlimited."),
+        // Added 2026-11-24, optional: a webhook that also proves its sender. The secret's VALUE stays in the sandbox's
+        // secrets store (never this versioned file); only its name is kept here.
+        signature: WebhookSignatureSchema.optional().describe(
+            "Require the sender's own signature on every call, on top of the webhook's token, and drop redeliveries of a call already taken. Absent accepts any call that carries the token.",
+        ),
     }),
     z.object({
         kind: z.literal("listener").describe("When a message arrives from somewhere outside."),

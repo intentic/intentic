@@ -36,4 +36,7 @@
 // names and a digest of its zod schemas, so a schema an extension parses cannot change without a new entry.
 // 2.45.0 records app-routes' `returnPath`, which validates a sign-in destination as a path on the editor's origin.
 // 2.46.0 records the routed conversation prefix and account routing fields in the agent and subagent schemas.
-export const extensionApiVersion = "2.46.0";
+// 2.47.0 records the listener protocol's reliable delivery: `id` on a /deliver body (a gateway posts one reply id once),
+// `features` on a gateway's status (`DELIVER_ID_FEATURE`), and the dispatch key header (`LISTENER_DISPATCH_KEY_HEADER`)
+// a gateway names a retried message by. Additive: each is optional, and an older side ignores it.
+export const extensionApiVersion = "2.47.0";

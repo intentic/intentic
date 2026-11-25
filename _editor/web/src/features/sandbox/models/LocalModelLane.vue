@@ -235,6 +235,7 @@ const memoryFact = computed(() =>
 );
 // One quieter line under the fact: what the offers were sized against (the free memory, so a model offered here runs at
 // full speed). An older daemon sized against the total and says nothing of it, so neither does this.
+// compat(daemon<1.318.0): `fullSpeedBytes` on the model fit
 const machineHint = computed(() =>
     fit?.fullSpeedBytes === undefined ? undefined : t(`connect.localModelLane.sizedForMemory`, { free: gb(fit.fullSpeedBytes) }),
 );

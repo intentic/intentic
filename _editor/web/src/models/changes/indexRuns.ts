@@ -128,6 +128,7 @@ const oneShot = async (repo: string, request: Omit<IndexRunStart, `repo`>, view?
 // with the passed run, and throws a sentence for everything else: refused by git, stopped, or declined at the prompt,
 // so the panel files each where it files any failure, and the typed commit message stays in its box.
 export const runIndexJob = async (repo: string, request: Omit<IndexRunStart, `repo`>, view?: ViewScope): Promise<IndexRun> => {
+    // compat(daemon<1.341.0): the git.indexRunStart route
     if (!supportsRoute(`git.indexRunStart`)) {
         return oneShot(repo, request, view);
     }

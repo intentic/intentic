@@ -1,4 +1,4 @@
-import { INTEGRATION_MARKERS } from "./_tools/constants/src/test-suites.mjs";
+import { INTEGRATION_MARKERS, MANUAL_MARKERS } from "./_tools/constants/src/test-suites.mjs";
 
 // Mutation testing: what the suite would notice if the code broke, not just whether it ran. Opt-in marker for the
 // `test-strength` chore (sandbox-contract/src/chores), which refuses to run without it. Mutates the daemon's
@@ -7,7 +7,7 @@ import { INTEGRATION_MARKERS } from "./_tools/constants/src/test-suites.mjs";
 
 // The unit suites of the two packages under mutation; `suites` is not used since its integration run would spend the
 // machine per mutant.
-const UNIT_RUN = `bun test --conditions=@intentic/src ${INTEGRATION_MARKERS.map((marker) => `--path-ignore-patterns '**/*.${marker}.test.*'`).join(" ")}`;
+const UNIT_RUN = `bun test --conditions=@intentic/src ${[...INTEGRATION_MARKERS, ...MANUAL_MARKERS].map((marker) => `--path-ignore-patterns '**/*.${marker}.test.*'`).join(" ")}`;
 
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {

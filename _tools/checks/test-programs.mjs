@@ -10,7 +10,7 @@
 // 3. an emitted package's tsconfig references every emitted package it depends on, so `tsc -b` builds them in order
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { INTEGRATION_NAME } from "../constants/src/test-suites.mjs";
+import { INTEGRATION_NAME, MANUAL_NAME } from "../constants/src/test-suites.mjs";
 import { finish } from "./lib/report.mjs";
 import { configFor, emitsDist, excludesOf, packages, root, sourceOf, TEST_FILE, walk } from "./lib/repo.mjs";
 
@@ -87,7 +87,7 @@ const problems = [];
 for (const { name, dir, pkg } of packages) {
     // Only where the budget exists: `suites` picks it by file name; Playwright specs reach the machine by definition.
     for (const file of runsSuites(pkg) ? walk(dir) : []) {
-        if (INTEGRATION_NAME.test(file) || !reachesTheMachine(file, undefined)) {
+        if (INTEGRATION_NAME.test(file) || MANUAL_NAME.test(file) || !reachesTheMachine(file, undefined)) {
             continue;
         }
         const relative = file.slice(root.length + 1);

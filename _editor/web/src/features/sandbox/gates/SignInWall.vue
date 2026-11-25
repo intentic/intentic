@@ -71,6 +71,7 @@ const roadNotice = computed<NoticeModel | undefined>(() => {
 // A refusal from a press here, else what the email road met before the wall went up.
 const shownNotice = computed(() => notice.value ?? roadNotice.value);
 // A daemon from before email sign-in, for an account with no other way in: the gap, named, with who closes it.
+// compat(daemon<1.333.0): `email` among /health signIn.proofs
 const outdatedNote = computed(() =>
     emailRoad.value?.kind === `outdated` ? (isOwner.value ? t(`sandbox.signInWall.emailNeedsUpdateOwner`) : t(`sandbox.signInWall.emailNeedsUpdate`)) : undefined,
 );

@@ -569,7 +569,7 @@ test("POST /automations/:id/fire skips bearer auth, enforces the door's token fr
 
     const ok = await fire(`/automations/deploy/fire?token=${deployToken}`);
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ ok: true });
+    expect(await ok.json()).toEqual({ ok: true, receipt: "queued" });
     // The turn runs detached (the fake agent completes instantly) and lands in the run history.
     await waitFor(async () => expect((await store.get("deploy"))?.runs).toHaveLength(1), SETTLES);
     expect((await store.get("deploy"))?.runs[0]?.outcome).toBe("completed");

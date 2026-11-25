@@ -28,6 +28,10 @@ import { createSlackReply, type SlackReplyDeps, statusStyleOf } from "./reply.js
 // A longer reply spills into follow-up messages in the thread.
 const SLACK_MAX = MESSAGE_LIMITS.slack;
 
+// How long an event's ack may wait for what it carries to be kept: under the three seconds Slack allows before it
+// redelivers, with room for the ack's own round trip.
+export const ACK_DEADLINE_MS = 2_500;
+
 // Allowlist, not denylist: Slack keeps adding bookkeeping subtypes; third-party `bot_message` can trigger us.
 const WAKING_SUBTYPES = new Set(["file_share", "thread_broadcast", "bot_message"]);
 
@@ -78,8 +82,9 @@ export interface SlackEventsBody {
     readonly team_id?: string;
 }
 
-// One `slack_event` envelope, narrowed to what this gateway reads; `ack` must be called for every one or Slack
-// redelivers it three times, then drops the socket.
+// One `slack_event` envelope, narrowed to what this gateway reads; `ack` must be called for every one, within three
+// seconds, or Slack redelivers it three times, then drops the socket. An event is acked once what it carries is kept
+// (connector-runtime's dispatch spool), so one heard by a gateway that died before keeping it comes again.
 export interface SlackEnvelope {
     readonly ack: () => Promise<void>;
     readonly type: string;
@@ -210,6 +215,41 @@ interface Context {
     readonly history: ListenerHistoryEntry[];
     readonly participated: boolean;
 }
+
+// One envelope to its handler, acked once, even one we chose not to wake on, or Slack redelivers it. An event is acked
+// once what it carries is kept, so a gateway that dies before then is sent it again; and by ACK_DEADLINE_MS whatever
+// happens, since Slack redelivers what is not acked within three seconds. Everything else is acked at once.
+const routeEnvelope = (
+    ctx: GatewayCtx,
+    envelope: SlackEnvelope,
+    handle: { readonly action: (body: SlackBlockActions) => Promise<void>; readonly events: (body: SlackEventsBody, kept: () => void) => Promise<void> },
+): void => {
+    let acked = false;
+    const ack = (): void => {
+        if (!acked) {
+            acked = true;
+            void envelope.ack().catch((error: unknown) => ctx.log.warn({ err: error }, "slack ack failed"));
+        }
+    };
+    const { body } = envelope;
+    if (envelope.type === "interactive" && "actions" in body && body.type === "block_actions") {
+        ack();
+        handle.action(body).catch((error: Error) => ctx.log.warn({ err: error }, "slack stop failed"));
+        return;
+    }
+    if (envelope.type !== "events_api" || "actions" in body) {
+        ack();
+        return;
+    }
+    const deadline = setTimeout(ack, ACK_DEADLINE_MS);
+    handle
+        .events(body, ack)
+        .catch((error: Error) => ctx.log.error({ err: error }, "slack event dispatch failed"))
+        .finally(() => {
+            clearTimeout(deadline);
+            ack();
+        });
+};
 
 export const createSlackListener = (
     ctx: GatewayCtx,
@@ -363,7 +403,7 @@ export const createSlackListener = (
         });
     };
 
-    const onMessage = async (connection: SlackConnection, message: SlackMessage, teamId: string | undefined): Promise<void> => {
+    const onMessage = async (connection: SlackConnection, message: SlackMessage, teamId: string | undefined, kept: () => void): Promise<void> => {
         if (!admitted(message)) {
             return;
         }
@@ -372,11 +412,11 @@ export const createSlackListener = (
         const author = message.user === undefined ? undefined : { id: message.user, name: await resolveName(connection, message.user) };
         const payload = payloadOf(message, heard, author, teamId);
         if (reply === undefined) {
-            await ctx.daemon.dispatch(payload);
+            await ctx.daemon.dispatch(payload, { onKept: kept });
             return;
         }
         try {
-            await ctx.daemon.dispatchStreaming(payload, reply.frame);
+            await ctx.daemon.dispatchStreaming(payload, reply.frame, { onKept: kept });
         } finally {
             await reply.settle();
         }
@@ -409,7 +449,7 @@ export const createSlackListener = (
         await connection.web.chat.postMessage({ channel: joinedEvent.channel, text: welcomeText(connection.selfUserId) });
     };
 
-    const onReaction = async (connection: SlackConnection, reaction: SlackReaction): Promise<void> => {
+    const onReaction = async (connection: SlackConnection, reaction: SlackReaction, kept: () => void): Promise<void> => {
         if (reaction.item.type !== "message" || selfIds().has(reaction.user)) {
             return;
         }
@@ -427,26 +467,31 @@ export const createSlackListener = (
                 ctx.log.warn({ err: error }, "slack reaction target fetch failed");
                 return undefined;
             });
-        await ctx.daemon.dispatch({
-            provider: "slack",
-            type: "reaction_added",
-            id: reaction.event_ts,
-            channelId: reaction.item.channel,
-            author: { id: reaction.user, name: await resolveName(connection, reaction.user) },
-            content: target?.text ?? "",
-            timestamp: tsToIso(reaction.event_ts),
-            extra: { reaction: reaction.reaction, threadTs: target?.thread_ts ?? reaction.item.ts, messageTs: reaction.item.ts },
-        });
+        await ctx.daemon.dispatch(
+            {
+                provider: "slack",
+                type: "reaction_added",
+                id: reaction.event_ts,
+                channelId: reaction.item.channel,
+                author: { id: reaction.user, name: await resolveName(connection, reaction.user) },
+                content: target?.text ?? "",
+                timestamp: tsToIso(reaction.event_ts),
+                extra: { reaction: reaction.reaction, threadTs: target?.thread_ts ?? reaction.item.ts, messageTs: reaction.item.ts },
+            },
+            { onKept: kept },
+        );
     };
 
-    const onEvents = async (connection: SlackConnection, body: SlackEventsBody): Promise<void> => {
+    // `kept` acknowledges the envelope: called once what it carries is safe (kept by the gateway's spool, or admitted by
+    // the daemon); an event that never gets that far is acknowledged once it was handled.
+    const onEvents = async (connection: SlackConnection, body: SlackEventsBody, kept: () => void): Promise<void> => {
         const event = body.event;
         if (event === undefined) {
             return;
         }
         // SAFETY: Slack names each event's shape by its `type`; the three cast below are the shapes those types carry.
         if (event.type === "reaction_added") {
-            await onReaction(connection, event as SlackReaction);
+            await onReaction(connection, event as SlackReaction, kept);
             return;
         }
         if (event.type === "member_joined_channel") {
@@ -455,22 +500,15 @@ export const createSlackListener = (
         }
         // `app_mention` handled like `message`: Slack can send both; dedup drops whichever arrives second.
         if (event.type === "message" || event.type === "app_mention") {
-            await onMessage(connection, event as SlackMessage, body.team_id);
+            await onMessage(connection, event as SlackMessage, body.team_id, kept);
         }
     };
 
     return {
-        onEvent: (connection, envelope) => {
-            // Ack first, unconditionally: an unacked envelope is redelivered, even one we chose not to wake on.
-            void envelope.ack().catch((error: unknown) => ctx.log.warn({ err: error }, "slack ack failed"));
-            const { body } = envelope;
-            if (envelope.type === "interactive" && "actions" in body && body.type === "block_actions") {
-                onAction(connection, body).catch((error: Error) => ctx.log.warn({ err: error }, "slack stop failed"));
-                return;
-            }
-            if (envelope.type === "events_api" && !("actions" in body)) {
-                onEvents(connection, body).catch((error: Error) => ctx.log.error({ err: error }, "slack event dispatch failed"));
-            }
-        },
+        onEvent: (connection, envelope) =>
+            routeEnvelope(ctx, envelope, {
+                action: (body) => onAction(connection, body),
+                events: (body, kept) => onEvents(connection, body, kept),
+            }),
     };
 };

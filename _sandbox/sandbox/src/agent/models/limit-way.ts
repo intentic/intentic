@@ -52,7 +52,7 @@ export const limitWayOf = async (
         handoffStateNote(services, { conversationId: turn.conversationId, standing, checklist, retiredSessionId: params.sessionId }),
         handoffHistory(services, turn),
     ]);
-    const handoffTokens = tokensOfChars(withRuntimeHistory("", rows).length + (note?.text.length ?? 0));
+    const handoffTokens = tokensOfChars(withRuntimeHistory("", rows, turn.conversationId).length + (note?.text.length ?? 0));
     const handoff = await handoffOfferOf(services, { turn, ran: params.ran, sessionId: params.sessionId, contextTokens, handoffTokens, rows, kept: params.kept }).catch(
         (error: unknown) => {
             services.logger.warn({ err: error, conversationId: turn.conversationId }, "hand-off: could not work out the ways on");

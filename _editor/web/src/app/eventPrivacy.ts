@@ -13,8 +13,9 @@ import { maskText } from "./replayText";
 //  - Page titles, and the message of an exception, which quotes whatever failed and so often names a path. The stack
 //    stays: its frames are the app's own bundle.
 //
-// Nothing else needs a rule. Our own `track()` events carry enums and counts (and `sandbox_setup_failed` the machine's
-// own words, scrubbed at the call by `scrubDiagnostic`), the heatmap event is keyed by page address (handled with the
+// Nothing else needs a rule. Our own `track()` events carry enums and counts, held to that by a schema per event
+// (analyticsEvents/eventRegistry.ts) that `track` checks before sending (with `sandbox_setup_failed` the machine's own
+// words, scrubbed at the call by `scrubDiagnostic`), the heatmap event is keyed by page address (handled with the
 // addresses), and web vitals carry no selectors because `web_vitals_attribution` is off.
 
 /** Where a browser path sits in the router's table: its route pattern, or undefined for a path nothing matches. */

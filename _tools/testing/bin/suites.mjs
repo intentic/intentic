@@ -2,12 +2,13 @@
 // A package's test script: `suites [--watch] [filter...]`. Two `bun test` runs, since a run has one budget and the
 // two kinds cannot share it: unit suites get a hang detector, `*.integration.test.*` and `*.e2e.test.*` get the
 // machine's time. Both read the package's own bunfig.toml (preload, ignore patterns) from the working directory.
+// `*.eval.test.*` files spend real model allowance: neither run sees them, and only `suites --manual <filter>` runs them.
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { timingArgs } from "../src/timings.ts";
-import { INTEGRATION_MARKERS, INTEGRATION_NAME, STOOD_DOWN_FILE, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
+import { INTEGRATION_MARKERS, INTEGRATION_NAME, MANUAL_MARKERS, MANUAL_NAME, STOOD_DOWN_FILE, SUITE_TIMEOUTS } from "../../constants/src/test-suites.mjs";
 import { junitFile, SOURCE_CONDITION } from "../../scripts/verify/failure-units.mjs";
 import { staleDist } from "../../scripts/build/dist-staleness.mjs";
 import { rebuildNote, rebuildStale } from "../../scripts/build/dist-rebuild.mjs";
@@ -18,12 +19,14 @@ import { leastSlots, maxWorkers, slotsPerWorker, standaloneWorkers, wantedWorker
 
 // Unit: purely a hang detector, since nothing in a unit suite waits on anything. Integration: real work on a shared
 // machine, room for two 30s waitFor SETTLES.
-const { unit: UNIT_TIMEOUT_MS, integration: INTEGRATION_TIMEOUT_MS } = SUITE_TIMEOUTS;
+const { unit: UNIT_TIMEOUT_MS, integration: INTEGRATION_TIMEOUT_MS, eval: MANUAL_TIMEOUT_MS } = SUITE_TIMEOUTS;
 
 // The kind is in the file name; `bun test` matches a positional filter against the path, so these select the second
 // run and the ignore globs exclude it from the first.
 const INTEGRATION_FILTERS = INTEGRATION_MARKERS.map((marker) => `.${marker}.test.`);
 const INTEGRATION_GLOBS = INTEGRATION_MARKERS.map((marker) => `**/*.${marker}.test.*`);
+// Manual suites are left out of every run unless `--manual` asks for them by name.
+const MANUAL_GLOBS = MANUAL_MARKERS.map((marker) => `**/*.${marker}.test.*`);
 
 // Worker count per run, decided as each run starts. `TEST_WORKERS` set by the caller wins: it is how a repo-wide fan-out
 // bounds memory (test-workers.mjs sizes it to the cgroup). On a CI host with a test memory pool (TEST_SLOTS_DIR,
@@ -100,19 +103,24 @@ const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
     process.stdout.write(
         [
-            "usage: suites [--watch] [--worker-gib=N] [bun test flags] [filter...]",
+            "usage: suites [--watch] [--unit] [--worker-gib=N] [bun test flags] [filter...]",
+            "       suites --manual <filter...>   runs only the *.eval.test.* files the filters name (they spend real model allowance)",
             "",
             "Runs this package's tests with bun: unit files under a hang detector, *.integration.test.* and *.e2e.test.*",
             "in a second run with the machine's time. Run it from the package's own directory (it reads that bunfig.toml).",
             "A filter is any part of a test file's path: `suites src/agent/foo.test.ts` or `suites foo`.",
+            "--unit runs the unit files alone, as a lane on a host the integration suites were not written for does.",
             "",
         ].join("\n"),
     );
     process.exit(0);
 }
 const watch = args.includes("--watch");
+// The unit run alone: CI's Windows lane, whose host carries none of what the integration suites stand up.
+const unitOnly = args.includes("--unit");
+const manual = args.includes("--manual");
 const workerGib = Number(args.map((arg) => WORKER_GIB.exec(arg)?.[1]).find((gib) => gib !== undefined) ?? 1);
-const flags = args.filter((arg) => arg !== "--watch" && arg !== "--" && arg.startsWith("-") && !WORKER_GIB.test(arg));
+const flags = args.filter((arg) => !["--watch", "--unit", "--manual", "--"].includes(arg) && arg.startsWith("-") && !WORKER_GIB.test(arg));
 // bun matches a positional filter as a substring of the file's path, which it spells without a leading "./".
 const filters = args.filter((arg) => !arg.startsWith("-")).map((arg) => arg.replace(/^\.\//u, ""));
 
@@ -128,8 +136,14 @@ const chosen = (() => {
         process.stderr.write(`suites: no test file's path contains ${filters.map((filter) => `"${filter}"`).join(" or ")}\n`);
         process.exit(1);
     }
-    const paths = (integration) => files.filter((file) => INTEGRATION_NAME.test(file) === integration).map((file) => `./${file}`);
-    return { unit: paths(false), integration: paths(true) };
+    const paths = (integration) =>
+        files.filter((file) => !MANUAL_NAME.test(file) && INTEGRATION_NAME.test(file) === integration).map((file) => `./${file}`);
+    const manualPaths = files.filter((file) => MANUAL_NAME.test(file)).map((file) => `./${file}`);
+    if (!manual && manualPaths.length === files.length) {
+        process.stderr.write(`suites: ${manualPaths.join(", ")} ${manualPaths.length === 1 ? "is a manual suite that spends" : "are manual suites that spend"} real model allowance: run with --manual to mean it\n`);
+        process.exit(1);
+    }
+    return { unit: paths(false), integration: paths(true), manual: manualPaths };
 })();
 
 // Set by a gate that reads failures back as units (failure-units.mjs); each run then also writes a JUnit report there.
@@ -183,7 +197,7 @@ const reportStoodDown = () => {
 // would discover.
 const filesFor = (integration) =>
     chosen === undefined
-        ? globSync(TEST_FILES, { exclude: IGNORES }).filter((file) => INTEGRATION_NAME.test(file) === integration)
+        ? globSync(TEST_FILES, { exclude: IGNORES }).filter((file) => !MANUAL_NAME.test(file) && INTEGRATION_NAME.test(file) === integration)
         : integration
           ? chosen.integration
           : chosen.unit;
@@ -292,9 +306,26 @@ if (process.env.CI !== "true") {
     }
 }
 
+if (manual) {
+    // Asked for by name only, never as "everything": a manual run with no filter would spend on every eval at once.
+    if (watch || chosen === undefined || chosen.manual.length === 0) {
+        process.stderr.write("suites: --manual runs the *.eval.test.* files its filters name, and these name none (and it does not --watch)\n");
+        process.exit(1);
+    }
+    const status = await run(
+        [`--timeout=${MANUAL_TIMEOUT_MS}`, ...report("eval"), ...ignoreArgs(IGNORES)],
+        chosen.manual,
+        chosen.manual,
+        MANUAL_TIMEOUT_MS,
+        "eval",
+    );
+    reportStoodDown();
+    process.exit(status);
+}
+
 if (watch) {
     // One run: a watch never exits, so the second run would never start; the larger budget keeps a slow suite alive.
-    const status = await run(["--watch", `--timeout=${INTEGRATION_TIMEOUT_MS}`, ...ignoreArgs(IGNORES)], filters, undefined, INTEGRATION_TIMEOUT_MS, "watch");
+    const status = await run(["--watch", `--timeout=${INTEGRATION_TIMEOUT_MS}`, ...ignoreArgs([...IGNORES, ...MANUAL_GLOBS])], filters, undefined, INTEGRATION_TIMEOUT_MS, "watch");
     reportStoodDown();
     process.exit(status);
 }
@@ -304,17 +335,17 @@ const unit =
     chosen?.unit.length === 0
         ? 0
         : await run(
-              [`--timeout=${UNIT_TIMEOUT_MS}`, ...report("unit"), ...ignoreArgs([...IGNORES, ...INTEGRATION_GLOBS])],
+              [`--timeout=${UNIT_TIMEOUT_MS}`, ...report("unit"), ...ignoreArgs([...IGNORES, ...INTEGRATION_GLOBS, ...MANUAL_GLOBS])],
               chosen?.unit ?? [],
               filesFor(false),
               UNIT_TIMEOUT_MS,
               "unit",
           );
 const integration =
-    chosen?.integration.length === 0
+    unitOnly || chosen?.integration.length === 0
         ? 0
         : await run(
-              [`--timeout=${INTEGRATION_TIMEOUT_MS}`, ...report("integration"), ...ignoreArgs(IGNORES)],
+              [`--timeout=${INTEGRATION_TIMEOUT_MS}`, ...report("integration"), ...ignoreArgs([...IGNORES, ...MANUAL_GLOBS])],
               chosen?.integration ?? INTEGRATION_FILTERS,
               filesFor(true),
               INTEGRATION_TIMEOUT_MS,

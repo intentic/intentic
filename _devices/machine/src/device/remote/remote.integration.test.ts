@@ -10,7 +10,7 @@ import type { PersonOnScreen } from "../indicator.js";
 import { createRemote, type Remote, type RemoteSeams } from "./remote.js";
 import { REMOTED_BIN_ENV, realRemotedIo, resolveRemoted } from "./remoted-binary.js";
 import { readRemotedConfig, readRemotedStatus, type RemotedConfig, type RemotedStatus } from "./remoted-files.js";
-import { spawnRemoted } from "./remoted.js";
+import { spawnRemoted } from "./remoted-spawn.js";
 
 /* The supervisor over a real child: a FAKE intentic-remoted, a script that reads the config it is handed as remoted does,
    reports every uplink `up` unless its address says it is unreachable, echoes what each allows and the pause back in its

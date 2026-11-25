@@ -253,6 +253,15 @@ const SPAWN_FIELDS = {
     fallbacks: FALLBACKS_FIELD,
     schema: SCHEMA_FIELD,
     after: z.array(z.string().min(1)).max(16).optional().describe(AFTER_WORDS),
+    retryOf: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+            "When this spawn retries a subagent of yours that failed (or that you cancelled to replace), its id: the new one joins that " +
+                "subagent's retry chain. Once three in a row of a chain have failed, a further retry is refused and you are told to stop " +
+                "and report what failed instead.",
+        ),
     paths: workspacePaths.describe("Workspace-relative folders this child needs. Its checkout contains these folders and each repository's root-level files; everything else is absent. Use for fan-outs over large workspaces. Work outside these folders does not belong to this child."),
     freshOf: z
         .object({
@@ -287,6 +296,7 @@ const spawnAsked = (args: SpawnArgs): ChildSpawnSpec | { readonly refused: strin
         ...opt("result", schema?.data === undefined ? undefined : { schema: schema.data }),
         ...opt("freshOf", args.freshOf),
         ...opt("after", args.after),
+        ...opt("retryOf", args.retryOf),
         ...opt("paths", args.paths),
     };
 };

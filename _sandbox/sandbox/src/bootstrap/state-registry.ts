@@ -11,6 +11,7 @@ import { activityLogDocument } from "../activity/activity-store.js";
 import { claudeSeatsDocument } from "../agent/providers/claude/claude-seats.js";
 import { burnRatesDocument } from "../agent/run/spend/burn-rates.js";
 import { readingsLogDocument } from "../agent/run/spend/readings-log.js";
+import { subagentReceiptsDocument } from "../agent/subagents/retries/mutation-receipts.js";
 import { spawnedChildrenDocument } from "../agent/subagents/spawned-children.js";
 import { scriptRunsDocument } from "../agent/subagents/workflows/script-run-store.js";
 import { keptJobRecordsDocument } from "../agent/tools/jobs/kept-job-records.js";
@@ -32,6 +33,7 @@ import { servicesDocument } from "../auth/principals/services-store.js";
 import { controlTokensDocument } from "../auth/tokens/control-tokens.js";
 import { doorTokensDocument } from "../auth/tokens/door-tokens.js";
 import { automationRunsDocument, automationWatchDocument, automationsDocument, automationsRelocationStep } from "../automations/automations-store.js";
+import { webhookDeliveriesDocument } from "../automations/durable/delivery-ledger.js";
 import { listenerInboxDocument, workspaceInboxDocument } from "../automations/durable/inbox-store.js";
 import { heldWakesDocument, heldWakesOffWorkspaceStep } from "../automations/held-wakes-store.js";
 import { scheduleCoverageDocument } from "../automations/schedule-coverage.js";
@@ -61,6 +63,7 @@ import { runtimeInstallsDocument } from "../environment/runtime-installs.js";
 import { extensionSettingsDocument } from "../extensions/extension-settings.js";
 import { extensionUpdatePolicyDocument, extensionUpdatesDocument } from "../extensions/extension-updates.js";
 import { extensionUsageDocument } from "../extensions/extension-usage.js";
+import { listenerOutboxDocument } from "../extensions/listener/listener-outbox.js";
 import { memberCommitIdentityDocument } from "../git/attribution/commit-attribution.js";
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
@@ -157,6 +160,7 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     claudeSeatsDocument,
     burnRatesDocument,
     readingsLogDocument,
+    subagentReceiptsDocument,
     spawnedChildrenDocument,
     scriptRunsDocument,
     keptJobRecordsDocument,
@@ -180,6 +184,7 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     automationRunsDocument,
     automationsDocument,
     automationWatchDocument,
+    webhookDeliveriesDocument,
     listenerInboxDocument,
     workspaceInboxDocument,
     heldWakesDocument,
@@ -201,10 +206,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     choreLedgerDocument,
     choreProbesDocument,
     ciDocument,
-    composerDraftsDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
+    composerDraftsDocument,
     projectDeliveriesDocument,
     conversationRecordDocument,
     definitionDocument,
@@ -215,6 +220,7 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     extensionUpdatePolicyDocument,
     extensionUpdatesDocument,
     extensionUsageDocument,
+    listenerOutboxDocument,
     memberCommitIdentityDocument,
     hookApprovalsDocument,
     hookRequestsDocument,
@@ -255,10 +261,10 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     ruleFiringsDocument,
     runnerIdentityDocument,
     safetyLogDocument,
-    autostartDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    autostartDocument,
     credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,

@@ -27,6 +27,14 @@ addressed to the agent; `--from <sender>` (repeatable) admits only those senders
 always starts a new agent per arrival, so it needs `--model`, and it gets what arrived as its payload. It is as fast
 as its source: chat at once, Gmail within about a minute.
 
+**Woken by another service's webhook.** `automations propose <id> --webhook --prompt "…" --why "…"` makes an
+automation that fires when something POSTs to `/automations/<id>/fire` with its token (shown on the Automations view
+once approved). Add `--signed <scheme>:<SECRET_NAME>` when the sender signs its deliveries (`github`, `linear`,
+`sentry`, `stripe` or `standard-webhooks`): every call then also needs a valid, recent signature made with the secret
+stored under that name (ask for it with `secrets ask SECRET_NAME` first; the definition holds only the name), a
+redelivery of a call already taken answers `duplicate` and wakes nothing, and credential-named keys in the body are
+masked before the agent sees it. The webhook's answer says `receipt`: `queued`, `duplicate` or `ignored` (GitHub's ping).
+
 **Waiting on something outside this sandbox.** For a CI run, a deploy or a remote queue, arm `mcp__watch__start` with a
 cheap check command and end the turn; it lasts a day at most. To be told, or to pick this conversation back up, when
 something happens out in the world that may take longer (a package version ships, a repository releases, a page

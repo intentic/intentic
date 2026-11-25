@@ -1,5 +1,6 @@
 import { errorMessage } from "@intentic/base/errors";
 import { z } from "zod";
+import { type OAuthFetch, secureOAuthFetch } from "./oauth-fetch.js";
 
 // What an MCP server asks of a client, read the way the MCP authorization spec (2026-07-28) says a client finds out:
 // call it without a credential; a 401 names its protected-resource metadata (RFC 9728) in `WWW-Authenticate`, or the
@@ -66,7 +67,9 @@ const challengeParams = (header: string | null): ReadonlyMap<string, string> => 
     return params;
 };
 
-const getJson = async <T>(url: string, schema: z.ZodType<T>, fetchImpl: typeof fetch): Promise<T | undefined> => {
+// Metadata is read through the sign-in's guarded fetch (oauth-fetch.ts): no redirect past its checks, no private
+// address for a public server, no answer past 1 MiB.
+const getJson = async <T>(url: string, schema: z.ZodType<T>, fetchImpl: OAuthFetch): Promise<T | undefined> => {
     if (!secureEnough(url)) {
         return undefined;
     }
@@ -121,7 +124,7 @@ export type AuthServerAnswer = { readonly metadata: AuthServerMetadata } | { rea
 // The authorization server's metadata, validated as the spec requires before anything is sent to it: its `issuer` is the
 // one asked about, character for character, its endpoints are HTTPS, and it does PKCE with S256. Undefined when no
 // candidate address holds any.
-const authServerMetadata = async (issuer: string, fetchImpl: typeof fetch = fetch): Promise<AuthServerAnswer> => {
+const authServerMetadata = async (issuer: string, fetchImpl: OAuthFetch): Promise<AuthServerAnswer> => {
     const base = URL.parse(issuer);
     if (base === null || !secureEnough(issuer)) {
         return undefined;
@@ -164,12 +167,14 @@ const initialize = JSON.stringify({
     params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "intentic", version: "1" } },
 });
 
-// Asks the server what it needs, and follows a sign-in it names to an authorization server a client may use.
-export const discoverMcpAuth = async (url: string, fetchImpl: typeof fetch = fetch): Promise<McpAuthDiscovery> => {
+// Asks the server what it needs, and follows a sign-in it names to an authorization server a client may use. `oauthFetch`
+// reads the metadata; the server itself is asked with `fetchImpl`, carrying no credential.
+export const discoverMcpAuth = async (url: string, fetchImpl: typeof fetch = fetch, oauthFetch?: OAuthFetch): Promise<McpAuthDiscovery> => {
     const server = URL.parse(url);
     if (server === null) {
         return { kind: "unreachable", detail: "that is not an address" };
     }
+    const guarded = oauthFetch ?? secureOAuthFetch({ resource: url });
     let response: Response;
     try {
         response = await fetchImpl(url, {
@@ -189,11 +194,11 @@ export const discoverMcpAuth = async (url: string, fetchImpl: typeof fetch = fet
     if (response.status !== 401 && !(response.status === 403 && challenge.has("resource_metadata"))) {
         return { kind: "open" };
     }
-    const resource = await firstProtectedResource(server, challenge.get("resource_metadata"), fetchImpl);
+    const resource = await firstProtectedResource(server, challenge.get("resource_metadata"), guarded);
     // Without protected-resource metadata, the earlier revisions' rule: the server's own origin is its authorization
     // server (some hosted servers still publish nothing else).
     const issuer = resource?.authorization_servers[0] ?? server.origin;
-    const found = await authServerMetadata(issuer, fetchImpl);
+    const found = await authServerMetadata(issuer, guarded);
     if (found === undefined) {
         return { kind: "token" };
     }
@@ -210,7 +215,7 @@ export const discoverMcpAuth = async (url: string, fetchImpl: typeof fetch = fet
     };
 };
 
-const firstProtectedResource = async (server: URL, named: string | undefined, fetchImpl: typeof fetch): Promise<ProtectedResource | undefined> => {
+const firstProtectedResource = async (server: URL, named: string | undefined, fetchImpl: OAuthFetch): Promise<ProtectedResource | undefined> => {
     for (const candidate of protectedResourceCandidates(server, named)) {
         const metadata = await getJson(candidate, ProtectedResourceSchema, fetchImpl);
         if (metadata !== undefined && describes(metadata, server)) {

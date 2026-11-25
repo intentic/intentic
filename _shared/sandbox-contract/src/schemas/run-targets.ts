@@ -1,5 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import { z } from "zod";
+import { CHECKOUT_HOOKS_FILE } from "./checkout-hooks.js";
 import { ArtifactNameSchema } from "./device-artifacts.js";
 
 // <repo>/.intentic/run.json declares what a repository can run, and where: in the sandbox, on the owner's own computers, or
@@ -21,7 +22,7 @@ export const HEAVY_CLASSES_FILE = `${STATE_DIR}/heavy.json`;
 
 // Project files under `.intentic/` live at each repository's root, including a project kept at the workspace root.
 // The root repo tracks them (VERSIONED_STATE_PATHS in state/workspace-state.ts), so an agent's edit lands like code.
-export const ROOT_PROJECT_PATHS: readonly string[] = [RUN_TARGETS_FILE, HEAVY_CLASSES_FILE];
+export const ROOT_PROJECT_PATHS: readonly string[] = [RUN_TARGETS_FILE, HEAVY_CLASSES_FILE, CHECKOUT_HOOKS_FILE];
 
 const RepoPathSchema = z
     .string()

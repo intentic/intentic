@@ -53,8 +53,11 @@ flowchart LR
 - `verify/quarantine.mjs` decides a verify group's verdict after its turbo graph: a failing test case is re-run alone
   (`verify/flakes.mjs`), and one that passes then, or is already quarantined, does not fail the job. The list lives in
   `/ci-cache/quarantine`, and every gate run names it. Nightly's `quarantine` job re-runs each listed test alone, releasing
-  it after three passing nights and evicting it on one failure. `verify/timing-hazards.mjs` is preflight's report of
-  real sleeps, wall-clock assertions and fixed ports in test code. It fails nothing.
+  it after three passing nights and evicting it on one failure. Timing hazards in test code are the
+  `timing-hazards` check's (`_tools/checks`).
+- `verify/dependency-advisories.sh` scans `pnpm-lock.yaml` and every `Cargo.lock` for known advisories with a pinned,
+  cached osv-scanner, for ci.yml's `advisories` job (on a lockfile change) and the nightly. It reports and blocks nothing;
+  an exception is an `osv-scanner.toml` entry beside its lockfile, with a reason and a date to look again.
 - `verify/clock-suites.mjs` is the nightly's `verify-clocks`: the test files whose text touches dates, zones or crons, run in
   UTC+14 and UTC-11. `lib/seed-buildinfo.mjs` starts the web's vue-tsc from a sibling worktree's build info, and on the
   fleet from the last passing check's (`TSBUILDINFO_SHARE_DIR`).

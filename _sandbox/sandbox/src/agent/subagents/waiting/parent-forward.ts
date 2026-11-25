@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import type { RunnerSubagentResult } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
@@ -9,7 +10,10 @@ import { ROSTER, subagentRunning } from "../../../conversations/actor/subagent-r
 import { backgroundJobOf, runningJobsOf } from "../../tools/jobs/background-jobs.js";
 import { boundChildReport, reportBoundOf, type ServerTool, type SubagentToolsWrap } from "./subagent-wait.js";
 import { childNamed } from "./wait-targets.js";
+import { RECEIPTED_TOOLS } from "../retries/call-receipts.js";
+import { payloadHash, toJson } from "../retries/mutation-receipts.js";
 import { WORDS_SAID, wordsSaid } from "./work-wait.js";
+import { opt } from "../../../opt.js";
 
 // A runner's turn hands the tools that touch children to its parent (runners/fleet/parent-subagents.ts has the call, and
 // says why); this wraps the `subagents` server's tools so each of those goes there, and the rest stays on the runner.
@@ -79,7 +83,60 @@ export interface ParentSubagentsDeps {
     readonly logger: Pick<Logger, "warn">;
     // The conversations already told their parent is too old for the door, so each is told once.
     readonly toldOld: Set<string>;
+    // The receipted calls a dropped link or a stopped turn cut off, by conversation, tool and payload: the id a retry of
+    // the same ask goes out under, so the parent answers it with what the first did (call-receipts.ts). Absent, this
+    // runner's own for its life.
+    readonly cutOff?: Map<string, CutOffCall>;
 }
+
+/* A RETRY OF A CUT-OFF CALL IS THE SAME CALL (2026-11-24). A spawn whose answer a dropped link lost may still have started
+   its child at the parent, and the model's retry is a new tool call with a new id. The call's id is kept here once the
+   link cuts it off, keyed by what it asked, and a call asking exactly that again within the half hour goes out under it,
+   which the parent answers from its receipt instead of acting twice. Any answer from the parent ends it. */
+export interface CutOffCall {
+    readonly callId: string;
+    readonly at: number;
+}
+const CUT_OFF_KEPT_MS = 30 * 60_000;
+const CUT_OFF_MOST = 200;
+const CUT_OFF = new Map<string, CutOffCall>();
+
+// A receipted call as it goes out: its id, and its key among the cut-off calls.
+interface ForwardedCall {
+    readonly callId: string;
+    readonly key: string;
+}
+
+const ToolUseMetaSchema = z.looseObject({ _meta: z.looseObject({ "claudecode/toolUseId": z.string().min(1) }) });
+
+// The id a receipted call goes out under: a cut-off call's own where this asks the same, else the runtime's id for the
+// tool call (Claude Code's), else a fresh one; and its key among the cut-off calls.
+const callIdFor = (deps: ParentSubagentsDeps, tool: string, args: ToolArgs, extra: ToolExtra): ForwardedCall => {
+    const cutOff = deps.cutOff ?? CUT_OFF;
+    const key = `${deps.conversationId}\u0000${tool}\u0000${payloadHash(toJson(args))}`;
+    const earlier = cutOff.get(key);
+    if (earlier !== undefined && Date.now() - earlier.at <= CUT_OFF_KEPT_MS) {
+        return { callId: earlier.callId, key };
+    }
+    const meta = ToolUseMetaSchema.safeParse(extra);
+    return { callId: meta.success ? meta.data["_meta"]["claudecode/toolUseId"] : randomUUID(), key };
+};
+
+// After the parent's answer: a call cut off is kept for its retry, one answered is done with.
+const noteCutOff = (deps: ParentSubagentsDeps, call: ForwardedCall, cut: boolean): void => {
+    const cutOff = deps.cutOff ?? CUT_OFF;
+    cutOff.delete(call.key);
+    if (!cut) {
+        return;
+    }
+    const now = Date.now();
+    for (const [key, kept] of cutOff) {
+        if (now - kept.at > CUT_OFF_KEPT_MS || cutOff.size >= CUT_OFF_MOST) {
+            cutOff.delete(key);
+        }
+    }
+    cutOff.set(call.key, { callId: call.callId, at: now });
+};
 
 const WaitArgsSchema = z.object({ target: z.string().optional(), targets: z.array(z.string()).optional() });
 
@@ -144,13 +201,17 @@ const OLD_PARENT =
     "This conversation runs on a runner, and the sandbox it runs for is too old to supervise subagents for it, so this ran on " +
     "the runner: subagents started here live on the runner, off the board the person watches, and land from there.";
 
+// A retry with the same arguments goes out as the same call (callIdFor), which a parent of this build answers once.
+const RETRY_SAME =
+    ", with exactly the same arguments: it goes out as this same call, so what the sandbox already did with it is answered rather than done twice (a sandbox older than this runner does not know that, so check with wait before spawning the same task again)";
+
 const unreachable = (tool: string, message: string): ToolResult =>
     text({
         ok: false,
         outcome: "unreachable",
         message:
             `This conversation runs on a runner, and its subagents belong to the sandbox it runs for, which did not answer ` +
-            `this \`${tool}\` (${message}). Nothing was done here in its place. Call it again once that sandbox is back${tool === "spawn" ? "; a spawn it took before the link dropped is on its board, so check with wait before spawning the same task again" : ""}.`,
+            `this \`${tool}\` (${message}). Nothing was done here in its place. Call it again once that sandbox is back${RECEIPTED_TOOLS.has(tool) ? RETRY_SAME : ""}.`,
     });
 
 // What the parent made of a call: a result to hand over, a sign the call is the runner's own to serve, or an answer the
@@ -161,14 +222,24 @@ type ParentReply =
     | { readonly kind: "said"; readonly result: ToolResult; readonly unreachable?: true };
 
 // One call asked of the parent, its words-heard race and its fallbacks read; `signal` ends it.
-const askParent = async (deps: ParentSubagentsDeps, tool: string, args: ToolArgs, signal: AbortSignal): Promise<ParentReply> => {
+const askParent = async (
+    deps: ParentSubagentsDeps,
+    tool: string,
+    args: ToolArgs,
+    signal: AbortSignal,
+    call?: ForwardedCall,
+): Promise<ParentReply> => {
     const sent = tool === "workflow" ? await withScriptRead(deps.cwd, args) : args;
     const listening = new AbortController();
     const both = AbortSignal.any([signal, listening.signal]);
     // Words said into this turn reach it here, never at the parent: a wait hands the turn back for them as it would locally.
     const heard = tool === "wait" ? wordsSaid(deps.conversations, deps.conversationId, both).then(() => ({ kind: "heard" as const })) : new Promise<never>(() => undefined);
-    const answer = await Promise.race([deps.call(tool, sent, deps.conversationId, { timeoutMs: callDeadlineMs(tool, args), signal: both }), heard]);
+    const options = { timeoutMs: callDeadlineMs(tool, args), signal: both, ...opt("callId", call?.callId) };
+    const answer = await Promise.race([deps.call(tool, sent, deps.conversationId, options), heard]);
     listening.abort();
+    if (call !== undefined && answer.kind !== "heard") {
+        noteCutOff(deps, call, answer.kind === "unreachable" || answer.kind === "aborted");
+    }
     switch (answer.kind) {
         case "heard":
             return { kind: "said", result: text({ outcome: "message", note: WORDS_SAID }) };
@@ -203,8 +274,14 @@ const toldOnce = (deps: ParentSubagentsDeps, result: ToolResult): ToolResult => 
 };
 
 // A call answered by the parent, or here where the parent says it is not one of its; `here` serves it on the runner.
-const parentOrHere = async (deps: ParentSubagentsDeps, tool: string, args: ToolArgs, here: () => Promise<ToolResult>): Promise<ToolResult> => {
-    const reply = await askParent(deps, tool, args, deps.signal);
+const parentOrHere = async (
+    deps: ParentSubagentsDeps,
+    tool: string,
+    args: ToolArgs,
+    here: () => Promise<ToolResult>,
+    call?: ForwardedCall,
+): Promise<ToolResult> => {
+    const reply = await askParent(deps, tool, args, deps.signal, call);
     if (reply.kind === "here") {
         const result = await here();
         return reply.old ? toldOnce(deps, result) : result;
@@ -322,7 +399,7 @@ const forwarded = (deps: ParentSubagentsDeps, tool: ServerTool): ServerTool["han
     if (child.success && childNamed(deps.conversations, deps.conversationId, child.data.child) !== undefined) {
         return here();
     }
-    return parentOrHere(deps, tool.name, args, here);
+    return parentOrHere(deps, tool.name, args, here, RECEIPTED_TOOLS.has(tool.name) ? callIdFor(deps, tool.name, args, extra) : undefined);
 };
 
 /** The server's tools with each the parent runs handed to it; the rest as they were. */

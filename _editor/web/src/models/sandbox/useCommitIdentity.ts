@@ -20,6 +20,7 @@ import { queryClient } from "../../lib/queryPersistence";
 const QUERY_KEY = rpcKey(`settings.commitIdentity`);
 
 // A daemon older than these routes keeps no commit identity, so it is never asked and the fields are not offered.
+// compat(daemon<1.395.0): the settings.commitIdentity and settings.setCommitIdentity routes
 const daemonKeeps = (): boolean => supportsRoute(`settings.commitIdentity`) && supportsRoute(`settings.setCommitIdentity`);
 
 export function useCommitIdentity() {

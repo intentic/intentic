@@ -7,6 +7,7 @@ import { createGateway, type GatewayCard, type GatewayDeps, type GatewayUse, typ
 import { brokerRoutes, GATEWAY_PLACEHOLDER, secretBearingEnv } from "./broker-routes.js";
 import { evaluateRules, pathMatches } from "./broker-rules.js";
 import { brokerSessionsFrom } from "./broker-session.js";
+import { createOpenCalls, type OpenCalls } from "../credentials/open-calls.js";
 
 const sessions = brokerSessionsFrom(async () => Buffer.alloc(32, 7));
 
@@ -468,5 +469,78 @@ describe("the credential gateway", () => {
         } finally {
             await upstream.close();
         }
+    });
+});
+
+describe("the credential gateway's open calls", () => {
+    const card: GatewayCard = {
+        name: "Service (service)",
+        config: { token: "real-secret", url: "https://svc.example.com" },
+        broker: { routes: [{ upstream: "${url}/api", env: "SERVICE_URL", headers: { authorization: "Bearer ${token}" } }] },
+    };
+    // An upstream whose answer is an event stream that stays open until it is cut.
+    const streaming = async (_input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const signal = init?.signal;
+        const body = new ReadableStream<Uint8Array>({
+            start: (controller) => signal?.addEventListener("abort", () => controller.error(signal.reason)),
+        });
+        return new Response(body, { headers: { "content-type": "text/event-stream" } });
+    };
+    // The door's calls, with the sweep the gateway registers kept for the test to run.
+    const sweptCalls = () => {
+        const calls = createOpenCalls({ call: { perConversation: 2, perDoor: 4 }, stream: { perConversation: 1, perDoor: 4 } });
+        let stillValid: Parameters<OpenCalls["watch"]>[0] = async () => undefined;
+        const openCalls: OpenCalls = {
+            ...calls,
+            watch: (check) => {
+                stillValid = check;
+                return () => undefined;
+            },
+        };
+        return { openCalls, sweep: () => calls.sweep(stillValid) };
+    };
+    const eventStream = { headers: { accept: "text/event-stream" } };
+
+    test("refuses a conversation's calls past its share, with streams counted apart", async () => {
+        const { openCalls } = sweptCalls();
+        const gateway = createGateway(harness(card, { fetch: Object.assign(streaming, { preconnect: fetch.preconnect }), openCalls }).deps);
+        const base = await addressFor(0, "https://svc.example.com/api");
+        expect((await gateway(new Request(`${base}/events`, eventStream))).status).toBe(200);
+        const refused = await gateway(new Request(`${base}/events`, eventStream));
+        expect(refused.status).toBe(429);
+        expect(refused.headers.get("x-intentic-gateway")).toBe("refused");
+        // Ordinary calls still go through while the stream is open.
+        expect((await gateway(new Request(`${base}/x`))).status).toBe(200);
+        // Another conversation has a share of its own.
+        expect((await gateway(new Request(`${await addressFor(0, "https://svc.example.com/api", "c2")}/events`, eventStream))).status).toBe(200);
+    });
+
+    test("cuts an open stream once the card's credential is replaced, the card removed, or the reach narrowed", async () => {
+        let current: GatewayCard | undefined = card;
+        let reach = true;
+        const { openCalls, sweep } = sweptCalls();
+        const gateway = createGateway(harness(card, { fetch: Object.assign(streaming, { preconnect: fetch.preconnect }), openCalls, card: async () => current, reaches: async () => reach }).deps);
+        // The answer, once the gateway has admitted and forwarded it, and the read of its stream.
+        const open = async (conversationId: string) => {
+            const response = await gateway(new Request(`${await addressFor(0, "https://svc.example.com/api", conversationId)}/events`, eventStream));
+            return { read: response.text() };
+        };
+
+        const first = await open("c1");
+        expect(await sweep()).toBe(0);
+        current = { ...card, config: { ...card.config, token: "rotated" } };
+        expect(await sweep()).toBe(1);
+        await expect(first.read).rejects.toThrow("given another credential");
+
+        const second = await open("c2");
+        reach = false;
+        expect(await sweep()).toBe(1);
+        await expect(second.read).rejects.toThrow("may no longer use");
+
+        reach = true;
+        const third = await open("c3");
+        current = undefined;
+        expect(await sweep()).toBe(1);
+        await expect(third.read).rejects.toThrow("was removed");
     });
 });

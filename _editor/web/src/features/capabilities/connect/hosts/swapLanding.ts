@@ -39,6 +39,7 @@ export const swapStanding = (
     now: SwapProgress,
 ): SwapVerdict => {
     const { from, overlay } = aim;
+    // compat(daemon<1.346.0): `running` on /info
     if (answered.running === undefined) {
         if (overlay !== undefined) {
             return answered.appliedHash === overlay ? `landed` : `waiting`;

@@ -1,6 +1,6 @@
 import { failureFingerprint } from "@intentic/sandbox-contract/policy/failure-codes";
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { track } from "../../app/analytics";
+import { type Track, track } from "../../app/analytics";
 import { type AgentStanding, turnInFlight } from "./agentStatus-standing";
 import type { WayOut, WayOutKind } from "../conversations/endings/wayOut";
 
@@ -9,8 +9,7 @@ import type { WayOut, WayOutKind } from "../conversations/endings/wayOut";
    the editor: a failure's words can hold a path, a command or the person's own message, so they are read here (to tell
    one failure from the next) and never sent. */
 
-type Properties = Readonly<Record<string, string | number | boolean>>;
-type Capture = (event: string, properties: Properties) => void;
+type Capture = Track;
 
 /** The card's facts these events are read off: its standing, and how many times in a row it failed the same way. */
 export type FailureCard = AgentStanding & Pick<AgentSummary, `id` | `updatedAt`> & Partial<Pick<AgentSummary, `failureRepeats`>>;

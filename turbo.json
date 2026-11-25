@@ -231,6 +231,22 @@
                 "CI_HOST_JOBS"
             ]
         },
+        // The automation-request eval: real Claude turns in this checkout's sandbox image, graded from the daemon's
+        // records. It spends real model allowance, so only a person or the opted-in nightly job runs it.
+        "eval:automations": {
+            "dependsOn": ["^build"],
+            "cache": false,
+            "passThroughEnv": [
+                "INTENTIC_EVAL_CLAUDE_TOKEN",
+                "INTENTIC_EVAL_MODEL",
+                "INTENTIC_EVAL_ONLY",
+                "INTENTIC_EVAL_TRIALS",
+                "INTENTIC_EVAL_CONCURRENCY",
+                "INTENTIC_EVAL_MIN_PASS_RATE",
+                "SANDBOX_E2E_IMAGE",
+                "CI_HOST_JOBS"
+            ]
+        },
         // THE PROVIDER CONFORMANCE TIER, and the only e2e task here that GATES a release.
         //
         // Named apart from `e2e` for the reason the two tasks below are: it asks for a provisioning of its own,

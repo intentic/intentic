@@ -5,13 +5,20 @@ import { sleep } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { parseJsonWith } from "@intentic/base/json";
 import { connectExtensionProcess, type ExtensionRuntime } from "@intentic/extension-api/runtime";
-import type { ListenerGatewayPhase, ListenerStatus } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 // The subpath, not the package root: the root loads every schema in the contract, tens of megabytes a gateway never uses.
-import { type ListenerDeliver, ListenerDeliverSchema } from "@intentic/sandbox-contract/listener-protocol";
+import {
+    DELIVER_ID_FEATURE,
+    type ListenerDeliver,
+    ListenerDeliverSchema,
+    type ListenerGatewayPhase,
+    type ListenerStatus,
+} from "@intentic/sandbox-contract/listener-protocol";
 import { extensionGatewayUrlFile } from "@intentic/sandbox-contract/workspace-state";
-import { type DaemonClient, createDaemonClient } from "./daemon.js";
+import { createDaemonClient } from "./daemon.js";
+import { type DeliveryReceipts, deliveryReceipts } from "./durable/delivery-receipts.js";
+import { spoolDispatches } from "./durable/dispatch-spool.js";
 import type { GatewayCtx } from "./context.js";
-import { createLog } from "./log.js";
+import { createLog, type Logger } from "./log.js";
 
 // The connector gateway shell: a baked extension's autoStart process that reconciles a connector's desired connections
 // against the daemon's listener state, reports status on a cadence, serves /health and the connector's control routes,
@@ -138,6 +145,36 @@ const defaultPhase = <THandle>(view: SlotView<THandle>): ListenerGatewayPhase =>
     return view.connecting ? "connecting" : "disconnected";
 };
 
+// The /deliver door: what it answers for a request body. A failed deliver answers 502 with the provider's bare sentence,
+// not the generic `error:`-prefixed line; a delivered one answers what the hook said about it, as JSON. A body naming
+// its reply's id posts that id once (delivery-receipts.ts).
+const deliverAnswer = async (
+    provider: string,
+    deliver: GatewayHooks<never, never>["deliver"],
+    receipts: DeliveryReceipts,
+    log: Logger,
+    raw: string,
+): Promise<{ status: number; body: string; type: string }> => {
+    const plain = (status: number, body: string) => ({ status, body, type: "text/plain" });
+    if (deliver === undefined) {
+        return plain(501, `the ${provider} connector cannot post into a channel on its own`);
+    }
+    const body = deliverBodyOf(raw);
+    if (body === undefined) {
+        return plain(400, "channelId and text required");
+    }
+    const { channelId, text, thread, id } = body;
+    try {
+        const delivered: Delivered | void = await receipts.once(id, () => deliver(channelId, text, thread));
+        return { status: 200, body: JSON.stringify(delivered ?? {}), type: "application/json" };
+    } catch (error) {
+        if (!(error instanceof GatewayRefusal)) {
+            log.error({ err: error }, "delivery failed");
+        }
+        return plain(502, deliveryErrorResponse(provider, error));
+    }
+};
+
 export const runConnectorGateway = async <TConfig extends { readonly provider: string }, THandle>(
     spec: GatewaySpec<TConfig, THandle>,
 ): Promise<void> => {
@@ -158,7 +195,10 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
     const port = Number(requireEnv("PORT", missing("PORT")));
     const workspaceRoot = runtime.api.workspaceRoot;
 
-    const daemon: DaemonClient<TConfig> = createDaemonClient(spec.provider, runtime.api.daemon, log);
+    // Every message heard goes through the spool: kept on disk until the daemon admits it (dispatch-spool.ts).
+    const daemon = spoolDispatches(createDaemonClient<TConfig>(spec.provider, runtime.api.daemon, log), { dir: join(runtime.api.stateDir, "dispatch-spool"), log });
+    // What /deliver posted by reply id, so the daemon's retry of a reply posts it once (delivery-receipts.ts).
+    const receipts = deliveryReceipts(join(runtime.api.stateDir, "delivery-receipts.json"), log);
 
     // Which connection each slot holds, and the config key it was built from (to detect a token edit as a change).
     const wired = new Map<string, { key: string; handle: THandle }>();
@@ -252,30 +292,8 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
                 gateway: (hooks.phase ?? ((_: ConnectorEntry<TConfig>, each: SlotView<THandle>) => defaultPhase(each)))(connector, view),
             };
         });
-        await daemon.status({ connections, ...hooks.statusExtras?.() });
-    };
-
-    // The /deliver door: what it answers for a request body. A failed deliver answers 502 with the provider's bare
-    // sentence, not the generic `error:`-prefixed line; a delivered one answers what the hook said about it, as JSON.
-    const deliverAnswer = async (raw: string): Promise<{ status: number; body: string; type: string }> => {
-        const plain = (status: number, body: string) => ({ status, body, type: "text/plain" });
-        if (hooks.deliver === undefined) {
-            return plain(501, `the ${spec.provider} connector cannot post into a channel on its own`);
-        }
-        const body = deliverBodyOf(raw);
-        if (body === undefined) {
-            return plain(400, "channelId and text required");
-        }
-        const { channelId, text, thread } = body;
-        try {
-            const delivered: Delivered | void = await hooks.deliver(channelId, text, thread);
-            return { status: 200, body: JSON.stringify(delivered ?? {}), type: "application/json" };
-        } catch (error) {
-            if (!(error instanceof GatewayRefusal)) {
-                log.error({ err: error }, "delivery failed");
-            }
-            return plain(502, deliveryErrorResponse(spec.provider, error));
-        }
+        // The features say what this build does that an older one did not, for a daemon newer than this gateway.
+        await daemon.status({ connections, ...hooks.statusExtras?.(), features: [DELIVER_ID_FEATURE] });
     };
 
     // Loopback surface: /health always, plus the connector's control routes when it has a CLI; binds PORT.
@@ -297,7 +315,7 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
                     return send("ok");
                 }
                 if (req.method === "POST" && path === "/deliver") {
-                    const answer = await deliverAnswer(await readBody(req));
+                    const answer = await deliverAnswer(spec.provider, hooks.deliver, receipts, log, await readBody(req));
                     return send(answer.body, answer.status, answer.type);
                 }
                 const handled = await hooks.routes?.(req, () => readBody(req));
@@ -347,6 +365,8 @@ export const runConnectorGateway = async <TConfig extends { readonly provider: s
 
     await reconcileNow();
     setInterval(() => void reconcileNow(), RECONCILE_MS);
+    // What an earlier process heard and the daemon never took goes to it now, oldest first.
+    void daemon.replay();
     await postStatus();
     setInterval(() => void postStatus(), spec.statusMs ?? STATUS_MS);
 };

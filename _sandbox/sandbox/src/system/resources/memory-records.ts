@@ -87,6 +87,20 @@ export const NetdKillSchema = z.object({
     failures: z.number().optional(),
     error: z.string().optional(),
     step: z.string().optional(),
+    // stuck / no-hello: what netd kept of the daemon before killing it (netd's evidence.rs). `capture` names a file in
+    // the logs directory holding every thread's state, wait channel, syscall and kernel stack; `state`, `wchan` and
+    // `syscall` are the main thread's from it; `signal` the one sent for a Node diagnostic report, and `report` its
+    // path when one was written in time (a loop truly stuck writes none: Node answers the signal on the loop).
+    evidence: z
+        .object({
+            capture: z.string().optional(),
+            state: z.string().optional(),
+            wchan: z.string().optional(),
+            syscall: z.string().optional(),
+            signal: z.string().optional(),
+            report: z.string().optional(),
+        })
+        .optional(),
 });
 export type NetdKill = z.infer<typeof NetdKillSchema>;
 

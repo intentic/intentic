@@ -8,6 +8,7 @@ import { accountOf, authorizeUrl, expiryOf, pkcePair, type RegisteredClient, reg
 import { type BearerOf, createBearers } from "./mcp-renewal.js";
 import { createFlowBook, type Flow, type FlowEnd, type FlowOutcome } from "./mcp-sign-in-flows.js";
 import { type McpSession, mcpSessionOf } from "./mcp-session.js";
+import { type AddressLookup, type OAuthFetch, secureOAuthFetch } from "./oauth-fetch.js";
 
 // An MCP server's OAuth sign-in, run by the sandbox from start to finish except the person's approval, and the upkeep
 // of what it yields. The browser is sent to the authorization server and lands back on this sandbox's own address
@@ -51,7 +52,11 @@ export interface McpSignInsDeps {
     // How the authorization server's consent page names this client.
     readonly clientName: () => string;
     readonly logger: Pick<Logger, "warn">;
+    // The transport in place of the daemon's own (a suite's): it asks the MCP server, and carries the OAuth requests
+    // once oauth-fetch.ts has checked each one.
     readonly fetch?: typeof fetch;
+    // How host names resolve for that check (a suite's stand-in DNS).
+    readonly lookup?: AddressLookup;
     readonly now?: () => number;
 }
 
@@ -104,7 +109,7 @@ const landingProblem = (flow: Flow, query: URLSearchParams): string | undefined 
 
 // The code traded for tokens, with the verifier only this daemon holds and the resource the sign-in is for. An
 // unreachable token endpoint is a failed sign-in like a refused one, said apart.
-const exchange = async (flow: Flow, code: string, fetchImpl: typeof fetch, now: () => number): Promise<FlowEnd> => {
+const exchange = async (flow: Flow, code: string, fetchImpl: OAuthFetch, now: () => number): Promise<FlowEnd> => {
     let answer: Awaited<ReturnType<typeof tokenRequest>>;
     try {
         answer = await tokenRequest(
@@ -138,6 +143,8 @@ const exchange = async (flow: Flow, code: string, fetchImpl: typeof fetch, now: 
 
 export const createMcpSignIns = (deps: McpSignInsDeps): McpSignIns => {
     const fetchImpl = deps.fetch ?? fetch;
+    // Every request that carries or fetches OAuth material goes through the guard, scoped to the MCP server it is for.
+    const oauthFetch = (resource: string): OAuthFetch => secureOAuthFetch({ resource, ...opt("fetch", deps.fetch), ...opt("lookup", deps.lookup) });
     const now = deps.now ?? Date.now;
     const flows = createFlowBook(now);
     const redirectUriOf = (): string => `${deps.callbackBase().replace(/\/+$/, "")}${MCP_CALLBACK_PATH}`;
@@ -157,7 +164,7 @@ export const createMcpSignIns = (deps: McpSignInsDeps): McpSignIns => {
                 `${host} does not register clients by itself: make an OAuth client in its own settings with ${redirectUri} as its redirect address, and enter its client ID`,
             );
         }
-        const registered = await registerClient(registration, { redirectUri, clientName: deps.clientName() }, fetchImpl);
+        const registered = await registerClient(registration, { redirectUri, clientName: deps.clientName() }, oauthFetch(input.url));
         if ("refused" in registered) {
             throw new McpSignInRefusal(`${host} refused to register this sandbox as a client (${registered.refused})`);
         }
@@ -165,7 +172,7 @@ export const createMcpSignIns = (deps: McpSignInsDeps): McpSignIns => {
     };
 
     const begin = async (input: McpSignInInput): Promise<McpSignInStart> => {
-        const found = await discoverMcpAuth(input.url, fetchImpl);
+        const found = await discoverMcpAuth(input.url, fetchImpl, oauthFetch(input.url));
         if (found.kind !== "oauth") {
             throw new McpSignInRefusal(refusalOf(found));
         }
@@ -194,7 +201,7 @@ export const createMcpSignIns = (deps: McpSignInsDeps): McpSignIns => {
             return { ok: false, message: "This sign-in was not started here, or it already finished or lapsed. Go back to Intentic and sign in again." };
         }
         const problem = landingProblem(flow, query);
-        const end: FlowEnd = problem === undefined ? await exchange(flow, query.get("code") ?? "", fetchImpl, now) : { state: "failed", message: problem };
+        const end: FlowEnd = problem === undefined ? await exchange(flow, query.get("code") ?? "", oauthFetch(flow.resource), now) : { state: "failed", message: problem };
         flows.finish(flow, end);
         return end.state === "done"
             ? { ok: true, message: `Signed in to ${flow.server}. You can close this window and go back to Intentic.` }
@@ -202,10 +209,10 @@ export const createMcpSignIns = (deps: McpSignInsDeps): McpSignIns => {
     };
 
     return {
-        check: async (url) => checkOf(await discoverMcpAuth(url, fetchImpl), redirectUriOf()),
+        check: async (url) => checkOf(await discoverMcpAuth(url, fetchImpl, oauthFetch(url)), redirectUriOf()),
         begin,
         land,
         wait: flows.wait,
-        bearer: createBearers({ store: deps.store, logger: deps.logger, fetch: fetchImpl, now }),
+        bearer: createBearers({ store: deps.store, logger: deps.logger, oauthFetch, now }),
     };
 };

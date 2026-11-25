@@ -5,7 +5,7 @@ import type { AutomationRecord } from "../automations-store.js";
 import { opt } from "../../opt.js";
 import { perDaemon } from "../durable/daemon-memory.js";
 import { admitFire, admitThenLetGo, queuedFire } from "../durable/fire-admission.js";
-import { channelAnswerSink } from "../../extensions/listener/listener-deliver.js";
+import { channelAnswerSink } from "../../extensions/listener/listener-outbox.js";
 import type { ReleasedWake } from "../held-wakes-store.js";
 import { mintConversationId } from "./fire-sessions.js";
 import type { FireOptions, FireOutcome, ThreadPlace, ThreadFireOptions } from "./fire-options.js";

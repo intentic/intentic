@@ -16,7 +16,8 @@ The binary of the sandbox's network daemon: it owns every port and the ingress t
 - [src/main.rs](src/main.rs) — the modules and how the process starts.
 - [src/proxy.rs](src/proxy.rs) — where every listener and tunnel stream hands its requests, and how each is relayed.
 - [src/route.rs](src/route.rs) — which side answers a request.
-- [src/supervise.rs](src/supervise.rs) — runs Node, restarts it and ends what it left behind.
+- [src/supervise.rs](src/supervise.rs) — runs Node, restarts it and ends what it left behind; before a stuck kill,
+  [src/evidence.rs](src/evidence.rs) keeps its threads and a diagnostic report.
 - [src/memguard/mod.rs](src/memguard/mod.rs) — the memory guard, on a thread of its own: kills a runaway, samples
   pressure, and the rule that holds a restart while memory is short.
 - [src/fallback.rs](src/fallback.rs) — keeps the last daemon build that booted and starts it, through

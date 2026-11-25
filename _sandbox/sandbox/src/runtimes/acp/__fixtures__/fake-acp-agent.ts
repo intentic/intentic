@@ -14,7 +14,9 @@ import {
     type SessionUpdate,
 } from "@agentclientprotocol/sdk/unstable";
 import { z } from "zod";
-import { type AcpConnection, releaseSession } from "../acp-connection.js";
+import { opt } from "../../../opt.js";
+import { type AcpDialect, plainReader } from "@intentic/acp-events/dialects";
+import { type AcpConnection, childStopper, releaseSession } from "../acp-connection.js";
 import type { AcpSessionMeta } from "../acp-spawn.js";
 import { routeSessions, type SessionRouting } from "../acp-routing.js";
 
@@ -295,8 +297,16 @@ export const fakeAcpAgentApp = (
 
 // A hand-built AcpConnection over the in-process composition, what acp-connection.ts produces from a spawned
 // process, minus the process. Mirrors its per-session turn routing so the adapter under test is the real one.
-export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities = { loadSession: false }): AcpConnection => {
-    const routing: SessionRouting = { turns: new Map(), abandoned: new Set(), models: new Map(), thoughts: new Map(), modes: new Map() };
+export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities = { loadSession: false }, dialect?: AcpDialect): AcpConnection => {
+    const reader = dialect?.reader() ?? plainReader();
+    const routing: SessionRouting = {
+        turns: new Map(),
+        abandoned: new Set(),
+        models: new Map(),
+        thoughts: new Map(),
+        modes: new Map(),
+        ...opt("dialect", dialect === undefined ? undefined : { speaks: dialect, reader }),
+    };
     const { turns, abandoned } = routing;
     let dead = false;
     let terminals = 0;
@@ -341,6 +351,10 @@ export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities
         kill: () => {
             dead = true;
         },
+        dialect,
+        reader,
+        stopChildren: (sessionId) => stopChildren(sessionId),
     };
+    const stopChildren = childStopper(connection, () => {});
     return connection;
 };

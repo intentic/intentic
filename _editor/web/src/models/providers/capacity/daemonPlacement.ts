@@ -76,6 +76,7 @@ export const placementKey = (provider: AgentProvider, model: string, loop?: stri
  * asked yet, or whose answer a capacity frame staled, is asked once, outside the computed that read it.
  */
 export const daemonPlacement = (provider: AgentProvider, model: string, loop?: string): DaemonPlacement | undefined => {
+    // compat(daemon<1.428.0): the usage.placement route
     if (!advertisesRoute(`usage.placement`)) {
         return undefined;
     }

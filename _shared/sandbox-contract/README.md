@@ -171,7 +171,9 @@ flowchart LR
   conversations that both moved the contract never conflict on it. By hand, from source with no build first:
   `pnpm --filter @intentic/sandbox-contract lock`. `src/state/contract-lock.test.ts`
   fails while the lock and the schemas disagree. `_tools/checks/contract-shrink.mjs` fails CI for a pushed branch
-  that shrinks it with no commit declaring the break (`type!:` or `Breaking-Note:`); nothing checks the push itself.
+  that shrinks it with no commit declaring the break (`type!:` or `Breaking-Note:`); nothing checks the push itself. It also
+  compares the doors whose far end lags in the field (machine agent, phone, browser extension, runner, netd wires) with
+  the last release tag, where no declaration lets a shrink through (`_tools/checks/lib/release-doors.mjs`).
 
 The cold-session trim settings (`coldTrim`, `coldTrimHoldout`, `coldTrimMinTokens`) and optional usage stamps
 (`coldTrimArm`, `coldTrimmed`) support comparing eligible Claude Code follow-ups. `SavingsReport.coldTrim` holds

@@ -45,6 +45,19 @@ flowchart LR
   posting a failed turn's notice and retiring the typing indicator; `deliverChunked` is the `/deliver` door's
   chunk loop, trying the next bot only while nothing has posted. Each platform's one-message ceiling is the contract's
   `MESSAGE_LIMITS`, re-exported here; how a platform decides a message is addressed to us stays in its gateway.
+- Nothing heard is lost to a daemon that is down. Every dispatch goes through the spool ([src/durable/dispatch-spool.ts](src/durable/dispatch-spool.ts)):
+  the message is written under the extension's state directory before the daemon is asked, and stays there, retried
+  with backoff and across a gateway restart, until the daemon admits it, which today's daemon says only once the
+  message is in its durable inbox. Every try names the message by one key (the contract's `idempotency-key`), so the
+  daemon admits a retry it already took once, and a platform's redelivery of a message already kept is not sent twice.
+  A message answered live is retried in place while its reply waits; past two minutes it is replayed plain with
+  `answer=channel`, and the daemon answers it in its thread. `onKept` says when a message is safe, which is when Slack's
+  envelope is acked. A spool that cannot write tries the message once, as before it existed; a message kept a day is
+  given up and logged.
+- `/deliver` posts a reply id once ([src/durable/delivery-receipts.ts](src/durable/delivery-receipts.ts)): the daemon's reply outbox
+  retries a reply whose answer never came back, and a repeat of an id posted in the last two days answers the first
+  post's result. The gateway's status declares it (`features: ["deliver-id"]`), and a daemon retries such an
+  ambiguous failure only through a gateway that does.
 - Listener memory (duplicate delivery keys, chat rings, typing heartbeats) is bounded and forgotten on restart, with the
   defaults every gateway shares (`RECENT_KEYS_MAX`, `HISTORY_LIMIT`, `TYPING_MAX_MS`).
 - A gateway with a CLI publishes its loopback address at the contract's `extensionGatewayUrlFile`, keyed by provider

@@ -139,6 +139,18 @@ export const gateSettingsHooks = async (
     return { held: true, set };
 };
 
+// A set the daemon runs itself rather than Claude Code (a repository's checkout hooks, conversations/worktrees/
+// checkout-hooks.ts): whether the owner approved it in this exact form, filing it under Approvals beside the settings
+// hook sets when not, so it is approved, dismissed and revoked through the same cards and the same ledger.
+export const hookSetApproved = async (historyRoot: string, set: HookSet, conversationId: string | undefined, now = Date.now()): Promise<boolean> => {
+    if (await approved(historyRoot, set.digest)) {
+        return true;
+    }
+    // No plugins in such a set, so no module is ever read.
+    await requestApproval(historyRoot, set, conversationId, () => Promise.reject(new Error("no module to read")), now);
+    return false;
+};
+
 // Said to the model and shown on the message, so neither reads a hook that did not fire as a broken one.
 export const HOOKS_HELD_NOTE: TurnNote = {
     title: "Workspace hooks are off this turn",

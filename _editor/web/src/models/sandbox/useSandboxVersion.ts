@@ -61,6 +61,7 @@ export function useSandboxVersion(poll?: Ref<number | false>) {
     // runtime alone, which is then the best word there is.
     const pairIssue = (runtime: AgentCapabilities[`runtime`], provider: AgentProvider): string | undefined => {
         const key = pairHealthKey(runtime, provider);
+        // compat(daemon<1.335.0): per-pair runtime health keys (pairHealthKey)
         return info.value?.runtimes?.[key] === undefined ? runtimeIssue(runtime) : runtimeIssue(key);
     };
 

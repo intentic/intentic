@@ -17,7 +17,7 @@ const USAGE = `automations — what this sandbox runs on its own, and how to ask
   automations check <source>      run a ready-made check once now and print what it sees (exit 0 passes, 1 does not)
   automations sources             what can wake an agent the moment something arrives (new mail, a chat message, a
                                   CI run): each listener's provider id, its events, and whether it names senders
-  automations propose <id> <source | --guard '<cmd>'> --prompt "…" --why "…" [options]
+  automations propose <id> <source | --guard '<cmd>' | --webhook> --prompt "…" --why "…" [options]
                                   ask the owner, on a card in this chat, to switch on a watch; nothing runs until they
                                   approve it, and the card shows what its check sees today
   automations propose <id> --on <provider> --model <provider>/<model> --prompt "…" --why "…" [options]
@@ -42,6 +42,12 @@ Listening instead of checking (--on): no schedule, always starts a new agent, so
   --mentioned                     only what is addressed to the agent (google: mail with your address in To)
   --from <sender>                 only from this sender (an e-mail address, a user id, as the source names them);
                                   repeat for several. Everyone else is ignored. Only on a source that names senders.
+
+A webhook instead (--webhook): woken when something POSTs to /automations/<id>/fire with its token
+  --webhook                       an event automation; its URL and token are on the Automations view once approved
+  --signed <scheme>:<SECRET_NAME> also require the sender's signature: scheme is github, linear, sentry, stripe or
+                                  standard-webhooks, and SECRET_NAME the sandbox secret holding its signing secret
+                                  (\`secrets ask SECRET_NAME\` first). A redelivery of a call already taken wakes nothing.
 
 Options for propose:
   --every <15m|2h|6h|1d|1w>       how often it checks (default 6h); or --cron '<expr>' [--tz <Zone/Name>]
@@ -123,7 +129,7 @@ const triggerText = (trigger) => {
         case "once":
             return `once at ${new Date(trigger.at).toISOString()}`;
         case "event":
-            return "webhook";
+            return trigger.signature === undefined ? "webhook" : `webhook, signed (${trigger.signature.scheme}, secret ${trigger.signature.secret})`;
         case "listener":
             return `${trigger.eventType ?? "messages"} from ${trigger.provider}${trigger.channelId === undefined ? "" : ` in ${trigger.channelId}`}${trigger.mentioned === true ? ", addressed to it" : ""}`;
         default:
@@ -400,6 +406,23 @@ const listenerOf = (flags) => {
     return { trigger, senders };
 };
 
+const SIGNATURE_SCHEMES = ["github", "linear", "sentry", "stripe", "standard-webhooks"];
+
+// An event trigger, signed when --signed names a scheme and the secret holding its key; the key itself never leaves
+// the sandbox's secrets store.
+const webhookOf = (flags) => {
+    if (flags.signed === undefined) {
+        return { kind: "event" };
+    }
+    const at = flags.signed.indexOf(":");
+    const scheme = flags.signed.slice(0, Math.max(at, 0));
+    const secret = flags.signed.slice(at + 1);
+    if (at < 0 || !SIGNATURE_SCHEMES.includes(scheme) || !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(secret)) {
+        return die(COMMAND, `--signed takes <scheme>:<SECRET_NAME>, scheme one of ${SIGNATURE_SCHEMES.join(", ")}, like github:GITHUB_WEBHOOK_SECRET`);
+    }
+    return { kind: "event", signature: { scheme, secret } };
+};
+
 const propose = async (args) => {
     const { flags, rest } = parseArgs(COMMAND, args, {
         values: [
@@ -418,8 +441,9 @@ const propose = async (args) => {
             "prompt",
             "why",
             "wait",
+            "signed",
         ],
-        switches: ["prereleases", "mentioned"],
+        switches: ["prereleases", "mentioned", "webhook"],
         repeated: ["model", "from"],
     });
     const [id] = rest;
@@ -431,6 +455,12 @@ const propose = async (args) => {
     if (source !== undefined && flags.guard !== undefined) {
         return die(COMMAND, "give it a source or a --guard command, not both");
     }
+    if (flags.signed !== undefined && flags.webhook !== true) {
+        return die(COMMAND, "--signed applies to a webhook: give --webhook with it");
+    }
+    if (flags.webhook === true && (listens || source !== undefined || flags.every !== undefined || flags.cron !== undefined)) {
+        return die(COMMAND, "--webhook fires when called, so it takes no --on, source, --every or --cron");
+    }
     if (listens) {
         if (source !== undefined || flags.every !== undefined || flags.cron !== undefined || flags.tz !== undefined) {
             return die(COMMAND, "--on listens for what arrives, so it takes no --npm, --github, --url, --every or --cron: drop them, or drop --on for a watch");
@@ -439,7 +469,7 @@ const propose = async (args) => {
             return die(COMMAND, "--on answers whoever wrote, so it can only start a new agent: drop --target, or give --target new");
         }
     } else {
-        if (source === undefined && flags.guard === undefined) {
+        if (source === undefined && flags.guard === undefined && flags.webhook !== true) {
             return die(COMMAND, "a watch needs something to check: --npm, --github, --url or --guard, or --on <provider> to listen instead");
         }
         const stray = [...LISTENER_FLAGS.filter((flag) => flags[flag] !== undefined), ...(flags.mentioned === true ? ["mentioned"] : []), ...((flags.from ?? []).length > 0 ? ["from"] : [])];
@@ -471,7 +501,9 @@ const propose = async (args) => {
     }
     const { trigger, senders } = listens
         ? listenerOf(flags)
-        : { trigger: { kind: "schedule", cron: flags.cron ?? cronEvery(flags.every ?? "6h", id), ...(flags.tz === undefined ? {} : { tz: flags.tz }) } };
+        : flags.webhook === true
+          ? { trigger: webhookOf(flags) }
+          : { trigger: { kind: "schedule", cron: flags.cron ?? cronEvery(flags.every ?? "6h", id), ...(flags.tz === undefined ? {} : { tz: flags.tz }) } };
     const automation = {
         id,
         enabled: true,

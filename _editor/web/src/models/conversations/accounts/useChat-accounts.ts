@@ -86,6 +86,7 @@ export const refreshTranslatorAccounts = (): Promise<void> =>
 const refreshProviderRefusals = (): Promise<void> =>
     readOrKeep(sandboxRpc.agent.refusals(), (body) => {
         providerRefusals.value = body.refusals;
+        // compat(daemon<1.419.1): agent.refusals `switchOffs`
         if (body.switchOffs !== undefined) {
             providerSwitchOffs.value = body.switchOffs;
         }
@@ -94,6 +95,7 @@ const refreshProviderRefusals = (): Promise<void> =>
 // Every provider's capacity as the daemon judges it now (usage.capacity), for the verdict door to read in place of the
 // four reads above. Only from a daemon whose hello names the route: one from before it never answers, and the door then
 // reads those four as before.
+// compat(daemon<1.428.0): the usage.capacity route
 export const refreshCapacity = (): Promise<void> =>
     advertisesRoute(`usage.capacity`) ? readOrKeep(sandboxRpc.usage.capacity(), setCapacitySnapshot) : Promise.resolve();
 

@@ -60,6 +60,7 @@ import { type Admission, admit, askOwner, HELD_MOVES, labelOf, notYet, refusedBy
 import { ROSTER } from "../../conversations/actor/subagent-roster.js";
 import { spawnCheckoutCostNote } from "./starting/spawn-checkout-note.js";
 import { quietLaneSpawnNote } from "./quiet-lane-words.js";
+import { retryLink } from "./retries/retry-chains.js";
 export type { ChildRehome } from "./child-spec.js";
 
 // Spawns, steers and answers full agents from inside a turn, on any connected provider; a child is an ordinary
@@ -117,6 +118,10 @@ export interface ChildSpawnSpec {
     readonly after?: readonly string[];
     // Workspace-relative folders this child needs; persisted with its conversation and applied on every checkout.
     readonly paths?: readonly string[];
+    // The settled child of the same parent this spawn retries, and the task id of the chain they share: the id of its
+    // first child, set by the spawn (retry-chains.ts retryLink), never by the caller.
+    readonly retryOf?: string;
+    readonly taskId?: string;
 }
 
 export interface ChildParent {
@@ -1175,7 +1180,17 @@ const startAllowedWithSeat = async (services: Services, parent: ChildParent, sta
  * surfaces later as the child's own failure. A start the owner must allow comes back at once as well, `held`, its row
  * waiting until they answer.
  */
-export const spawnChild = async (services: Services, parent: ChildParent, { after: named, ...ask }: ChildSpawnSpec): Promise<ChildSpawnResult> => {
+export const spawnChild = async (services: Services, parent: ChildParent, spec: ChildSpawnSpec): Promise<ChildSpawnResult> => {
+    const linked = retryLink(services.conversations, parent.conversationId, spec);
+    if ("refused" in linked) {
+        return { ok: false, message: linked.refused };
+    }
+    const result = await spawnLinked(services, parent, linked.spec);
+    return result.ok && linked.note !== undefined ? { ...result, note: result.note === undefined ? linked.note : `${result.note} ${linked.note}` } : result;
+};
+
+// A spawn once its place in a retry chain is settled.
+const spawnLinked = async (services: Services, parent: ChildParent, { after: named, ...ask }: ChildSpawnSpec): Promise<ChildSpawnResult> => {
     const asked = await withChildEffort(services, wearingParent(services.conversations, parent, ask));
     const after = named === undefined || named.length === 0 ? undefined : [...new Set(named)];
     const unwaitable = afterRefusal(services.conversations, parent.conversationId, after);

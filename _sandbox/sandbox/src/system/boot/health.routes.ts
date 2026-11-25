@@ -10,6 +10,7 @@ import { proveSyncHolder } from "../../peers/desktop-sync.js";
 import { AT_REST_ACCOUNT_STORE, AT_REST_STORES, atRestActive } from "../../store/encryption/at-rest.js";
 import { stateStatus } from "../../store/evolution/state-convergence.js";
 import { reachPosture } from "../listeners/reach-posture.js";
+import { ioPoolState } from "../resources/loop/io-pool-probe.js";
 import { buildInfo } from "./build-info.js";
 import { FAVICON_ICO_BASE64 } from "./favicon.generated.js";
 import { openInApp } from "./open-in-app.js";
@@ -69,6 +70,12 @@ export const healthRawRoutes = defineRawRoutes((services: HealthDeps) => ({
             build: buildInfo(),
             atRestEncryption: { active: atRestActive(), stores: atRestActive() ? [...AT_REST_STORES, AT_REST_ACCOUNT_STORE] : [] },
         };
+        // Whether libuv's thread pool answers (system/resources/loop/io-pool-probe.ts): one held by a hung network mount
+        // stalls every file read while this route, served on the loop, still answers.
+        const ioPool = ioPoolState();
+        if (ioPool !== undefined) {
+            health.ioPool = ioPool;
+        }
         // Which proofs open a session here, so an editor knows before signing in whether this daemon takes the platform's
         // identity assertion. Absent on a loopback daemon, which asks for no proof at all.
         if (services.auth !== undefined) {

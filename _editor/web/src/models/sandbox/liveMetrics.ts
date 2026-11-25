@@ -28,6 +28,7 @@ export const LIVE_METRICS_KEY: InjectionKey<ComputedRef<SandboxMetrics | undefin
 export function useLiveMetrics(): ComputedRef<SandboxMetrics | undefined> {
     const { query } = useSandboxQuery({
         ...rpcQuery(`system.metrics`, undefined, { unpersisted: true }),
+        // compat(daemon<1.305.0): the system.metrics route
         enabled: computed(() => showLiveMetrics.value && supportsRoute(`system.metrics`)),
         refetchInterval: (current) => (current.state.status === `error` ? false : LIVE_METRICS_POLL_MS),
         staleTime: 0,

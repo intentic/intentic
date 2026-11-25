@@ -1485,13 +1485,26 @@ some link wants it, and enforces the switches ([`device/remote/`](src/device/rem
   STUN servers remoted gathers its screens' outside address from; without them it offers host candidates only). An uplink not `up` for 30 s has its address
   resolved again, and rewritten if it moved. remoted prints a status line on stdout whenever anything in it changes, and
   the agent keeps the latest as `remoted-status.json`.
-- **The supervisor** ([`remote/remoted.ts`](src/device/remote/remoted.ts)) runs `intentic-remoted run --config <path>
-  --parent-stdin`, its stdin a pipe the agent holds, so it never outlives the agent; its stderr lines land in the
-  agent's log as `remoted: …`. An exit nobody asked for is logged with its code and last line, and it is started again
-  after 1 s, doubling to a minute, back to 1 s after a run that held a minute. Once no uplink is left (a `remoteStop`,
-  every switch off, the link removed or revoked) its stdin is closed, and it is killed 3 s later if it is still there.
-  An agent starting takes up the uplinks `remoted.json` held for links that still exist and still allow something, and
-  drops the rest.
+- **The supervisor** ([`remote/remoted.ts`](src/device/remote/remoted.ts)) keeps one remoted per environment, and it
+  outlives the agent (2026-11-24): an upgrade, a watchdog kill or a crash leaves people's terminals and the programs in
+  them running. The agent first connects to the control endpoint ([`remote/remoted-control.ts`](src/device/remote/remoted-control.ts);
+  `remoted.sock` beside its state, or a named pipe on Windows, owner-only) and adopts the remoted it finds there when
+  both speak a control protocol; otherwise it starts `intentic-remoted run --config <path> --control <endpoint>`
+  detached (its own session on Unix, no window on Windows), its stderr into `remoted.log`, and adopts that one. An
+  adopted remoted sends its status and its log lines over the endpoint, so they land in the agent's log as
+  `remoted: …` as before. When the agent leaves it lets go of remoted, running; the next agent adopts it. A remoted
+  that speaks no protocol of this agent's is asked to stop and replaced; one of another build (after an upgrade) is
+  kept while anything is open on it and replaced once nothing is, so an upgrade ends no terminal. A remoted binary from
+  before the control endpoint (it has no `control-protocol` word), and every remoted of an agent running before anyone
+  signed in (it has no desktop, and the session's agent must not adopt it), runs as before as the agent's child with
+  `--parent-stdin`, ending with it: on Windows the terminals opened before sign-in still end at the sign-in's handover.
+  An exit nobody asked for is logged with its code and last line, and it is looked for and started again after 1 s,
+  doubling to a minute, back to 1 s after a run that held a minute. Once no uplink is left (a `remoteStop`, every switch
+  off, the link removed or revoked) it is asked to stop, and killed 3 s later if it is still there. Unadopted, remoted
+  leaves by itself after 60 s with nothing open, and after 10 minutes whatever is open (remoted's README). `uninstall`
+  (and removing the last link) asks it to stop over the endpoint, and names the pid in `remoted.pid` if nothing answers
+  there. An agent starting takes up the uplinks `remoted.json` held for links that still exist and still allow
+  something, and drops the rest.
 - **The person at the computer.** On Windows, while anyone is connected, the agents' notice stays up and says so,
   naming the foremost kind: someone using the mouse and keyboard, else viewing, else in a terminal. (2026-11-20: ranked by
   the screen the person sits at, since a terminal shows whoever is connected nothing of it.) `Ctrl+Alt+Shift+P` pauses

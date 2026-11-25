@@ -298,12 +298,23 @@ describe(`initAnalytics`, () => {
 describe(`track`, () => {
     it(`captures only when analytics is enabled`, async () => {
         const { posthog: disabled, analytics: inert } = await bootAnalytics(``);
-        inert.track(`message_sent`);
+        inert.track(`message_sent`, { agent: `claude` });
         expect(disabled.capture).not.toHaveBeenCalled();
 
         const { posthog, analytics } = await bootAnalytics(`phc_test`);
         analytics.track(`message_sent`, { agent: `claude` });
         expect(posthog.capture).toHaveBeenCalledWith(`message_sent`, { agent: `claude` });
+    });
+
+    // The registry's check runs before the queue: what fails it never reaches the SDK, sent or held.
+    it(`drops an event whose properties the registry refuses`, async () => {
+        const { posthog, analytics } = await bootAnalytics(`phc_test`);
+        const warn = jest.spyOn(console, `warn`).mockImplementation(() => undefined);
+        // SAFETY: a call site's cast is exactly what the runtime check is for.
+        analytics.track(`message_sent`, { agent: `claude`, branch: `feature/secret plans` } as never);
+        expect(posthog.capture).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining(`dropped "message_sent"`));
+        warn.mockRestore();
     });
 });
 
@@ -318,11 +329,11 @@ describe(`the SDK loading after the first screen`, () => {
         analyticsChoice.value = `allow`;
         const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
         const loading = analytics.initAnalytics(routePatternOf, user);
-        analytics.track(`sandbox_connected`, { first: true });
+        analytics.track(`sandbox_connected`, { resuming: false, machine: `own` });
         expect(posthog.capture).not.toHaveBeenCalled();
 
         await loading;
-        expect(mocked(posthog.capture).mock.calls).toEqual([[`sandbox_connected`, { first: true }]]);
+        expect(mocked(posthog.capture).mock.calls).toEqual([[`sandbox_connected`, { resuming: false, machine: `own` }]]);
     });
 
     // A phone's replay leaves the conversation out whole: every word of it is asterisks anyway, and recording its DOM
@@ -354,13 +365,13 @@ describe(`the Settings switch`, () => {
         const { posthog } = await import(`posthog-js`);
         const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
         const loading = analytics.initAnalytics(routePatternOf, user);
-        analytics.track(`denied`);
+        analytics.track(`voice_wake_off`, {});
         await nextTick();
         expect(posthog.init).not.toHaveBeenCalled();
         analyticsChoice.value = `allow`;
         await loading;
         expect(posthog.init).toHaveBeenCalledTimes(1);
-        expect(posthog.capture).not.toHaveBeenCalledWith(`denied`);
+        expect(posthog.capture).not.toHaveBeenCalledWith(`voice_wake_off`, {});
     });
 
     it(`starts on when nobody has switched it off`, async () => {
@@ -387,19 +398,19 @@ describe(`sandbox switch`, () => {
         const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
         const { sandboxAnalyticsGate } = await import(`../features/sandbox/analytics/analyticsGate`);
         await analytics.initAnalytics(routePatternOf, user, sandboxAnalyticsGate(route));
-        analytics.track(`unknown`);
+        analytics.track(`voice_wake_on`, {});
         expect(posthog.capture).not.toHaveBeenCalled();
         queryClient.setQueryData(rpcKey(`settings.get`), { productAnalytics: false });
-        analytics.track(`off`);
+        analytics.track(`voice_wake_listening`, {});
         expect(posthog.capture).not.toHaveBeenCalled();
         route.value = `home:account`;
         await nextTick();
-        analytics.track(`outside`);
-        expect(posthog.capture).toHaveBeenCalledWith(`outside`, undefined);
+        analytics.track(`voice_wake_yielded`, {});
+        expect(posthog.capture).toHaveBeenCalledWith(`voice_wake_yielded`, {});
         route.value = `chat`;
         await nextTick();
-        analytics.track(`back-inside`);
-        expect(posthog.capture).not.toHaveBeenCalledWith(`back-inside`, undefined);
+        analytics.track(`voice_wake_cancelled`, {});
+        expect(posthog.capture).not.toHaveBeenCalledWith(`voice_wake_cancelled`, {});
         queryClient.removeQueries({ queryKey: rpcKey(`settings.get`) });
         activeSandboxId.value = undefined;
     });
@@ -417,11 +428,11 @@ describe(`sandbox switch`, () => {
         const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
         const { sandboxAnalyticsGate } = await import(`../features/sandbox/analytics/analyticsGate`);
         await analytics.initAnalytics(routePatternOf, user, sandboxAnalyticsGate(ref(`chat`)));
-        analytics.track(`before-answer`);
-        expect(posthog.capture).not.toHaveBeenCalledWith(`before-answer`, undefined);
+        analytics.track(`voice_wake_on`, {});
+        expect(posthog.capture).not.toHaveBeenCalledWith(`voice_wake_on`, {});
         queryClient.setQueryData(rpcKey(`settings.get`), { timezone: `` });
-        analytics.track(`after-answer`);
-        expect(posthog.capture).toHaveBeenCalledWith(`after-answer`, undefined);
+        analytics.track(`voice_wake_off`, {});
+        expect(posthog.capture).toHaveBeenCalledWith(`voice_wake_off`, {});
         queryClient.removeQueries({ queryKey: rpcKey(`settings.get`) });
         activeSandboxId.value = undefined;
     });

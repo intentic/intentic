@@ -58,6 +58,7 @@ export const sandboxAnalyticsGate = (routeName: Readonly<Ref<string>>): Analytic
                 }
                 return false;
             }
+            // compat(daemon<1.335.0): `productAnalytics` in settings
             return settings.productAnalytics !== false;
         },
         // A switch of sandbox or route, the daemon becoming reachable, and every cache event: the settings answering, or

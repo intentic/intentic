@@ -7,7 +7,9 @@ import type {
     RequestPermissionResponse,
     SessionNotification,
 } from "@agentclientprotocol/sdk/unstable";
-import { methods } from "@agentclientprotocol/sdk/unstable";
+import { methods, RequestError } from "@agentclientprotocol/sdk/unstable";
+import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
+import { type AcpDialect, type ChildSession, type DialectReader, type Json, placeUpdate, type VendorQuestion } from "@intentic/acp-events/dialects";
 import { z } from "zod";
 import { decidePermission } from "./acp-permissions.js";
 import { recordOptions, type SessionOptions } from "@intentic/acp-events/model";
@@ -18,7 +20,15 @@ import type { PreparedTerminal } from "./acp-terminal.js";
 // (acp-connection.ts) so the in-process test fixture routes exactly the same way without a spawn.
 
 export interface TurnHooks {
-    readonly onUpdate: (notification: SessionNotification) => void;
+    // One of the session's updates, or, with `child` set, one of a child session the agent opened for a subagent this
+    // session spawned (acp-events dialects), read under the spawning call's card.
+    readonly onUpdate: (notification: SessionNotification, child?: ChildSession) => void;
+    // Frames the agent's dialect read from what it said beyond the protocol. Called with none as well, whenever the
+    // dialect read anything, so a turn held open for the agent's own wake-up (`DialectReader.holding`) looks again.
+    readonly onFrames?: (events: readonly AgentEvent[]) => void;
+    // A question the agent asks through a request of its own (dialect `question`): parks on a question card. Absent,
+    // the agent hears nobody answered.
+    readonly ask?: (question: VendorQuestion) => Promise<Json>;
     // Can park: the owner's rulebook may hold this call for approval while the agent waits on the response.
     readonly permission: (request: RequestPermissionRequest) => Promise<RequestPermissionResponse>;
     // A form the agent asks a person to fill (elicitation/create): parks on a question card. Absent, the form is
@@ -42,7 +52,18 @@ export interface SessionRouting extends SessionOptions {
     readonly turns: Map<string, TurnHooks>;
     readonly abandoned: Set<string>;
     readonly modes: Map<string, SessionModes>;
+    // What the agent says beyond the protocol (acp-events dialects): absent, plain ACP, and an extension the agent sends
+    // is dropped, or refused as an unknown method, as before.
+    readonly dialect?: { readonly speaks: AcpDialect; readonly reader: DialectReader };
 }
+
+// Every bound turn hears that the dialect read something, with the frames for its own session.
+const deliver = (routing: SessionRouting, read: readonly { readonly sessionId: string; readonly events: readonly AgentEvent[] }[]): void => {
+    for (const [sessionId, hooks] of routing.turns) {
+        hooks.onFrames?.(read.flatMap((frames) => (frames.sessionId === sessionId ? frames.events : [])));
+    }
+};
+
 
 const DECLINED: CreateElicitationResponse = { action: "decline" };
 
@@ -65,7 +86,16 @@ export const routeSessions = (app: ClientApp, routing: SessionRouting): ClientAp
             if (params.update.sessionUpdate === "current_mode_update") {
                 noteMode(routing.modes, params.sessionId, params.update.currentModeId);
             }
-            routing.turns.get(params.sessionId)?.onUpdate(params);
+            if (routing.dialect === undefined) {
+                routing.turns.get(params.sessionId)?.onUpdate(params);
+                return;
+            }
+            const placed = placeUpdate(routing.dialect.reader, params);
+            const hooks = routing.turns.get(placed.sessionId);
+            hooks?.onUpdate(params, placed.child);
+            if (placed.extra.length > 0) {
+                hooks?.onFrames?.(placed.extra);
+            }
         })
         .onRequest(methods.client.session.requestPermission, ({ params }) => {
             const hooks = routing.turns.get(params.sessionId);
@@ -75,6 +105,25 @@ export const routeSessions = (app: ClientApp, routing: SessionRouting): ClientAp
             const scope = SessionScopeSchema.safeParse(params);
             const elicit = scope.success ? routing.turns.get(scope.data.sessionId)?.elicit : undefined;
             return elicit === undefined ? DECLINED : elicit(params);
+        })
+        // What the agent sends beyond the protocol, read by its dialect; without one, or unread, dropped.
+        .onNotification("*", ({ method, params }) => {
+            // SAFETY: a JSON-RPC message's params arrived as JSON text, so they are JSON.
+            const read = routing.dialect?.reader.notification(method, (params ?? null) as Json);
+            if (read !== undefined) {
+                deliver(routing, read);
+            }
+        })
+        // A request of the agent's own: a question parks on the bound turn's card; anything else is an unknown method,
+        // the answer the agent had before this fallback existed.
+        .onRequest("*", ({ method, params }) => {
+            // SAFETY: a JSON-RPC message's params arrived as JSON text, so they are JSON.
+            const question = routing.dialect?.speaks.question?.(method, (params ?? null) as Json);
+            if (question === undefined) {
+                throw RequestError.methodNotFound(method);
+            }
+            const ask = routing.turns.get(question.sessionId)?.ask;
+            return ask === undefined ? question.cancelled : ask(question);
         });
 
 

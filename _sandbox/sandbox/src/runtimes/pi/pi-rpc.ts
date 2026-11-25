@@ -13,6 +13,7 @@ import { opt } from "../../opt.js";
 import { runCheck } from "../../workload/run-check.js";
 import { parseEnvBlock, splitCommand } from "../acp/acp-spawn.js";
 import { spawnAs } from "../../workload/workload-class.js";
+import { stopTree } from "../../workload/process-group.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { jsonLines, outputTail } from "../stdio/child-output.js";
 import { createHookSocket, type HookEndpoint } from "../daemon-tools/hook-socket.js";
@@ -224,6 +225,8 @@ const startPi = async (
         // daemon runs). A spawn that names no conversation stays the daemon's.
         env: { ...env, ...cardEnv, ...flags.env, ...workloadStamp(launch.owner ?? DAEMON_OWNER) },
         stdio: ["pipe", "pipe", "pipe"],
+        // Leads a process group, so its stop (stopTree) ends the MCP servers and tool children it started with it.
+        detached: true,
     });
     proc.once("close", () => {
         void (async () => {
@@ -300,7 +303,7 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
         })().catch(() => {
             // A stdout that broke leaves no way to read a response; ending the process settles every waiter through
             // its exit.
-            proc.kill();
+            stopTree(proc);
         });
 
         const send = (command: Record<string, unknown>): void => {
@@ -339,7 +342,7 @@ export const piSpawner = (sessionDir: string): PiSpawn => {
             stderrTail: stderr.text,
             kill: () => {
                 dead = true;
-                proc.kill();
+                stopTree(proc);
             },
         };
     };

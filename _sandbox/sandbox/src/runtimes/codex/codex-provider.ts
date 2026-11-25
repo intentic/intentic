@@ -29,6 +29,7 @@ import { engineReady } from "../../engines/engine-resolve.js";
 import { turnSecretAccess } from "../../agent/run/harness/harness-servers.js";
 import { daemonServersFor, type DaemonServersDeps } from "../daemon-tools/daemon-servers.js";
 import { createCodexAgent } from "./codex-agent.js";
+import { stallGuarded } from "../decorators/stall-guard.js";
 import { type CodexCatalog, createCodexCatalog } from "./codex-catalog.js";
 import { writeCodexConfig } from "./codex-config.js";
 import { codexReadiness } from "./codex-readiness.js";
@@ -50,6 +51,13 @@ export interface CodexSlice {
     readonly codexAgent: (request: AgentRequest<CodexCredential>) => AsyncGenerator<AgentEvent>;
 }
 
+// Codex's app-server has no watchdog of its own: one gone silent with nothing open is ended by the stall guard, and the
+// turn is re-run on backoff as an outage.
+const guardedCodex =
+    (agent: (request: AgentRequest<CodexCredential>) => AsyncGenerator<AgentEvent>) =>
+    (request: AgentRequest<CodexCredential>): AsyncGenerator<AgentEvent> =>
+        stallGuarded(request, agent, { said: (why) => `Codex stopped responding: ${why}. It was stopped; send again to retry.` });
+
 export const createCodexSlice = (input: {
     readonly config: Config;
     readonly authRoot: string;
@@ -70,7 +78,7 @@ export const createCodexSlice = (input: {
         ),
         codexHome,
         codexThreadExists: (threadId) => codexThreadExists(codexHome, threadId),
-        codexAgent: createCodexAgent({ codexHome }),
+        codexAgent: guardedCodex(createCodexAgent({ codexHome })),
     };
 };
 

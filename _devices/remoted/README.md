@@ -4,8 +4,8 @@
 
 ```mermaid
 flowchart LR
-    agent["intentic-machine<br/>device/remote/"] -->|"spawns, writes remoted.json"| remoted(["intentic-remoted"])
-    remoted -->|"status lines on stdout"| agent
+    agent["intentic-machine<br/>device/remote/"] -->|"starts or adopts it, writes remoted.json"| remoted(["intentic-remoted"])
+    remoted -->|"status and log lines<br/>over the control endpoint"| agent
     remoted -->|"wss …/system/device-uplink<br/>one yamux session per sandbox"| netd["Sandbox's netd"]
     netd -->|"a stream per viewer or daemon call<br/>HTTP/1.1 on each"| remoted
     editor["Editor terminal"] -->|"/system/device-terminal/&lt;device&gt;/&lt;session&gt;"| netd
@@ -28,7 +28,8 @@ a distro with its own agent would have had two remoteds offering its shell.
 
 ## Command line, configuration, status
 
-`intentic-remoted run --config <file> [--parent-stdin] [--sandbox-url <url> --device <name>]`; `intentic-remoted version`
+`intentic-remoted run --config <file> [--control <endpoint> | --parent-stdin] [--sandbox-url <url> --device <name>]`;
+`intentic-remoted control-protocol` prints the control protocols it speaks (`{protocol, accepts}`); `intentic-remoted version`
 prints the bare version (`0.0.0` from source, the release's when `build-remoted.sh --version` stamped it through
 `INTENTIC_REMOTED_VERSION`). On Windows, `intentic-remoted service status|install|uninstall` manages the lock screen
 and admin prompts service and `desktop-helper` is that service's helper (below, "The lock screen and admin prompts").
@@ -42,18 +43,52 @@ runs in a child process of its own (below, "Encoders"), its answer one JSON line
   is base64url and tokens are checked under its decoded bytes. `iceServers` are the sandbox's `remoteIceServers` URLs
   (`stun:host:port`), written by an agent that advertises `remote-ice`; absent, screens offer host candidates only. A file that does not parse leaves the last good one standing, said
   once. With `--sandbox-url` and `--device` the file holds one uplink's fields at its top level instead (by hand, tests).
-- **`--parent-stdin`**: remoted ends when stdin ends. The agent holds the pipe, so remoted never outlives it, on Windows
-  included, where a killed parent takes no child with it. Its terminals end with it.
+- **`--control <endpoint>`** (2026-11-24): how the agent starts it now, so it outlives the agent and the next one adopts
+  it (below, "Outliving the agent").
+- **`--parent-stdin`**: remoted ends when stdin ends. An agent holds the pipe, so remoted never outlives it, on Windows
+  included, where a killed parent takes no child with it. Its terminals end with it. How an agent from before
+  `--control` starts it, and how today's agent starts it before anyone signed in on Windows (that remoted has no desktop,
+  so it ends at the sign-in's handover rather than being adopted by the session's agent).
 - **What changes do.** An uplink's terminal switch turned off ends that uplink's terminals (each viewer told why) and
   refuses new ones; its view switch turned off closes its screens' sockets, its control switch turned off leaves them
   watching; an uplink removed is closed and its terminals ended; `notBefore` moving drops every person's socket
   and refuses every token minted before it (`intentic-machine remote end`); `paused` (the person's pause hotkey) drops
   everyone's typing. What stays allowed keeps running.
-- **Status**: one JSON line on stdout at start and on every change ([`src/status.rs`](src/status.rs)):
+- **Status**: one JSON line on stdout (and to the adopting agent) at start and on every change ([`src/status.rs`](src/status.rs)):
   `{type: "status", version, pid, uplinks: [{id, state, generation, since, error?}], people: [{uplink, kind, session,
   readOnly, since}], terminals, environments, monitors, paused}`. `state` is `connecting`, `up`, `down`, `withdrawn` or
   `refused`; `generation` is the config's for that state, so the agent waits for `up` at the generation it just wrote.
-  The log goes to stderr (`RUST_LOG`, default `info`), in castd's format.
+  The log goes to stderr (`RUST_LOG`, default `info`), in castd's format; under `--control`, also to the adopting agent.
+
+## Outliving the agent
+
+(2026-11-24, [`src/control.rs`](src/control.rs)) The agent restarts on every upgrade, at a watchdog kill and after a
+crash; a remoted tied to it ended every person's terminal and the programs in it each time. Started with `--control`,
+remoted is the agent's no longer:
+
+- **One per environment.** It holds `remoted.lock` beside its config locked for its life (the system lets go when it
+  ends, however it ends) and writes `remoted.pid` beside it (`{pid, protocol, accepts, build, control, startedAt}`),
+  removed when it ends gracefully. A second remoted waits 5 s for the lock and exits 3. Only the lock's holder touches the
+  endpoint's name: a socket left at the path is a dead remoted's (its lock is free), and is replaced, never removed on
+  the way out.
+- **The endpoint is the owner's alone**: a Unix socket made 0600 whose peer must run as the same user, or a named pipe
+  whose access list names this process's user alone and which refuses remote clients. The agent names it
+  (`remoted.sock` beside its state, or `\\.\pipe\intentic-remoted-control-<hash of the state directory>`).
+- **The protocol**, lines of JSON: every connection is greeted with `{type: "hello", protocol, accepts, build, pid,
+  startedAt}`; `{type: "adopt", protocol}` with a protocol `accepts` lists makes the connection the adopter, which then
+  gets every status line and `{type: "log", line}` for each log record (a newer adopter replaces it: `{type:
+  "replaced"}`); another protocol is `{type: "refused", reason}`; `{type: "stop"}` ends remoted as a signal does
+  (`{type: "stopping"}`, its terminals ended). Unknown types are ignored. The hello and `stop` keep their shape in every
+  protocol, so any agent can tell what it found and ask one it cannot adopt to leave. `PROTOCOL` moves when a message's
+  meaning changes, and the one it replaces stays in `PREVIOUS_PROTOCOLS` (and the agent's list) while it is still
+  spoken: [`_tools/checks/remoted-protocol.mjs`](../../_tools/checks/remoted-protocol.mjs) fails a change that drops
+  main's, or where remoted and the agent disagree.
+- **Unadopted**, it leaves after 60 s with no terminal and nobody connected, and after 10 minutes whatever is open:
+  an agent restarting is back within seconds, and one gone longer is not showing the person at the computer who is
+  connected, nor passing their pause on. So orphans do not pile up, and uninstall asks it to stop over the endpoint.
+- **What the agent does with what it finds** is the machine agent's README's ("The supervisor"): adopt it when a
+  protocol is shared, replace it when none is, and after an upgrade keep the older build while anything is open on it
+  and replace it once nothing is. Replacing ends its terminals; adopting ends none.
 
 ## The uplink
 
@@ -96,7 +131,8 @@ The daemon's calls carry no token: the uplink is the sandbox's alone, and netd p
 elsewhere. On Windows `pwsh` where it is installed (on PATH or under Program Files), else Windows PowerShell; `cmd` and
 `powershell` when asked for; `wsl.exe -d <distro> --cd <cwd or ~>` for `wsl:<distro>`. On Linux the user's login shell
 (`$SHELL`, else the password database, run as `-bash`), or a shell `/etc/shells` lists when asked for by name, with
-`TERM=xterm-256color`. A terminal outlives every viewer and the uplink dropping, for as long as remoted runs.
+`TERM=xterm-256color`. A terminal outlives every viewer and the uplink dropping, for as long as remoted runs, which under
+`--control` includes the machine agent restarting (above).
 
 - **The socket is netd's terminal protocol exactly**: browser-wire's `TerminalClientMessage` in, `TerminalServerMessage`
   and the pane's bytes as binary messages out, `cols`, `rows`, `away=1` and `deflate=1` in the query, `ping`/`pong`, 45 s

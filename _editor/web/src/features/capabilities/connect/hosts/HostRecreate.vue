@@ -241,6 +241,7 @@ const confirmBody = computed(() => {
 // What answers now: its build and boot, or what a daemon older than `running` says instead (swapLanding.ts).
 const answered = async (overlay: string | undefined): Promise<Answered> => {
     const running = await answering();
+    // compat(daemon<1.346.0): `running` on /info
     return running === undefined ? await olderAnswer(overlay) : { running };
 };
 // What answered when a follow began, read in the background: the build and boot, or the version, a swap is told against.

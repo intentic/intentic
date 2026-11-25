@@ -23,7 +23,8 @@ export const KIMI_CLI: VendorCli = {
     door: "kimi-cli",
     authDir: "kimi-cli",
     // KIMI_CODE_NO_AUTO_UPDATE: the engine store's pin is the version that runs, not whatever the CLI would fetch itself.
-    launch: (binary, home) => ({ argv: [binary, "acp"], env: { KIMI_CODE_HOME: home, KIMI_CODE_NO_AUTO_UPDATE: "1" } }),
+    // Its shell answers' exit codes are read by its dialect (@intentic/acp-events dialects/kimi.ts).
+    launch: (binary, home) => ({ argv: [binary, "acp"], env: { KIMI_CODE_HOME: home, KIMI_CODE_NO_AUTO_UPDATE: "1" }, dialect: "kimi" }),
     login: {
         argv: (binary) => [binary, "login"],
         env: (home) => ({ KIMI_CODE_HOME: home, KIMI_CODE_NO_AUTO_UPDATE: "1" }),

@@ -24,6 +24,7 @@ export const previewGuardChoices = (): readonly PickerOption<PreviewGuardScope>[
 
 export function usePreviewGuard() {
     const { holds } = useAccess();
+    // compat(daemon<1.367.0): the ports.previewGuard route
     const served = computed(() => supportsRoute(`ports.previewGuard`));
     const mayChange = computed(() => holds(`people`));
     const read = rpcQuery(`ports.previewGuard`);

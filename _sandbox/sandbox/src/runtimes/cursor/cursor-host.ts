@@ -8,6 +8,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { opt } from "../../opt.js";
 import { namespaceTargetOf, nsenterArgv, type NamespaceEntryReference } from "../../workload/namespace-entry.js";
 import { spawnAs } from "../../workload/workload-class.js";
+import { stopTree } from "../../workload/process-group.js";
 import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { outputTail } from "../stdio/child-output.js";
 import type {
@@ -58,6 +59,7 @@ export const inProcessHost =
 
 // The members of the runtime's ChildProcess the channel reaches, which is all a suite's stand-in has to be.
 export interface RuntimeProcess {
+    readonly pid?: number | undefined;
     readonly stdout: Readable | null;
     readonly stderr: Readable | null;
     readonly connected: boolean;
@@ -69,6 +71,7 @@ export interface RuntimeProcess {
     on(event: "message", listener: (message: RuntimeMessage) => void): this;
     once(event: "error", listener: (error: Error) => void): this;
     once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
+    once(event: "close", listener: () => void): this;
 }
 
 // Starts the runtime process from a finished argv; a seam so a suite can stand in for the process. `owner` is the
@@ -82,7 +85,7 @@ const liveRuntimes = new Set<RuntimeProcess>();
 /** Ends every Cursor runtime process still running; the daemon's shutdown. */
 export const stopCursorRuntimes = (): void => {
     for (const child of liveRuntimes) {
-        child.kill("SIGTERM");
+        stopTree(child);
     }
     liveRuntimes.clear();
 };
@@ -93,6 +96,8 @@ const spawnRuntime: CursorRuntimeSpawn = (command, args, spawnDepth, owner) => {
     const child = spawnAs({ class: "agentRuntime", spawnDepth }, command, args, {
         env: { ...process.env, ...workloadStamp(owner ?? DAEMON_OWNER) },
         stdio: ["ignore", "pipe", "pipe", "ipc"],
+        // Leads a process group, so its stop (stopTree) ends what it started with it.
+        detached: true,
     });
     liveRuntimes.add(child);
     child.once("exit", () => liveRuntimes.delete(child));
@@ -223,7 +228,7 @@ const runtimeChannel = (child: RuntimeProcess, tools: Record<string, SDKCustomTo
             }
         },
         // The agent is closed in the runtime first, then the channel, which lets the runtime exit on its own; the kill
-        // is for a runtime that does not.
+        // is for a runtime that does not, and reaches its whole group: SIGTERM past the grace, SIGKILL past another.
         close: () => {
             void call({ method: "close" })
                 .catch((error) => logger.debug({ err: error }, "cursor runtime: the agent did not close, disconnecting it anyway"))
@@ -234,7 +239,7 @@ const runtimeChannel = (child: RuntimeProcess, tools: Record<string, SDKCustomTo
                     if (!running()) {
                         return;
                     }
-                    const kill = setTimeout(() => child.kill("SIGKILL"), CLOSE_GRACE_MS);
+                    const kill = setTimeout(() => stopTree(child), CLOSE_GRACE_MS);
                     kill.unref();
                     child.once("exit", () => clearTimeout(kill));
                 });

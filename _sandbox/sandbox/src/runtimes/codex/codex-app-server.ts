@@ -1,5 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawnAs } from "../../workload/workload-class.js";
+import { stopTree } from "../../workload/process-group.js";
 import { sleep, whenAborted } from "@intentic/base/async";
 import type { NamespaceEntryReference } from "../../workload/namespace-entry.js";
 import { codexAppServerArgv } from "./startup/codex-cli-config.js";
@@ -534,8 +535,9 @@ class AsyncQueue<T> implements AsyncIterable<T> {
 
 type CodexSpawn = (binary: string, args: readonly string[], env: Record<string, string>, spawnDepth: number) => ChildProcessWithoutNullStreams;
 
+// Detached, so it leads a process group and its stop reaches what it started (MCP servers, a tool's children) too.
 const spawnCodex: CodexSpawn = (binary, args, env, spawnDepth) =>
-    spawnAs({ class: "agentRuntime", spawnDepth }, binary, args, { env, stdio: ["pipe", "pipe", "pipe"] });
+    spawnAs({ class: "agentRuntime", spawnDepth }, binary, args, { env, stdio: ["pipe", "pipe", "pipe"], detached: true });
 
 export const stdioConnector =
     (binaryPath: () => Promise<string | undefined> = codexBinary, spawnProcess: CodexSpawn = spawnCodex): CodexAppServerConnector =>
@@ -556,9 +558,11 @@ export const stdioConnector =
         let active: { threadId: string; turnId: string } | undefined;
         let interrupted: string | undefined;
         let abortTimer: ReturnType<typeof setTimeout> | undefined;
+        let stopped = false;
         const kill = (): void => {
-            if (!child.killed) {
-                child.kill();
+            if (!stopped) {
+                stopped = true;
+                stopTree(child);
             }
         };
         const request: CodexAppServerConnection["request"] = (method, params) => {

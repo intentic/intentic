@@ -1,12 +1,15 @@
-//! The command line: `intentic-remoted run --config <file> [--parent-stdin] [--sandbox-url <url> --device <name>]`,
-//! `intentic-remoted version`, and on Windows `service …` and `desktop-helper` (the lock screen and admin prompts
-//! service, [`remoted::service`]). The machine agent starts `run` with `--parent-stdin`, so it ends when the agent does.
+//! The command line: `intentic-remoted run --config <file> [--control <endpoint> | --parent-stdin] [--sandbox-url <url>
+//! --device <name>]`, `intentic-remoted version`, `intentic-remoted control-protocol`, and on Windows `service …` and
+//! `desktop-helper` (the lock screen and admin prompts service, [`remoted::service`]). The machine agent starts `run`
+//! with `--control`, so it outlives the agent and the next one adopts it ([`remoted::control`]); an agent from before
+//! adoption starts it with `--parent-stdin`, so it ends when that agent does.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use remoted::config::{self, Named};
+use remoted::control::{self, Control};
 use remoted::daemon::Daemon;
 use remoted::status::Status;
 
@@ -14,13 +17,16 @@ const USAGE: &str = "\
 intentic-remoted: people's terminals on this computer, served to the sandboxes that turned remote access on.
 
 usage:
-  intentic-remoted run --config <file> [--parent-stdin] [--sandbox-url <url> --device <name>]
+  intentic-remoted run --config <file> [--control <endpoint> | --parent-stdin] [--sandbox-url <url> --device <name>]
   intentic-remoted version
+  intentic-remoted control-protocol   the control protocols it speaks (JSON), for the agent to ask before starting it
   intentic-remoted service status|install|uninstall|admin-run   (Windows: the lock screen and admin prompts service)
 
   --config <file>       the uplinks, their secrets and switches (JSON, written 0600 by intentic-machine); read again
                         whenever it changes
-  --parent-stdin        end when stdin ends: how the machine agent keeps remoted from outliving it
+  --control <endpoint>  serve the machine agent's control endpoint (a Unix socket path, or a named pipe),
+                        hold remoted.lock beside the config, and outlive the agent until the next one adopts it
+  --parent-stdin        end when stdin ends: how a machine agent from before --control keeps remoted from outliving it
   --sandbox-url <url>   with --device: serve one uplink to this daemon base, its uplinkToken, mediaKey and allow at the
   --device <name>       file's top level instead of in `uplinks`
 
@@ -33,12 +39,14 @@ const END_PATIENCE: Duration = Duration::from_secs(2);
 struct Args {
     config: PathBuf,
     parent_stdin: bool,
+    control: Option<String>,
     named: Option<Named>,
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
     let mut config = None;
     let mut parent_stdin = false;
+    let mut control = None;
     let mut url = None;
     let mut device = None;
     let mut rest = args.iter();
@@ -52,6 +60,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "run" => {}
             "--config" => config = Some(PathBuf::from(value("--config")?)),
             "--parent-stdin" => parent_stdin = true,
+            "--control" => control = Some(value("--control")?),
             "--sandbox-url" => url = Some(value("--sandbox-url")?),
             "--device" => device = Some(value("--device")?),
             other => return Err(format!("unknown argument {other:?}")),
@@ -65,6 +74,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
     Ok(Args {
         config: config.ok_or("--config is required")?,
         parent_stdin,
+        control,
         named,
     })
 }
@@ -74,6 +84,15 @@ fn main() {
     match args.first().map(String::as_str) {
         Some("version" | "--version") => {
             println!("{}", remoted::VERSION);
+            return;
+        }
+        // Asked by the agent before it starts this binary with --control: one from before has no such word and exits 2.
+        Some("control-protocol") => {
+            let accepts = control::accepts();
+            println!(
+                "{}",
+                serde_json::json!({"protocol": control::PROTOCOL, "accepts": accepts})
+            );
             return;
         }
         Some("--help" | "-h" | "help") | None => {
@@ -90,17 +109,39 @@ fn main() {
         }
         _ => {}
     }
-    // zbus says every handshake step at info (the desktop portal's connection): kept to warnings unless asked.
-    let _ = env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("info,zbus=warn,tracing=warn"),
-    )
-    .try_init();
     let args = match parse(&args) {
         Ok(args) => args,
         Err(error) => {
             eprintln!("intentic-remoted: {error}\n\n{USAGE}");
             std::process::exit(2);
         }
+    };
+    // zbus says every handshake step at info (the desktop portal's connection): kept to warnings unless asked.
+    let mut logger = env_logger::Builder::from_env(
+        env_logger::Env::default().default_filter_or("info,zbus=warn,tracing=warn"),
+    );
+    if args.control.is_some() {
+        // Each record also to the agent that adopted it, which keeps remoted's lines in its own log.
+        logger.target(env_logger::Target::Pipe(Box::new(control::LogTee)));
+    }
+    let _ = logger.try_init();
+    // One remoted per environment: the lock beside the config, held until the process ends.
+    let claim = match &args.control {
+        Some(endpoint) => {
+            let dir = args
+                .config
+                .parent()
+                .filter(|dir| !dir.as_os_str().is_empty())
+                .unwrap_or(std::path::Path::new("."));
+            match control::claim(dir, endpoint, control::LOCK_PATIENCE) {
+                Ok(claim) => Some(claim),
+                Err(error) => {
+                    eprintln!("intentic-remoted: {error}");
+                    std::process::exit(3);
+                }
+            }
+        }
+        None => None,
     };
     let first = match config::read(&args.config, args.named.as_ref()) {
         Ok(first) => first,
@@ -115,6 +156,9 @@ fn main() {
         .build()
         .expect("a runtime starts");
     let code = runtime.block_on(run(args, first));
+    if let Some(claim) = claim {
+        claim.release();
+    }
     // Threads still blocked on a pseudo-terminal or stdin would hold a graceful shutdown: the process just ends.
     std::process::exit(code);
 }
@@ -131,7 +175,24 @@ async fn run(args: Args, first: config::Config) -> i32 {
     let writer = status.clone();
     tokio::spawn(async move { writer.write_lines(std::io::stdout()).await });
     tokio::spawn(daemon.clone().run());
-    let why = ended(args.parent_stdin).await;
+    let control = args.control.clone().map(|endpoint| {
+        let control = Control::new(status.clone());
+        (
+            control.clone(),
+            tokio::spawn(control::listen(endpoint, control)),
+        )
+    });
+    let (why, code) = match control {
+        Some((control, listening)) => tokio::select! {
+            why = ended(args.parent_stdin) => (why, 0),
+            why = control.ended() => (why, 0),
+            failed = listening => {
+                log::error!("control endpoint: {}", failed.unwrap_or_else(|e| e.to_string()));
+                ("its control endpoint failed", 1)
+            }
+        },
+        None => (ended(args.parent_stdin).await, 0),
+    };
     log::info!("stopping: {why}");
     daemon.terminals.end_all(None, "remoted stopped");
     // The screens' input lets go of every key and restores the keymap; a virtual desktop remoted started ends.
@@ -142,7 +203,7 @@ async fn run(args: Args, first: config::Config) -> i32 {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     status.write_last(std::io::stdout());
-    0
+    code
 }
 
 // Whichever comes first: a signal, or the agent's end of stdin.

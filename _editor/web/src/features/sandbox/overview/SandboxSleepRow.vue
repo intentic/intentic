@@ -21,6 +21,7 @@ const { settings, patch, refusal, save } = useSandboxSettings();
 
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
 const on = computed(() => settings.value?.sleepWhenUnused);
+// compat(daemon<1.342.0): `sleepWhenUnused` in settings
 const shown = computed(() => !hosted.value && on.value !== undefined);
 const id = useId();
 </script>

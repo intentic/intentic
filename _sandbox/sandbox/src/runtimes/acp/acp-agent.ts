@@ -1,16 +1,13 @@
 import {
     type ContentBlock,
     type CreateTerminalRequest,
-    type McpServer,
     methods,
     type PromptResponse,
-    RequestError,
     type RequestPermissionRequest,
     type SessionNotification,
 } from "@agentclientprotocol/sdk/unstable";
 import { ACP, type AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
@@ -34,19 +31,17 @@ import { opt } from "../../opt.js";
 import { answerVendorAsk } from "../decorators/vendor-ask.js";
 import { withStderrTail } from "../../engines/failure-sentences.js";
 import { textPlanTurn, vendorTurn } from "../decorators/vendor-turn.js";
-import { type AcpConnection, type AcpConnections, releasingSession } from "./acp-connection.js";
+import { type AcpConnection, type AcpConnections, releasingSession, type TurnHooks } from "./acp-connection.js";
 import type { AcpLaunch, AcpSessionMeta } from "./acp-spawn.js";
-import { answerElicitation } from "./acp-elicitation.js";
-import { sessionMissing } from "@intentic/acp-events/session-missing";
-import { acpMcpProxyFile, stdioProxyServer } from "./acp-mcp-proxy.js";
+import { answerElicitation, answerVendorQuestion } from "./acp-elicitation.js";
+import { type ChildSession, childFrame } from "@intentic/acp-events/dialects";
 import { sessionUpdateEvent } from "./acp-events.js";
-import { offeredChoice, recordOptions, thoughtFor } from "@intentic/acp-events/model";
-import { isBypassMode, modeFor, noteMode, recordModes } from "@intentic/acp-events/modes";
 import { allowedBy, type PersonDecision, refusePermission } from "@intentic/acp-events/answers";
 import { decidePermission, type PermissionPhase, permissionCommand, permissionProgram, type PersonAsk } from "./acp-permissions.js";
 import { acpTerminalShell, terminalProgram } from "./acp-terminal.js";
 import { promptUsage } from "@intentic/acp-events/usage";
 import { type AcpTimeouts, cancelOnStop, phasePull, sealedWords } from "./acp-prompt.js";
+import { failureFrame, failureOf, openPhaseSession } from "./acp-session-setup.js";
 import { tmuxRunEnabled } from "../../agent/tools/agent-terminals.js";
 
 // The ACP provider adapter, the seam runAgent/createCodexAgent/createOpenCodeAgent share: AgentRequest in, AgentEvent out,
@@ -64,178 +59,15 @@ export interface AcpTurnOptions {
     readonly model?: string | undefined;
 }
 
-// A model the session's own option does not offer: the account's list moved since the catalog last read it.
-class ModelNotOffered extends Error {}
-
-// A session the agent would not take out of its run-without-asking mode, on a turn that asked for a person's approvals
-// or whose rulebook is watching: running on would let every call past both.
-class ModeNotLeft extends Error {}
 
 // The plan card is the daemon's on every ACP agent, whatever modes it advertises: the protocol has no signal that a plan
 // is ready for a yes, so the emulation (plan-mode.ts) runs the two phases, with the agent's own plan mode under the first
 // where it has one (acp-events modes.ts).
 const EMULATED_PLAN: Pick<AgentCapabilities, "permissions" | "editChecks"> = { permissions: "plan", editChecks: ACP.editChecks };
 
-// The agent's MCP servers: the turn's remote list (every mount at the daemon's MCP door: browsers, the mcp-kind cards and
-// the daemon's own servers) over http where the agent advertises http MCP, else as stdio servers through the daemon's
-// proxy (acp-mcp-proxy.ts), stdio being the transport every ACP agent must take. In-process SDK servers have no ACP
-// projection; the daemon's own reach the agent through the door instead (daemon-servers.ts).
-const mcpServersOf = async (request: AgentRequest, connection: AcpConnection): Promise<McpServer[]> => {
-    const tools = request.tools.remote ?? [];
-    if (tools.length === 0) {
-        return [];
-    }
-    if (connection.capabilities.mcpCapabilities?.http === true) {
-        return tools.map((tool) => ({
-            type: "http",
-            name: tool.name,
-            url: tool.url,
-            headers: tool.token === undefined ? [] : [{ name: "Authorization", value: `Bearer ${tool.token}` }],
-        }));
-    }
-    const script = await acpMcpProxyFile();
-    return tools.map((tool) => stdioProxyServer(tool, script));
-};
 
-// The SDK wraps a throwing handler as "Internal error"; the real reason lives in data.details, unwrapped here.
-const failureOf = (error: unknown): string => {
-    const details = (error as { data?: { details?: unknown } }).data?.details;
-    return typeof details === "string" && details !== "" ? details : error instanceof Error ? error.message : "ACP agent failed";
-};
 
-type ErrorFrame = Extract<AgentEvent, { kind: "error" }>;
 
-// A failure as its frame: the protocol's own auth_required (ACP credentials belong to the capability, not a native provider
-// account's reconnect flow); the agent's sentence is read where every runtime's is (codedFailure).
-const failureFrame = (message: string, error: unknown): ErrorFrame =>
-    error instanceof RequestError && error.code === RequestError.authRequired().code ? { kind: "error", message, code: "acp-auth-required" } : { kind: "error", message };
-
-// The session a phase runs on: the one asked for when this process holds it or can load it, else a new one, announced. A
-// session the agent can't bring back is the coded self-heal every runtime shares: the next send starts fresh.
-async function* sessionFor(
-    connection: AcpConnection,
-    request: AgentRequest,
-    sessionId: string | undefined,
-    meta: AcpSessionMeta | undefined,
-): AsyncGenerator<AgentEvent, string | undefined> {
-    if (sessionId !== undefined && connection.sessions.has(sessionId)) {
-        return sessionId;
-    }
-    if (sessionId !== undefined) {
-        // A fresh process doesn't know this session; session/load's replay arrives unbound, so it's dropped.
-        if (connection.capabilities.loadSession !== true) {
-            yield {
-                kind: "error",
-                code: "session-not-found",
-                message: "The agent restarted and cannot resume this chat's session. Send again to start fresh.",
-            };
-            return undefined;
-        }
-        // Only an explicit missing resource retires the session; authentication and replay failures may recover.
-        const refused = await connection.agent
-            .request(methods.agent.session.load, {
-                sessionId,
-                cwd: request.spec.cwd,
-                mcpServers: await mcpServersOf(request, connection),
-                ...opt("_meta", meta === undefined ? undefined : { ...meta }),
-            })
-            .then(
-                (loaded) => {
-                    recordOptions(connection, sessionId, loaded.configOptions);
-                    recordModes(connection.modes, sessionId, loaded.modes);
-                    return false;
-                },
-                (error: unknown) => {
-                    if (error instanceof RequestError && sessionMissing(error)) {
-                        return true;
-                    }
-                    throw error;
-                },
-            );
-        if (refused) {
-            yield { kind: "error", code: "session-not-found", message: "The agent no longer has this chat's session. Send again to start fresh." };
-            return undefined;
-        }
-        connection.sessions.add(sessionId);
-        return sessionId;
-    }
-    const created = await connection.agent.request(methods.agent.session.new, {
-        cwd: request.spec.cwd,
-        mcpServers: await mcpServersOf(request, connection),
-        ...opt("_meta", meta === undefined ? undefined : { ...meta }),
-    });
-    recordOptions(connection, created.sessionId, created.configOptions);
-    recordModes(connection.modes, created.sessionId, created.modes);
-    connection.sessions.add(created.sessionId);
-    yield { kind: "session", sessionId: created.sessionId };
-    return created.sessionId;
-}
-
-// Puts the session on the model asked for and answers what it now runs on. Undefined when the agent offers no model
-// option for this session: it keeps its own. Asking for one it does not offer throws ModelNotOffered rather than
-// running the turn on a model nobody picked.
-const settleModel = async (connection: AcpConnection, sessionId: string, asked: string): Promise<string | undefined> => {
-    const models = connection.models.get(sessionId);
-    if (models === undefined) {
-        return undefined;
-    }
-    const wanted = offeredChoice(models, asked);
-    if (wanted === undefined) {
-        const offered = models.choices.map((choice) => choice.name).join(", ");
-        throw new ModelNotOffered(
-            `${asked} is not one of the models this account offers${offered === "" ? "" : ` (${offered})`}. Pick another model.`,
-        );
-    }
-    if (models.current === wanted) {
-        return models.current;
-    }
-    const answer = await connection.agent.request(methods.agent.session.setConfigOption, { sessionId, configId: models.configId, value: wanted });
-    return recordOptions(connection, sessionId, answer.configOptions)?.current ?? wanted;
-};
-
-// Puts the session on the reasoning depth nearest the turn's effort, where the agent offers a `thought_level` option.
-// Advisory, like every runtime's effort: a level the agent refuses leaves its own, and the turn runs on.
-const settleThought = async (connection: AcpConnection, sessionId: string, effort: string | undefined): Promise<void> => {
-    const thoughts = connection.thoughts.get(sessionId);
-    const wanted = effort === undefined || thoughts === undefined ? undefined : thoughtFor(thoughts, effort);
-    if (thoughts === undefined || wanted === undefined || wanted === thoughts.current) {
-        return;
-    }
-    const answer = await connection.agent
-        .request(methods.agent.session.setConfigOption, { sessionId, configId: thoughts.configId, value: wanted })
-        // allow(silent-catch): reasoning depth is advisory; the session keeps the agent's own level
-        .catch(() => undefined);
-    if (answer !== undefined) {
-        recordOptions(connection, sessionId, answer.configOptions);
-    }
-};
-
-// Puts the session in the mode this phase's posture maps onto (acp-events modes.ts `modeFor`); an agent advertising no modes
-// is left as it is. A refused switch is tolerated, except out of a bypass mode, which ModeNotLeft refuses the turn over.
-const settleMode = async (
-    connection: AcpConnection,
-    sessionId: string,
-    phase: PermissionPhase,
-    permissionMode: PermissionMode | undefined,
-    rulebookEnforcing: boolean,
-): Promise<void> => {
-    const modes = connection.modes.get(sessionId);
-    const target = modes === undefined ? undefined : modeFor(modes, phase, permissionMode, rulebookEnforcing);
-    if (modes === undefined || target === undefined || target === modes.current) {
-        return;
-    }
-    const switched = await connection.agent.request(methods.agent.session.setMode, { sessionId, modeId: target }).then(
-        () => true,
-        () => false,
-    );
-    if (switched) {
-        noteMode(connection.modes, sessionId, target);
-        return;
-    }
-    if (isBypassMode(modes, modes.current)) {
-        throw new ModeNotLeft(`The agent would not leave its ${modes.current} mode, which runs every call without asking. Send again to retry.`);
-    }
-};
 
 // A command line as the rulebook and the dedupe read it: spacing collapsed, so one call's two spellings match.
 const normalizedProgram = (program: string): string => program.trim().replaceAll(/\s+/g, " ");
@@ -309,6 +141,54 @@ interface PhaseTurn {
     readonly ended: AbortSignal;
 }
 
+// How a phase reads what the agent says: its updates into the queue (a child session's under the call that spawned it,
+// a planning phase's answer held back as the plan), and what its dialect read beyond the protocol.
+const phaseReading = (
+    connection: AcpConnection,
+    request: AgentRequest,
+    captureText: boolean,
+    into: { readonly queue: AgentEvent[]; readonly held: { text: string }; readonly wake: () => void },
+): Pick<TurnHooks, "onUpdate"> & Required<Pick<TurnHooks, "onFrames">> => ({
+    onUpdate: (notification: SessionNotification, child?: ChildSession): void => {
+        const update = notification.update;
+        if (child === undefined && captureText && update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
+            // Plan phase: the agent's answer is the plan, held back rather than streamed as deltas.
+            into.held.text += update.content.text;
+            into.wake();
+            return;
+        }
+        const read = sessionUpdateEvent(update, request.spec.cwd, connection.terminalExit, connection.dialect);
+        const event = read === undefined || child === undefined ? read : childFrame(read, child, notification.sessionId);
+        if (event !== undefined) {
+            into.queue.push(event);
+        }
+        into.wake();
+    },
+    // Called with no frames too, so a turn held open on the agent's own wake-up looks again.
+    onFrames: (events) => {
+        into.queue.push(...events);
+        into.wake();
+    },
+});
+
+// The cards a phase asks a person on: a form the agent asks for (ACP elicitation) and a question it asks through a
+// request of its own (Grok's ask-user tool). Either holds the watchdog while the card is open.
+const cardAsks = (request: AgentRequest, push: (event: AgentEvent) => void, ended: AbortSignal, clock: Pick<TurnWatchdog, "hold">): Pick<TurnHooks, "elicit" | "ask"> => {
+    const held = async <T>(ask: () => Promise<T>): Promise<T> => {
+        const release = clock.hold();
+        try {
+            return await ask();
+        } finally {
+            release();
+        }
+    };
+    const context = { cards: request.hooks.cards, conversationId: request.spec.conversationId, push, signal: ended };
+    return {
+        elicit: (form) => held(() => answerElicitation(form, context)),
+        ask: (question) => held(() => answerVendorQuestion(question, context)),
+    };
+};
+
 // A phase's live half: what the agent sends lands in `queue` (or, while planning, in `text`), and every landing wakes
 // the loop. The gate's sink is repointed here, since the gate outlives a phase and the queue does not. `clock` is the
 // phase's watchdog, held while a permission, a form or a command is decided: the agent is waiting on the daemon then,
@@ -325,30 +205,18 @@ const bindPhase = (connection: AcpConnection, request: AgentRequest, session: st
     // already refused.
     const person = turn.phase === "execute" && request.policy.permissionMode === "default" ? personAsk(request, turn.ended, push) : undefined;
     const admitted = admittedPrograms();
-    const onUpdate = (notification: SessionNotification): void => {
-        const update = notification.update;
-        if (turn.captureText && update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
-            // Plan phase: the agent's answer is the plan, held back rather than streamed as deltas.
-            held.text += update.content.text;
-            wait.wake();
-            return;
-        }
-        const event = sessionUpdateEvent(update, request.spec.cwd, connection.terminalExit);
-        if (event !== undefined) {
-            queue.push(event);
-        }
-        wait.wake();
-    };
+    const { onUpdate, onFrames } = phaseReading(connection, request, turn.captureText, { queue, held, wake: wait.wake });
     // terminal/create runs in the conversation's own tmux session; the first one surfaces it in the panel.
     const tmuxSession = agentSessionName(session);
     const shell = acpTerminalShell(request, session, tmuxRunEnabled());
     let terminalSurfaced = false;
     if (turn.sealed) {
         // No form (absent declines it) and no terminal (absent refuses it); a permission is refused without asking.
-        return { queue, held, unbind: connection.bindTurn(session, { onUpdate, permission: async (permissionRequest) => refusePermission(permissionRequest) }) };
+        return { queue, held, unbind: connection.bindTurn(session, { onUpdate, onFrames, permission: async (permissionRequest) => refusePermission(permissionRequest) }) };
     }
     const unbind = connection.bindTurn(session, {
         onUpdate,
+        onFrames,
         permission: async (permissionRequest) => {
             const release = clock.hold();
             try {
@@ -362,14 +230,7 @@ const bindPhase = (connection: AcpConnection, request: AgentRequest, session: st
                 release();
             }
         },
-        elicit: async (form) => {
-            const release = clock.hold();
-            try {
-                return await answerElicitation(form, { cards: request.hooks.cards, conversationId: request.spec.conversationId, push, signal: turn.ended });
-            } finally {
-                release();
-            }
-        },
+        ...cardAsks(request, push, turn.ended, clock),
         ...(tmuxSession !== undefined
             ? {
                   terminal: {
@@ -440,25 +301,8 @@ async function* runAcpTurn(
         readonly sessionMeta: AcpSessionMeta | undefined;
     },
 ): AsyncGenerator<AgentEvent, PlanPhaseResult> {
-    let session: string | undefined;
-    let running: string | undefined;
-    try {
-        session = yield* sessionFor(connection, request, sessionId, turn.sessionMeta);
-        if (session !== undefined) {
-            running = turn.model.wanted !== undefined ? await settleModel(connection, session, turn.model.wanted) : undefined;
-            await settleThought(connection, session, request.spec.effort);
-            await settleMode(connection, session, turn.phase, request.policy.permissionMode, turn.gate.enforcing);
-        }
-    } catch (error) {
-        if (error instanceof ModelNotOffered) {
-            yield { kind: "error", code: "model-unavailable", message: error.message };
-            return { sessionId: session, planText: "", errored: true };
-        }
-        if (error instanceof ModeNotLeft) {
-            yield { kind: "error", message: error.message };
-            return { sessionId: session, planText: "", errored: true };
-        }
-        yield failureFrame(withStderrTail(failureOf(error), connection.stderrTail()), error);
+    const { session, running, failed: unopened } = yield* openPhaseSession(connection, request, sessionId, turn);
+    if (unopened) {
         return { sessionId: session ?? sessionId, planText: "", errored: true };
     }
     if (session === undefined) {
@@ -492,7 +336,10 @@ async function* runAcpTurn(
             settled = true;
             wait.wake();
         });
-    const pull = phasePull(queue, () => settled, { clock, wait, signal: request.signal, graceMs: turn.timeouts.abortGraceMs });
+    // Settled once the prompt has answered and the agent owes the session no wake-up of its own (a background subagent
+    // still running, or one that said it will report back): what the wake says lands on this turn, not on no turn. The
+    // watchdog still bounds the wait; a stop's grace still ends it.
+    const pull = phasePull(queue, () => settled && !connection.reader.holding(session), { clock, wait, signal: request.signal, graceMs: turn.timeouts.abortGraceMs });
     try {
         for (let next = await pull(); next !== SETTLED; next = await pull()) {
             if (next === EXPIRED) {

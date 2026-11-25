@@ -16,9 +16,11 @@ flowchart LR
   of a host, one list of hop-by-hop headers) and the tunnel crate are built by both.
 - Runs as the container's main process. `docker-entrypoint.sh` execs `intentic-netd -- node … main.js`, and the
   netd starts Node as its child, in a process group of its own. A crash restarts Node with backoff while every
-  listener and connection stays open, once the group is ended too: SIGTERM, then SIGKILL a second later, so a pooled
-  agent, the translator or a turn's runtime the dead daemon started never runs on beside its replacement. Whatever is
-  meant to outlive a restart starts in a group of its own (services, X displays, tmux panes). A Node that leaves a
+  listener and connection stays open, once the group is ended too: SIGTERM, then SIGKILL a second later, so the translator
+  or an `intentic` run the dead daemon started never runs on beside its replacement. Whatever is meant to outlive a
+  restart starts in a group of its own (services, X displays, tmux panes). So do agent runtimes (a pooled ACP agent,
+  a turn's Codex, Pi, Cursor or Muse process), so that stopping one ends what it started; the next daemon's boot sweep
+  ends those a crash left, by the earlier run's generation stamp. A Node that leaves a
   `ping` unanswered for 5 minutes has an event loop that is not turning at all, since a busy one answers within
   seconds: netd SIGKILLs it (its SIGTERM handler would need that loop) and restarts it as after a crash. A clean
   exit or a refused config ends netd, and with it the container. `docker run` gives the container a 30 s
@@ -187,12 +189,21 @@ flowchart LR
   back to the live build, written down as `rollback-failed`, and never rolls back again for that build. A new build in
   the trees is always tried first with strikes of its own, and a restarted container starts with none (2026-11-11: an
   `ic sandbox dev` build crashed at "Opening the netd door" and was restarted 16 times in four minutes).
+- Before it kills a daemon stuck or one that never said hello, netd keeps what it was doing (`src/evidence.rs`,
+  2026-11-24): every thread's state, wait channel, syscall and kernel stack (the stack only where the kernel lets netd
+  read it) from `/proc`, with the process's `status`, in `netd-stuck.<at>.<pid>.json` beside the records (the newest
+  ten stay); then the Node diagnostic report the daemon was started to write on SIGUSR2 (`--report-on-signal`,
+  docker-entrypoint.sh), waited for at most 5 s. The signal goes only to a daemon whose command line asks for reports
+  on it and that catches it. Node answers that signal on its event loop, so a loop truly stuck writes no report and the
+  capture is the evidence: a main thread in `D` on a cifs wait channel is a hung network mount, one in `R` is code
+  that never yielded. The kill's line names both (`evidence`), and the daemon's next boot says them in its post-mortem.
 - Memory is netd's to watch too (2026-11-05: one process an agent started grew to 17.6 GB of RSS and 33 GB of swap,
   the VM thrashed for 1 h 48 m, the daemon's event loop froze and its own sampler with it, and netd, up and answering
   throughout, killed the frozen daemon and every one it restarted every three minutes, saying so only on stderr). Every
   kill netd makes of the daemon is written to `netd-kills.jsonl` in the history volume's `logs/` (`stuck`, `no-hello`,
   and the build switches above, `rolled-back` and `rollback-failed`,
-  with the pid, how long it had been silent and the memory pressure), and a restart after a crash or a kill waits while
+  with the pid, how long it had been silent and the memory pressure; a `stuck` or `no-hello` kill also names what netd
+  kept of the daemon first, `evidence`), and a restart after a crash or a kill waits while
   the sandbox stalls on memory (`full avg10` at or above 20%) until it is below 10%, read every 5 s for 10 minutes at
   most, and is written down as `restart-held`; a first start is never held. The memory guard (`memguard/`) runs on a
   thread of its own, needing neither Node nor netd's async runtime, and reads nine cgroup files a second: the

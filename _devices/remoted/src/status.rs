@@ -1,6 +1,7 @@
-//! What remoted tells the machine agent that started it: one JSON object per line on stdout, the whole picture every
-//! time any of it changes (and once at the start). The agent waits on an uplink's `up` to answer the sandbox's start,
-//! shows the person at the computer who is connected, and restarts remoted when it exits. Logs go to stderr, never here.
+//! What remoted tells the machine agent: one JSON object per line, the whole picture every time any of it changes (and
+//! once at the start), on stdout and on the control connection of the agent that adopted it ([`crate::control`]). The
+//! agent waits on an uplink's `up` to answer the sandbox's start, shows the person at the computer who is connected, and
+//! restarts remoted when it exits. Logs go to stderr, never here.
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -95,7 +96,8 @@ impl Status {
     fn change(&self, change: impl FnOnce(&mut Held) -> bool) {
         let changed = change(&mut self.held.lock().expect("status poisoned"));
         if changed {
-            self.changed.notify_one();
+            // Every reader: the stdout writer, an adopter's connection, the idle clock.
+            self.changed.notify_waiters();
         }
     }
 
@@ -200,18 +202,35 @@ impl Status {
         }
     }
 
-    /// Writes a line now, then one after every change, until the process ends.
-    pub async fn write_lines(&self, mut out: impl Write) {
+    /// Whether anything is open for a person: a terminal, or someone on a screen or a terminal.
+    pub fn busy(&self) -> bool {
+        let held = self.held.lock().expect("status poisoned");
+        held.terminals > 0 || !held.people.is_empty()
+    }
+
+    /// Resolves at the next change (registered as it is called, before it is polled).
+    pub fn changed(&self) -> tokio::sync::futures::Notified<'_> {
+        self.changed.notified()
+    }
+
+    /// Hands `send` a line now, then one after every change, until it answers false.
+    pub async fn each_line(&self, mut send: impl FnMut(String) -> bool) {
         loop {
             let changed = self.changed.notified();
             let line = serde_json::to_string(&self.line()).expect("a status line serializes");
-            if writeln!(out, "{line}").and_then(|()| out.flush()).is_err() {
-                // Nobody reads it any more: the agent is gone, and stdin's end will say so.
+            if !send(line) {
                 return;
             }
             changed.await;
             tokio::time::sleep(SETTLE).await;
         }
+    }
+
+    /// Writes a line now, then one after every change, until the process ends.
+    pub async fn write_lines(&self, mut out: impl Write) {
+        // Nobody reads it any more: the agent is gone, and stdin's end (or the control connection's) will say so.
+        self.each_line(|line| writeln!(out, "{line}").and_then(|()| out.flush()).is_ok())
+            .await;
     }
 
     /// One more line, for the moment before the process ends.

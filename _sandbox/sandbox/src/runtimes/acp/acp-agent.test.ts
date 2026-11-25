@@ -1,5 +1,5 @@
 import { codedFailure } from "../../agent/run/frames/error-frames.js";
-import type { McpServer, NewSessionRequest } from "@agentclientprotocol/sdk/unstable";
+import { type McpServer, methods, type NewSessionRequest } from "@agentclientprotocol/sdk/unstable";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -217,6 +217,44 @@ test("a connection that drops during session/load fails the turn without discard
     const dropped: AcpConnection = { ...base, agent: Object.assign(Object.create(base.agent) as typeof base.agent, { request: closed }) };
     const events = await collect(createAcpAgent(connectionsOf(dropped), TIMEOUTS), request("hello", { spec: { sessionId: "live-id" } }));
     expect(events).toEqual([{ kind: "error", message: "ACP connection closed" }, { kind: "done" }]);
+});
+
+// A connection whose agent never answers one method; every other request goes through.
+const deafTo = (method: string, base: AcpConnection): AcpConnection => {
+    // SAFETY: the stand-in forwards every method's own params untouched, so the SDK's per-method typing still holds.
+    const deaf = (async (asked: string, params: unknown) =>
+        asked === method ? new Promise(() => {}) : base.agent.request(asked as never, params as never)) as typeof base.agent.request;
+    // SAFETY: a prototype copy of the agent with only `request` replaced is still that agent's shape.
+    return { ...base, agent: Object.assign(Object.create(base.agent) as typeof base.agent, { request: deaf }) };
+};
+
+// 2026-11-24: setup ran before the watchdog with no bound, so an agent that never answered session/new held the turn to
+// its 30-minute cap, and a Stop did not end it.
+test("an agent that never answers session/new ends the turn at the setup deadline, naming the step", async () => {
+    const connection = deafTo(methods.agent.session.new, fakeAcpConnection(fakeAcpAgentApp()));
+    const events = await collect(createAcpAgent(connectionsOf(connection), { ...TIMEOUTS, sessionOpenMs: 50 }), request("hello"));
+    expect(events.find((event) => event.kind === "error")).toMatchObject({ message: expect.stringContaining("session/new") });
+    expect(events.at(-1)).toEqual({ kind: "done" });
+});
+
+test("a mode switch the agent never answers ends the turn at its own deadline and gives up the session", async () => {
+    const base = fakeAcpConnection(fakeAcpAgentApp({ modes: [{ id: "default", name: "Default" }, { id: "plan", name: "Plan" }] }));
+    const connection = deafTo(methods.agent.session.setMode, base);
+    const events = await collect(createAcpAgent(connectionsOf(connection), { ...TIMEOUTS, optionWriteMs: 50 }), request("hello", { policy: { permissionMode: "plan" } }));
+    expect(events.find((event) => event.kind === "error")).toMatchObject({ message: expect.stringContaining("session/set_mode") });
+    expect(events.some((event) => event.kind === "delta")).toBe(false);
+    expect(base.alive()).toBe(false);
+});
+
+test("a stop while the agent sits on session/new ends the turn at once, with nothing said", async () => {
+    const connection = deafTo(methods.agent.session.new, fakeAcpConnection(fakeAcpAgentApp()));
+    const stop = new AbortController();
+    const turn = collect(createAcpAgent(connectionsOf(connection), TIMEOUTS), { ...request("hello"), signal: stop.signal });
+    setTimeout(() => stop.abort(), 20);
+    // A hang bound, not a timing: without the stop being heard the turn waits out its 120s setup deadline.
+    const events = await turn;
+    expect(events.some((event) => event.kind === "error")).toBe(false);
+    expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
 test("plan mode runs the two-phase emulation: captured plan → approval → execute on the same session", async () => {

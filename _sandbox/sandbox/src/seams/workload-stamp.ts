@@ -110,6 +110,8 @@ export const DETACHED_KINDS = [
     "backend-host",
     // A command another of the owner's sandboxes runs here over a link it may operate this one through (links/link-operate.ts).
     "link-operate",
+    // A repository's approved checkout setup or archive hook (conversations/worktrees/lifecycle/checkout-hooks.ts).
+    "checkout-hook",
 ] as const;
 export type DetachedKind = (typeof DETACHED_KINDS)[number];
 
