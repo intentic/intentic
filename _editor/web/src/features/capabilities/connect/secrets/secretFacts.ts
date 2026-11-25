@@ -45,6 +45,10 @@ const laneWords = (use: LastUse): LaneWords => {
             return { phrase: detail === undefined ? t(`capabilities.secretFacts.viaGateway`) : t(`capabilities.secretFacts.viaGatewayTo`, { detail }) };
         case `ssh`:
             return { phrase: detail === undefined ? t(`capabilities.secretFacts.viaSshAgent`) : t(`capabilities.secretFacts.viaSshAgentFor`, { detail }) };
+        // (2026-11-25) Rendered by the daemon into a managed stack's `.env` as it deployed it: the detail is the stack and
+        // the computer it went to, read as words.
+        case `deploy`:
+            return { phrase: detail === undefined ? t(`capabilities.secretFacts.inDeploy`) : t(`capabilities.secretFacts.inDeployTo`, { detail }) };
     }
 };
 

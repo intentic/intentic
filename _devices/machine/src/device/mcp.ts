@@ -13,7 +13,7 @@ import {
 } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { SandboxResourcesAskFieldsSchema, SandboxShapeWhenSchema } from "@intentic/sandbox-contract/schemas/devices";
-import { createMcpServer, type McpAuditEntry, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
+import { createMcpServer, type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
 import type { DeviceProgramTool } from "@intentic/sandbox-contract/policy/device-programs";
 import { z } from "zod";
 import { audit } from "./audit.js";
@@ -53,7 +53,8 @@ import { InspectCommandSchema, inspectSandbox, MAX_INSPECT_ARG_LENGTH, MAX_INSPE
 import { osTools } from "./tools/os/os.js";
 import { osSettingsTools } from "./tools/os/settings.js";
 import { DEFAULT_TIMEOUT_MS, describeResult, MAX_TIMEOUT_MS, runCommand } from "./tools/shell.js";
-import { stackTools } from "./tools/stacks/stacks.js";
+import { stackTools } from "./tools/stacks/stack-tools.js";
+import { auditDetail } from "./audit-detail.js";
 import { ciRunnerTools } from "./tools/ci-runners/ci-runners.js";
 import { appStop, DEFAULT_LOG_LINES as DEFAULT_APP_LOG_LINES, MAX_LOG_LINES as MAX_APP_LOG_LINES, startApp } from "./tools/programs/programs.js";
 import { appStartInput } from "./tools/programs/launch.js";
@@ -740,8 +741,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         input: z.object({ slug: required.describe("The sandbox's slug, from list_sandboxes, or the first label of its address.") }),
         run: async ({ slug }, scopes) => textResult(await diagnoseSandbox(slug, scopes)),
     }),
-    // list_stacks, stack_action, stack_logs and deploy_stack: Docker compose stacks on this machine, for the Deployments
-    // board (tools/stacks/stacks.ts). A deploy copies only what the calling sandbox pushed here.
+    // list_stacks, stack_action, stack_logs, deploy_stack and host_stats: Docker compose stacks on this machine, for the
+    // Deployments board (tools/stacks/stack-tools.ts). A deploy copies only what the calling sandbox pushed here.
     ...stackTools(callerSandbox),
     // The self-hosted CI runners here, for the Pipelines view (tools/ci-runners/ci-runners.ts); off Linux each says so.
     ...ciRunnerTools(),
@@ -750,23 +751,6 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     // Its network, sound, screens, keyboard and drives, on Intentic OS only (tools/os/settings.ts).
     ...osSettingsTools(),
 ];
-
-// Arguments are logged verbatim except typed text, which is redacted to its length: a `device` or `android_act` "type",
-// `clipboard` "write" or `ui_act` set_value call routinely carries a password. A key combination is not redacted; there is nothing
-// in it to leak. A `password` (os_wifi_connect's) or a runner `token` (ci_runner_register's, _remove's) is one too.
-export const auditDetail = (name: string, args: McpAuditEntry["args"]): string => {
-    const redact =
-        ((name === "device" || name === "android_act") && args["action"] === "type") ||
-        (name === "clipboard" && args["action"] === "write") ||
-        name === "browser_fill";
-    const typed = redact
-        ? { ...args, text: `<${String(args["text"] ?? "").length} characters>` }
-        : name === "ui_act" && args["value"] !== undefined
-          ? { ...args, value: `<${String(args["value"]).length} characters>` }
-          : args;
-    const safe = Object.fromEntries(Object.entries(typed).map(([key, value]) => [key, key === "password" || key === "token" ? `<${String(value).length} characters>` : value]));
-    return JSON.stringify(safe).slice(0, 500);
-};
 
 // The tools this device serves, for its tests to read what `tools/list` does not say (which carry a program).
 export const machineTools = (): readonly McpTool<DeviceScopes>[] => TOOLS;

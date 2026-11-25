@@ -14,6 +14,8 @@ import {
     DEVICE_FEATURE_REMOTE_SERVICE,
     DEVICE_FEATURE_ADMIN_RUN,
     DEVICE_FEATURE_STACKS,
+    DEVICE_FEATURE_STACKS_MANAGED,
+    DEVICE_FEATURE_HOST_STATS,
     DEVICE_FEATURE_CI_RUNNERS,
     type DeviceFacts,
 } from "@intentic/sandbox-contract/schemas/hosts";
@@ -148,8 +150,9 @@ export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => 
         ...(links === undefined ? {} : { links }),
         // What this agent and the ic under it implement: the ic's asked of that ic rather than written down here, and
         // the agent's own (the loopback catch, landed work delivered into an attached folder, a `devices reach` tunnel to
-        // a host on this machine's network, a file copied to or from a path, the compose stack tools) always, since this
-        // build answers them: a machine without Docker answers the stack tools with Docker's own error. The keyring only
+        // a host on this machine's network, a file copied to or from a path, the compose stack tools, their managed deploys
+        // and host_stats) always, since this build answers them: a machine without Docker answers the stack tools with
+        // Docker's own error. The keyring only
         // while one is installed here and answers (keyring/feature.ts); people's remote access only where an
         // intentic-remoted can be had (remote/remoted-binary.ts), and its lock-screen service on Windows alone
         // (remote/remoted-service.ts). The `power-stay-on` op on Windows' own side alone, the one environment whose power
@@ -163,6 +166,8 @@ export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => 
             DEVICE_FEATURE_REACH_NETWORK,
             DEVICE_FEATURE_FILE_COPY,
             DEVICE_FEATURE_STACKS,
+            DEVICE_FEATURE_STACKS_MANAGED,
+            DEVICE_FEATURE_HOST_STATS,
             ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
             ...(remotedAdvertised() ? [DEVICE_FEATURE_REMOTE, DEVICE_FEATURE_REMOTE_ICE] : []),
             ...(remotedAdvertised() && platform() === "win32" ? [DEVICE_FEATURE_REMOTE_SERVICE, DEVICE_FEATURE_ADMIN_RUN] : []),

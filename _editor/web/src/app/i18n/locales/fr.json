@@ -3210,6 +3210,8 @@
             "lastUsed": "Dernier usage",
             "inCommand": "dans une commande",
             "inScript": "dans un script",
+            "inDeploy": "déployé avec un stack",
+            "inDeployTo": "déployé avec {detail}",
             "inMcpCall": "dans un appel à un serveur MCP",
             "typedOnDesktop": "tapé sur le bureau du sandbox",
             "typed": "tapé dans une fenêtre",
@@ -6689,6 +6691,12 @@
             "leadUndated": "{device} arrêterait le travail prévu dessus.",
             "approve": "Modifier ces paramètres sur {device}",
             "working": "Modification des paramètres sur {device}…"
+        },
+        "deploy": {
+            "lead": "{stack} de {repo} se déploie sur {device}. Accorder permet à ce sandbox d'écrire ces secrets dans son .env à chaque déploiement :",
+            "new": "nouveau",
+            "note": "Ces noms seulement, sur {device} seulement : une stack qui lit un autre secret, ou qui passe sur un autre ordinateur, redemande.",
+            "approve": "Accorder à {stack}"
         }
     },
     "preview": {

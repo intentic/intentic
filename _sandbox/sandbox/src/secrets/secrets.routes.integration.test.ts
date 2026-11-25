@@ -49,6 +49,15 @@ test("secrets.generate refuses a name something already holds, rather than break
     expect(await client.secrets.reveal({ key: "SESSION_SECRET" })).toEqual({ value: "the-one-in-use" });
 });
 
+test("secrets.importValue stores a value under a new name, answers its length and never the value, and never replaces one", async () => {
+    const client = clientFor(createApp(services()));
+    const made = await client.secrets.importValue({ key: "KOMODO_DB_PASSWORD", value: "moved-from-komodo-42" });
+    expect(made).toEqual({ key: "KOMODO_DB_PASSWORD", length: 20, stored: "sandbox" });
+    expect(await client.secrets.reveal({ key: "KOMODO_DB_PASSWORD" })).toEqual({ value: "moved-from-komodo-42" });
+    expect(await errorCode(client.secrets.importValue({ key: "KOMODO_DB_PASSWORD", value: "a-replacement-value" }))).toBe("CONFLICT");
+    expect(await client.secrets.reveal({ key: "KOMODO_DB_PASSWORD" })).toEqual({ value: "moved-from-komodo-42" });
+});
+
 test("a value too short to mask is flagged on its inventory row, and regenerate replaces only one a person set", async () => {
     const client = clientFor(createApp(services()));
     await client.secrets.set({ key: "ROOT_PASSWORD", value: "hunter2" });

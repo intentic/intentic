@@ -3210,6 +3210,8 @@
             "lastUsed": "Last used",
             "inCommand": "in a command",
             "inScript": "in a script",
+            "inDeploy": "deployed with a stack",
+            "inDeployTo": "deployed with {detail}",
             "inMcpCall": "in a call to an MCP server",
             "typedOnDesktop": "typed on the sandbox's desktop",
             "typed": "typed into a window",
@@ -6689,6 +6691,12 @@
             "leadUndated": "{device} would stop the work booked on it.",
             "approve": "Change these settings on {device}",
             "working": "Changing the settings on {device}…"
+        },
+        "deploy": {
+            "lead": "{stack} in {repo} deploys to {device}. Granting lets this sandbox write these secrets into its .env each time it deploys it:",
+            "new": "new",
+            "note": "These names only, on {device} only: a stack that starts reading another secret, or moves to another computer, asks again.",
+            "approve": "Grant to {stack}"
         }
     },
     "preview": {

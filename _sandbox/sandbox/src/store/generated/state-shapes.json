@@ -73,6 +73,18 @@
       "since": "v1.327.0"
     }
   ],
+  "auth:deploy-grants.json": [
+    {
+      "type": "{ grants: { device: string; grantedAt: string; grantedBy?: string; repo: string; secrets: string[]; stack: string }[] }",
+      "since": "unreleased"
+    }
+  ],
+  "auth:deploy-secret-marks.json": [
+    {
+      "type": "{ key: string; stacks?: { deployed: Record<string, string>; repo: string; stack: string; told?: Record<string, string> }[] }",
+      "since": "unreleased"
+    }
+  ],
   "auth:extension-secrets.json": [
     {
       "type": "Record<string, string>",
@@ -451,6 +463,12 @@
     {
       "type": "{ projects: Record<string, { conversationId?: string; kind: \"request\"; title?: string }> }",
       "since": "v1.312.0"
+    }
+  ],
+  "history:deploy-watch.json": [
+    {
+      "type": "{ forge?: { deployment?: number; id: string; reported: string }[]; hosts?: { device: string; low: string[] }[]; registry?: { checkedAt: string; repo: string; stack: string }[]; stacks?: ({ reads: number; repo: string; since: string; stack: string; state: \"running\" | \"unhealthy\" | \"restarting\" | \"stopped\" | \"missing\" | \"unreachable\" | \"unknown\"; told: \"ok\" | \"bad\" })[] }",
+      "since": "unreleased"
     }
   ],
   "history:engines/<engine>/state.json": [
@@ -1703,6 +1721,12 @@
       "since": "v1.313.0"
     }
   ],
+  "workspace:.intentic/records/deploys.json": [
+    {
+      "type": "{ commit: string; device: string; digests?: Record<string, string>; endedAt?: string; envDigest?: string; error?: string; forgeUrl?: string; healthySeconds?: number; id: string; outcome: \"queued\" | \"running\" | \"succeeded\" | \"failed\" | \"rolled-back\" | \"superseded\" | \"refused\"; outputTail?: string; pins?: Record<string, string>; queuedAt: string; ref?: string; repo: string; rolledBackTo?: string; secretNames?: string[]; stack: string; startedAt?: string; trigger: { detail?: string; kind: \"manual\" | \"ci\" | \"registry\" | \"after\" | \"rollback\" | \"promote\" | \"secret-change\"; url?: string } }",
+      "since": "unreleased"
+    }
+  ],
   "workspace:.intentic/records/extension-updates.json": [
     {
       "type": "{ checkedAt?: string; extensions: Record<string, { advisory?: { at: string; autoDisabled: boolean; reason: string; registry: string }; health?: { at: string; autoReverted?: boolean; detail?: string; fromRef?: string; state: \"watching\" | \"healthy\" | \"unhealthy\" }; update?: { at: string; needsReview?: string; path?: string; ref: string; registry: string; review?: { at: string; conversationId: string }; securityFix?: boolean; trust: \"verified\" | \"listed\"; url: string; version?: string } }> }",
@@ -1807,7 +1831,7 @@
       "since": "v1.428.0"
     },
     {
-      "type": "{ answeredBy?: string; byAgent?: boolean; conversationId: string; createdAt: number; id: string; outcome?: string; status: \"open\" | \"working\" | \"met\" | \"declined\" | \"cancelled\"; subject: { changes?: Record<string, string>; entry: string; instance?: string; kind: \"capability\"; mode: \"connect\" | \"reconnect\" | \"change\" | \"remove\"; name: string; prefill?: Record<string, string>; reason?: string; reported?: boolean; target?: string } | { hint?: string; hosts?: string[]; kind: \"secret\"; link?: string; multiline?: boolean; name: string; replace?: boolean; where?: string } | { kind: \"grant\"; label: string; role?: string; roles?: { id: string; label: string }[]; scope?: \"conversation\" | \"persona\"; subject: \"capability\" | \"folder\" | \"shelf\" | \"site\"; what: string } | { approvers: string[]; kind: \"release\"; subject: string } | { approvedHash?: string; kind: \"environment\"; steps: string; tool: string } | { automation: { account?: string; actsAs?: string; allowedTools?: string[]; chore?: boolean; createdBy?: string; enabled: boolean; expiresAt?: number; fireOn?: \"pass\" | \"change\"; group?: string; guard?: string; holdForSeconds?: number; id: string; issues?: { accent?: string; antiBot?: \"pow\"; askEmail?: boolean; captureCrashes?: boolean; dailyReportMax?: number; escalateAfter?: number; keyFromBrowsers?: boolean; prompt?: string; thanks?: string; title?: string }; models?: ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; model: string; provider: string; thinking?: boolean })[]; note?: string; prompt: string; requireApproval?: boolean; runAs?: string; senders?: { others: \"allow\" | \"hold\" | \"ignore\"; rules: { actsAs?: string; groups?: string[]; ids?: string[]; label?: string; requireApproval?: boolean; runAs?: string }[] }; source?: { kind: \"npm\"; package: string; range?: string; tag?: string } | { kind: \"github-release\"; prereleases?: boolean; repo: string } | { kind: \"url\"; select?: string; url: string }; target?: { kind: \"agent\" } | { conversationId: string; kind: \"conversation\" } | { kind: \"notify\" }; trigger: { afterSessions?: number; cron: string; kind: \"schedule\"; tz?: string } | { at: number; kind: \"once\" } | { dailyMax?: number; kind: \"event\"; signature?: { scheme: \"github\" | \"linear\" | \"sentry\" | \"stripe\" | \"standard-webhooks\"; secret: string } } | { allowedOrigins?: string[]; branch?: string; channelId?: string; eventType?: string; kind: \"listener\"; mentioned?: boolean; provider: string } | { event: \"turn.settled\" | \"agent.landed\" | \"deps.broken\" | \"deps.fixed\"; kind: \"workspace\"; repo?: string }; until?: \"first-fire\"; webchat?: { accent?: string; access?: \"public\" | \"google\"; aiDisclosure?: boolean; aiDisclosureText?: string; antiBot?: \"turnstile\" | \"pow\"; conversationMessageMax?: number; dailyMessageMax?: number; googleClientId?: string; greeting?: string; position?: \"top-right\" | \"top-left\" | \"bottom-right\" | \"bottom-left\"; requireName?: boolean; sessionTtlMinutes?: number; title?: string; turnstileSecret?: string; turnstileSiteKey?: string } }; firstCheck?: { at: number; pass: boolean; saw: string }; kind: \"automation\"; replaces?: boolean } | { creates?: boolean; diff: string; file: string; kind: \"instruction\"; text: string } | { device: string; dueAt?: number; findings: ({ action?: string; afterSeconds?: number; command?: string; fixable: boolean; id: string; plans?: string[]; power?: \"ac\" | \"dc\"; text: string; window?: { fromHour: number; toHour: number } })[]; kind: \"host-power\" } | { heldBy?: string; kind: \"claim\"; project: string } | { address?: string; from?: string; kind: \"route\"; person: string; scopes: (\"report\" | \"drop\" | \"read\" | \"task\")[]; target: string; targetName: string } | { address?: string; attachments?: number; clipped?: boolean; kind: \"redirect\"; person: string; project?: string; target: string; targetName: string; words: string }; title: string; told?: \"call\" | \"turn\" | \"queued\"; unattended?: boolean; updatedAt: number; why?: string }",
+      "type": "{ answeredBy?: string; byAgent?: boolean; conversationId: string; createdAt: number; id: string; outcome?: string; status: \"open\" | \"working\" | \"met\" | \"declined\" | \"cancelled\"; subject: { changes?: Record<string, string>; entry: string; instance?: string; kind: \"capability\"; mode: \"connect\" | \"reconnect\" | \"change\" | \"remove\"; name: string; prefill?: Record<string, string>; reason?: string; reported?: boolean; target?: string } | { hint?: string; hosts?: string[]; kind: \"secret\"; link?: string; multiline?: boolean; name: string; replace?: boolean; where?: string } | { kind: \"grant\"; label: string; role?: string; roles?: { id: string; label: string }[]; scope?: \"conversation\" | \"persona\"; subject: \"capability\" | \"folder\" | \"shelf\" | \"site\"; what: string } | { approvers: string[]; kind: \"release\"; subject: string } | { approvedHash?: string; kind: \"environment\"; steps: string; tool: string } | { automation: { account?: string; actsAs?: string; allowedTools?: string[]; chore?: boolean; createdBy?: string; enabled: boolean; expiresAt?: number; fireOn?: \"pass\" | \"change\"; group?: string; guard?: string; holdForSeconds?: number; id: string; issues?: { accent?: string; antiBot?: \"pow\"; askEmail?: boolean; captureCrashes?: boolean; dailyReportMax?: number; escalateAfter?: number; keyFromBrowsers?: boolean; prompt?: string; thanks?: string; title?: string }; models?: ({ effort?: string; fast?: boolean; harness?: \"native\" | \"claude-code\" | \"codex\" | \"opencode\" | \"pi\" | \"muse\" | \"vendor\"; model: string; provider: string; thinking?: boolean })[]; note?: string; prompt: string; requireApproval?: boolean; runAs?: string; senders?: { others: \"allow\" | \"hold\" | \"ignore\"; rules: { actsAs?: string; groups?: string[]; ids?: string[]; label?: string; requireApproval?: boolean; runAs?: string }[] }; source?: { kind: \"npm\"; package: string; range?: string; tag?: string } | { kind: \"github-release\"; prereleases?: boolean; repo: string } | { kind: \"url\"; select?: string; url: string }; target?: { kind: \"agent\" } | { conversationId: string; kind: \"conversation\" } | { kind: \"notify\" }; trigger: { afterSessions?: number; cron: string; kind: \"schedule\"; tz?: string } | { at: number; kind: \"once\" } | { dailyMax?: number; kind: \"event\"; signature?: { scheme: \"github\" | \"linear\" | \"sentry\" | \"stripe\" | \"standard-webhooks\"; secret: string } } | { allowedOrigins?: string[]; branch?: string; channelId?: string; eventType?: string; kind: \"listener\"; mentioned?: boolean; provider: string } | { event: \"turn.settled\" | \"agent.landed\" | \"deps.broken\" | \"deps.fixed\"; kind: \"workspace\"; repo?: string }; until?: \"first-fire\"; webchat?: { accent?: string; access?: \"public\" | \"google\"; aiDisclosure?: boolean; aiDisclosureText?: string; antiBot?: \"turnstile\" | \"pow\"; conversationMessageMax?: number; dailyMessageMax?: number; googleClientId?: string; greeting?: string; position?: \"top-right\" | \"top-left\" | \"bottom-right\" | \"bottom-left\"; requireName?: boolean; sessionTtlMinutes?: number; title?: string; turnstileSecret?: string; turnstileSiteKey?: string } }; firstCheck?: { at: number; pass: boolean; saw: string }; kind: \"automation\"; replaces?: boolean } | { creates?: boolean; diff: string; file: string; kind: \"instruction\"; text: string } | { device: string; dueAt?: number; findings: ({ action?: string; afterSeconds?: number; command?: string; fixable: boolean; id: string; plans?: string[]; power?: \"ac\" | \"dc\"; text: string; window?: { fromHour: number; toHour: number } })[]; kind: \"host-power\" } | { heldBy?: string; kind: \"claim\"; project: string } | { address?: string; from?: string; kind: \"route\"; person: string; scopes: (\"report\" | \"drop\" | \"read\" | \"task\")[]; target: string; targetName: string } | { address?: string; attachments?: number; clipped?: boolean; kind: \"redirect\"; person: string; project?: string; target: string; targetName: string; words: string } | { device: string; kind: \"deploy\"; repo: string; secrets: string[]; stack: string; ungranted: string[] }; title: string; told?: \"call\" | \"turn\" | \"queued\"; unattended?: boolean; updatedAt: number; why?: string }",
       "since": "unreleased"
     }
   ],
@@ -1859,7 +1883,7 @@
       "since": "v1.338.0"
     },
     {
-      "type": "{ approvedBy?: string; at: number; detail?: string; lane: \"shell\" | \"code\" | \"browser\" | \"gateway\" | \"ssh\" | \"device\" | \"desktop\" | \"mcp\"; name: string }",
+      "type": "{ approvedBy?: string; at: number; detail?: string; lane: \"shell\" | \"code\" | \"browser\" | \"gateway\" | \"ssh\" | \"device\" | \"desktop\" | \"mcp\" | \"deploy\"; name: string }",
       "since": "unreleased"
     }
   ],

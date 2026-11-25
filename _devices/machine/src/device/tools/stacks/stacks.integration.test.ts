@@ -7,7 +7,8 @@ import { ScopeError } from "../../policy.js";
 import { sandboxRunsDir } from "../programs/artifacts.js";
 import { COMPLETE } from "../programs/builds.js";
 import { copyIntoStack, DEPLOY_RECORD, planCopy } from "./stack-folder.js";
-import { deployStack, stackAction, stacksRoot } from "./stacks.js";
+import { deployStack } from "./deploy.js";
+import { stackAction, stacksRoot } from "./stacks.js";
 
 // deploy_stack's copy, on real folders: `suites` gives this run a throwaway HOME, so the runs folder a push files into
 // and the stacks root are temp ones. Docker is a fake (device-testing.ts); nothing here needs an engine. POSIX paths and
@@ -99,7 +100,7 @@ test("a deploy adds and overwrites, deletes nothing, never touches a .env, recor
     expect(statSync(join(dir, "bin", "entrypoint.sh")).mode & 0o777).toBe(0o755);
     expect(existsSync(join(dir, COMPLETE))).toBe(false);
     const record: unknown = JSON.parse(readFileSync(join(dir, DEPLOY_RECORD), "utf8"));
-    expect(record).toEqual({ commit: COMMIT, composeFile: "compose.yaml", deployedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) });
+    expect(record).toEqual({ commit: COMMIT, composeFile: "compose.yaml", deployedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/), owner: SANDBOX });
     expect(calls.at(-1)).toEqual({ args: ["compose", "-p", "shop", "-f", join(dir, "compose.yaml"), "up", "-d", "--build", "--remove-orphans"], cwd: dir });
 });
 
@@ -186,7 +187,7 @@ test("stack_action runs in the stack's own folder with its files, and a pull's u
         compose: dockerAnswered("", " wiki Pulled\n"),
     });
 
-    expect(await stackAction("wiki", "pull", granted, docker)).toBe(" wiki Pulled\n wiki Pulled");
+    expect(await stackAction("wiki", "pull", granted, SANDBOX, docker)).toBe(" wiki Pulled\n wiki Pulled");
     expect(calls.slice(-2)).toEqual([
         { args: ["compose", "-p", "wiki", "-f", files, "pull"], cwd: dir },
         { args: ["compose", "-p", "wiki", "-f", files, "up", "-d", "--remove-orphans"], cwd: dir },

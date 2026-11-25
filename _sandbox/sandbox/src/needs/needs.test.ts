@@ -87,6 +87,7 @@ const harness = (): Harness => {
         claim: handler,
         route: handler,
         redirect: { ...handler, wakesOn: "declined" },
+        deploy: handler,
     };
     let next = 0;
     const deps: NeedsDeps = {

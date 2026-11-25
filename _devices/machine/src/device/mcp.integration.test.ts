@@ -5,7 +5,8 @@ import { dirname, join } from "node:path";
 import { agentHome } from "@intentic/local-agent";
 import { DEVICE_PROGRAM_TOOLS } from "@intentic/sandbox-contract/policy/device-programs";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
-import { auditDetail, handleMcpMessage, machineTools } from "./mcp.js";
+import { auditDetail } from "./audit-detail.js";
+import { handleMcpMessage, machineTools } from "./mcp.js";
 import { grantWith } from "./device-testing.js";
 
 // `text` is the first block, the one a program reading a tool's answer takes; `texts` is every block, in order.
@@ -117,6 +118,7 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "stack_action",
         "stack_logs",
         "deploy_stack",
+        "host_stats",
         "ci_runners",
         "ci_runner_action",
         "ci_runner_logs",
@@ -206,6 +208,14 @@ test("the stack tools take only the contract's ops and arguments, and name the s
     const unread = await call("list_stacks", {}, grantWith("agent", { shell: "off" }));
     expect(unread.isError).toBe(true);
     expect(unread.text).toMatch(/Run commands.*switched off/);
+    const unmeasured = await call("host_stats", {}, grantWith("agent", { shell: "off" }));
+    expect(unmeasured.isError).toBe(true);
+    expect(unmeasured.text).toMatch(/Run commands.*switched off/);
+    // A registry outside the contract's host shape, and a managed field this agent does not know, are refused unread.
+    const badHost = await call("deploy_stack", { ...deploy, registries: [{ host: "https://ghcr.io", username: "me", password: "hunter22" }] }, grantWith("agent", { programs: "on" }));
+    expect(badHost.isError).toBe(true);
+    expect(badHost.text).toMatch(/registries/);
+    expect(badHost.text).not.toContain("hunter22");
     const unsent = await call("deploy_stack", deploy, grantWith("agent"));
     expect(unsent.isError).toBe(true);
     expect(unsent.text).toMatch(/Run programs this sandbox sends.*switched off/);
@@ -314,6 +324,7 @@ test("every tool says what a call can do to the device", async () => {
         "diagnose_sandbox",
         "list_stacks",
         "stack_logs",
+        "host_stats",
         "ci_runners",
         "ci_runner_logs",
     ]);
@@ -464,6 +475,10 @@ test("reshape_sandbox refuses an empty ask as a readable result, not a transport
 // is a file on the machine anyone at it can read, and everything else is kept so the owner can see what ran.
 test("the audit record keeps a Wi-Fi password's length, never the password", () => {
     expect(JSON.parse(auditDetail("os_wifi_connect", { ssid: "Office", password: "correct horse" }))).toEqual({ ssid: "Office", password: "<13 characters>" });
+    // A managed deploy's rendered .env and registry logins are logged as how much they held.
+    const deployed = auditDetail("deploy_stack", { name: "shop", env: "DB_PASSWORD=hunter22\n", registries: [{ host: "ghcr.io", username: "me", password: "hunter22" }] });
+    expect(JSON.parse(deployed)).toEqual({ name: "shop", env: "<21 characters>", registries: "<1 entries>" });
+    expect(auditDetail("stack_logs", { name: "shop", env: "not a secret here" })).toContain("not a secret here");
     expect(auditDetail("os_wifi_connect", { ssid: "Café: Guest" })).toBe(JSON.stringify({ ssid: "Café: Guest" }));
     // The redactions already there still hold beside it.
     expect(JSON.parse(auditDetail("device", { action: "type", text: "hunter22" }))).toEqual({ action: "type", text: "<8 characters>" });

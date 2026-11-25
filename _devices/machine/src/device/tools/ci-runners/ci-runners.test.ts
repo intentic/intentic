@@ -1,6 +1,6 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import { grantWith } from "../../device-testing.js";
-import { auditDetail } from "../../mcp.js";
+import { auditDetail } from "../../audit-detail.js";
 import { ScopeError } from "../../policy.js";
 import { ciRunners, ciRunnerTools } from "./ci-runners.js";
 

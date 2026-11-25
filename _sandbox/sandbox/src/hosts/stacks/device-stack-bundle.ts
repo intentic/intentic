@@ -77,6 +77,19 @@ export const committedStack = async (dir: string, repo: string, composeFile: str
             throw refused(said === "" ? `"${repo}" has no commits yet: commit what should run, then deploy` : `could not read "${repo}"'s last commit: ${said}`);
         },
     );
+    return { commit, composeFile: await composeFileIn(dir, repo, commit, composeFile, `"${repo}"'s last commit (${commit.slice(0, 12)})`) };
+};
+
+// (2026-11-25) The same for an exact commit, which a managed deploy names (deploys/): a CI run's, a rollback's, the one a
+// promotion copies. `commit` is a full sha already resolved (exactCommit below), so the words name it rather than HEAD.
+export const stackAtCommit = async (dir: string, repo: string, commit: string, composeFile: string | undefined): Promise<CommittedStack> => ({
+    commit,
+    composeFile: await composeFileIn(dir, repo, commit, composeFile, `"${repo}" at ${commit.slice(0, 12)}`),
+});
+
+// The compose file inside `commit`: the one named, which must be a file there, or the first of compose's own defaults at
+// its root. `which` names the commit in a refusal.
+const composeFileIn = async (dir: string, repo: string, commit: string, composeFile: string | undefined, which: string): Promise<string> => {
     if (composeFile !== undefined) {
         // `-t` rather than `-e`: a folder of that name is in the commit too, and compose cannot run a folder.
         const kind = await defaultGit(dir, ["cat-file", "-t", `${commit}:${composeFile}`]).then(
@@ -85,19 +98,48 @@ export const committedStack = async (dir: string, repo: string, composeFile: str
             () => undefined,
         );
         if (kind !== "blob") {
-            throw refused(`"${composeFile}" is not a file in "${repo}"'s last commit (${commit.slice(0, 12)}): commit it, or name another compose file`);
+            throw refused(`"${composeFile}" is not a file in ${which}: commit it, or name another compose file`);
         }
-        return { commit, composeFile };
+        return composeFile;
     }
     const { stdout } = await defaultGit(dir, ["ls-tree", "-z", "--name-only", commit]);
     const top = new Set(stdout.split("\0"));
     const found = COMPOSE_FILE_DEFAULTS.find((name) => top.has(name));
     if (found === undefined) {
-        throw refused(
-            `"${repo}"'s last commit (${commit.slice(0, 12)}) has none of ${COMPOSE_FILE_DEFAULTS.join(", ")} at its root: commit one, or name the compose file to run`,
-        );
+        throw refused(`${which} has none of ${COMPOSE_FILE_DEFAULTS.join(", ")} at its root: commit one, or name the compose file to run`);
     }
-    return { commit, composeFile: found };
+    return found;
+};
+
+// The full sha of `wanted` (a full or abbreviated commit), or undefined when the repository does not hold it.
+const resolvedCommit = async (dir: string, wanted: string): Promise<string | undefined> =>
+    defaultGit(dir, ["rev-parse", "--verify", "--quiet", `${wanted}^{commit}`]).then(
+        ({ stdout }) => stdout.trim() || undefined,
+        // allow(silent-catch): `--quiet` makes a commit the repository lacks a bare failure, which is the answer asked for
+        () => undefined,
+    );
+
+// (2026-11-25) The full sha of a commit a deploy names. A CI run's commit may not be here yet (the workspace pulls on
+// its own clock), so one the repository lacks is fetched once from its remote and looked up again. `fetch` is the
+// caller's way to the remote (deploys/ hands in the daemon's own git env); it answers why it failed, or nothing.
+export const exactCommit = async (dir: string, repo: string, wanted: string, fetch: () => Promise<string | undefined>): Promise<string> => {
+    if (!/^[0-9a-f]{7,64}$/.test(wanted)) {
+        throw refused(`"${wanted}" is not a commit: name one by its sha, full or abbreviated`);
+    }
+    const local = await resolvedCommit(dir, wanted);
+    if (local !== undefined) {
+        return local;
+    }
+    const failed = await fetch();
+    const fetched = await resolvedCommit(dir, wanted);
+    if (fetched !== undefined) {
+        return fetched;
+    }
+    throw refused(
+        failed === undefined
+            ? `"${repo}" has no commit ${wanted}, here or on its remote: push it, or name a commit that exists`
+            : `"${repo}" has no commit ${wanted} here, and fetching its remote failed: ${failed}`,
+    );
 };
 
 const sha256Of = async (file: string): Promise<string> => {
@@ -120,7 +162,7 @@ export const withPackedTree = async <T>(dir: string, repo: string, commit: strin
         const { size } = await stat(file);
         if (size > STACK_BUNDLE_MAX_BYTES) {
             throw refused(
-                `"${repo}"'s last commit packs to ${sizeLabel(size)}, past the ${sizeLabel(STACK_BUNDLE_MAX_BYTES)} a deploy carries: keep data, media and build output out of the repository (or mark them export-ignore in .gitattributes)`,
+                `"${repo}" at ${commit.slice(0, 12)} packs to ${sizeLabel(size)}, past the ${sizeLabel(STACK_BUNDLE_MAX_BYTES)} a deploy carries: keep data, media and build output out of the repository (or mark them export-ignore in .gitattributes)`,
             );
         }
         return await send({ file, size, sha256: await sha256Of(file) });

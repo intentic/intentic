@@ -14,10 +14,12 @@ import {
     SecretGeneratedSchema,
     SecretGenerateSchema,
     type SecretHostGuard,
+    SecretImportSchema,
     SecretHostGuardsSchema,
     SecretHostGuardSetResultSchema,
     SecretHostGuardSetSchema,
 } from "@intentic/sandbox-contract/schemas/secrets";
+import { DeployAnswerSchema, DeployRecordSchema, DeployRequestSchema } from "@intentic/sandbox-contract/schemas/deploys";
 import { sandboxRequestFor } from "@intentic/sandbox-contract";
 
 // The asking commands against the contract itself: each request a CLI sends must be the route the contract declares
@@ -83,11 +85,15 @@ const TOKEN_DIR = mkdtempSync(join(tmpdir(), "needs-cli-"));
 const TOKEN = join(TOKEN_DIR, "agent.token");
 writeFileSync(TOKEN, "agent-token-for-the-suite\n");
 
-const run = (port: number, command: string, args: readonly string[]): Promise<{ code: number | null; stdout: string; stderr: string }> =>
+// `stdin`, when given, is piped into the command and closed: what `… | secrets import NAME --stdin` reads.
+const run = (port: number, command: string, args: readonly string[], stdin?: string): Promise<{ code: number | null; stdout: string; stderr: string }> =>
     new Promise((resolve) => {
         const child = spawn(process.execPath.endsWith("bun") ? "node" : process.execPath, [join(BIN, command), ...args], {
             env: { ...process.env, SANDBOX_PORT: String(port), INTENTIC_AGENT_TOKEN_PATH: TOKEN, INTENTIC_TURN_OWNER: "conv-cli" },
         });
+        if (stdin !== undefined) {
+            child.stdin.end(stdin);
+        }
         let stdout = "";
         let stderr = "";
         child.stdout.on("data", (chunk: Buffer) => {
@@ -382,6 +388,76 @@ describe("the asking commands speak the needs contract", () => {
         const taken = await run(server.port, "secrets", ["generate", "SESSION_SECRET"]);
         expect(taken).toMatchObject({ code: 2, stderr: "", stdout: 'secrets: "SESSION_SECRET" is already stored: use it as it is, or pick a name nothing here holds.\n' });
         expect(server.seen.map((seen) => `${seen.method} ${seen.path}`)).toEqual([declared(["secrets", "generate"], { key: "SESSION_SECRET" })]);
+    });
+
+    // A value only the pipe ever carries: found anywhere else, it leaked.
+    const MOVED = "s3cret-moved-from-komodo";
+
+    it("secrets import reads the value from stdin, sends it to the route the contract declares, and never prints it", async () => {
+        server.answer = (seen) =>
+            `${seen.method} ${seen.path}` === declared(["secrets", "importValue"], seen.body)
+                ? { status: 200, body: SecretGeneratedSchema.parse({ key: "KOMODO_DB_PASSWORD", length: MOVED.length, stored: "sandbox" }) }
+                : { status: 404, body: { message: `nothing at ${seen.method} ${seen.path}` } };
+        const result = await run(server.port, "secrets", ["import", "KOMODO_DB_PASSWORD", "--stdin"], `${MOVED}\n`);
+        expect(result).toEqual({
+            code: 0,
+            stderr: "",
+            stdout:
+                `Stored KOMODO_DB_PASSWORD (${MOVED.length} characters). Write {{secret:KOMODO_DB_PASSWORD}} wherever it goes: a command substitutes it at ` +
+                "execution, a managed stack's .env receives it once the owner grants it, and in a file keep the reference itself.\n",
+        });
+        // The one trailing newline a pipe ends with is not part of the value.
+        expect(SecretImportSchema.parse(server.seen[0]?.body)).toEqual({ key: "KOMODO_DB_PASSWORD", value: MOVED });
+    });
+
+    it("secrets import refuses a name already held with exit 1, and asks nothing without --stdin or a value", async () => {
+        server.answer = () => ({ status: 409, body: { message: '"KOMODO_DB_PASSWORD" is already stored: use it as it is, or pick a name nothing here holds.' } });
+        const held = await run(server.port, "secrets", ["import", "KOMODO_DB_PASSWORD", "--stdin"], MOVED);
+        expect(held).toEqual({ code: 1, stderr: "", stdout: 'secrets: "KOMODO_DB_PASSWORD" is already stored: use it as it is, or pick a name nothing here holds.\n' });
+        expect(server.seen).toHaveLength(1);
+        const unflagged = await run(server.port, "secrets", ["import", "KOMODO_DB_PASSWORD"], MOVED);
+        expect(unflagged).toEqual({
+            code: 2,
+            stderr: "",
+            stdout: "secrets: secrets import takes a NAME and --stdin, with the value piped in: … | secrets import NAME --stdin\n",
+        });
+        const empty = await run(server.port, "secrets", ["import", "KOMODO_DB_PASSWORD", "--stdin"], "\n");
+        expect(empty).toEqual({ code: 2, stderr: "", stdout: "secrets: nothing arrived on stdin: pipe the value in, … | secrets import NAME --stdin\n" });
+        expect(server.seen).toHaveLength(1);
+        expect(JSON.stringify([held, unflagged, empty])).not.toContain(MOVED);
+    });
+
+    it("deploys grant raises the deploy ask the needs route declares, and exits 3 while the owner has not answered", async () => {
+        server.answer = raised({ state: "open", message: "Asked the owner to let web on rog receive the secret DB_URL." });
+        const result = await run(server.port, "deploys", ["grant", "shop", "web", "--why", "the new release reads DB_URL"]);
+        expect(result).toEqual({ code: 3, stderr: "", stdout: "Asked the owner to let web on rog receive the secret DB_URL.\n" });
+        expect(NeedRaiseSchema.parse(server.seen[0]?.body)).toEqual({ ask: { kind: "deploy", repo: "shop", stack: "web" }, why: "the new release reads DB_URL" });
+    });
+
+    it("deploys deploy sends the route's body, and with --wait exits by how the deploy ended", async () => {
+        const record = DeployRecordSchema.parse({
+            id: "dep-0001",
+            repo: "shop",
+            stack: "web",
+            device: "rog",
+            commit: "0123456789abcdef0123456789abcdef01234567",
+            trigger: { kind: "manual", detail: "hotfix" },
+            outcome: "rolled-back",
+            rolledBackTo: "dep-0000",
+            queuedAt: "2026-11-25T12:00:00.000Z",
+            error: "web did not come up healthy in 60 s",
+        });
+        server.answer = (seen) =>
+            `${seen.method} ${seen.path}` === declared(["deploys", "deploy"], seen.body)
+                ? { status: 200, body: DeployAnswerSchema.parse({ record }) }
+                : { status: 404, body: { message: `nothing at ${seen.method} ${seen.path}` } };
+        const result = await run(server.port, "deploys", ["deploy", "shop", "web", "--commit", "0123456", "--why", "hotfix", "--wait"]);
+        expect(result).toEqual({
+            code: 1,
+            stderr: "",
+            stdout: "dep-0001 rolled-back, back to dep-0000 · 01234567 on rog · manual (hotfix) · 2026-11-25T12:00:00.000Z — web did not come up healthy in 60 s\n",
+        });
+        expect(DeployRequestSchema.parse(server.seen[0]?.body)).toEqual({ repo: "shop", stack: "web", commit: "0123456", reason: "hotfix", wait: true });
     });
 
     // A daemon holding these guards and approver gates: the reads answer them, a PUT answers the setting it was sent, with

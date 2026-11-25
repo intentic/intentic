@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { KeyringShareModeSchema } from "./keyring.js";
+import { NeedKindSchema } from "./need-kinds.js";
 import { AutomationSchema } from "./automations.js";
+import { DeployNeedAskSchema, DeployNeedSchema } from "./deploys.js";
 import { HostPowerFindingSchema } from "./host-power.js";
 import { entryId } from "./internal.js";
 import { PASS_SCOPES } from "../protocol/doors/pass-scopes.js";
@@ -12,13 +14,7 @@ import { SecretHostSchema } from "./secrets.js";
 // it until someone answers, draws it wherever it is waiting, and wakes the conversation when it is met
 // (docs/architecture/needs.md). Every word on a need is the daemon's except `why`, the agent's own case.
 
-export const NEED_KINDS = ["capability", "secret", "grant", "release", "environment", "automation", "instruction", "host-power", "claim", "route", "redirect"] as const;
-export const NeedKindSchema = z
-    .enum(NEED_KINDS)
-    .describe(
-        "What is being asked for: a connection, a secret's value, wider reach, a gated credential, a tool in the image, an automation to run unattended, a standing rule written into an AGENTS.md, power settings changed on the computer this sandbox runs on, a project claimed for this sandbox so the owner's other sandboxes report its problems here, a person's leave for this sandbox to act as them in another, or a person's message sent on to the sandbox it was meant for.",
-    );
-export type NeedKind = z.infer<typeof NeedKindSchema>;
+export { NEED_KINDS, type NeedKind, NeedKindSchema } from "./need-kinds.js";
 
 // `working` is a yes still being carried out: a connection whose form is open, an overlay approved but not yet built.
 export const NeedStatusSchema = z
@@ -274,12 +270,12 @@ export const NeedSubjectSchema = z
         ClaimNeedSchema,
         RouteNeedSchema,
         RedirectNeedSchema,
+        DeployNeedSchema,
     ])
     .describe("What exactly is asked for.");
 export type NeedSubject = z.infer<typeof NeedSubjectSchema>;
 
-// How the agent learned the outcome: the call it raised the need with, words into its live turn, a turn of its own, or
-// queued behind what the conversation was doing.
+// How the agent learned the outcome: the call it raised the need with, words into its live turn, its own turn, or queued.
 export const NeedToldSchema = z.enum(["call", "turn", "queued"]);
 export type NeedTold = z.infer<typeof NeedToldSchema>;
 
@@ -356,6 +352,7 @@ export const NeedAskSchema = z.discriminatedUnion("kind", [
         target: z.string().trim().min(1).max(120).optional().describe("The sandbox the message belongs in, by its name or id."),
         project: z.string().trim().min(1).max(400).optional().describe("Or the project it is about: the sandbox claiming it is the target."),
     }),
+    DeployNeedAskSchema,
 ]);
 export type NeedAsk = z.infer<typeof NeedAskSchema>;
 

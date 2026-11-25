@@ -3210,6 +3210,8 @@
             "lastUsed": "Zuletzt genutzt",
             "inCommand": "in einem Befehl",
             "inScript": "in einem Skript",
+            "inDeploy": "mit einem Stack bereitgestellt",
+            "inDeployTo": "mit {detail} bereitgestellt",
             "inMcpCall": "in einem Aufruf an einen MCP-Server",
             "typedOnDesktop": "auf dem Desktop der Sandbox getippt",
             "typed": "in ein Fenster getippt",
@@ -6689,6 +6691,12 @@
             "leadUndated": "{device} würde die dort geplante Arbeit anhalten.",
             "approve": "Diese Einstellungen auf {device} ändern",
             "working": "Die Einstellungen auf {device} werden geändert…"
+        },
+        "deploy": {
+            "lead": "{stack} in {repo} wird auf {device} bereitgestellt. Mit der Freigabe schreibt diese Sandbox bei jeder Bereitstellung diese Secrets in seine .env:",
+            "new": "neu",
+            "note": "Nur diese Namen, nur auf {device}: Liest der Stack ein weiteres Secret oder zieht er auf einen anderen Computer um, wird erneut gefragt.",
+            "approve": "Für {stack} freigeben"
         }
     },
     "preview": {

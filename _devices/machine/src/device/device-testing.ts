@@ -14,6 +14,7 @@ import { type DeviceScopes, deviceScopesOn, type DeviceSwitch } from "@intentic/
 import type { ExecResult } from "../sync/exec.js";
 import type { IndicatorDeps } from "./indicator.js";
 import type { AdbOutput, AdbRunner } from "./tools/android.js";
+import type { DeploySeams } from "./tools/stacks/deploy.js";
 import type { Docker } from "./tools/stacks/stacks.js";
 
 // The fake desktop the tool tests drive (this repo's `testing.ts` convention, excluded from the build), so both
@@ -305,22 +306,73 @@ export const dockerAnswered = (stdout: string, stderr = ""): ExecResult => ({ st
 
 export interface FakeDocker {
     readonly docker: Docker;
-    // Every invocation, in order, with the folder it ran in.
-    readonly calls: { readonly args: readonly string[]; readonly cwd: string | undefined }[];
+    // Every invocation, in order, with the folder it ran in and the environment laid over the agent's, when one was.
+    readonly calls: { readonly args: readonly string[]; readonly cwd: string | undefined; readonly env?: Readonly<Record<string, string>> }[];
 }
 
-// The docker the stack tools run, answering by what was asked: `compose ls` and `ps` with the listing's two reads, any
-// other compose run with `compose`. Unset, it is an engine with nothing on it whose every run succeeds.
-export const fakeDocker = (answers: { readonly ls?: ExecResult; readonly ps?: ExecResult; readonly compose?: ExecResult } = {}): FakeDocker => {
-    const calls: { args: readonly string[]; cwd: string | undefined }[] = [];
+// The docker the stack tools run, answering by what was asked: `respond` first, for any run it answers; then `compose
+// ls` and `ps` with the listing's two reads, any other compose run with `compose`. Unset, it is an engine with nothing on
+// it whose every run succeeds.
+export const fakeDocker = (
+    answers: {
+        readonly ls?: ExecResult;
+        readonly ps?: ExecResult;
+        readonly compose?: ExecResult;
+        readonly respond?: (args: readonly string[]) => ExecResult | undefined;
+    } = {},
+): FakeDocker => {
+    const calls: FakeDocker["calls"][number][] = [];
     return {
         calls,
         docker: async (args, options) => {
-            calls.push({ args, cwd: options.cwd });
+            calls.push(options.env === undefined ? { args, cwd: options.cwd } : { args, cwd: options.cwd, env: options.env });
+            const answered = answers.respond?.(args);
+            if (answered !== undefined) {
+                return answered;
+            }
             if (args[0] === "ps") {
                 return answers.ps ?? dockerAnswered("");
             }
             return args[1] === "ls" ? (answers.ls ?? dockerAnswered("[]")) : (answers.compose ?? dockerAnswered("", " Container a-1  Started\n"));
         },
     };
+};
+
+// What a deploy reaches besides docker, recorded: each hook it ran with where and with what, each URL it asked, each
+// wait. The clock moves only when the deploy sleeps, so a health wait of minutes runs at once.
+export interface FakeDeploySeams {
+    readonly seams: DeploySeams;
+    readonly hooks: { readonly script: string; readonly cwd: string; readonly env: Readonly<Record<string, string>> }[];
+    readonly probed: string[];
+    readonly slept: number[];
+}
+
+// `hook` answers a hook by its script (exit 0 with nothing printed when it does not), `probe` a URL (2xx when it does
+// not); `userDockerDir` is the person's docker config folder, by default one that is not there.
+export const fakeDeploySeams = (
+    answers: {
+        readonly hook?: (script: string) => ExecResult | undefined;
+        readonly probe?: (url: string) => string | undefined;
+        readonly userDockerDir?: string;
+    } = {},
+): FakeDeploySeams => {
+    let clock = Date.parse("2026-11-25T12:00:00Z");
+    const fake: Omit<FakeDeploySeams, "seams"> = { hooks: [], probed: [], slept: [] };
+    const seams: DeploySeams = {
+        hook: async (script, { cwd, env }) => {
+            fake.hooks.push({ script, cwd, env });
+            return answers.hook?.(script) ?? dockerAnswered("");
+        },
+        probe: async (url) => {
+            fake.probed.push(url);
+            return answers.probe?.(url);
+        },
+        sleep: async (ms) => {
+            fake.slept.push(ms);
+            clock += ms;
+        },
+        now: () => clock,
+        userDockerDir: () => answers.userDockerDir ?? "/nonexistent/.docker",
+    };
+    return { ...fake, seams };
 };

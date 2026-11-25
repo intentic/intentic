@@ -25,6 +25,10 @@ unknown name fails and lists the names that exist. In a file you write, keep the
   put a value into a page or a window, use `mcp__secrets__type_secret`.
 - **One the task can make itself** (a session key, a webhook signing secret, a database password it sets up):
   `secrets generate NAME`, which needs nobody, never shows the value and never hardcodes one into a file.
+- **One that already lives somewhere you can read it from** (another orchestrator's variables, a file on a server):
+  pipe it in, `… | secrets import NAME --stdin`, so the value passes through neither the chat nor your context. It is
+  stored under a NAME nothing here holds yet and prints only the reference and the length; a name already stored is
+  refused (exit 1), so this adds a credential and never replaces one. One trailing newline is dropped (`--raw` keeps it).
 - **A value under 12 characters** is masked in what you read only where its context names a secret (`password=…`,
   `--password …`, `NAME=…`, a URL's password); printed bare, it reaches you in full. The owner's Secrets view flags it
   and offers a random replacement for one they set. Don't print such a value; use its reference.
@@ -41,6 +45,17 @@ or an account that looks unconnected, run `secrets gates` (what is gated and by 
 `secrets request <id> --why "…"` for an account or connector (it mounts from the next turn), or just write the secret's
 reference and let the card go up for that one use. A refusal is somebody's decision: carry on without it and say plainly
 what you left undone.
+
+## Managed stacks' secrets (deploy grants)
+
+A stack a repository declares in `.intentic/stacks.json` (the `deploys` command) reads its secrets as
+`{{secret:NAME}}` in its `env` or a registry's `password`, and the sandbox writes their values into the stack's `.env` on
+the computer as it deploys it. Never you: the render is the daemon's, from this sandbox's own secret store only. The
+owner grants each stack, on each computer, exactly the names it reads; a deploy needing one not granted is refused,
+saying so, and `deploys grant <repo> <stack> --why "…"` asks them on a card (exit 3 while it waits; only they can
+press it). A name behind a named approver, or held only by a connection's vault or a computer's keyring, is refused
+too: store a copy with `secrets import`, or give the stack a secret of its own. Each deploy's use shows in the
+inventory's last use as `deploy`, by stack and computer.
 
 ## Host guards
 

@@ -26,6 +26,7 @@ import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
+import { heardPasses } from "../deploys/deploy-watch.testing.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact these tests state in one line.
@@ -67,6 +68,8 @@ const harness = async (
         join(root, `${STATE_DIR}`, "records", "automation-runs.json"),
     );
     await automations.upsert(automationConfig(automationId, { trigger: { kind: "listener", provider: "ci", ...narrow }, prompt: "handle ci" }));
+    // What reaches the deploys watch: a passing job, or a passing run (deploys/deploy-triggers.ts).
+    const heard = heardPasses();
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
@@ -74,6 +77,7 @@ const harness = async (
         // The automation inboxes (durable/inbox-store.ts) live beside the holds.
         config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
+        deployWatch: heard.deployWatch,
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ autoRepair }) }),
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json"), () => false),
@@ -93,7 +97,7 @@ const harness = async (
     };
     const app = new Hono();
     app.post("/ci/webhook/:host", createCiWebhookRoute(drivenBy(services, wake), fetchFn));
-    return { app, services, prompts, root };
+    return { app, services, prompts, root, passes: heard.passes };
 };
 
 const workflowRun = (conclusion: string) => ({
@@ -318,6 +322,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         // The automation inboxes (durable/inbox-store.ts) live beside the holds.
         config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
+        deployWatch: heardPasses().deployWatch,
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json"), () => false),
@@ -403,18 +408,58 @@ test("a failed job's own delivery reaches main's fix agent at once, with the ste
     expect(await services.ciStore.lastConclusion("web", "main")).toBeUndefined();
 });
 
-test("a job that passed, was cancelled, or is still going reaches no fix agent, but announces ci", async () => {
-    const { app, services } = await harness("wh-job-ignored");
+test("a job that was cancelled or is still going reaches no fix agent and deploys nothing, but announces ci", async () => {
+    const { app, services, passes } = await harness("wh-job-ignored");
     heardJobs.length = 0;
     published.length = 0;
     const secret = await services.ciStore.secret();
-    for (const payload of [workflowJob("success"), workflowJob("cancelled"), workflowJob(null, "in_progress")]) {
+    for (const payload of [workflowJob("cancelled"), workflowJob(null, "in_progress")]) {
         const response = await deliver(app, secret, payload, { "x-github-event": "workflow_job" });
         expect(((await response.json()) as { ignored?: boolean }).ignored).toBe(true);
     }
     expect(heardJobs).toEqual([]);
+    expect(passes).toEqual([]);
     // Its run's job graph is open somewhere, or a watch reads it: each phase is news to them.
-    expect(published.filter((domain) => domain === "ci")).toHaveLength(3);
+    expect(published.filter((domain) => domain === "ci")).toHaveLength(2);
+});
+
+// The whole point of hearing a pass job by job: a stack deploys the moment the job publishing its images ends, not when
+// the rest of the run does (deploys/deploy-triggers.ts).
+test("a job that passed reaches the deploys watch at once, as the forge named it, and no fix agent", async () => {
+    const { app, services, passes } = await harness("wh-job-passed");
+    heardJobs.length = 0;
+    const response = await deliver(app, await services.ciStore.secret(), workflowJob("success"), { "x-github-event": "workflow_job" });
+
+    expect(response.status).toBe(200);
+    // SAFETY: the route answers its JSON acknowledgement, `{ ok, ignored? }`.
+    expect(((await response.json()) as { ignored?: boolean }).ignored).toBeUndefined();
+    expect(passes).toEqual([
+        {
+            host: "github",
+            repo: "web",
+            branch: "main",
+            sha: "abc1234def",
+            runId: 7,
+            workflow: "CI",
+            job: { id: 70, name: "verify-core" },
+            url: "https://github.com/acme/web/actions/runs/7/job/70",
+        },
+    ]);
+    expect(heardJobs).toEqual([]);
+});
+
+test("a run that passed reaches the deploys watch with its workflow; a failed one does not", async () => {
+    const { app, services, passes } = await harness("wh-run-passed");
+    const secret = await services.ciStore.secret();
+    const passing = workflowRun("success");
+    expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
+    expect((await deliver(app, secret, { ...passing, workflow_run: { ...passing.workflow_run, id: 8, name: "Release" } })).status).toBe(200);
+    // One repository's runs are read in the order they arrived: the failure was read before the pass reached the watch.
+    await waitFor(() => expect(passes).toHaveLength(1), SETTLES);
+
+    expect(passes).toEqual([
+        { host: "github", repo: "web", branch: "main", sha: "abc1234def", runId: 8, workflow: "Release", url: "https://github.com/acme/web/actions/runs/7" },
+    ]);
 });
 
 test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason; a job allowed to fail is none", async () => {
@@ -425,10 +470,12 @@ test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason
     await defaultGit(dir, ["remote", "add", "origin", "git@gitlab.example.com:group/app.git"]);
     const capabilities = fileCapabilitiesStore(join(root, `${STATE_DIR}`, "config", "capabilities.json"));
     await capabilities.upsert({ id: "gitlab", kind: "cli", config: { provider: "gitlab", url: "https://gitlab.example.com", token: "T" } });
+    const heard = heardPasses();
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
+        deployWatch: heard.deployWatch,
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
     const app = new Hono();
@@ -468,8 +515,17 @@ test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason
     });
     const allowed = await send(hook({ build_allow_failure: true }));
     expect(((await allowed.json()) as { ignored?: boolean }).ignored).toBe(true);
-    const passed = await send(hook({ build_status: "success" }));
-    expect(((await passed.json()) as { ignored?: boolean }).ignored).toBe(true);
+    expect(heardJobs).toHaveLength(1);
+    // A job that passed is the deploys watch's, the moment it ends; a tag's names no branch a trigger could.
+    const passed = await send(hook({ build_status: "success", build_id: 301, build_name: "publish" }));
+    // SAFETY: the route answers its JSON acknowledgement, `{ ok, ignored? }`.
+    expect(((await passed.json()) as { ignored?: boolean }).ignored).toBeUndefined();
+    const tagged = await send(hook({ build_status: "success", build_id: 302, tag: true }));
+    // SAFETY: the route answers its JSON acknowledgement, `{ ok, ignored? }`.
+    expect(((await tagged.json()) as { ignored?: boolean }).ignored).toBe(true);
+    expect(heard.passes).toEqual([
+        { host: "gitlab", repo: "app", branch: "main", sha: "abc", runId: 42, job: { id: 301, name: "publish" }, url: "https://gitlab.example.com/group/app/-/jobs/301" },
+    ]);
     expect(heardJobs).toHaveLength(1);
 });
 

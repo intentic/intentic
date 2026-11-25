@@ -23,6 +23,7 @@ import { createBrowserToolsRoutes } from "./browser/window-tools.routes.js";
 import { createOrgRoutes } from "./org/org.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
+import { createDeploysRoutes } from "./deploys/deploys.routes.js";
 import { createComplianceRoutes } from "./compliance/compliance.routes.js";
 import { createDiffRoutes } from "./git/changes/diff-derived.js";
 import type { Services } from "./composition.js";
@@ -183,6 +184,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     capabilities: createCapabilitiesRoutes(services, probeDockerGpu),
     chores: createChoresRoutes(services),
     ci: createCiRoutes(services),
+    deploys: createDeploysRoutes(services),
     compliance: createComplianceRoutes(services),
     diff: createDiffRoutes(services),
     approvals: createApprovalsRoutes(services),

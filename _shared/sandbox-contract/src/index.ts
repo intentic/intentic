@@ -18,6 +18,7 @@ import { browserContract } from "./contracts/browser.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
 import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
+import { deploysContract } from "./contracts/deploys.contract.js";
 import { complianceContract } from "./contracts/compliance.contract.js";
 import { diffContract } from "./contracts/diff.contract.js";
 import { endpointsContract } from "./contracts/endpoints.contract.js";
@@ -80,6 +81,7 @@ export const sandboxContract: {
     capabilities: typeof capabilitiesContract;
     chores: typeof choresContract;
     ci: typeof ciContract;
+    deploys: typeof deploysContract;
     compliance: typeof complianceContract;
     diff: typeof diffContract;
     endpoints: typeof endpointsContract;
@@ -136,6 +138,7 @@ export const sandboxContract: {
     capabilities: capabilitiesContract,
     chores: choresContract,
     ci: ciContract,
+    deploys: deploysContract,
     compliance: complianceContract,
     diff: diffContract,
     endpoints: endpointsContract,

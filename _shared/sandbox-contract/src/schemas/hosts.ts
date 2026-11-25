@@ -229,6 +229,15 @@ export const DeviceFeatureSchema = z.enum([
     // self-hosted GitHub Actions runners on this computer, read and driven from the Pipelines view
     // (schemas/ci-fleet.ts). Advertised by a Linux agent: the runners are systemd units.
     "ci-runners",
+    // (2026-11-25) `deploy_stack`'s managed fields (schemas/device-stacks.ts DeployStackToolArgsSchema): a daemon-rendered
+    // `.env`, `images` mode (pull, never build), registry logins kept in the stack's own docker config, pre/post-deploy
+    // hooks, a health wait, image pins and adopting a stopped project; and every stack recording the sandbox that
+    // deployed it, with ops, logs and deploys from any other sandbox refused (schemas/deploys.ts). An agent without it
+    // rejects those fields, so the daemon sends them only to one that advertises this.
+    "stacks-managed",
+    // (2026-11-25) `host_stats`: disk free under Docker's root and the stacks folder, memory and load, for the deploys
+    // monitor's low-disk and low-memory alerts (HostStatsSchema in schemas/deploys.ts).
+    "host-stats",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -252,6 +261,8 @@ export const DEVICE_FEATURE_REMOTE_ICE: DeviceFeature = "remote-ice";
 export const DEVICE_FEATURE_REMOTE_SERVICE: DeviceFeature = "remote-service";
 export const DEVICE_FEATURE_POWER: DeviceFeature = "power";
 export const DEVICE_FEATURE_ADMIN_RUN: DeviceFeature = "admin-run";
+export const DEVICE_FEATURE_STACKS_MANAGED: DeviceFeature = "stacks-managed";
+export const DEVICE_FEATURE_HOST_STATS: DeviceFeature = "host-stats";
 // What `ic features --json` answers (_hosts/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
 // implements, as strings, since a newer ic's word means nothing to an older agent.
 export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });

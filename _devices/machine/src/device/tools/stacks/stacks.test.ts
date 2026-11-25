@@ -7,7 +7,6 @@ import {
     COMPOSE_LS_ARGS,
     CONTAINERS_ARGS,
     CONTAINERS_FORMAT,
-    deployArgs,
     dockerFailure,
     healthOf,
     listStacks,
@@ -20,6 +19,7 @@ import {
     stackOpArgs,
     stacksRoot,
 } from "./stacks.js";
+import { deploySteps } from "./deploy.js";
 
 /* What `docker compose ls` and `docker ps` print, read and merged without a Docker engine, and the command lines the
    stack tools hand docker. The fixtures are in the shapes Docker 29 and Compose 5 print on a Linux server (`ps` through
@@ -177,16 +177,13 @@ test("each op is one closed command line, and none of them takes a stack down or
     expect(stackOpArgs("a", "start", [])).toEqual([["compose", "-p", "a", "start"]]);
     expect(stackOpArgs("a", "stop", files)).toEqual([[...base, "stop"]]);
     expect(stackLogsArgs("a", 200, files)).toEqual([...base, "logs", "--no-color", "--tail", "200"]);
-    expect(deployArgs("a", "/home/me/.intentic/machine/stacks/a/compose.yaml")).toEqual([
-        "compose",
-        "-p",
-        "a",
-        "-f",
-        "/home/me/.intentic/machine/stacks/a/compose.yaml",
-        "up",
-        "-d",
-        "--build",
-        "--remove-orphans",
+    const deployed = ["compose", "-p", "a", "-f", "/home/me/.intentic/machine/stacks/a/compose.yaml"];
+    expect(deploySteps("a", deployed.slice(-1), "build")).toEqual([[...deployed, "up", "-d", "--build", "--remove-orphans"]]);
+    // A managed deploy's `images` pulls and never builds, its pins laid over the stack's own file.
+    const pinned = [...deployed, "-f", "/home/me/.intentic/machine/stacks/a/.intentic-stack/pins.yaml"];
+    expect(deploySteps("a", [deployed[4] ?? "", pinned.at(-1) ?? ""], "images")).toEqual([
+        [...pinned, "pull"],
+        [...pinned, "up", "-d", "--remove-orphans"],
     ]);
     const words = StackOpSchema.options.flatMap((op) => stackOpArgs("a", op, files).flat());
     expect(words.filter((word) => ["down", "rm", "kill", "-v", "--volumes", "--rmi"].includes(word))).toEqual([]);
@@ -206,50 +203,51 @@ test("a docker that is not there, one stopped before it finished, and a failed r
 
 const off: DeviceScopes = grantWith();
 const shell: DeviceScopes = { ...off, shell: "on" };
+const SANDBOX = "https://sandbox-0a1b2c3d4e5f.example.dev";
 
 test("the listing needs 'Run commands', and answers the contract's JSON with the stacks root", async () => {
-    await expect(listStacks(off, fakeDocker({}).docker)).rejects.toBeInstanceOf(ScopeError);
+    await expect(listStacks(off, SANDBOX, fakeDocker({}).docker)).rejects.toBeInstanceOf(ScopeError);
     const { docker } = fakeDocker({ ls: dockerAnswered(COMPOSE_LS), ps: dockerAnswered(PS) });
-    const answer = DeviceStacksSchema.parse(JSON.parse(await listStacks(shell, docker)));
+    const answer = DeviceStacksSchema.parse(JSON.parse(await listStacks(shell, SANDBOX, docker)));
     expect(answer.root).toBe(stacksRoot());
     expect(answer.stacks.map((stack) => stack.name)).toEqual(["ghost", "intentic-dind", "late", "notes", "shop"]);
 });
 
 test("a docker that is missing or fails is an error in its own words, never an empty list", async () => {
     const missing = fakeDocker({ ls: { status: null, stdout: "", stderr: "spawn docker ENOENT", spawnCode: "ENOENT" } });
-    await expect(listStacks(shell, missing.docker)).rejects.toThrow("Docker is not installed on this device, or docker is not on the agent's PATH: spawn docker ENOENT");
+    await expect(listStacks(shell, SANDBOX, missing.docker)).rejects.toThrow("Docker is not installed on this device, or docker is not on the agent's PATH: spawn docker ENOENT");
     const down = fakeDocker({ ps: { status: 1, stdout: "", stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n" } });
-    await expect(listStacks(shell, down.docker)).rejects.toThrow(
+    await expect(listStacks(shell, SANDBOX, down.docker)).rejects.toThrow(
         "docker ps failed (exit 1).\n\nCannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
     );
 });
 
 test("stack_action refuses a name it cannot find and a sandbox's own project, before compose is asked anything", async () => {
     const { calls, docker } = fakeDocker({ ls: dockerAnswered(COMPOSE_LS), ps: dockerAnswered(PS) });
-    await expect(stackAction("nope", "restart", shell, docker)).rejects.toThrow('There is no compose stack called "nope" on this device; list_stacks names them.');
-    await expect(stackAction("intentic-dind", "stop", shell, docker)).rejects.toThrow(
+    await expect(stackAction("nope", "restart", shell, SANDBOX, docker)).rejects.toThrow('There is no compose stack called "nope" on this device; list_stacks names them.');
+    await expect(stackAction("intentic-dind", "stop", shell, SANDBOX, docker)).rejects.toThrow(
         '"intentic-dind" belongs to an Intentic sandbox on this device: the Devices view drives sandboxes (manage_sandbox), not stack_action.',
     );
-    await expect(stackAction("shop", "stop", off, docker)).rejects.toBeInstanceOf(ScopeError);
+    await expect(stackAction("shop", "stop", off, SANDBOX, docker)).rejects.toBeInstanceOf(ScopeError);
     expect(calls.filter((call) => call.args[0] === "compose" && call.args[1] === "-p")).toEqual([]);
 });
 
 test("up and pull need the files compose started a stack from; start, stop and restart run on its containers without them", async () => {
     // ghost's file is not on this disk, and its working folder is gone.
     const { calls, docker } = fakeDocker({ ls: dockerAnswered(COMPOSE_LS), ps: dockerAnswered(PS), compose: dockerAnswered("", " Container ghost-1  Restarting\n Container ghost-1  Started\n") });
-    await expect(stackAction("ghost", "up", shell, docker)).rejects.toThrow(
+    await expect(stackAction("ghost", "up", shell, SANDBOX, docker)).rejects.toThrow(
         '"ghost" was started from compose files that are gone (/srv/ghost/compose.yaml), so `up` cannot run on it: start, stop and restart still work on its containers as they are. Deploy it again, or bring it up from its own folder.',
     );
-    await expect(stackAction("ghost", "pull", shell, docker)).rejects.toThrow("so `pull` cannot run on it");
-    expect(await stackAction("ghost", "restart", shell, docker)).toBe(" Container ghost-1  Restarting\n Container ghost-1  Started");
+    await expect(stackAction("ghost", "pull", shell, SANDBOX, docker)).rejects.toThrow("so `pull` cannot run on it");
+    expect(await stackAction("ghost", "restart", shell, SANDBOX, docker)).toBe(" Container ghost-1  Restarting\n Container ghost-1  Started");
     expect(calls.at(-1)).toEqual({ args: ["compose", "-p", "ghost", "restart"], cwd: undefined });
 });
 
 test("stack_logs reads the tail compose keeps, by default the contract's", async () => {
     const { calls, docker } = fakeDocker({ ls: dockerAnswered(COMPOSE_LS), ps: dockerAnswered(PS), compose: dockerAnswered("notes-app-1  | listening on :8080\n") });
-    await expect(stackLogs("notes", undefined, off, docker)).rejects.toBeInstanceOf(ScopeError);
-    expect(await stackLogs("notes", undefined, shell, docker)).toBe("notes-app-1  | listening on :8080\n");
+    await expect(stackLogs("notes", undefined, off, SANDBOX, docker)).rejects.toBeInstanceOf(ScopeError);
+    expect(await stackLogs("notes", undefined, shell, SANDBOX, docker)).toBe("notes-app-1  | listening on :8080\n");
     expect(calls.at(-1)?.args).toEqual(["compose", "-p", "notes", "logs", "--no-color", "--tail", String(STACK_LOG_TAIL_DEFAULT)]);
-    await stackLogs("notes", 40, shell, docker);
+    await stackLogs("notes", 40, shell, SANDBOX, docker);
     expect(calls.at(-1)?.args.slice(-2)).toEqual(["--tail", "40"]);
 });

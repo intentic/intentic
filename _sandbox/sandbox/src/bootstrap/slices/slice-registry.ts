@@ -5,6 +5,7 @@ import type { CompositionCore, Services } from "../../composition.js";
 import { distinctMembers, type SliceStopped, stopsOf } from "../../seams/slice.js";
 import { translatorGatewaySlice, type TranslatorGatewaySlice } from "../../agent/providers/translator-gateway.js";
 import { approvalsSlice, type ApprovalsSlice } from "../../approvals/approvals-slice.js";
+import { deploysSlice, type DeploysSlice } from "../../deploys/deploys-slice.js";
 import { gitSlice, type GitSlice } from "../../git/git-slice.js";
 import { historySlice, type HistorySlice } from "../../history/history-slice.js";
 import { hostsSlice, type HostsSlice } from "../../hosts/hosts-slice.js";
@@ -22,6 +23,7 @@ import { webextSlice, type WebextSlice } from "../../webext/webext-slice.js";
 
 export type LeafMembers = TranslatorGatewaySlice &
     ApprovalsSlice &
+    DeploysSlice &
     GitSlice &
     HistorySlice &
     HostsSlice &
@@ -42,6 +44,7 @@ export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
     const built = {
         translatorGatewaySlice: translatorGatewaySlice.build(core),
         approvalsSlice: approvalsSlice.build(core),
+        deploysSlice: deploysSlice.build(core),
         gitSlice: gitSlice.build(core),
         historySlice: historySlice.build(core),
         hostsSlice: hostsSlice.build(core),
@@ -64,6 +67,7 @@ export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
     return {
         ...built.translatorGatewaySlice,
         ...built.approvalsSlice,
+        ...built.deploysSlice,
         ...built.gitSlice,
         ...built.historySlice,
         ...built.hostsSlice,
@@ -85,6 +89,7 @@ export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
 export const leafTeardown = (services: Services): readonly (() => SliceStopped)[] => [
     ...stopsOf(translatorGatewaySlice, services),
     ...stopsOf(approvalsSlice, services),
+    ...stopsOf(deploysSlice, services),
     ...stopsOf(gitSlice, services),
     ...stopsOf(historySlice, services),
     ...stopsOf(hostsSlice, services),

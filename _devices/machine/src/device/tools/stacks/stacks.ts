@@ -5,25 +5,21 @@ import { parseJsonWith } from "@intentic/base/json";
 import { clipText } from "@intentic/base/process";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
 import {
-    type DeployStackToolArgs,
-    DeployStackToolArgsSchema,
     type DeviceStack,
     type DeviceStacks,
     STACK_LOG_TAIL_DEFAULT,
-    STACK_LOG_TAIL_MAX,
     type StackContainerState,
     StackContainerStateSchema,
     StackNameSchema,
     type StackOp,
-    StackOpSchema,
     type StackService,
 } from "@intentic/sandbox-contract/schemas/device-stacks";
-import { type McpTool, textResult, tool } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { baseDir } from "../../../config.js";
 import { type ExecResult, runProcess } from "../../../sync/exec.js";
 import { assertScope } from "../../policy.js";
-import { composeFileIn, copyIntoStack, recordDeploy, stagedSource } from "./stack-folder.js";
+import { readDeployRecord, refuseOtherOwner } from "./stack-folder.js";
+import { stackDockerConfig } from "./stack-state.js";
 
 /* DOCKER COMPOSE STACKS ON THIS MACHINE (schemas/device-stacks.ts), for the Deployments board's own backend: a server
    the owner paired is deployed to over the link this agent already holds, with no second agent (a Komodo Periphery)
@@ -37,21 +33,24 @@ import { composeFileIn, copyIntoStack, recordDeploy, stagedSource } from "./stac
 export const stacksRoot = (): string => join(baseDir, "stacks");
 
 // How docker is run: the agent's one bounded runner, which inherits the Intentic engine's environment, or a test's fake.
-export type Docker = (args: readonly string[], options: { readonly cwd?: string | undefined; readonly timeoutMs: number }) => Promise<ExecResult>;
-const machineDocker: Docker = async (args, options) => await runProcess("docker", args, options);
+// `env` is laid over that environment (a stack's own DOCKER_CONFIG), never in its place.
+export type Docker = (
+    args: readonly string[],
+    options: { readonly cwd?: string | undefined; readonly timeoutMs: number; readonly env?: Readonly<Record<string, string>> | undefined },
+) => Promise<ExecResult>;
+export const machineDocker: Docker = async (args, { cwd, timeoutMs, env }) =>
+    await runProcess("docker", args, { cwd, timeoutMs, env: env === undefined ? undefined : { ...process.env, ...env } });
 
 // A listing is two reads of the engine's own state, seconds even on a loaded machine. The daemon waits a minute for a
 // read (_sandbox/sandbox hosts/stacks/device-stacks.ts), and the logs are a lookup and then a read, so each stays well under half of that.
-const READ_TIMEOUT_MS = 25_000;
+export const READ_TIMEOUT_MS = 25_000;
 // A pull, or an `up` that builds an image a service names, takes minutes on a home connection. Ten minutes for the
 // whole op (a pull and the up after it share them), as long as any device command runs (run_command's longest).
 const STACK_OP_TIMEOUT_MS = 10 * 60_000;
-// A deploy's `up --build` builds every image the stack names: the same ten minutes, inside the hub's own ceiling.
-const DEPLOY_TIMEOUT_MS = 10 * 60_000;
 // What compose printed, kept to a size an answer carries: its start says what it did, its end how it ended.
 const MAX_OUTPUT_CHARS = 200_000;
 
-const PROJECT_LABEL = "com.docker.compose.project";
+export const PROJECT_LABEL = "com.docker.compose.project";
 
 // Each container as one JSON object, every label read by name. `{{json .}}` gives the labels as one "k=v,k=v" string,
 // which a project of several compose files makes ambiguous: compose joins their paths with commas in its label.
@@ -221,13 +220,13 @@ export const mergeStacks = (
 };
 
 // Everything a run printed, stdout then stderr: compose writes its progress to stderr.
-const outputOf = (result: ExecResult): string =>
+export const outputOf = (result: ExecResult): string =>
     [result.stdout, result.stderr]
         .map((text) => text.trimEnd())
         .filter((text) => text !== "")
         .join("\n");
 
-const clipped = (text: string): string => clipText(text, MAX_OUTPUT_CHARS).text;
+export const clipped = (text: string): string => clipText(text, MAX_OUTPUT_CHARS).text;
 
 // Why a docker run gave no answer, in words: no docker here, a run stopped before it finished, or its own exit with
 // what it printed. `earlier` is what the steps before it printed, so a failed `up` after a pull keeps the pull's output.
@@ -249,23 +248,45 @@ const answered = (what: string, result: ExecResult, timeoutMs: number): string =
     return result.stdout;
 };
 
-const readStacks = async (docker: Docker = machineDocker): Promise<DeviceStacks> => {
+export const readStacks = async (docker: Docker = machineDocker): Promise<DeviceStacks> => {
     const [ls, ps] = await Promise.all([docker(COMPOSE_LS_ARGS, { timeoutMs: READ_TIMEOUT_MS }), docker(CONTAINERS_ARGS, { timeoutMs: READ_TIMEOUT_MS })]);
     const projects = parseComposeLs(answered("docker compose ls", ls, READ_TIMEOUT_MS));
     return mergeStacks(stacksRoot(), projects, parseContainers(answered("docker ps", ps, READ_TIMEOUT_MS)));
 };
 
-export const listStacks = async (scopes: DeviceScopes, docker: Docker = machineDocker): Promise<string> => {
+// (2026-11-25) Each managed stack with the sandbox its record names, and whether that is the one asking.
+const withOwners = async (listing: DeviceStacks, caller: string): Promise<DeviceStacks> => ({
+    ...listing,
+    stacks: await Promise.all(
+        listing.stacks.map(async (stack) => {
+            const owner = stack.managed ? (await readDeployRecord(join(listing.root, stack.name)))?.owner : undefined;
+            return owner === undefined ? stack : { ...stack, owner: { sandbox: owner, you: owner === caller } };
+        }),
+    ),
+});
+
+export const listStacks = async (scopes: DeviceScopes, caller: string, docker: Docker = machineDocker): Promise<string> => {
     assertScope(scopes, "shell");
-    return JSON.stringify(await readStacks(docker));
+    return JSON.stringify(await withOwners(await readStacks(docker), caller));
 };
 
-const findStack = async (name: string, docker: Docker): Promise<DeviceStack> => {
+// The stack by its name, once the caller may act on it: a managed stack another sandbox deployed is refused.
+const findStack = async (name: string, caller: string, docker: Docker): Promise<DeviceStack> => {
     const found = (await readStacks(docker)).stacks.find((stack) => stack.name === name);
     if (found === undefined) {
         throw new Error(`There is no compose stack called "${name}" on this device; list_stacks names them.`);
     }
+    if (found.managed) {
+        refuseOtherOwner(name, await readDeployRecord(join(stacksRoot(), name)), caller);
+    }
     return found;
+};
+
+// The environment an op on a managed stack runs with: its own docker config, so a `pull` reaches the registries its
+// deploy logged in to.
+const stackEnv = async (stack: DeviceStack): Promise<Readonly<Record<string, string>> | undefined> => {
+    const config = stack.managed ? await stackDockerConfig(join(stacksRoot(), stack.name)) : undefined;
+    return config === undefined ? undefined : { DOCKER_CONFIG: config };
 };
 
 // The stack's compose files when every one is still on this disk: compose refuses a missing `-f` outright, and a
@@ -283,7 +304,7 @@ const existingDir = async (dir: string | undefined): Promise<string | undefined>
     dir !== undefined && (await stat(dir).catch(() => undefined))?.isDirectory() === true ? dir : undefined;
 
 // `docker compose` aimed at one project by its name, with its files where they are known.
-const composeArgs = (name: string, files: readonly string[]): string[] => ["compose", "-p", name, ...files.flatMap((file) => ["-f", file])];
+export const composeArgs = (name: string, files: readonly string[]): string[] => ["compose", "-p", name, ...files.flatMap((file) => ["-f", file])];
 
 // What each op runs, in order. `up` (and the pull's `up`) applies the files as they are and removes the containers of
 // services no longer in them; nothing here runs `down`, `rm` or anything with `-v`.
@@ -307,12 +328,10 @@ export const stackLogsArgs = (name: string, tail: number, files: readonly string
     String(tail),
 ];
 
-export const deployArgs = (name: string, composeFile: string): string[] => [...composeArgs(name, [composeFile]), "up", "-d", "--build", "--remove-orphans"];
-
 // One change to a stack at a time: two deploys of one name copying into one folder, or a stop racing an up, would each
 // leave whatever the other half did.
 const turns = new Map<string, Promise<void>>();
-const oneAtATime = async <T>(name: string, work: () => Promise<T>): Promise<T> => {
+export const oneAtATime = async <T>(name: string, work: () => Promise<T>): Promise<T> => {
     const turn = (turns.get(name) ?? Promise.resolve()).then(work);
     const settled = turn.then(
         () => undefined,
@@ -328,28 +347,37 @@ const oneAtATime = async <T>(name: string, work: () => Promise<T>): Promise<T> =
     }
 };
 
-// The steps of one op, sharing one deadline, stopped at the first that fails with everything printed so far.
-const runSteps = async (steps: readonly (readonly string[])[], cwd: string | undefined, docker: Docker, what: string): Promise<string> => {
-    const deadline = Date.now() + STACK_OP_TIMEOUT_MS;
-    const printed: string[] = [];
+// Where a run of steps is and how long it has: one deadline shared by every step, and the environment each runs with.
+export interface StepRun {
+    readonly cwd: string | undefined;
+    readonly env?: Readonly<Record<string, string>> | undefined;
+    readonly deadline: number;
+    readonly now: () => number;
+}
+
+// The steps of one op, sharing one deadline, stopped at the first that fails with everything printed so far, `earlier`
+// (what ran before them: a deploy's hook) first. `what` names a failed step in the refusal.
+export const runSteps = async (steps: readonly (readonly string[])[], run: StepRun, docker: Docker, what: (step: readonly string[]) => string, earlier: readonly string[] = []): Promise<string> => {
+    const printed = [...earlier];
     for (const args of steps) {
+        const timeoutMs = Math.max(run.deadline - run.now(), 1_000);
         // in order: the `up` after a pull applies what the pull fetched
-        const result = await docker(args, { cwd, timeoutMs: Math.max(deadline - Date.now(), 1_000) });
+        const result = await docker(args, { cwd: run.cwd, env: run.env, timeoutMs });
         if (result.status !== 0) {
-            throw new Error(dockerFailure(what, result, STACK_OP_TIMEOUT_MS, printed.join("\n")));
+            throw new Error(dockerFailure(what(args), result, timeoutMs, printed.join("\n")));
         }
         const output = outputOf(result);
         if (output !== "") {
             printed.push(output);
         }
     }
-    return clipped(printed.join("\n"));
+    return clipped(printed.slice(earlier.length).join("\n"));
 };
 
-export const stackAction = async (name: string, op: StackOp, scopes: DeviceScopes, docker: Docker = machineDocker): Promise<string> => {
+export const stackAction = async (name: string, op: StackOp, scopes: DeviceScopes, caller: string, docker: Docker = machineDocker): Promise<string> => {
     assertScope(scopes, "shell");
     return await oneAtATime(name, async () => {
-        const stack = await findStack(name, docker);
+        const stack = await findStack(name, caller, docker);
         if (stack.sandbox) {
             throw new Error(`"${name}" belongs to an Intentic sandbox on this device: the Devices view drives sandboxes (manage_sandbox), not stack_action.`);
         }
@@ -363,7 +391,8 @@ export const stackAction = async (name: string, op: StackOp, scopes: DeviceScope
                 `${which}, so \`${op}\` cannot run on it: start, stop and restart still work on its containers as they are. Deploy it again, or bring it up from its own folder.`,
             );
         }
-        return await runSteps(stackOpArgs(name, op, files ?? []), await existingDir(stack.workingDir), docker, `docker compose ${op} for ${name}`);
+        const run = { cwd: await existingDir(stack.workingDir), env: await stackEnv(stack), deadline: Date.now() + STACK_OP_TIMEOUT_MS, now: Date.now };
+        return await runSteps(stackOpArgs(name, op, files ?? []), run, docker, () => `docker compose ${op} for ${name}`);
     });
 };
 
@@ -371,96 +400,11 @@ export const stackAction = async (name: string, op: StackOp, scopes: DeviceScope
 const lastOf = (text: string): string =>
     text.length <= MAX_OUTPUT_CHARS ? text : `… [${text.length - MAX_OUTPUT_CHARS} characters cut] …\n${text.slice(-MAX_OUTPUT_CHARS)}`;
 
-export const stackLogs = async (name: string, tail: number | undefined, scopes: DeviceScopes, docker: Docker = machineDocker): Promise<string> => {
+export const stackLogs = async (name: string, tail: number | undefined, scopes: DeviceScopes, caller: string, docker: Docker = machineDocker): Promise<string> => {
     assertScope(scopes, "shell");
-    const stack = await findStack(name, docker);
+    const stack = await findStack(name, caller, docker);
     const files = (await filesOnDisk(stack.configFiles)) ?? [];
     const args = stackLogsArgs(name, tail ?? STACK_LOG_TAIL_DEFAULT, files);
     const result = await docker(args, { cwd: await existingDir(stack.workingDir), timeoutMs: READ_TIMEOUT_MS });
     return lastOf(answered(`docker compose logs for ${name}`, result, READ_TIMEOUT_MS));
 };
-
-// A project of this name that no deploy put in the stacks folder is somebody else's: an `up --remove-orphans` under its
-// name would replace its containers with the repository's and remove the rest. One with no container left has nothing
-// to replace.
-const refuseTakeover = (existing: DeviceStack | undefined): void => {
-    if (existing === undefined || existing.managed) {
-        return;
-    }
-    if (existing.sandbox) {
-        throw new Error(`"${existing.name}" is an Intentic sandbox's own compose project on this device: deploy under another name.`);
-    }
-    if (existing.workingDir !== undefined) {
-        throw new Error(
-            `A compose project called "${existing.name}" already runs on this device from ${existing.workingDir}, which no deploy put there: deploying under its name would replace its containers. Deploy under another name.`,
-        );
-    }
-};
-
-export const deployStack = async (args: DeployStackToolArgs, scopes: DeviceScopes, sandboxUrl: string, docker: Docker = machineDocker): Promise<string> => {
-    assertScope(scopes, "shell");
-    assertScope(scopes, "programs");
-    const source = await stagedSource(args.source, sandboxUrl);
-    // Checked before the stack's folder is touched, so a wrong name changes nothing there.
-    await composeFileIn(source, args.composeFile, "the pushed repository");
-    return await oneAtATime(args.name, async () => {
-        refuseTakeover((await readStacks(docker)).stacks.find((stack) => stack.name === args.name));
-        const dir = join(stacksRoot(), args.name);
-        await copyIntoStack(source, dir);
-        await recordDeploy(dir, { commit: args.commit, composeFile: args.composeFile, deployedAt: new Date().toISOString() });
-        const composeFile = await composeFileIn(dir, args.composeFile, "the stack's folder");
-        const result = await docker(deployArgs(args.name, composeFile), { cwd: dir, timeoutMs: DEPLOY_TIMEOUT_MS });
-        if (result.status !== 0) {
-            throw new Error(dockerFailure(`docker compose up for ${args.name} in ${dir}`, result, DEPLOY_TIMEOUT_MS));
-        }
-        return JSON.stringify({ path: dir, output: clipped(outputOf(result)) });
-    });
-};
-
-// The four tools as the device serves them; `caller` is the sandbox the call came from, whose pushed builds alone a
-// deploy may copy.
-export const stackTools = (caller: () => string): McpTool<DeviceScopes>[] => [
-    tool({
-        name: "list_stacks",
-        description:
-            "The Docker compose stacks on this device, as JSON: `root`, the folder deploy_stack puts stacks in, and for each compose project, running or stopped, its name, compose's status, the compose files it was started from, its working folder, whether a deploy put it in `root` (`managed`), whether it is an Intentic sandbox's own (`sandbox`: list_sandboxes and manage_sandbox drive those, not these tools), and each service's container, image, state, status and health. Reads `docker compose ls` and `docker ps` and changes nothing. A device without Docker, or whose Docker does not answer, is an error in Docker's own words, never an empty list. Requires the 'Run commands' permission.",
-        effect: "read",
-        input: z.object({}),
-        run: async (_args, scopes) => textResult(await listStacks(scopes)),
-    }),
-    tool({
-        name: "stack_action",
-        description:
-            "Drive one compose stack on this device by its name from list_stacks, and answer with what compose printed. `up` applies its compose files as they are (`docker compose up -d --remove-orphans`, which also removes the containers of services no longer in them), `pull` fetches newer images and then does the same, `restart`, `start` and `stop` act on its containers. `up` and `pull` need the compose files the stack was started from and are refused once those are gone; an Intentic sandbox's own project is refused, since manage_sandbox drives those. Nothing here takes a stack down or deletes a volume: `down` and `-v` are the owner's to run. Requires the 'Run commands' permission.",
-        effect: "write",
-        input: z.object({
-            name: StackNameSchema.describe("The stack's name, from list_stacks."),
-            op: StackOpSchema.describe("up, pull (newer images, then up), restart, start or stop."),
-        }),
-        run: async ({ name, op }, scopes) => textResult(await stackAction(name, op, scopes)),
-    }),
-    tool({
-        name: "stack_logs",
-        description:
-            "The end of one compose stack's logs on this device, every service's lines together (`docker compose logs --tail`), by its name from list_stacks. Read-only. Requires the 'Run commands' permission.",
-        effect: "read",
-        input: z.object({
-            name: StackNameSchema.describe("The stack's name, from list_stacks."),
-            tail: z
-                .int()
-                .positive()
-                .max(STACK_LOG_TAIL_MAX)
-                .optional()
-                .describe(`How many lines from the end of each service's log. Default ${STACK_LOG_TAIL_DEFAULT}, maximum ${STACK_LOG_TAIL_MAX}.`),
-        }),
-        run: async ({ name, tail }, scopes) => textResult(await stackLogs(name, tail, scopes)),
-    }),
-    tool({
-        name: "deploy_stack",
-        description:
-            "Deploy a repository this sandbox pushed to this device as a compose stack: copy the pushed folder (`source`, the path the push answered with; any other folder is refused) into `<root>/<name>` (root from list_stacks), record the commit there in .intentic-deploy.json, and run `docker compose -p <name> -f <composeFile> up -d --build --remove-orphans` in that folder, for up to ten minutes. The copy adds and overwrites files and deletes nothing already in the folder (a service's data may live there); a .env is never copied, and one already there is never touched, so the secrets put there stay. A path whose kind differs between the folder and the repository, or a name another compose project on this device already runs under, is refused before anything is written. Answers with JSON: `path`, the stack's folder, and `output`, what compose printed; a failed `up` is an error carrying compose's output. Requires the 'Run commands' and 'Run programs this sandbox sends' permissions.",
-        effect: "write",
-        input: DeployStackToolArgsSchema,
-        run: async (args, scopes) => textResult(await deployStack(args, scopes, caller())),
-    }),
-];

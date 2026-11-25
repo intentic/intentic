@@ -37,8 +37,11 @@ export const deviceClientFor = (services: RelayServices, id: string, needs: read
     return client;
 };
 
-/** What a relayed tool takes: names, ops, counts, paths, and lists of names (a new runner's labels); never a nested object. */
-export type ToolArgs = Readonly<Record<string, string | number | readonly string[]>>;
+/** What a relayed tool takes: names, ops, counts, paths, and lists of names (a new runner's labels). (2026-11-25) And a
+ *  managed deploy's nested parts (registry logins, hooks, health, image pins: stacks/device-stacks.ts), so JSON as the MCP
+ *  call carries it; an absent field is left out of the call. */
+export type ToolArg = string | number | boolean | readonly ToolArg[] | { readonly [key: string]: ToolArg | undefined };
+export type ToolArgs = Readonly<Record<string, ToolArg | undefined>>;
 
 /** One of the machine's tools, its answer as text. A refusal (a switch that is off) is FORBIDDEN in the machine's own
  *  words; a call that got no answer is BAD_GATEWAY, said as what it means for the call (it may have run). */

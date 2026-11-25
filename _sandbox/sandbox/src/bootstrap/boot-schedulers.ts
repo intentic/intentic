@@ -278,6 +278,14 @@ const startAcrossSandboxes = (services: BootPhase["services"], shutdown: BootPha
     shutdown.push(startPoolSignalsFor(services));
 };
 
+// Managed environments (deploys/): a deploy a restart cut short ends failed, and the ones waiting run; then the watch
+// starts (deploys/deploy-watch.ts): the monitor, the registry pulls and the rotated-secret checks. Both stop with their
+// slice.
+const resumeDeploys = (services: BootPhase["services"], logger: BootPhase["logger"]): void => {
+    void inBackground("deploys", () => services.deploys.start()).catch((error: Error) => logger.warn({ err: error }, "deploys: the waiting deploys could not be resumed"));
+    void inBackground("deploy-watch", () => services.deployWatch.start()).catch((error: Error) => logger.warn({ err: error }, "deploys: the watch could not start"));
+};
+
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
     startAutomations({ role, services, shutdown });
@@ -288,6 +296,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // gpu-run's state, and the host's GPU resets and crashes, ride the same start (hosts/gpu/, 2026-11-03).
     if (role.container) {
         shutdown.push(inBackground("needs", () => services.needs.start()));
+        resumeDeploys(services, logger);
         shutdown.push(inBackground("gpu-watch", () => startGpuWatch(services, logger)));
         startAcrossSandboxes(services, shutdown);
     }

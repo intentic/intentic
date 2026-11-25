@@ -57,13 +57,41 @@ flowchart LR
   `restart`, `start` or `stop` on one project by name, refusing a sandbox's own and, for `up` and `pull`, one whose
   compose files are gone; `stack_logs` reads its tail. `deploy_stack` copies a repository the sandbox pushed (only a
   folder filed whole in that sandbox's own `runs/` folder) into `~/.intentic/machine/stacks/<name>`, records the commit
-  in `.intentic-deploy.json`, and runs `docker compose up -d --build --remove-orphans` there, ten minutes at most. The
-  copy adds and overwrites and deletes nothing, since a service's data may live in that folder. It never writes a
-  `.env`, at any depth, so the secrets put there stay. Before writing anything it refuses a path whose kind differs
+  in `.intentic-deploy.json`, and runs `docker compose up -d --build --remove-orphans` there. The copy adds and
+  overwrites and deletes nothing, since a service's data may live in that folder. It never copies a `.env`, at any
+  depth, so the secrets put there stay. Before writing anything it refuses a path whose kind differs
   between the folder and the repository, so it never writes through a link it finds there. A name another compose
   project already runs under is refused. Reading and driving need "Run commands"; a deploy also needs "Run programs
   this sandbox sends". Nothing here runs `down`, `rm` or `-v`, and `uninstall --purge` keeps `stacks/` as the person's
   data (`ic uninstall`, which removes `~/.intentic` whole, does not).
+- (2026-11-25) **Managed stacks** ([`tools/stacks/deploy.ts`](src/device/tools/stacks/deploy.ts), the folder's own
+  state in `stack-state.ts`, the health wait in `deploy-health.ts`; advertised as `stacks-managed`): the stacks a
+  repository declares in its stacks manifest, which the sandbox deploys and keeps running in place of Komodo. Every
+  deploy records the sandbox that made it (`owner`, from the link, never from the call) in `.intentic-deploy.json`,
+  and from then on `deploy_stack`, `stack_action` and `stack_logs` from any other sandbox are refused, saying the stack
+  was deployed by another sandbox; `list_stacks` shows the owner. A stack deployed before owners were recorded is
+  claimed by the next deploy. A managed deploy may bring its own `.env`, rendered by the daemon: written 0600 by a
+  rename, its sha256 recorded. A `.env` there that no deploy wrote, or that was edited since, is refused before
+  anything is copied and never overwritten: a person on the machine moves it away. Registry logins go in the stack's
+  own docker config, `.intentic-stack/docker/config.json` (0600 in a 0700 folder), handed to compose as
+  `DOCKER_CONFIG`; that folder links the person's `~/.docker/cli-plugins` and `contexts` and carries their current
+  context, which a `DOCKER_CONFIG` elsewhere would hide, and the machine's own config is never touched. `.intentic-stack/`
+  rather than `.intentic/`, which a deployed repository may hold for itself, and no copy writes into it. `images` mode
+  runs `pull` and then `up -d --remove-orphans`, never `--build`; image pins are a compose override
+  (`.intentic-stack/pins.yaml`, passed as a second `-f`), removed when a deploy brings none, as the registry config is.
+  The `preDeploy` hook runs after the files are in place and before compose, `postDeploy` once the stack is healthy,
+  each by `sh -c` (PowerShell on Windows, as `run_command`) in the stack's folder with `COMPOSE_PROJECT_NAME` and
+  `COMPOSE_FILE` set; either failing fails the deploy with what it printed. The health wait trusts nothing for 5 s,
+  then looks every 3 s until every container of the project runs (none restarting, each healthcheck healthy, a one-shot
+  service exited 0) and each URL answers 2xx, and otherwise fails naming what was not ready. The answer then carries
+  each service's image pinned by the registry digest of the repository it names, or its image id when built here.
+  `adopt` takes over a compose project no deploy put here once none of its containers runs, its named volumes carrying
+  over; a running one, and a sandbox's own, stay refused. The whole deploy runs under one 14-minute deadline, each step
+  given what is left of it, since the daemon waits 15 for a device call. Every secret it carried is taken out of its
+  answer and its errors, and the audit log keeps only how long the `.env` was and how many logins came.
+  `host_stats` (advertised as `host-stats`, under "Run commands") reads the free space of Docker's data root and of
+  the stacks folder by statfs, memory (Linux's MemAvailable), load and cpus, for the deploys monitor; a Docker that does
+  not answer, or whose data root is inside a VM, leaves only its disk out.
 - (2026-11-24) **Self-hosted CI runners** ([`src/ci-fleet/`](src/ci-fleet), tools in
   [`tools/ci-runners/`](src/device/tools/ci-runners/ci-runners.ts), contract `schemas/ci-fleet.ts`): the GitHub Actions
   runners on a Linux computer or WSL distro, read and driven from the Pipelines view's Runners section in place of the

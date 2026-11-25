@@ -9,7 +9,8 @@ import type { CiProject } from "./projects.js";
 import type { FetchFn } from "./providers.js";
 
 // Turns a finished PipelineRun into `ci` listener messages for the webhook (ci/webhook.routes.ts) and the poller
-// (ci/poller.ts); the previous-conclusion memory is written only here. Canceled and skipped runs produce no message, and
+// (ci/poller.ts), and a passing one into the deploys its stacks' `ci` triggers ask for (deploys/deploy-triggers.ts); the
+// previous-conclusion memory is written only here. Canceled and skipped runs produce no message, and
 // only a canceled one reaches main's fix agent. While Repair is on, a repository's main line failing is its one fix agent's (main-fixer.ts), so its failure events reach no
 // automation listening on every branch: one failed main run starts one agent, and none is told to push its own fix to
 // main beside it.
@@ -110,6 +111,11 @@ export const dispatchCiRun = async (
         // A cancelled run is no result an automation acts on, but main's fix agent still reads it: what passed in it, and
         // a job that ran out of time, which GitHub reports as cancelled (forge/github-cancels.ts).
         return { types: [], fixed: run.status === "canceled" ? fix() : Promise.resolve() };
+    }
+    if (result === "success") {
+        // First, and off this run's clock: a stack whose `ci` trigger names no job deploys the moment its run passes
+        // (deploys/deploy-triggers.ts, which never rejects).
+        void services.deployWatch.ciPassed({ host: run.host, repo: run.repo, branch: run.branch, sha: run.sha, runId: run.runId, workflow: run.workflow, url: run.url });
     }
     const types = typesFor(result, await rememberCiRun(services, run));
     // An automation that names the branch asked for exactly these events (a notice when main fails), so it still hears

@@ -61,7 +61,7 @@ value import closing a cycle between two of them fails too (standing ones: `_too
 | host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `access/` `roles/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `activity/` `audit/` `org/` |
 | connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `account-routing/` `definition/` |
 | agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
-| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
+| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `deploys/` `chores/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
 | composition | boot wiring and whole-daemon self-checks, which import every layer and are imported by none | `bootstrap/` `invariants/` `harness/` |
 | (none) | in no layer: the boundary check places no module here | `e2e/` `evals/` |
 <!-- <<< end of generated layers.json -->
@@ -279,6 +279,35 @@ flowchart LR
   512 MiB at most), it travels into the machine's staging the way `devices push` does (`hosts/runs/device-staging.ts`), and
   the machine brings it up with `--build`. These handlers hold no bearer gate, since the board's backend calls with its
   extension token, admitted by the routes its manifest declares; a person still meets their maintainer floor.
+- (2026-11-25) Managed environments (`deploys/`, the contract's `deploys.contract.ts` and `schemas/deploys.ts`): the
+  compose stacks a repository declares in `.intentic/stacks.json`, deployed and kept running by this sandbox in place of
+  an outside orchestrator (Komodo). A deploy reads the manifest of the very commit it deploys (`deploy-manifests.ts`),
+  never the working tree, fetching a commit the checkout lacks. The daemon renders the stack's `.env` and registry logins
+  from the sandbox's own secret store (`deploy-render.ts`), and only the names the owner granted that stack on that
+  computer (`deploy-grants.ts`: `deploy-grants.json` in the auth root, never in a bundle); a gated secret, one held only
+  by a connection's vault or a keyring, or an ungranted one refuses the deploy by name. One deploy runs per stack and a
+  newer request replaces the one waiting (`deploys-engine.ts`, `deploy-lanes.ts`); the records
+  (`.intentic/records/deploys.json`, values never, what the machine printed masked) are the durable queue, so a restart
+  resumes the waiting ones and fails the one it cut. A failure the machine reports rolls the stack back to its last good
+  deploy, images pinned to the digests it ran. Each end reaches the owner's automations as a `deploys` listener event and
+  the engine's `onDeployRecord` subscribers. The machine takes the managed fields of `deploy_stack` only from an agent
+  advertising `stacks-managed` (`hosts/stacks/device-stacks.ts` `deployManagedStack`). `bin/deploys` lists, deploys,
+  rolls back, promotes and asks for a grant (a `deploy` need the owner presses); `secrets import NAME --stdin` moves a
+  value in from where it lives now without it passing through the chat, under a new name only.
+- (2026-11-25) The deploys watch (`deploys/deploy-watch.ts`) starts deploys and watches what runs with no turn in the
+  path. A CI job that passes (GitHub `workflow_job`, GitLab Job Hook) deploys each stack whose `ci` trigger names it the
+  moment it ends, and a passing run each trigger that names no job (`ci/events.ts` `dispatchCiRun`, so the poller too);
+  a commit the stack already runs, or one older than it, is skipped (`deploy-triggers.ts`). A stack that comes up
+  deploys the stacks that follow it (`after`) at its commit, images pinned. A `registry` trigger has the computer pull
+  the stack on its interval and records a deploy only when compose recreated a container (`deploy-registry.ts`), in
+  place of Komodo's daily auto-update. The monitor reads each server's stacks once a minute and its disks and memory
+  every five (`deploy-monitor.ts`), and tells the owner's automations of a stack unhealthy or recovered after two
+  reads in a row, never while it deploys, and of a server running low once per episode; what it last told is kept on
+  the history volume (`deploy-watch-store.ts`), so a restart tells nothing twice. Each deploy's secret values are marked
+  with an HMAC under a key of this sandbox's own in the auth root (`deploy-secret-marks.ts`), so a value rotated in the
+  store shows on the board and is redeployed or told, as the stack's `onSecretChange` says (`deploy-rotation.ts`). Each
+  deploy is reported to its forge, a GitHub Deployment or a GitLab `deploy/<stack>` commit status, with the token CI
+  already uses; a refusal fails no deploy and shows on the environment (`deploy-forge.ts`).
 - (2026-11-24) The Pipelines view reads and drives the self-hosted GitHub Actions runners on the owner's computers
   (`hosts/ci-fleet/device-ci-fleet.ts`, `/system/devices/{id}/ci-runners…`, routes in the contract's
   `device-ci-runners.contract.ts`): list, start, stop, drain, restart, logs, register and remove, relayed to the

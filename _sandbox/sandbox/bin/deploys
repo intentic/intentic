@@ -1,0 +1,194 @@
+#!/usr/bin/env node
+// The in-sandbox deploys command (2026-11-25): the stacks this workspace's repositories declare in their stacks manifest
+// (`.intentic/stacks.json`), which this sandbox deploys to the owner's computers and keeps running in place of an outside
+// orchestrator. Every verb relays to the daemon's deploys routes (contracts/deploys.contract.ts), which own the queue,
+// the records and the secrets: a deploy's `.env` is rendered by the daemon from the sandbox's own secret store, under the
+// owner's grant for that stack on that computer, never by this command or by an agent turn.
+//
+// What an agent may do here: read the stacks and their history, deploy a commit, roll back, promote, and ASK for a
+// grant, which raises a card in its conversation (a `deploy` need) that only the owner can press. Granting itself is
+// not on the agent token at all.
+//
+// Exit codes, as every asking command here: 0 done, 1 refused or did not come up, 2 a bad command or no verdict, 3 asked
+// and waiting on the owner (grant only).
+
+import { call, die, parseArgs, raise, refusalOf } from "./needs-cli.mjs";
+
+const COMMAND = "deploys";
+
+const USAGE = `deploys — the stacks this workspace's repositories declare in .intentic/stacks.json, deployed by this sandbox
+
+  deploys                                    every stack: the computer it runs on and its state there, the commit it
+                                             runs, what is deploying or waiting, and the secrets it reads that the
+                                             owner has not granted it yet
+  deploys history <repo> <stack> [--limit <n>]
+                                             its deploys, newest first: what each ran, what started it, how it ended
+  deploys deploy <repo> <stack> [--commit <sha>] [--why "…"] [--wait]
+                                             deploy the stack at a commit: the repository's committed HEAD when none is
+                                             named (never uncommitted edits), and one this checkout lacks is fetched
+                                             from its remote. The stack is read from that commit's own manifest. One
+                                             deploy runs per stack; a newer one waiting replaces an older one
+  deploys rollback <repo> <stack> [--to <id>] [--wait]
+                                             put the stack back on an earlier successful deploy (the one before the
+                                             current one, or the record named): its commit, its images pinned to the
+                                             digests it ran
+  deploys promote <repo> <from> <to> [--wait]
+                                             deploy <to> at what <from> runs now: its commit and its image digests
+                                             (staging, then production)
+  deploys grant <repo> <stack> [--why "…"] [--wait <seconds>]
+                                             ask the owner, on a card in this chat, to let the stack receive the
+                                             secrets its manifest reads, on the computer it names. Only they can. Exit
+                                             3: asked and waiting; the answer reaches this conversation by itself
+
+A secret reaches a stack only from this sandbox's own store, rendered by the sandbox as it deploys: write
+{{secret:NAME}} in the stack's env (or a registry's password) in .intentic/stacks.json, and store the value with
+\`secrets ask NAME\` or \`… | secrets import NAME --stdin\`. A deploy is refused, saying which and why, when a name is not
+granted to the stack, is behind a named approver, or is held only by a connection or a computer's keyring.
+
+--wait holds until the deploy ends, which can take as long as the deploy itself (up to 15 minutes): run it in the
+background. Exit 0: it came up (or, without --wait, it is queued). Exit 1: refused, failed, rolled back, or replaced by a
+newer deploy while it waited. Exit 2: a bad command, or the daemon said no before queuing anything.`;
+
+// A commit as people read it.
+const short = (sha) => (typeof sha === "string" ? sha.slice(0, 8) : "?");
+
+const firstLine = (text) => (typeof text === "string" ? (text.split("\n")[0] ?? "") : "");
+
+const answered = async (method, path, body) => {
+    const { status, text } = await call(COMMAND, method, path, body === undefined ? undefined : JSON.stringify(body));
+    if (status !== 200) {
+        return die(COMMAND, refusalOf(text));
+    }
+    return JSON.parse(text);
+};
+
+// One stack on one line, then a line for each reason it cannot deploy now.
+const environmentLines = (environment) => {
+    const parts = [`${environment.repo} ${environment.stack} → ${environment.device}`, environment.state];
+    parts.push(environment.current === undefined ? "never deployed here" : `runs ${short(environment.current.commit)} (${environment.current.id})`);
+    if (environment.active !== undefined) {
+        parts.push(`${environment.active.outcome === "running" ? "deploying" : "waiting"} ${short(environment.active.commit)}`);
+    }
+    if (environment.latest !== undefined && environment.latest.id !== environment.current?.id && environment.latest.id !== environment.active?.id) {
+        parts.push(`last ${environment.latest.outcome} at ${short(environment.latest.commit)}`);
+    }
+    if (environment.ungranted.length > 0) {
+        parts.push(`not granted: ${environment.ungranted.join(", ")}`);
+    }
+    if (environment.ownedElsewhere) {
+        parts.push("deployed there by another sandbox");
+    }
+    return [parts.join(" · "), ...environment.problems.map((problem) => `  ${problem}`)];
+};
+
+const list = async () => {
+    const { environments, manifestErrors } = await answered("GET", "/deploys/environments");
+    if (environments.length === 0 && manifestErrors.length === 0) {
+        process.stdout.write("No repository here declares a stack: a stack is declared in a repository's .intentic/stacks.json.\n");
+        return;
+    }
+    const lines = environments.flatMap(environmentLines);
+    for (const broken of manifestErrors) {
+        lines.push(`${broken.repo}: ${broken.error}`);
+    }
+    process.stdout.write(`${lines.join("\n")}\n`);
+};
+
+// One record on one line: what it is, what it ran, what started it, how it ended.
+const recordLine = (record) => {
+    const trigger = record.trigger.detail === undefined ? record.trigger.kind : `${record.trigger.kind} (${record.trigger.detail})`;
+    const back = record.rolledBackTo === undefined ? "" : `, back to ${record.rolledBackTo}`;
+    const why = record.error === undefined ? "" : ` — ${firstLine(record.error)}`;
+    return `${record.id} ${record.outcome}${back} · ${short(record.commit)} on ${record.device} · ${trigger} · ${record.queuedAt}${why}`;
+};
+
+const history = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["limit"] });
+    const [repo, stack] = rest;
+    if (repo === undefined || stack === undefined) {
+        return die(COMMAND, USAGE);
+    }
+    const query = new URLSearchParams({ repo, stack, ...(flags.limit === undefined ? {} : { limit: flags.limit }) });
+    const { records } = await answered("GET", `/deploys/history?${query}`);
+    if (records.length === 0) {
+        process.stdout.write(`${stack} has not been deployed from here yet.\n`);
+        return;
+    }
+    process.stdout.write(`${records.map(recordLine).join("\n")}\n`);
+};
+
+// The record as the daemon answered it, and the exit its outcome means.
+const ended = (record, waited) => {
+    process.stdout.write(`${recordLine(record)}\n`);
+    if (record.error !== undefined && record.error.includes("\n")) {
+        process.stdout.write(`${record.error}\n`);
+    }
+    if (!waited) {
+        process.stdout.write(`Queued. \`deploys history ${record.repo} ${record.stack}\` shows how it ends.\n`);
+        return;
+    }
+    process.exit(record.outcome === "succeeded" ? 0 : 1);
+};
+
+const deploy = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["commit", "why"], switches: ["wait"] });
+    const [repo, stack] = rest;
+    if (repo === undefined || stack === undefined) {
+        return die(COMMAND, USAGE);
+    }
+    const body = {
+        repo,
+        stack,
+        ...(flags.commit === undefined ? {} : { commit: flags.commit }),
+        ...(flags.why === undefined ? {} : { reason: flags.why }),
+        ...(flags.wait === true ? { wait: true } : {}),
+    };
+    const { record } = await answered("POST", "/deploys/deploy", body);
+    ended(record, flags.wait === true);
+};
+
+const rollback = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["to"], switches: ["wait"] });
+    const [repo, stack] = rest;
+    if (repo === undefined || stack === undefined) {
+        return die(COMMAND, USAGE);
+    }
+    const body = { repo, stack, ...(flags.to === undefined ? {} : { to: flags.to }), ...(flags.wait === true ? { wait: true } : {}) };
+    const { record } = await answered("POST", "/deploys/rollback", body);
+    ended(record, flags.wait === true);
+};
+
+const promote = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { switches: ["wait"] });
+    const [repo, from, to] = rest;
+    if (repo === undefined || from === undefined || to === undefined) {
+        return die(COMMAND, USAGE);
+    }
+    const { record } = await answered("POST", "/deploys/promote", { repo, from, to, ...(flags.wait === true ? { wait: true } : {}) });
+    ended(record, flags.wait === true);
+};
+
+// A card in this conversation, through the needs door every asking command shares (needs-cli.mjs `raise`).
+const grant = async (args) => {
+    const { flags, rest } = parseArgs(COMMAND, args, { values: ["why", "wait"] });
+    const [repo, stack] = rest;
+    if (repo === undefined || stack === undefined) {
+        return die(COMMAND, USAGE);
+    }
+    await raise(COMMAND, { kind: "deploy", repo, stack }, flags);
+};
+
+const main = async () => {
+    const [command, ...rest] = process.argv.slice(2);
+    if (command === undefined || command === "list") {
+        return list();
+    }
+    const verbs = { history, deploy, rollback, promote, grant };
+    if (Object.hasOwn(verbs, command)) {
+        return verbs[command](rest);
+    }
+    process.stdout.write(`${USAGE}\n`);
+    process.exit(command === "--help" || command === "-h" ? 0 : 2);
+};
+
+main().catch((error) => die(COMMAND, error?.message ?? String(error)));

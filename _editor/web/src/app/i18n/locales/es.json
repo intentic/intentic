@@ -3210,6 +3210,8 @@
             "lastUsed": "Último uso",
             "inCommand": "en un comando",
             "inScript": "en un script",
+            "inDeploy": "desplegado con un stack",
+            "inDeployTo": "desplegado con {detail}",
             "inMcpCall": "en una llamada a un servidor MCP",
             "typedOnDesktop": "escrito en el escritorio del sandbox",
             "typed": "escrito en una ventana",
@@ -6689,6 +6691,12 @@
             "leadUndated": "{device} detendría el trabajo programado en él.",
             "approve": "Cambiar estos ajustes en {device}",
             "working": "Cambiando los ajustes en {device}…"
+        },
+        "deploy": {
+            "lead": "{stack} de {repo} se despliega en {device}. Al concederlo, este sandbox escribe estos secretos en su .env cada vez que lo despliega:",
+            "new": "nuevo",
+            "note": "Solo estos nombres y solo en {device}: si el stack empieza a leer otro secreto o pasa a otro equipo, se vuelve a preguntar.",
+            "approve": "Conceder a {stack}"
         }
     },
     "preview": {

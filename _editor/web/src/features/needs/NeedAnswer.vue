@@ -11,6 +11,7 @@ import NeedClaimBody from "./routing/NeedClaimBody.vue";
 import NeedRouteBody from "./routing/NeedRouteBody.vue";
 import NeedRedirectBody from "./routing/NeedRedirectBody.vue";
 import NeedDecline from "./NeedDecline.vue";
+import NeedDeployBody from "./NeedDeployBody.vue";
 import NeedEnvironmentBody from "./NeedEnvironmentBody.vue";
 import NeedGrantBody from "./NeedGrantBody.vue";
 import NeedHostPowerBody from "./NeedHostPowerBody.vue";
@@ -76,6 +77,9 @@ const decline = async (): Promise<void> => {
     <NeedRedirectBody v-else-if="need.subject.kind === `redirect`" :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="false" :label="t(`needs.redirect.keep`)" @open="decline" /></template>
     </NeedRedirectBody>
+    <NeedDeployBody v-else-if="need.subject.kind === `deploy`" :need="need" :subject="need.subject">
+        <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
+    </NeedDeployBody>
     <NeedEnvironmentBody v-else :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedEnvironmentBody>

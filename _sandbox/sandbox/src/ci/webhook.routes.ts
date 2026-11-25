@@ -18,6 +18,7 @@ import {
     type GitlabPipelineHook,
     gitlabHookRun,
 } from "./providers.js";
+import type { CiPass } from "../deploys/deploy-triggers.js";
 import { forgeOf } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
@@ -141,6 +142,35 @@ const gitlabFailedJob = (hook: GitlabJobHook): FailedJob | undefined =>
               reason: hook.build_failure_reason,
           };
 
+// A job that passed, as the deploys watch hears of it (deploys/deploy-triggers.ts): a stack whose `ci` trigger names it
+// deploys now, before the rest of its run ends. A tag's job deploys nothing: a trigger names a branch.
+type PassedJob = Omit<CiPass, "repo">;
+
+const githubPassedJob = (job: GithubJob): PassedJob | undefined =>
+    job.conclusion !== "success" || job.head_sha === undefined || job.head_branch === undefined || job.head_branch === null
+        ? undefined
+        : {
+              host: "github",
+              branch: job.head_branch,
+              sha: job.head_sha,
+              runId: job.run_id,
+              workflow: job.workflow_name ?? undefined,
+              job: { id: job.id, name: job.name },
+              url: job.html_url ?? undefined,
+          };
+
+const gitlabPassedJob = (hook: GitlabJobHook): PassedJob | undefined =>
+    hook.build_status !== "success" || hook.tag === true || hook.sha === undefined
+        ? undefined
+        : {
+              host: "gitlab",
+              branch: hook.ref,
+              sha: hook.sha,
+              runId: hook.pipeline_id,
+              job: { id: hook.build_id, name: hook.build_name },
+              url: hook.project.web_url === undefined ? undefined : `${hook.project.web_url}/-/jobs/${hook.build_id}`,
+          };
+
 // A run as the board and the automations hear of it, at every phase: what failed in it read first, so the wake payload
 // and the view name what broke (a failure of that read degrades to names-less), then cached, announced and, once it has
 // a result, dispatched.
@@ -176,6 +206,7 @@ interface Understood {
     readonly toRun?: (project: { repo: string; project: string }) => PipelineRun;
     readonly jobMoved: boolean;
     readonly failedJob?: FailedJob | undefined;
+    readonly passedJob?: PassedJob | undefined;
 }
 
 const githubDeliveryOf = (event: string | undefined, delivery: GithubDelivery): Understood | undefined => {
@@ -190,6 +221,7 @@ const githubDeliveryOf = (event: string | undefined, delivery: GithubDelivery): 
             author: { id: "github", name: "github" },
             jobMoved: true,
             failedJob: delivery.action === "completed" ? githubFailedJob(job) : undefined,
+            passedJob: delivery.action === "completed" ? githubPassedJob(job) : undefined,
         };
     }
     if (event === "workflow_run" && delivery.workflow_run !== undefined) {
@@ -211,7 +243,8 @@ const gitlabDeliveryOf = (event: string | undefined, payload: Partial<GitlabJobH
         if (delivery.project === undefined || typeof delivery.build_id !== "number" || typeof delivery.pipeline_id !== "number") {
             return undefined;
         }
-        return { sender: gitlabSender(delivery.project), author: { id: "gitlab", name: "gitlab" }, jobMoved: true, failedJob: gitlabFailedJob(delivery as GitlabJobHook) };
+        const hook = delivery as GitlabJobHook;
+        return { sender: gitlabSender(delivery.project), author: { id: "gitlab", name: "gitlab" }, jobMoved: true, failedJob: gitlabFailedJob(hook), passedJob: gitlabPassedJob(hook) };
     }
     const delivery = payload as Partial<GitlabPipelineHook>;
     if (event !== "Pipeline Hook" || delivery.object_attributes === undefined || delivery.project === undefined) {
@@ -227,6 +260,24 @@ const gitlabDeliveryOf = (event: string | undefined, payload: Partial<GitlabJobH
         toRun: (project) => gitlabHookRun(project, delivery as GitlabPipelineHook),
         jobMoved: false,
     };
+};
+
+// A job that ended, handed on off the delivery's clock: a failure to main's fix agent (reading its log and starting or
+// telling the agent takes a while), a pass to the deploys watch (which fetches the commit, reads the manifest and never
+// rejects). Whether the delivery was one.
+const handedOffJob = (services: Services, project: CiProject, understood: Understood, fetchFn: FetchFn): boolean => {
+    const { failedJob, passedJob } = understood;
+    if (failedJob !== undefined) {
+        void jobFailed(services, project, failedJob, fetchFn).catch((error: unknown) =>
+            services.logger.warn({ err: error, repo: project.repo, jobId: failedJob.jobId }, "ci repair: the failed job could not be handled"),
+        );
+        return true;
+    }
+    if (passedJob !== undefined) {
+        void services.deployWatch.ciPassed({ ...passedJob, repo: project.repo });
+        return true;
+    }
+    return false;
 };
 
 // Ample room for a workflow run or job delivery, while bounding the memory an unauthenticated caller can make the
@@ -277,7 +328,7 @@ export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetc
         if (understood === undefined) {
             return c.json({ ok: true, ignored: true });
         }
-        const { sender, author, toRun, failedJob, jobMoved } = understood;
+        const { sender, author, toRun, jobMoved } = understood;
 
         const project = await projectOf(services, host, sender);
         if (project === undefined) {
@@ -294,12 +345,7 @@ export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetc
             // A job's phase is not in the runs cache, but an open run's job graph and a watch on it read it fresh.
             publishRuntimeChange("ci");
         }
-        if (failedJob !== undefined) {
-            // Off the delivery's clock: reading the job's log and starting or telling the fix agent takes a while.
-            const job = failedJob;
-            void jobFailed(services, project, job, fetchFn).catch((error: unknown) =>
-                services.logger.warn({ err: error, repo: project.repo, jobId: job.jobId }, "ci repair: the failed job could not be handled"),
-            );
+        if (handedOffJob(services, project, understood, fetchFn)) {
             return c.json({ ok: true });
         }
         if (toRun === undefined) {

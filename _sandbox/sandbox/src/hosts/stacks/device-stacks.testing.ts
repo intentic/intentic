@@ -18,11 +18,15 @@ export interface ToolAnswer {
     readonly refused?: boolean;
 }
 
+// A tool's arguments as JSON.
+const ToolArgsSchema = z.record(z.string(), z.json());
+
 export interface ToolCall {
     // The connection the call went over, as the hub keys it.
     readonly device: string;
     readonly tool: string;
-    readonly args: Readonly<Record<string, string | number>>;
+    // What the machine read, as JSON: a managed deploy's args nest (registry logins, hooks, health, pins).
+    readonly args: z.infer<typeof ToolArgsSchema>;
     readonly signal: AbortSignal | undefined;
 }
 
@@ -31,7 +35,7 @@ const FACTS: DeviceFacts = { os: "Ubuntu 24.04", arch: "x64", shell: "bash", hom
 
 // The MCP request callTool sends, read back as the machine would read it.
 const ToolRequestSchema = z.object({
-    params: z.object({ name: z.string(), arguments: z.record(z.string(), z.union([z.string(), z.number()])) }),
+    params: z.object({ name: z.string(), arguments: ToolArgsSchema }),
 });
 
 // A staging that has nothing yet and files each upload under its name and hash, as the machine's runs folder does.

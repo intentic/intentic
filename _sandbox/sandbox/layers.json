@@ -82,6 +82,7 @@
                 "loops",
                 "workflows",
                 "ci",
+                "deploys",
                 "chores",
                 "links",
                 "needs",

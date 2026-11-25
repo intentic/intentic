@@ -29,6 +29,7 @@ import { automationNeed } from "./kinds/automation-need.js";
 import { environmentNeed } from "./kinds/environment-need.js";
 import { instructionNeed, type InstructionNeedDeps } from "./kinds/instruction-need.js";
 import { claimNeed } from "./kinds/claim-need.js";
+import { deployNeed } from "./kinds/deploy-need.js";
 import { routeNeedOf } from "./kinds/route-need.js";
 import { redirectNeedOf } from "./kinds/redirect-need.js";
 import { projectOfRemote } from "../issues/account-outbox.js";
@@ -308,6 +309,13 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             // A person's leave to route as them into another sandbox; the pairing itself is their press.
             route: routeNeedOf(whole),
             redirect: redirectNeedOf(whole),
+            // A managed stack's secrets, granted by the owner's press into the auth root the deploy engine reads (deploys/).
+            deploy: deployNeed({
+                stackAtHead: (ref) => whole().deploys.stackAtHead(ref),
+                grantFor: async (repo, stack, device) =>
+                    (await whole().deploys.grants()).find((grant) => grant.repo === repo && grant.stack === stack && grant.device === device),
+                grant: (grant) => whole().deploys.grantShown(grant),
+            }),
         },
         logger,
         raisingConversation: (named) => liveRequestRun(whole().conversations)(named)?.conversationId,

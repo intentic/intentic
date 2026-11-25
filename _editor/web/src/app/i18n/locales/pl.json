@@ -3210,6 +3210,8 @@
             "lastUsed": "Ostatnio użyty",
             "inCommand": "w poleceniu",
             "inScript": "w skrypcie",
+            "inDeploy": "wdrożony ze stackiem",
+            "inDeployTo": "wdrożony ze stackiem {detail}",
             "inMcpCall": "w wywołaniu serwera MCP",
             "typedOnDesktop": "wpisany na pulpicie sandboxa",
             "typed": "wpisany w okno",
@@ -14382,6 +14384,12 @@
             "leadUndated": "{device} przerwie zaplanowaną na nim pracę.",
             "approve": "Zmień te ustawienia na {device}",
             "working": "Zmieniam ustawienia na {device}…"
+        },
+        "deploy": {
+            "lead": "{stack} z {repo} wdraża się na {device}. Zgoda pozwala tej piaskownicy wpisywać te sekrety do jego .env przy każdym wdrożeniu:",
+            "new": "nowy",
+            "note": "Tylko te nazwy i tylko na {device}: stack, który zacznie czytać inny sekret albo przeniesie się na inny komputer, zapyta ponownie.",
+            "approve": "Przyznaj dla {stack}"
         }
     },
     "local": {

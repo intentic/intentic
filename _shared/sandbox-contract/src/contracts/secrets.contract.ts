@@ -11,6 +11,7 @@ import {
     SecretKeyParamSchema,
     SecretGeneratedSchema,
     SecretGenerateSchema,
+    SecretImportSchema,
     SecretRegenerateSchema,
     SecretHostGuardSetResultSchema,
     SecretHostGuardSetSchema,
@@ -62,6 +63,18 @@ export const secretsContract = {
         // The `secrets generate` CLI, on the agent token: it creates a value, and hands none back.
         .meta({ agent: true })
         .input(SecretGenerateSchema)
+        .output(SecretGeneratedSchema),
+    importValue: secretRoute
+        .route({
+            method: "POST",
+            path: "/secrets/import",
+            summary: "Store a value under a new name",
+            description:
+                "Stores a value read from the `secrets import` command's input under a name nothing here holds yet, where `set` would have put it: how a value moves from where it lives now (another orchestrator's variables, a file on a server) without passing through the chat. Answers the name and its length, never the value. Refused for a name something here already holds, so it can add a credential and never replace one.",
+        })
+        // (2026-11-25) The `secrets import` CLI, on the agent token; withheld from the panel token, as `set` is.
+        .meta({ agent: true, panel: false })
+        .input(SecretImportSchema)
         .output(SecretGeneratedSchema),
     regenerate: secretRoute
         .route({

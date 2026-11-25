@@ -22,6 +22,16 @@ export const SecretKeysSchema = z.object({
 export const SecretKeyParamSchema = z.object({ key: secretKey.describe("Which secret, by name.") });
 export const SecretRevealSchema = z.object({ value: z.string().describe("The value itself. The only place in this API one is ever returned.") });
 
+// (2026-11-25) A value the agent already holds the way to, moved into the store without passing through the chat or its
+// own context: `secrets import NAME --stdin`, a value piped from where it lives now (another orchestrator's variables,
+// a file on a server). A new name only, never one anything here holds: the agent token can add a credential and never
+// replace one, so a value the owner stored cannot be swapped under the references that read it.
+export const SECRET_IMPORT_MAX = 64_000;
+export const SecretImportSchema = z.object({
+    key: secretKey.describe("The name to store it under: one nothing here holds yet."),
+    value: z.string().min(1).max(SECRET_IMPORT_MAX).describe("The value, as read from the command's input. Stored, never echoed or logged."),
+});
+
 // A secret nobody has to find or paste: a session key, a webhook signing secret, a database password the task sets up
 // itself. The sandbox makes it and keeps it; the caller gets its reference and length, never the value.
 // The shortest stored value the sandbox masks wherever it appears; a shorter one masks only in a secret-like context. The
@@ -319,14 +329,14 @@ export const SecretInventoryEntrySchema = z.object({
         .object({
             at: z.number().describe("When, in milliseconds."),
             lane: z
-                .enum(["shell", "code", "browser", "gateway", "ssh", "device", "desktop", "mcp"])
+                .enum(["shell", "code", "browser", "gateway", "ssh", "device", "desktop", "mcp", "deploy"])
                 .describe(
-                    "How it was used: a command, a script, typed into a page, attached by the credential gateway to a request the agent sent, a key the sandbox's ssh agent signed with for the agent, typed into a window or app on one of the owner's computers, typed into a window on the sandbox's desktop, or sent in a tool call to an MCP server the owner connected.",
+                    "How it was used: a command, a script, typed into a page, attached by the credential gateway to a request the agent sent, a key the sandbox's ssh agent signed with for the agent, typed into a window or app on one of the owner's computers, typed into a window on the sandbox's desktop, sent in a tool call to an MCP server the owner connected, or rendered by the sandbox into a managed stack's .env or registry login as it deployed it.",
                 ),
             detail: z
                 .string()
                 .optional()
-                .describe("Where it went: the start of the command or script, the site, or the MCP tool and its server's host. Names and destinations only, never values."),
+                .describe("Where it went: the start of the command or script, the site, the MCP tool and its server's host, or the stack and the computer it was deployed to. Names and destinations only, never values."),
             approvedBy: z.string().optional().describe("Who released it for that use, when it is gated. Absent when nothing had to be approved."),
         })
         .optional()

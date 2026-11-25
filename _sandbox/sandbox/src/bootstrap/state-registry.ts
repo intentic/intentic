@@ -57,6 +57,10 @@ import { projectDeliveriesDocument } from "../conversations/land/project-deliver
 import { conversationRecordDocument } from "../conversations/registry/agents-store.js";
 import { pre1308ImportStep } from "../conversations/registry/pre-1308-import.js";
 import { definitionDocument } from "../definition/definition.js";
+import { deployGrantsDocument } from "../deploys/deploy-grants.js";
+import { deploySecretMarksDocument } from "../deploys/deploy-secret-marks.js";
+import { deployWatchDocument } from "../deploys/deploy-watch-store.js";
+import { deploysDocument } from "../deploys/deploys-store.js";
 import { enginePolicyDocument } from "../engines/engine-policy.js";
 import { engineStateDocument } from "../engines/engine-store.js";
 import { runtimeInstallsDocument } from "../environment/runtime-installs.js";
@@ -207,13 +211,17 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     choreLedgerDocument,
     choreProbesDocument,
     ciDocument,
+    composerDraftsDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
-    composerDraftsDocument,
     projectDeliveriesDocument,
     conversationRecordDocument,
     definitionDocument,
+    deployGrantsDocument,
+    deploySecretMarksDocument,
+    deployWatchDocument,
+    deploysDocument,
     enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
@@ -260,11 +268,11 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     ownerGrantsDocument,
     rolesDocument,
     ruleFiringsDocument,
-    runnerIdentityDocument,
-    safetyLogDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    runnerIdentityDocument,
+    safetyLogDocument,
     autostartDocument,
     credentialGatesDocument,
     credentialReleasesDocument,
