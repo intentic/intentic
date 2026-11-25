@@ -1,59 +1,48 @@
 <script setup lang="ts">
 import type { SandboxMetrics } from "@intentic/sandbox-contract/schemas/metrics";
 import { Meter } from "@intentic/ui";
+import { toneWash } from "@intentic/ui/tone";
+import { useT } from "@intentic/ui/i18n";
+import { computed } from "vue";
 import { GAUGE_GLYPH, useSandboxReadout } from "./sandboxFigures";
 
-// The geek metrics at rest, in the board's header (BoardMetrics.vue): three small gauges (CPU, memory, disk), each its
-// glyph and its meter, and no figure until one nears its limit, when that figure joins the line tinted. At rest the
-// question is only "is anything running out?", which the meters answer; "5.7 / 17 GiB" beside each one made the line
-// ~400px of numbers nobody read. The figures are the button's hover (BoardMetrics), and the rest (load, processes,
-// pressure, the daemon, memory by kind) is the popover a press on them opens. A screen reader still hears each label and
-// figure. The glyphs are always CPU, memory, disk in that order, and the hover names them. A figure raised past its limit
-// speaks the same way: its own glyph (a clock for pressure), then each reading behind the glyph of what it measures, so
-// pressure on I/O reads as the disk glyph and its percent rather than a sentence; its words are in the hover.
+// The geek metrics in one line (BoardMetrics.vue): the board's header on a stacked board, its bottom-left corner folded.
+// At rest, three small gauges (CPU, memory, disk), each its glyph and its meter, and no figure: the question is only "is
+// anything running out?", which the meters answer, and "5.7 / 17 GiB" beside each one made the line ~400px of numbers
+// nobody read. The figures are the hover, the rest the popover a press opens. A screen reader still hears each one.
+//
+// ONCE ANYTHING NEARS A LIMIT the meters give way to one verdict: the resource worst off, in words, with what else is wrong
+// with it ("Memory 13 / 17 GiB · swap full · 31% stalled"), and "+N" for the other resources short. One line whatever
+// goes wrong: until 2026-11-24 every warning was appended after the meters as a group of its own, and a line short of
+// room cut them off from the right, so the figures worth acting on were the first to go.
 
 const props = defineProps<{
     metrics: SandboxMetrics;
 }>();
 
+const t = useT();
 const readout = useSandboxReadout(() => props.metrics);
+const worst = computed(() => readout.value.strains[0]);
+const others = computed(() => readout.value.strains.length - 1);
 </script>
 
 <template>
-    <span class="flex min-w-0 items-center gap-3 overflow-hidden">
+    <span v-if="worst === undefined" class="flex min-w-0 items-center gap-3 overflow-hidden">
         <span v-for="gauge in readout.gauges" :key="gauge.key" data-figure class="inline-flex shrink-0 items-center gap-1.5">
-            <Icon :name="GAUGE_GLYPH[gauge.key]" aria-hidden="true" class="text-2xs" :class="gauge.warn ? `text-warning` : ``" />
+            <Icon :name="GAUGE_GLYPH[gauge.key]" aria-hidden="true" class="text-2xs" />
             <span class="sr-only">{{ gauge.label }}</span>
-            <Meter :value="gauge.fraction" :tone="gauge.warn ? `warning` : `muted`" class="w-6" />
-            <span class="tabular-nums" :class="gauge.warn ? `text-warning` : `sr-only`">{{ gauge.value }}</span>
+            <Meter :value="gauge.fraction" tone="muted" class="w-6" />
+            <span class="sr-only tabular-nums">{{ gauge.value }}</span>
         </span>
-        <!-- Only past a limit: a figure worth acting on shouldn't hide behind a click. -->
-        <!-- Short of room an alert gives up its readings from the right and never spills into the next one. -->
-        <span
-            v-for="alert in readout.alerts"
-            :key="alert.key"
-            data-figure
-            class="inline-flex min-w-0 items-center gap-1.5 overflow-hidden border-l border-content/10 pl-3 text-warning"
-        >
-            <template v-if="alert.glyph !== undefined">
-                <Icon :name="alert.glyph" aria-hidden="true" class="shrink-0 text-2xs" />
-                <span class="sr-only">{{ alert.label }}</span>
-                <span
-                    v-for="part in alert.parts ?? []"
-                    :key="part.key"
-                    class="inline-flex shrink-0 items-center gap-1"
-                    :class="part.warn ? `` : `text-muted`"
-                >
-                    <Icon v-if="part.glyph !== undefined" :name="part.glyph" aria-hidden="true" class="text-2xs opacity-70" />
-                    <span class="sr-only">{{ part.label }}</span>
-                    <span class="tabular-nums">{{ part.value }}</span>
-                </span>
-            </template>
-            <template v-else>
-                <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
-                <span class="min-w-0 truncate">{{ alert.label }}</span>
-                <span class="min-w-0 shrink-[100] truncate tabular-nums">{{ alert.value }}</span>
-            </template>
+    </span>
+    <!-- The figure keeps its place and the notes give way, so a narrow line still says what and how much. -->
+    <span v-else data-verdict :class="toneWash(`warning`, `flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-md px-2 whitespace-nowrap`)">
+        <span class="shrink-0 font-medium">{{ worst.label }}</span>
+        <span v-if="worst.value !== ``" class="shrink-0 tabular-nums">{{ worst.value }}</span>
+        <span v-if="worst.notes.length > 0" class="min-w-0 truncate">· {{ worst.notes.join(` · `) }}</span>
+        <span v-if="others > 0" class="shrink-0 tabular-nums opacity-70">
+            <span aria-hidden="true">+{{ others }}</span>
+            <span class="sr-only">{{ t(`agents.liveMetrics.moreStrained`, { count: others }, others) }}</span>
         </span>
     </span>
 </template>

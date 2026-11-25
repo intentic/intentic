@@ -69,7 +69,7 @@ const toHours = (): void => {
 
 <template>
     <template v-if="night !== undefined && mayChange">
-        <!-- Sized and washed as the metrics beside it (BoardMetrics.vue), so the header's quiet controls read as one set. -->
+        <!-- Sized and washed as the metrics line a stacked board keeps beside it (BoardMetrics.vue), so the header's quiet controls read as one set. -->
         <button
             ref="anchor"
             type="button"

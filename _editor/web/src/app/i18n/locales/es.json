@@ -684,7 +684,13 @@
             "tintAt": "≥ {percent} de memoria",
             "tinted": "Resaltado",
             "groupedLabel": "Sesiones agrupadas",
-            "groupedValue": "{count} · {size}"
+            "groupedValue": "{count} · {size}",
+            "stalled": "{percent} en espera",
+            "swapFull": "swap lleno",
+            "eventLoopAt": "bucle de eventos {percent}",
+            "moreStrained": "{count} más cerca de su límite | {count} más cerca de su límite",
+            "allFigures": "Todas las cifras",
+            "cornerLabel": "Sandbox"
         },
         "boardNight": {
             "tipTitle": "Buenas noches",
@@ -12221,7 +12227,7 @@
                 "liveMetrics": "Métricas para geeks",
                 "liveMetricsHint": "Indicadores y costes en vivo en el tablero de agentes.",
                 "hint": {
-                    "header": "CPU, memoria y disco en la cabecera del tablero.",
+                    "corner": "CPU, memoria y disco en la esquina inferior izquierda del tablero.",
                     "cards": "En la tarjeta de cada agente: su parte y lo que costó.",
                     "rail": "En otras vistas, un icono en la barra solo cerca de un límite.",
                     "off": "Desactivado: no se mide nada."

@@ -16,9 +16,9 @@ import {
 } from "../../../models/sandbox/liveMetrics";
 
 // The board's geek metrics as the places that draw them read them: three gauges (CPU, memory, disk: the figures that run
-// out) for the quiet bar at the foot of the board, every other figure for the panel it opens, and one conversation's
-// share for its card and the panel's list of them. A figure near its limit is flagged, so the bar can raise it without
-// the reader opening anything.
+// out) for the board's corner and its one line, every other figure for the panel they open, and one conversation's
+// share for its card and the panel's list of them. A figure near its limit is flagged, and what is running short is
+// regrouped by resource (`strains`), so the line can say it without the reader opening anything.
 
 export interface Gauge {
     readonly key: `cpu` | `memory` | `disk`;
@@ -58,6 +58,23 @@ export interface Figure {
 
 // The glyph of each thing that runs out, the same in the gauges and wherever a figure is about one of them (pressure).
 export const GAUGE_GLYPH = { cpu: `cpu`, memory: `memory`, disk: `database` } as const satisfies Record<Gauge[`key`], IconName>;
+
+// ONE RESOURCE RUNNING SHORT, with every warning about it folded in: memory near its limit, a full swap and work stalled
+// on memory are one problem, "Memory 13 / 17 GiB · swap full · 31% stalled", not three figures side by side. Until
+// 2026-11-24 each warning was its own group on the header's line, appended after the gauges, and a line short of room
+// cut them off from the right: the most urgent figures were the first to go.
+export interface Strain {
+    readonly key: Gauge[`key`] | `daemon`;
+    readonly label: string;
+    // The gauge's own figure ("13 / 17 GiB"), or what the daemon was raised for.
+    readonly value: string;
+    // What else is wrong with it: "swap full", "31% stalled".
+    readonly notes: readonly string[];
+}
+
+// Worst first: memory is what holds a person's turn, a full disk stops everything, a busy CPU only slows, and the daemon's
+// loop lags the editor.
+const STRAIN_ORDER = [`memory`, `disk`, `cpu`] as const satisfies readonly Gauge[`key`][];
 
 export interface RoleRow {
     readonly key: string;
@@ -104,6 +121,8 @@ export interface SandboxReadout {
     readonly smallSessionsBytes: number;
     // Figures past a limit, besides the gauges: what the bar names on its own so nobody has to open the panel to see it.
     readonly alerts: readonly Figure[];
+    // What is running short, one entry a resource, worst first; empty while all is well.
+    readonly strains: readonly Strain[];
 }
 
 // "9.3 / 16 GiB" when both halves share a unit, which is the common case; both units kept when they differ.
@@ -358,6 +377,37 @@ export function useSandboxReadout(metrics: () => SandboxMetrics, cards?: () => C
         ];
     };
 
+    // The same thresholds the gauges and figures warn by, regrouped by the resource each is about.
+    const strainsOf = ({ sandbox, daemon }: SandboxMetrics, gauges: readonly Gauge[]): Strain[] => {
+        const stalled = (share: number | undefined): string[] =>
+            share !== undefined && share >= PRESSURE_STALLING ? [t(`agents.liveMetrics.stalled`, { percent: formatPercent(share) })] : [];
+        const notes = {
+            memory: [...((sandbox.swapBytes ?? 0) > 0 && sandbox.swapFull === true ? [t(`agents.liveMetrics.swapFull`)] : []), ...stalled(sandbox.pressure?.memory)],
+            disk: stalled(sandbox.pressure?.io),
+            cpu: stalled(sandbox.pressure?.cpu),
+        } satisfies Record<Gauge[`key`], string[]>;
+        const strained = STRAIN_ORDER.flatMap((key): Strain[] => {
+            const gauge = gauges.find((each) => each.key === key);
+            if (!(gauge?.warn ?? false) && notes[key].length === 0) {
+                return [];
+            }
+            // A sandbox that reports no disk still names the disk its I/O stalls on, without a figure.
+            return [{ key, label: gauge?.label ?? t(`agents.liveMetrics.diskLabel`), value: gauge?.value ?? ``, notes: notes[key] }];
+        });
+        const loop = daemon.eventLoopPercent;
+        return loop === undefined || loop < NEAR_LIMIT * 100
+            ? strained
+            : [
+                  ...strained,
+                  {
+                      key: `daemon`,
+                      label: t(`agents.liveMetrics.daemonLabel`),
+                      value: t(`agents.liveMetrics.eventLoopAt`, { percent: formatPercent(loop) }),
+                      notes: [],
+                  },
+              ];
+    };
+
     const rolesOf = ({ roles }: SandboxMetrics): RoleRow[] => {
         const held = heaviestRoles(roles, PROCESS_ROLES.length);
         const heaviest = held[0]?.rssBytes ?? 0;
@@ -389,8 +439,9 @@ export function useSandboxReadout(metrics: () => SandboxMetrics, cards?: () => C
         const figures = figuresOf(reading);
         const [roles, smallRoles] = splitRoles(rolesOf(reading));
         const [sessions, smallSessions] = splitSessions(sessionsOf(reading));
+        const gauges = gaugesOf(reading);
         return {
-            gauges: gaugesOf(reading),
+            gauges,
             memoryRows: memoryRowsOf(t, reading.sandbox),
             figures,
             roles,
@@ -400,6 +451,7 @@ export function useSandboxReadout(metrics: () => SandboxMetrics, cards?: () => C
             smallSessions,
             smallSessionsBytes: smallSessions.reduce((sum, session) => sum + session.bytes, 0),
             alerts: figures.filter((figure) => figure.warn),
+            strains: strainsOf(reading, gauges),
         };
     });
 }

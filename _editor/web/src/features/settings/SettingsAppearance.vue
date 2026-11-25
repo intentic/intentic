@@ -76,7 +76,7 @@ const wordsHint = computed(() => {
 
 // Where each gauge shows, behind the (i) beside the switch's name; the row itself says one line.
 const liveMetricsFacts = computed<readonly HintFact[]>(() => [
-    { icon: `cpu`, text: t(`settings.appearance.statusBar.hint.header`) },
+    { icon: `cpu`, text: t(`settings.appearance.statusBar.hint.corner`) },
     { icon: `usage`, text: t(`settings.appearance.statusBar.hint.cards`) },
     { icon: `exclamation-triangle`, text: t(`settings.appearance.statusBar.hint.rail`) },
     { icon: `eye-slash`, text: t(`settings.appearance.statusBar.hint.off`) },

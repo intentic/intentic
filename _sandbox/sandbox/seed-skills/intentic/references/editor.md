@@ -48,9 +48,11 @@ is **Home** (`/home`): every sandbox the person has, at once. Going into a sandb
   parent's checkout, as an in-process subagent's edits do, so the family lands once, with the parent. **Land** (in plain
   words, **Accept**) applies a conversation's delta to the main tree; a conflict card names the paths. Cards carry
   titles, reactions and a tint for the kind of work, never tags (`agents-board.md`). With geek metrics on (Settings ▸
-  Appearance), the status bar carries the sandbox's CPU, memory and disk, and opens a panel with every figure, memory by
-  kind of process, and memory and CPU by session; each card shows its own conversation's. Desktop only: a phone shows
-  no geek metrics.
+  Appearance), a card in the board's bottom-left corner carries the sandbox's CPU, memory and disk (the header does, as
+  one line, when the board is too narrow for columns). It folds to one row when the cards above it need the room, and
+  once anything nears a limit that row names the resource worst off ("Memory 13 / 17 GiB · swap full", "+1" for any
+  other). A press opens a panel with every figure, memory by kind of process, and memory and CPU by session; each card
+  shows its own conversation's. Desktop only: a phone shows no geek metrics.
 - **Status bar** (the foot of the desktop window): what the sandbox is running, not places. The terminal's toggle
   (Ctrl+`, developers only), then chips that are there only while live: **Browsers**, one chip for the live apps while
   something answers, the agents' open browsers and the sandbox's desktop while a window is open (amber while an agent

@@ -207,34 +207,37 @@ describe("the sandbox segment", () => {
         expect(figuresOf(el).slice(0, 2)).toEqual([`CPU –`, `Memory 900 MiB / 16 GiB`]);
     });
 
-    it("raises a figure past its limit onto the line, tinted, so it needs no click to be seen", () => {
+    it("trades the meters for one line on the resource worst off, every warning about it folded in, and counts the rest", () => {
         const el = mount(SandboxMetricsSummary, {
             metrics: reading({
-                sandbox: { memoryBytes: 15 * GIB, memoryRoom: room(GIB / 2), pressure: { cpu: 0, memory: 30, io: 0 } },
+                sandbox: {
+                    memoryBytes: 15 * GIB,
+                    memoryRoom: room(GIB / 2),
+                    swapBytes: 2 * GIB,
+                    swapLimitBytes: 2 * GIB,
+                    swapFull: true,
+                    pressure: { cpu: 0, memory: 30, io: 0 },
+                },
                 daemon: { eventLoopPercent: 95 },
             }),
         });
-        expect(figuresOf(el)).toEqual([
-            `CPU 23%`,
-            `Memory 15 / 16 GiB`,
-            `Disk 400 / 1,000 GiB`,
-            // As glyphs, each label for a screen reader only: pressure names only the resource waited on, the daemon only
-            // the event loop it was raised for.
-            `Pressure Memory 30%`,
-            `Daemon Event loop 95%`,
-        ]);
-        const tinted = [...el.querySelectorAll(`[data-figure]`)].filter(
-            (figure) => figure.matches(`.text-warning`) || figure.querySelector(`.text-warning`) !== null,
-        );
-        expect(tinted.map((figure) => wordsOf(figure).split(` `)[0])).toEqual([`Memory`, `Pressure`, `Daemon`]);
+        // Memory short, its swap full and work stalled on it are one problem; the daemon's loop is the one other.
+        expect(figuresOf(el)).toEqual([]);
+        expect(wordsOf(el.querySelector(`[data-verdict]`)!)).toBe(`Memory 15 / 16 GiB · swap full · 30% stalled +1 1 more near its limit`);
     });
 
-    it("tints the resource stalling within pressure, and leaves one merely queuing muted", () => {
-        const el = mount(SandboxMetricsSummary, { metrics: reading({ sandbox: { pressure: { cpu: 2, memory: 0, io: 15 } } }) });
-        const pressure = figuresOf(el).find((figure) => figure.startsWith(`Pressure`));
-        expect(pressure).toBe(`Pressure CPU 2.0% I/O 15%`);
-        const muted = [...el.querySelectorAll(`[data-figure] .text-muted`)].map((part) => wordsOf(part));
-        expect(muted).toEqual([`CPU 2.0%`]);
+    it("names a resource short only by what waits on it, worst first: the disk before the CPU", () => {
+        const el = mount(SandboxMetricsSummary, { metrics: reading({ sandbox: { pressure: { cpu: 12, memory: 0, io: 15 } } }) });
+        expect(wordsOf(el.querySelector(`[data-verdict]`)!)).toBe(`Disk 400 / 1,000 GiB · 15% stalled +1 1 more near its limit`);
+    });
+
+    it("says the daemon's loop when that is all that is wrong, and keeps the meters while work only queues", () => {
+        const daemon = mount(SandboxMetricsSummary, { metrics: reading({ daemon: { eventLoopPercent: 95 } }) });
+        expect(wordsOf(daemon.querySelector(`[data-verdict]`)!)).toBe(`Daemon event loop 95%`);
+        app?.unmount();
+        const queuing = mount(SandboxMetricsSummary, { metrics: reading({ sandbox: { pressure: { cpu: 2, memory: 0, io: 5 } } }) });
+        expect(queuing.querySelector(`[data-verdict]`)).toBeNull();
+        expect(figuresOf(queuing)).toHaveLength(3);
     });
 });
 
