@@ -392,7 +392,7 @@ const capabilitiesLink = appLink(host().href(host().links.capabilities()), () =>
         <!-- Above the editor rather than over it: the notice's tint is translucent, and the editor's toolbar is right there. -->
         <div v-if="revealed && note !== undefined" class="shrink-0 p-2">
             <Notice v-if="note.kind === 'conflict'" tone="warning">
-                <span class="block">{{ t(`onlyOfficeViewer.changedOnDisk`) }}</span>
+                {{ t(`onlyOfficeViewer.changedOnDisk`) }}
                 <span class="mt-1 flex flex-wrap gap-3">
                     <button type="button" :class="ui.textButton(`font-medium`)" @click="settle(`overwrite`)">{{ t(`onlyOfficeViewer.keepMine`) }}</button>
                     <button type="button" :class="ui.textButton(`font-medium`)" @click="settle(`copy`)">{{ t(`onlyOfficeViewer.keepBoth`) }}</button>
