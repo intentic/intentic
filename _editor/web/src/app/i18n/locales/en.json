@@ -570,8 +570,6 @@
             "finishedAgentsLandWork": "Finished agents land their work in your workspace.",
             "ignoreCase": "Ignore case",
             "ignoreOuterSpaces": "Search without the spaces at the ends",
-            "inArchive": "In the archive",
-            "inEarlierChats": "In earlier chats",
             "leaveArchive": "Leave archive",
             "mine": "Mine",
             "mineOff": "Everyone’s sessions",
@@ -1194,6 +1192,7 @@
             "ownNote": "It works in a copy of its own; its fix lands as changes you review."
         },
         "beyondResults": {
+            "earlierChat": "Earlier chat",
             "showMore": "Show {count} more · {hidden} not shown"
         },
         "autoApprove": {

@@ -570,8 +570,6 @@
             "finishedAgentsLandWork": "Les agents terminés intègrent leur travail dans votre espace de travail.",
             "ignoreCase": "Ignorer la casse",
             "ignoreOuterSpaces": "Rechercher sans les espaces aux extrémités",
-            "inArchive": "Dans l'archive",
-            "inEarlierChats": "Dans des chats antérieurs",
             "leaveArchive": "Quitter l'archive",
             "mine": "Les miennes",
             "mineOff": "Les sessions de tout le monde",
@@ -1194,6 +1192,7 @@
             "ownNote": "Il travaille dans sa propre copie ; sa correction arrive sous forme de changements que vous relisez."
         },
         "beyondResults": {
+            "earlierChat": "Chat antérieur",
             "showMore": "Afficher {count} de plus · {hidden} non affichés"
         },
         "autoApprove": {

@@ -570,8 +570,6 @@
             "finishedAgentsLandWork": "Fertige Agenten landen ihre Arbeit in Ihrem Workspace.",
             "ignoreCase": "Groß-/Kleinschreibung ignorieren",
             "ignoreOuterSpaces": "Ohne die Leerzeichen am Rand suchen",
-            "inArchive": "Im Archiv",
-            "inEarlierChats": "In früheren Chats",
             "leaveArchive": "Archiv verlassen",
             "mine": "Meine",
             "mineOff": "Die Sitzungen aller",
@@ -1194,6 +1192,7 @@
             "ownNote": "Er arbeitet in einer eigenen Kopie; seine Korrektur kommt als Änderungen an, die du prüfst."
         },
         "beyondResults": {
+            "earlierChat": "Früherer Chat",
             "showMore": "{count} weitere zeigen · {hidden} nicht angezeigt"
         },
         "autoApprove": {

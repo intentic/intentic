@@ -570,8 +570,6 @@
             "finishedAgentsLandWork": "Los agentes terminados integran su trabajo en tu espacio de trabajo.",
             "ignoreCase": "Ignorar mayúsculas",
             "ignoreOuterSpaces": "Buscar sin los espacios de los extremos",
-            "inArchive": "En el archivo",
-            "inEarlierChats": "En chats anteriores",
             "leaveArchive": "Salir del archivo",
             "mine": "Mías",
             "mineOff": "Las sesiones de todos",
@@ -1194,6 +1192,7 @@
             "ownNote": "Trabaja en una copia propia; su arreglo llega como cambios que revisas."
         },
         "beyondResults": {
+            "earlierChat": "Chat anterior",
             "showMore": "Mostrar {count} más · {hidden} sin mostrar"
         },
         "autoApprove": {

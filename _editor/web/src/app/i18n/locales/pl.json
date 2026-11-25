@@ -570,8 +570,6 @@
             "finishedAgentsLandWork": "Skończone agenty scalają swoją pracę do Twojej przestrzeni roboczej.",
             "ignoreCase": "Ignoruj wielkość liter",
             "ignoreOuterSpaces": "Szukaj bez spacji na końcach",
-            "inArchive": "W archiwum",
-            "inEarlierChats": "We wcześniejszych czatach",
             "leaveArchive": "Wyjdź z archiwum",
             "mine": "Moje",
             "mineOff": "Sesje wszystkich",
@@ -1194,6 +1192,7 @@
             "ownNote": "Pracuje we własnej kopii; poprawka trafia do Ciebie jako zmiany do przejrzenia."
         },
         "beyondResults": {
+            "earlierChat": "Wcześniejszy czat",
             "showMore": "Pokaż {count} więcej · {hidden} niewyświetlonych"
         },
         "autoApprove": {

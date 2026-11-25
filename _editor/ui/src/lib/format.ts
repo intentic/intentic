@@ -64,6 +64,8 @@ const DATE_STYLES = {
     monthShort: { month: `short` },
     // A weekday's short name, over a calendar's column: "Tue".
     weekday: { weekday: `short` },
+    // A weekday's full name, over the rows one day holds: "Tuesday".
+    weekdayLong: { weekday: `long` },
     // A day said whole, for a calendar day's accessible name: "Tuesday, October 14".
     dayLong: { weekday: `long`, month: `long`, day: `numeric` },
     dateTime: { year: `numeric`, month: `short`, day: `numeric`, hour: `2-digit`, minute: `2-digit`, hour12: false },
@@ -198,6 +200,9 @@ export const formatMonthShort = (at: number): string => dateFormat(`monthShort`)
 
 /** A weekday's short name, over a calendar's column: "Tue". */
 export const formatWeekday = (at: number): string => dateFormat(`weekday`).format(at);
+
+/** A weekday's full name, as the heading over one day's rows: "Tuesday". */
+export const formatWeekdayLong = (at: number): string => dateFormat(`weekdayLong`).format(at);
 
 /** A day said whole, the year left to context: "Tuesday, October 14". A calendar day's accessible name. */
 export const formatDayLong = (at: number): string => dateFormat(`dayLong`).format(at);
