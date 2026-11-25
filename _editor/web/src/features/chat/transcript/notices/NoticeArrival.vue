@@ -150,8 +150,8 @@ const told = ref(false);
                         <Markdown v-if="bodyOf(row)?.said" :source="bodyOf(row)!.said" class="chat-markdown chat-markdown-compact" />
                         <p v-else class="text-2xs text-subtle">{{ t(`chat.noticeArrival.noReport`) }}</p>
                         <div v-if="senderOf(row)" class="-ml-2 flex">
-                            <Button size="small" tier="quiet" @click="openSender(row)">
-                                <template #icon><Icon name="arrow-up-right" /></template>{{ t(`chat.noticeCard.openChat`) }}
+                            <Button size="small" tier="quiet" :label="t(`chat.noticeCard.openChat`)" @click="openSender(row)">
+                                <template #icon><Icon name="arrow-up-right" /></template>
                             </Button>
                         </div>
                     </div>
@@ -190,8 +190,10 @@ const told = ref(false);
                 <Button v-if="overflowing" size="small" tier="quiet" :aria-expanded="whole" @click="whole = !whole">
                     {{ whole ? t(`chat.noticeArrival.showLess`) : t(`chat.noticeArrival.showAll`) }}
                 </Button>
-                <Button v-if="senderOf(head)" size="small" tier="quiet" @click="openSender(head)">
-                    <template #icon><Icon name="arrow-up-right" /></template>{{ t(`chat.noticeCard.openChat`) }}
+                <!-- `:label`, never words in the default slot beside `#icon`: PrimeVue calls a button with an icon and no label
+                     icon-only, boxes it to a glyph's width and clips the words to their middle ("n its" beside Show less). -->
+                <Button v-if="senderOf(head)" size="small" tier="quiet" :label="t(`chat.noticeCard.openChat`)" @click="openSender(head)">
+                    <template #icon><Icon name="arrow-up-right" /></template>
                 </Button>
                 <Button v-if="head.watchWake" size="small" tier="quiet" :aria-expanded="told" @click="told = !told">
                     {{ t(`chat.noticeCard.sentCheck`) }}

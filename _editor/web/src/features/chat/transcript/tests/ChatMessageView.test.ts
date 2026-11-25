@@ -1483,6 +1483,15 @@ describe(`another agent's words`, () => {
         expect(report({ failed: true, machine: `omen` })).toContain(`sub-x7 failed omen`);
     });
 
+    // 2026-11-25: written as `#icon` plus words in the default slot, PrimeVue took the press for icon-only, boxed it to a
+    // glyph's width and clipped its words to their middle, "n its" standing beside Show less like stray text.
+    it(`draws the press to the sender's chat as a whole labelled button, never a clipped icon box`, () => {
+        const open = [...mount(rowOf(REPORT)).querySelectorAll(`.chat-arrival-actions button`)].find((button) => button.textContent?.includes(`Open its chat`));
+        expect(open?.classList.contains(`p-button-icon-only`)).toBe(false);
+        expect(open?.querySelector(`.p-button-label`)?.textContent).toBe(`Open its chat`);
+        expect(open?.querySelector(`[data-icon="arrow-up-right"]`)).not.toBeNull();
+    });
+
     it(`says what checked a child's work beside how it ended`, () => {
         const checked = childReportPrompt({ child: `sub-x7`, title: `Port the parser`, failed: false, report: `done`, verification: { state: `failing`, check: `pnpm test` } });
         expect(headOf(mount(rowOf(checked)))).toContain(`Check failing`);
