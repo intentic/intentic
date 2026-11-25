@@ -11,7 +11,7 @@
 # BETTER_AUTH_SECRET, SECRETS_KEY, WEB_ORIGIN, API_URL, GOOGLE_CLIENT_*, INTENTIC_CLOUDFLARE_*, STRIPE_*, …
 # The Bun pin is one of _tools/scripts/tools/tool-pins.mjs's, moved with CI's, the sandbox image's and the `bun`
 # catalog entry's by the tool bump; the `tool-pins` check refuses a hand edit that moves only some of them.
-FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4
+FROM oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643
 LABEL org.opencontainers.image.source=https://github.com/intentic/intentic
 # Match PostgreSQL clients to the server major: pg_dump refuses newer servers, so bump this ARG with the platform database image.
 # Extract client binaries to avoid Perl pg_wrapper's dependency cost; install libpq from the same signed PGDG repository.

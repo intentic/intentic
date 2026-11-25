@@ -16,7 +16,7 @@ ENV UV_CACHE_DIR=/work/.intentic/local/cache/uv \
     TORCH_HOME=/work/.intentic/local/cache/torch \
     CUDA_CACHE_PATH=/work/.intentic/local/cache/cuda
 RUN version=0.13.9 \
-    && ruff_version=0.17.5 \
+    && ruff_version=0.17.6 \
     && case "$(dpkg --print-architecture)" in \
         amd64) triple=x86_64-unknown-linux-gnu ;; \
         arm64) triple=aarch64-unknown-linux-gnu ;; \

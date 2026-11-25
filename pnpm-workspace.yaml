@@ -167,40 +167,44 @@ minimumReleaseAgeStrict: false
 minimumReleaseAgeExcludePrune: true
 
 minimumReleaseAgeExclude:
-  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.330'
-  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.330'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.330'
-  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.330'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.330'
-  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.330'
-  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.330'
-  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.330'
-  - '@anthropic-ai/claude-agent-sdk@0.3.330'
+  - '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.332'
+  - '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.332'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.332'
+  - '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.332'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.332'
+  - '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.332'
+  - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.332'
+  - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.332'
+  - '@anthropic-ai/claude-agent-sdk@0.3.332'
   - image-size@2.0.4
-  - "@opencode/client@2.3.2"
-  - "@opencode/protocol@2.3.2"
-  - "@opencode/schema@2.3.2"
+  - "@opencode/client@2.4.1"
+  - "@opencode/protocol@2.4.1"
+  - "@opencode/schema@2.4.1"
   - monaco-editor-core@0.57.0
   - "@posthog/core@1.56.0"
   - "@muse-code/sdk@1.4.25"
   - marked@18.1.0
   - posthog-js@1.436.1
-  - "@oven/bun-darwin-aarch64@1.4.4"
-  - "@oven/bun-darwin-x64@1.4.4"
-  - "@oven/bun-freebsd-aarch64@1.4.4"
-  - "@oven/bun-freebsd-x64@1.4.4"
-  - "@oven/bun-linux-aarch64-android@1.4.4"
-  - "@oven/bun-linux-aarch64-musl@1.4.4"
-  - "@oven/bun-linux-aarch64@1.4.4"
-  - "@oven/bun-linux-x64-android@1.4.4"
-  - "@oven/bun-linux-x64-musl@1.4.4"
-  - "@oven/bun-linux-x64@1.4.4"
-  - "@oven/bun-windows-aarch64@1.4.4"
-  - "@oven/bun-windows-x64@1.4.4"
-  - bun@1.4.4
+  - "@oven/bun-darwin-aarch64@1.4.5"
+  - "@oven/bun-darwin-x64@1.4.5"
+  - "@oven/bun-freebsd-aarch64@1.4.5"
+  - "@oven/bun-freebsd-x64@1.4.5"
+  - "@oven/bun-linux-aarch64-android@1.4.5"
+  - "@oven/bun-linux-aarch64-musl@1.4.5"
+  - "@oven/bun-linux-aarch64@1.4.5"
+  - "@oven/bun-linux-x64-android@1.4.5"
+  - "@oven/bun-linux-x64-musl@1.4.5"
+  - "@oven/bun-linux-x64@1.4.5"
+  - "@oven/bun-windows-aarch64@1.4.5"
+  - "@oven/bun-windows-x64@1.4.5"
+  - bun@1.4.5
   - music-metadata@12.3.2
-  - "@openai/codex-sdk@0.171.0"
-  - "@openai/codex@0.171.0-darwin-arm64 || 0.171.0-darwin-x64 || 0.171.0-linux-arm64 || 0.171.0-linux-x64 || 0.171.0-win32-arm64 || 0.171.0-win32-x64 || 0.171.0"
+  - "@cursor/sdk-darwin-arm64@1.5.0"
+  - "@cursor/sdk-darwin-x64@1.5.0"
+  - "@cursor/sdk-linux-arm64@1.5.0"
+  - "@cursor/sdk-linux-x64@1.5.0"
+  - "@cursor/sdk-win32-x64@1.5.0"
+  - "@cursor/sdk@1.5.0"
 
 allowBuilds:
   # The workspace watcher's native backend. Its `install` script only builds from source; the platform binding
@@ -242,7 +246,7 @@ catalogPrune: true
 # what lets the overrides above dedupe rather than add.
 catalog:
   "@agentclientprotocol/sdk": 2.0.2
-  "@anthropic-ai/claude-agent-sdk": 0.3.330
+  "@anthropic-ai/claude-agent-sdk": 0.3.332
   "@astrojs/check": 0.9.12
   "@astrojs/sitemap": 3.7.4
   "@commitlint/cli": 21.2.4
@@ -255,7 +259,7 @@ catalog:
   # image-packs/cursor.Dockerfile installs the same pin back on the owner's OWN machine when they connect a Cursor
   # account. packs.integration.test.ts holds the two in step, the @openai/codex precedent.
   # ponytail: bump together with image-packs/cursor.Dockerfile.
-  "@cursor/sdk": 1.4.2
+  "@cursor/sdk": 1.5.0
   "@dagrejs/dagre": 3.1.1
   "@discordjs/voice": 0.19.2
   "@hono/node-server": 2.1.11
@@ -267,8 +271,8 @@ catalog:
   # with the Muse Code release it speaks to: engines.json blesses the matching CLI build (1.4.6-R…), and
   # _tools/scripts/engines/engine-pins.mjs reads this line as the version it tracks.
   "@muse-code/sdk": 1.4.25
-  "@openai/codex-sdk": 0.171.0
-  "@opencode/client": 2.3.2
+  "@openai/codex-sdk": 0.172.0
+  "@opencode/client": 2.4.1
   "@opentelemetry/api": 1.10.0
   "@opentelemetry/context-async-hooks": 3.0.0
   "@opentelemetry/core": 3.0.0
@@ -335,7 +339,7 @@ catalog:
   # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.
   baileys: 7.0.0-rc14
   better-auth: 1.7.12
-  bun: 1.4.4
+  bun: 1.4.5
   chokidar: 6.0.0
   croner: 10.0.1
   discord.js: 14.27.0
