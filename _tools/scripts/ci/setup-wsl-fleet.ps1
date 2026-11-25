@@ -544,15 +544,23 @@ if (`$freeGb -ge 0 -and `$freeGb -lt `$LowDiskGb) {
         # release 1.285.0 lost its amd64 smoke gate while this reconciler was taking its three-minute pass over
         # the same daemon. smoke-image.sh now survives one (image-pull.sh); not causing it is this end's half.
         #
-        # SKIPPED WHILE THE FLEET IS WORKING, NOT DEFERRED FOREVER, the same shape as the engine restart above:
-        # the next pass three minutes later still finds the host under the floor, and a host DEEP under it
-        # prunes anyway -- an engine wedged on a disk with nothing left fails every job on this machine, which
-        # is worse than one pull that has to be pulled again. The build caches are BuildKit's own and rebuilt
-        # on demand by the next build, so they stay in scope either way, and on this host they are the bulk.
+        # SKIPPED WHILE ANY JOB IS EXECUTING, HOWEVER LOW THE DISK. It used to go ahead anyway on a host DEEP under
+        # the floor, on the theory that freeing space was worth one re-pull. The space was never freed: the free
+        # figure this pass reads is the HOST volume's, and an image prune frees blocks inside Docker Desktop's
+        # docker_data.vhdx, which does not give them back to the host until that disk is compacted. On 25
+        # November omen sat 20-30 GB free (under half the 60 GB floor) all afternoon, and every three-minute pass
+        # pruned images during the release smoke. Each pass logged the same "free after the prune" as before, or
+        # less. Each pull lost a layer within seconds of a prune: six in a row, at 14:32:27, 14:40:56, 14:41:13,
+        # 14:44:13, 14:47:30 and 14:50:15. The image-store retries are only three, so that run's whole release
+        # smoke failed (run 45626851740; 45598897622 and 45594477272 the same, an hour earlier). The prune
+        # waits for an idle fleet instead. When the disk really is full, it is the vhdx compaction
+        # (wsl-maintenance.ps1) that returns the space, and that run already holds every pass off.
+        # The build caches are BuildKit's own and rebuilt on demand by the next build, so they stay in scope
+        # either way.
         `$busyNow = BusyRunners
-        `$skipImages = (`$busyNow -gt 0) -and (-not `$deep)
+        `$skipImages = `$busyNow -gt 0
         if (`$skipImages) {
-            Say "disk: `$busyNow job(s) are executing -- reclaiming build cache only and leaving the image store alone: pruning dangling images out from under a running pull is how a release loses the parent snapshot it is extracting onto"
+            Say "disk: `$busyNow job(s) are executing -- reclaiming build cache only and leaving the image store alone: pruning dangling images out from under a running pull makes it lose the layer it is unpacking, and inside docker_data.vhdx the prune frees nothing on this host until the disk is compacted"
         }
         # A BUDGET, because the pass runs under a 15-minute ExecutionTimeLimit and a prune on a full disk is
         # slow. Whatever does not fit is not lost -- the next pass three minutes later still sees a host under
