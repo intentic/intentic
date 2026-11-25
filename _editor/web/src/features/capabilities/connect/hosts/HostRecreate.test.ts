@@ -267,9 +267,45 @@ it(`names the agents a restart stops, and says they wait to be continued`, async
             dialog = shown();
         },
     });
-    expect(dialog).toContain(
-        `This stops the 2 agents that are working now: Build the API, Fix the tests. Their work is kept, and each waits for you to continue it once the sandbox is back.`,
-    );
+    expect(dialog).toContain(`Stops 2 agents`);
+    expect(dialog).toContain(`Build the API`);
+    expect(dialog).toContain(`Fix the tests`);
+    expect(dialog).not.toContain(`Done already`);
+    expect(dialog).toContain(`Work kept · you continue them later`);
+});
+
+it(`draws the update as its steps, each with how long it takes, instead of telling it`, async () => {
+    let dialog = ``;
+    await press({
+        beforeConfirm: () => {
+            dialog = shown();
+        },
+    });
+    expect(dialog).toContain(`Downloads and builds`);
+    expect(dialog).toContain(`You keep working`);
+    expect(dialog).toContain(`Only the sandbox restarts`);
+    expect(dialog).toContain(`~30s`);
+    expect(dialog).toContain(`Your files in /work are kept`);
+    expect(dialog).not.toContain(`agents`);
+});
+
+it(`folds a long list of stopped agents behind a count, one press from the whole list`, async () => {
+    fleet.value = Array.from({ length: 8 }, (_, index) => ({ id: `a${index}`, title: `Slice ${index}`, status: `running` }));
+    let folded = ``;
+    let whole = ``;
+    await press({
+        beforeConfirm: async () => {
+            folded = shown();
+            buttonNamed(`+5 more`)?.click();
+            await nextTick();
+            whole = shown();
+        },
+    });
+    expect(folded).toContain(`Stops 8 agents`);
+    expect(folded).toContain(`Slice 2`);
+    expect(folded).not.toContain(`Slice 3`);
+    expect(whole).toContain(`Slice 7`);
+    expect(whole).not.toContain(`+5 more`);
 });
 
 it(`says the stopped agents pick up by themselves where the owner turned that on`, async () => {
@@ -281,7 +317,8 @@ it(`says the stopped agents pick up by themselves where the owner turned that on
             dialog = shown();
         },
     });
-    expect(dialog).toContain(`This stops the agent that is working now: Build the API. It picks up again by itself once the sandbox is back.`);
+    expect(dialog).toContain(`Pauses 1 agent`);
+    expect(dialog).toContain(`It resumes after the restart`);
 });
 
 it(`quotes the device when it answered, since then nothing was swapped out from under the page`, async () => {
@@ -303,8 +340,8 @@ it(`asks the sandbox to pick the stopped agents up again once it is back, unless
             dialog = shown();
         },
     });
-    expect(dialog).toContain(`This stops the agent that is working now: Build the API. It picks up again by itself once the sandbox is back.`);
-    expect(dialog).toContain(`Let it pick up again by itself once the sandbox is back`);
+    expect(dialog).toContain(`Pauses 1 agent`);
+    expect(dialog).toContain(`Resume it after the restart`);
     expect(swapServingSandbox).toHaveBeenCalledWith(`host-1`, `work`, `update`, { resumeTurns: true, onLine: expect.any(Function) });
     app?.unmount();
     document.body.innerHTML = ``;
@@ -320,7 +357,7 @@ it(`asks the sandbox to pick the stopped agents up again once it is back, unless
             dialog = shown();
         },
     });
-    expect(dialog).toContain(`Its work is kept, and it waits for you to continue it once the sandbox is back.`);
+    expect(dialog).toContain(`Stops 1 agent`);
     expect(swapServingSandbox).toHaveBeenCalledWith(`host-1`, `work`, `update`, { onLine: expect.any(Function) });
 });
 
@@ -333,7 +370,8 @@ it(`offers a sandbox too old to wait or resume neither, and says the stopped age
             dialog = shown();
         },
     });
-    expect(dialog).not.toContain(`pick up again by itself`);
+    expect(dialog).not.toContain(`Resume it after`);
+    expect(dialog).toContain(`Work kept · you continue it later`);
     expect(dialog).not.toContain(`Rebuild when`);
     expect(swapServingSandbox).toHaveBeenCalledWith(`host-1`, `work`, `rebuild`, { hash: `approved`, onLine: expect.any(Function) });
 });

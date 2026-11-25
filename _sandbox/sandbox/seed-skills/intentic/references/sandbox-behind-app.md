@@ -54,5 +54,5 @@ card:
 
 The sandbox restarts for about half a minute; files in `/work` and conversations are kept. Running turns stop
 (the card warns when an agent is mid-turn) and must be resumed unless **Resume turns after a restart** is on, or the
-owner left the dialog's **Let them pick up again by themselves** ticked for that restart. An
+owner left the dialog's **Resume them after the restart** ticked for that restart. An
 agent never updates or restarts the daemon itself: it is the owner's press, and it would end the agent's own turn.

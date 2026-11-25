@@ -90,7 +90,7 @@ Files and commits never change the sandbox's image. A tool or package that must 
    owner's own machine the build runs there, from a connected device or the desktop app, or as a command to paste.
    Running turns stop and must be resumed unless **Resume turns after a restart** is on. When agents are mid-turn
    on a sandbox whose machine is connected as a device, the rebuild dialog names them and offers two ways round
-   that: leave **Let them pick up again by themselves once the sandbox is back** ticked (the sandbox resumes the
+   that: leave **Resume them after the restart** ticked (the sandbox resumes the
    turns the restart cut), or press **Rebuild when they're idle** (the sandbox holds the rebuild, starts it once no
    agent is mid-turn, and the card says whom it waits for, with **Cancel rebuild**). The owner can also take a tool out
    again with **Remove from environment** on its row in Contents; that too waits for a rebuild.

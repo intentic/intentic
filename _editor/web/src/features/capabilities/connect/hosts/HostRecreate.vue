@@ -12,7 +12,6 @@ import {
     type CommandOs,
 } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import Checkbox from "primevue/checkbox";
 import { computed, onBeforeUnmount, ref, shallowRef, type VNode, watch } from "vue";
 import { type DeviceSandboxPayload, swapServingSandbox, useHostRunning } from "../../../../models/sandbox/devices/useDevices";
 import { useSandbox } from "../../../../client/sandbox/useSandbox";
@@ -29,6 +28,7 @@ import ConnectDeviceHint from "../../../../parts/sandbox/ConnectDeviceHint.vue";
 import ComposeUpdateHint from "../../../../parts/sandbox/ComposeUpdateHint.vue";
 import { desktopVersion } from "../../../../app/environments/desktop";
 import AppRecreateButton from "./AppRecreateButton.vue";
+import RecreateConfirmBody from "./RecreateConfirmBody.vue";
 import { quietOf, type RecreateAction, verbOf, workingWords } from "./recreateWords";
 import { DESKTOP_DOWNLOADS } from "../../../../app/environments/desktopDownloads";
 import { bashCommand, oneLiner, psCommand } from "../../../../app/environments/scriptCommand";
@@ -172,14 +172,6 @@ const resumeAfter = ref(true);
 // Offered while someone is mid-turn, the owner's own setting does not already resume them, and the sandbox can.
 const offerResume = computed(() => activeAgents.value.length > 0 && !autoResume.value && idle.supported.value);
 const resumes = computed(() => autoResume.value || (offerResume.value && resumeAfter.value));
-const interruption = computed(() => {
-    const count = activeAgents.value.length;
-    if (count === 0) {
-        return undefined;
-    }
-    const key = resumes.value ? `capabilities.hostRecreate.resumesAgents` : `capabilities.hostRecreate.interruptsAgents`;
-    return t(key, { count, names: activeAgents.value.map((agent) => agent.title ?? agent.id).join(`, `) }, count);
-});
 
 // Only a rebuild of an approved overlay waits: an update or a rollback is timed by the owner, on its own card.
 const offerWait = computed(() => props.action === `Rebuild` && props.hash !== undefined && activeAgents.value.length > 0 && idle.supported.value);
@@ -220,23 +212,12 @@ const runOnMachine = (): void => {
     confirming.value = true;
 };
 
-// Every sentence keeps the sandbox as the subject, not the device (a bare "it restarts on that device" reads as the
-// device restarting); the device is named once, to say it's left alone.
+// The question alone heads the dialog; what saying yes does is drawn beneath it (RecreateConfirmBody), not told.
 const confirmHeader = computed(() =>
     props.action === `Roll back`
         ? t(`capabilities.hostRecreate.rollBackHeader`)
         : t(`capabilities.hostRecreate.actionHeader`, { action: verb.value }),
 );
-const confirmBody = computed(() => {
-    if (props.action === `Roll back`) {
-        return t(`capabilities.hostRecreate.confirmRollBack`);
-    }
-    if (props.ready === true) {
-        return t(`capabilities.hostRecreate.confirmRestartOnly`);
-    }
-    const work = props.action === `Rebuild` ? t(`capabilities.hostRecreate.workRebuilt`) : t(`capabilities.hostRecreate.workDownloaded`);
-    return t(`capabilities.hostRecreate.confirmBuildThenRestart`, { work });
-});
 
 // What answers now: its build and boot, or what a daemon older than `running` says instead (swapLanding.ts).
 const answered = async (overlay: string | undefined): Promise<Answered> => {
@@ -502,23 +483,19 @@ const command = (os: CommandOs): string => {
                 :confirm-label="t(`capabilities.hostRecreate.now`, { action: verb })"
                 :confirm-icon="icon"
                 :header-icon="gilded ? `sparkles` : undefined"
-                :description="confirmBody"
                 :destructive="false"
                 :gilded="gilded"
                 @cancel="confirming = false"
                 @confirm="execute"
             >
-                <div class="flex flex-col gap-3">
-                    <p v-if="interruption" class="text-xs text-warning">{{ interruption }}</p>
-                    <!-- Said before the restart, since afterwards nothing can run a cut turn again with one press. -->
-                    <label v-if="offerResume" class="flex items-center gap-2 text-xs text-content">
-                        <Checkbox v-model="resumeAfter" binary size="small" />
-                        {{ t(`capabilities.hostRecreate.continueAfter`, {}, activeAgents.length) }}
-                    </label>
-                    <p class="text-xs text-muted">
-                        {{ t(`capabilities.hostRecreate.onlySandboxRestartsNothing`) }}
-                    </p>
-                </div>
+                <RecreateConfirmBody
+                    v-model:resume-after="resumeAfter"
+                    :action="action"
+                    :ready="ready"
+                    :agents="activeAgents"
+                    :offer-resume="offerResume"
+                    :resumes="resumes"
+                />
                 <template v-if="offerWait" #actions>
                     <Button :label="t(`capabilities.hostRecreate.whenIdle`, {}, activeAgents.length)" tier="boring" @click="waitForIdle">
                         <template #icon><Icon name="clock" /></template>
