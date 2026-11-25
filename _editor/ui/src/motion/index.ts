@@ -1,10 +1,12 @@
 // Shared motion: choice.ts follows the OS's reduce-motion switch and owns lessMotion(), which script animations check before starting.
 // loops.ts slows activity glyphs under reduced motion; fold/reveal/flash handle layout, row arrival and target feedback.
 // swipe.ts resolves gestures; spring.ts carries release velocity into compositor easing without per-frame script.
+// rest.ts holds every endless loop still while nobody watches the window, since one running loop redraws every frame.
 // ../styles/motion.css owns duration/curve tokens, CSS recipes and the data-motion="reduced" transition switch.
 
 export { lessMotion, REDUCE_MOTION_QUERY, useMotion } from "./choice.js";
 export { setDeveloperBuild, useCompositedLoops, useReducedMotion, useTouchMotion } from "./loops.js";
+export { IDLE_MS, installMotionRest, LOOP_ATTRIBUTE, REST_ATTRIBUTE, SWEEP_MS, UNWATCHED_MS } from "./rest.js";
 export { canAnimate, FOLD_EASE, FOLD_MS, slideFrom, stopSlide, trayFold, useFoldFlip } from "./fold.js";
 export { FLASH_MS, flashElement } from "./flash.js";
 export {

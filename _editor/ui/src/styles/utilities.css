@@ -192,6 +192,14 @@
     :root[data-motion="reduced"] {
         --ui-skeleton-sheen: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3Crect width='1' height='1'%3E%3Canimate attributeName='fill-opacity' values='1;.6;1' calcMode='spline' keySplines='.45 0 .55 1;.45 0 .55 1' dur='2.8s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E");
     }
+    /* While nobody watches the window (motion.css, ../motion/rest.ts) the bar holds its resting ink: SMIL in an image is
+       no CSS animation, so the rest's pause cannot reach it, and it redraws the bar on every frame it moves. */
+    :root[data-motion-rest] {
+        --ui-skeleton-sheen: linear-gradient(#000, #000);
+    }
+    :root[data-mode="dark"][data-motion-rest] {
+        --ui-skeleton-sheen: linear-gradient(#0000009e, #0000009e);
+    }
     /* A placeholder drawn from its content's imprint (<SkeletonSnapshot>): it keeps the content's surfaces, as a
        hand-drawn skeleton keeps its card, and nothing in it answers the pointer or a selection. */
     .skeleton-snapshot {
@@ -647,6 +655,12 @@
     :root[data-motion="reduced"] {
         --ui-freshness-edge: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3ClinearGradient id='g'%3E%3Cstop offset='0' stop-opacity='0'/%3E%3Cstop offset='.3'/%3E%3Cstop offset='.7'/%3E%3Cstop offset='1' stop-opacity='0'/%3E%3C/linearGradient%3E%3Crect width='1' height='1' fill='url(%23g)'%3E%3Canimate attributeName='opacity' values='.4;.9;.4' calcMode='spline' keySplines='.45 0 .55 1;.45 0 .55 1' dur='4.2s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E");
         --ui-freshness-breath: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1' preserveAspectRatio='none'%3E%3Crect width='1' height='1'%3E%3Canimate attributeName='opacity' values='.5;1;.5' calcMode='spline' keySplines='.45 0 .55 1;.45 0 .55 1' dur='4.2s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E");
+    }
+    /* While nobody watches the window (motion.css) the edge and the dot hold mid-breath, for the skeleton's reason above: a
+       slow answer can stay slow for as long as a sandbox sleeps, and a breathing mask redraws every frame of it. */
+    :root[data-motion-rest] {
+        --ui-freshness-edge: linear-gradient(to right, #0000, #0009 30%, #0009 70%, #0000);
+        --ui-freshness-breath: linear-gradient(#000a, #000a);
     }
     .ui-freshness-edge {
         background-color: color-mix(in oklab, var(--color-content) 38%, transparent);

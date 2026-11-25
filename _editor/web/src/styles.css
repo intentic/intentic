@@ -229,8 +229,11 @@
         mask-size: 100% 100%;
         mask-repeat: no-repeat;
     }
-/* Reduced motion: no blade; the wash and the edge still say which card is open. */
-    :root[data-motion="reduced"] :is(.session-card.session-card-on, .chip-blade)::before {
+/* Reduced motion: no blade; the wash and the edge still say which card is open. Nor while nobody watches the window
+   (@intentic/ui motion.css): the sweep is SMIL in an image, which the rest's pause cannot reach, and it repaints the card
+   on every frame it travels. */
+    :root[data-motion="reduced"] :is(.session-card.session-card-on, .chip-blade)::before,
+    :root[data-motion-rest] :is(.session-card.session-card-on, .chip-blade)::before {
         content: none;
     }
 /* NO RULE HERE REPAINTS A CHIP ON A SELECTED CARD, and that absence is the fix rather than the gap in it. */

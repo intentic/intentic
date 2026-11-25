@@ -239,5 +239,7 @@ if (localRoster !== undefined) {
 }
 app.mount("#app");
 markBoot(`mount`);
+// A spinner left turning in a window nobody looks at keeps the browser drawing every frame: they rest until somebody does.
+installMotionRest();
 // The worker that keeps this editor openable while app.intentic.dev is down (public/sw.js), registered once loaded.
 installOfflineCopy();

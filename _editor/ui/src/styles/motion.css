@@ -52,6 +52,18 @@
     }
 }
 
+/* WHILE NOBODY WATCHES THE WINDOW (../motion/rest.ts puts data-motion-rest on html), every endless loop holds its frame:
+   one running loop keeps the browser drawing on every refresh of the display. rest.ts marks each loop's element; the mark
+   holds its ::before and ::after too, where a sheen runs. Base layer and !important, like the reduced switch above, so a
+   component's own play state cannot win it back while the window rests, and has it again the moment it wakes. */
+@layer base {
+    :root[data-motion-rest] [data-motion-loop],
+    :root[data-motion-rest] [data-motion-loop]::before,
+    :root[data-motion-rest] [data-motion-loop]::after {
+        animation-play-state: paused !important;
+    }
+}
+
 /* A hover's fill fades in, never snaps, wherever it was written. A Tailwind `hover:bg-*` (or `hover:text-*`,
    `hover:border-*`, and their `group-hover:` forms) on an element that names no transition of its own used to land on
    the first frame; this gives every such element the hover fade. Zero specificity and the earliest layer, so any
