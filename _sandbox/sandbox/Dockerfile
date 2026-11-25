@@ -132,7 +132,7 @@ RUN printf '%s\n' \
 # ponytail: bump together with package.json's packageManager field.
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH=$PNPM_HOME/bin:$PATH
-RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.22.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
+RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.23.0 SHELL=/bin/sh ENV=/tmp/pnpm-env.sh sh - \
     && rm -f /tmp/pnpm-env.sh \
     && pnpm --version
 # bun on PATH. Every package's tests run on Bun (`suites` is `bun test`), every typecheck is `bun check`, and the
@@ -146,7 +146,7 @@ RUN curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.22.0 SHELL=/
 # release dies with SIGILL. -slim is trixie, this image's own release, so the glibc it links against is here.
 # The pin is one of _tools/scripts/tools/tool-pins.mjs's: the tool bump moves it with ci-base's, the platform api's
 # and the catalog's, and the `tool-pins` check refuses a hand edit that moves only some of them.
-COPY --from=oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643 /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -s bun /usr/local/bin/bunx && bun --version && bunx --version
 # Pin node-gyp and bump it with the Node base so native builds use compatible headers.
 # Every npm install mounts ~/.npm as a BuildKit cache: tarballs survive rebuilds without duplicating package bytes in image layers.

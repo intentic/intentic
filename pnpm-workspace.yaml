@@ -185,19 +185,19 @@ minimumReleaseAgeExclude:
   - "@muse-code/sdk@1.4.25"
   - marked@18.1.0
   - posthog-js@1.436.1
-  - "@oven/bun-darwin-aarch64@1.4.4"
-  - "@oven/bun-darwin-x64@1.4.4"
-  - "@oven/bun-freebsd-aarch64@1.4.4"
-  - "@oven/bun-freebsd-x64@1.4.4"
-  - "@oven/bun-linux-aarch64-android@1.4.4"
-  - "@oven/bun-linux-aarch64-musl@1.4.4"
-  - "@oven/bun-linux-aarch64@1.4.4"
-  - "@oven/bun-linux-x64-android@1.4.4"
-  - "@oven/bun-linux-x64-musl@1.4.4"
-  - "@oven/bun-linux-x64@1.4.4"
-  - "@oven/bun-windows-aarch64@1.4.4"
-  - "@oven/bun-windows-x64@1.4.4"
-  - bun@1.4.4
+  - "@oven/bun-darwin-aarch64@1.4.5"
+  - "@oven/bun-darwin-x64@1.4.5"
+  - "@oven/bun-freebsd-aarch64@1.4.5"
+  - "@oven/bun-freebsd-x64@1.4.5"
+  - "@oven/bun-linux-aarch64-android@1.4.5"
+  - "@oven/bun-linux-aarch64-musl@1.4.5"
+  - "@oven/bun-linux-aarch64@1.4.5"
+  - "@oven/bun-linux-x64-android@1.4.5"
+  - "@oven/bun-linux-x64-musl@1.4.5"
+  - "@oven/bun-linux-x64@1.4.5"
+  - "@oven/bun-windows-aarch64@1.4.5"
+  - "@oven/bun-windows-x64@1.4.5"
+  - bun@1.4.5
   - music-metadata@12.3.2
   - "@openai/codex-sdk@0.171.0"
   - "@openai/codex@0.171.0-darwin-arm64 || 0.171.0-darwin-x64 || 0.171.0-linux-arm64 || 0.171.0-linux-x64 || 0.171.0-win32-arm64 || 0.171.0-win32-x64 || 0.171.0"
@@ -335,7 +335,7 @@ catalog:
   # the whole of the 7.x line — so the pin looks provisional but is in fact the newest published build.
   baileys: 7.0.0-rc14
   better-auth: 1.7.12
-  bun: 1.4.4
+  bun: 1.4.5
   chokidar: 6.0.0
   croner: 10.0.1
   discord.js: 14.27.0
