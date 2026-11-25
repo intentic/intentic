@@ -114,13 +114,15 @@ const partClass = (part: CardPart): string[] => [TONE[part.tone], part.mono === 
 
 // Where the sandbox stands, as a dot and a word in the line's own ink rather than a chip: a list of cards each wearing
 // two or three pills read as a wall of tags. Only a state worth acting on takes its colour into the word.
+// The dot is the word's own `::before`, so it costs no element; while the row is busy a spinner stands in for it.
+const STATUS_DOT = `before:size-1.5 before:shrink-0 before:rounded-full`;
 const DOT = {
-    success: `bg-success`,
-    warning: `bg-warning`,
-    danger: `bg-danger`,
-    info: `bg-info`,
-    neutral: `bg-subtle`,
-    primary: `bg-primary`,
+    success: `before:bg-success`,
+    warning: `before:bg-warning`,
+    danger: `before:bg-danger`,
+    info: `before:bg-info`,
+    neutral: `before:bg-subtle`,
+    primary: `before:bg-primary`,
 } as const satisfies Record<StatusVariant, string>;
 const WORD = {
     success: `text-muted`,
@@ -271,16 +273,13 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                             </h3>
                             <span
                                 class="inline-flex shrink-0 items-center gap-1.5 text-2xs"
-                                :class="WORD[cardStatus(item.group, busy.includes(item.group.sandboxId)).variant]"
+                                :class="[
+                                    WORD[cardStatus(item.group, busy.includes(item.group.sandboxId)).variant],
+                                    busy.includes(item.group.sandboxId) ? undefined : [STATUS_DOT, DOT[cardStatus(item.group, false).variant]],
+                                ]"
                                 v-tooltip.top="cardStatus(item.group, busy.includes(item.group.sandboxId)).hint"
                             >
                                 <Icon v-if="busy.includes(item.group.sandboxId)" name="spinner" spin class="text-2xs text-info" aria-hidden="true" />
-                                <span
-                                    v-else
-                                    class="size-1.5 shrink-0 rounded-full"
-                                    :class="DOT[cardStatus(item.group, busy.includes(item.group.sandboxId)).variant]"
-                                    aria-hidden="true"
-                                />
                                 {{ cardStatus(item.group, busy.includes(item.group.sandboxId)).label }}
                             </span>
                             <span v-if="item.group.sandbox?.tunnelRunning === false" class="shrink-0 text-2xs text-warning">{{ t(`ui.deviceDetail.tunnelOff`) }}</span>

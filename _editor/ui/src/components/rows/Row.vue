@@ -239,15 +239,16 @@ const washes = computed(() => interactive || selected || href !== undefined || a
             </slot>
         </div>
         <!-- A line of its own under the headline: the wrap spaces it by `gap-y-2`, and its margin makes up the rest of the 0.75rem. -->
-        <div v-if="$slots[`below`]" class="mt-1 min-w-0 basis-full">
+        <!-- Indented, the box itself is the flex line of mirror + block, so the indent costs no wrapper of its own. -->
+        <div v-if="$slots[`below`]" class="mt-1 min-w-0 basis-full" :class="indent ? [`flex`, TIERS[tier].gap] : ``">
             <!-- The lead, mirrored and hidden, so the block starts where the title does. -->
-            <div v-if="indent" class="flex" :class="TIERS[tier].gap">
+            <template v-if="indent">
                 <span class="invisible flex shrink-0 items-center" :class="TIERS[tier].gap" inert aria-hidden="true">
                     <slot name="lead" :mark="mark" :icon-class="TIERS[tier].icon" />
                     <Icon v-if="icon !== undefined" :name="icon" :class="TIERS[tier].icon" />
                 </span>
                 <div class="min-w-0 flex-1"><slot name="below" /></div>
-            </div>
+            </template>
             <slot v-else name="below" />
         </div>
     </component>
