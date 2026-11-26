@@ -133,7 +133,12 @@ const waitOf = (command, raw) => {
 export const raise = async (command, ask, flags, follow = () => "") => {
     const why = flags.why === undefined || flags.why === "" ? {} : { why: flags.why };
     const wait = waitOf(command, flags.wait);
-    const { status, text } = await call(command, "POST", "/needs/ask", JSON.stringify({ ask, ...why, ...(wait === undefined ? {} : { wait }) }));
+    await raiseAt(command, "/needs/ask", { ask, ...why, ...(wait === undefined ? {} : { wait }) }, follow);
+};
+
+// The same for a route of its own that answers a raised need (`/stack-grants/request`): posts `body` to `path`.
+export const raiseAt = async (command, path, body, follow = () => "") => {
+    const { status, text } = await call(command, "POST", path, JSON.stringify(body));
     if (status < 200 || status >= 300) {
         return die(command, refusalOf(text));
     }

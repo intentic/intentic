@@ -22,7 +22,12 @@ import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
-import { heardPasses } from "../deploys/deploy-watch.testing.js";
+import type { CiFeedEvent } from "@intentic/sandbox-contract/schemas/ci";
+import { subscribeCiFeed } from "./feed/ci-feed.js";
+
+// What a program reading GET /ci/feed hears (ci-feed.ts), every frame since the suite began.
+const heardFeed: CiFeedEvent[] = [];
+subscribeCiFeed((event) => void heardFeed.push(event));
 
 /* The fallback path: a repo whose webhook could NOT be registered still wakes its `ci` automations. */
 
@@ -75,10 +80,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
         enabled: true,
     });
-    // What reaches the deploys watch: a run that passed (deploys/deploy-triggers.ts).
-    const heard = heardPasses();
     const services = unstubbed<Services>("services", {
-        deployWatch: heard.deployWatch,
         // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
         events: createDomainEvents(() => {}),
         // Real actors under a wake's detached run (turn-runs.ts): the archived check, and the run it holds while live.
@@ -125,7 +127,6 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
     return {
         services,
         prompts,
-        passes: heard.passes,
         refusing,
         clock,
         // Jitter pinned to the top of its range, so a refused token's pause is each rung's whole ceiling.
@@ -162,14 +163,15 @@ test("a run that appears after the first pass wakes the ci automation", async ()
     expect(published).toContain("ci");
 });
 
-// Where no webhook is live, a stack whose `ci` trigger names no job still deploys once its run passes.
-test("a passing run the poller finds reaches the deploys watch, as the webhook's would; the runs it adopted do not", async () => {
-    const { poller, publish, passes } = await harness(true);
+// Where no webhook is live, a program reading the CI feed still hears each run that ended.
+test("each run the poller finds ended is a run frame on the CI feed, as the webhook's would be; the runs it adopted are not", async () => {
+    const { poller, publish } = await harness(true);
     await poller.poll();
+    heardFeed.length = 0;
     publish([run(3, "success"), run(2, "failure"), run(1, "success")]);
     await poller.poll();
 
-    expect(passes).toEqual([{ host: "github", repo: "web", branch: "main", sha: "sha3", runId: 3, url: "https://github.com/acme/web/actions/runs/3" }]);
+    expect(heardFeed.map((event) => (event.kind === "run" ? `${event.run.runId}:${event.run.status}` : event.kind)).toSorted()).toEqual(["2:failed", "3:success"]);
 });
 
 test("a repo whose webhook IS registered is never polled: the webhook owns it", async () => {

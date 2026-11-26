@@ -12,17 +12,18 @@ import {
     type DeviceStackOpInput,
     type DeviceStacks,
     DeviceStacksSchema,
+    type HostStats,
+    HostStatsSchema,
     type StackLogs,
     type StackOpResult,
 } from "@intentic/sandbox-contract/schemas/device-stacks";
-import { type HostStats, HostStatsSchema } from "@intentic/sandbox-contract/schemas/deploys";
 import { DEVICE_FEATURE_HOST_STATS, DEVICE_FEATURE_PROGRAMS, DEVICE_FEATURE_STACKS, DEVICE_FEATURE_STACKS_MANAGED } from "@intentic/sandbox-contract/schemas/hosts";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
 import { DEVICE_ANSWER_MARGIN_MS, DEVICE_CALL_CEILING_MS, QUICK_CALL_MS } from "../../peers/device-call-deadline.js";
 import { type DeviceNeed, deviceClientFor, parsedToolAnswer, relayTool } from "../devices/device-tool-relay.js";
-import { committedStack, type PackedTree, repoFolder, stackAtCommit, withPackedTree } from "./device-stack-bundle.js";
+import { committedStack, type PackedTree, repoFolder, withPackedTree } from "./device-stack-bundle.js";
 import { alreadyStaged, type StagedBundle, stageBundle, type StagingDeadlines } from "../runs/device-staging.js";
 import type { HostClient } from "../host-peer.js";
 
@@ -62,8 +63,8 @@ export const deviceStacks = async (services: StackServices, id: string): Promise
     return parsedToolAnswer(id, "list_stacks", await relayTool(services, id, "list_stacks", {}, READ_DEADLINE_MS), DeviceStacksSchema);
 };
 
-// (2026-11-25) How full the computer is (`host_stats`): its Docker and stacks disks, memory and load, for the deploys
-// monitor (deploys/deploy-monitor.ts).
+// (2026-11-25) How full the computer is (`host_stats`): its Docker and stacks disks, memory and load, for the Deployments
+// extension's monitor (`GET /system/devices/{id}/host-stats`).
 const HOST_STATS: DeviceNeed = { feature: DEVICE_FEATURE_HOST_STATS, to: "say how full its disks and memory are" };
 export const deviceHostStats = async (services: StackServices, id: string): Promise<HostStats> => {
     deviceClientFor(services, id, [HOST_STATS]);
@@ -125,11 +126,11 @@ export const deployDeviceStack = async (services: StackServices, input: DeviceSt
     return { stack: input.name, path: deployed.path, commit, output: deployed.output };
 };
 
-// (2026-11-25) MANAGED DEPLOYS (deploys/): the computer's client once its agent can take every part of one, refused
-// before anything is packed or carried otherwise, in the hub's words (offline) or saying which update it needs.
+// (2026-11-25) MANAGED DEPLOYS (managed-deploy.ts): the computer's client once its agent can take every part of one,
+// refused before anything is packed or carried otherwise, in the hub's words (offline) or saying which update it needs.
 export const managedStackClient = (services: StackServices, id: string): HostClient => deviceClientFor(services, id, [STACKS, PROGRAMS, STACKS_MANAGED]);
 
-// What the engine hands the machine besides the tree: the managed fields of deploy_stack's args, rendered already.
+// What the managed deploy hands the machine besides the tree: the managed fields of deploy_stack's args, rendered already.
 export type ManagedStackFields = Omit<DeployStackToolArgs, "source" | "name" | "composeFile" | "commit">;
 
 export interface ManagedStackDeploy {
@@ -137,50 +138,40 @@ export interface ManagedStackDeploy {
     readonly id: string;
     readonly name: string;
     readonly repo: string;
-    // A full sha the repository holds (device-stack-bundle.ts exactCommit).
+    // A full sha the repository holds (device-stack-bundle.ts exactCommit), and the compose file inside it.
     readonly commit: string;
-    readonly composeFile?: string | undefined;
+    readonly composeFile: string;
     readonly fields: ManagedStackFields;
 }
 
-// How a managed deploy ended, by where: `refused` never reached the stack (the repository, a switch, the staging),
-// `carried` lost the link before the machine was asked to run anything, `machine` is the machine's own answer that the
-// deploy failed (compose, a hook, health), and `lost` is a link that dropped while it ran, which may or may not have
-// finished there. The engine rolls back only on `machine`: it is the one case the stack is known to be broken.
-export type ManagedStackOutcome =
-    | { readonly kind: "deployed"; readonly composeFile: string; readonly result: DeployStackToolResult }
-    | { readonly kind: "refused" | "carried" | "machine" | "lost"; readonly error: string };
-
 // The commit's tree, carried into the machine's staging (a tree it already holds is not sent again) and run there by
-// `deploy_stack` with the managed fields. Over `input.id`'s own connection throughout, as `deployDeviceStack` is.
-export const deployManagedStack = async (services: StackServices, input: ManagedStackDeploy): Promise<ManagedStackOutcome> => {
-    let source: string;
-    let composeFile: string;
-    try {
-        const client = managedStackClient(services, input.id);
-        const dir = await repoFolder(services.workspace.root, input.repo);
-        composeFile = (await stackAtCommit(dir, input.repo, input.commit, input.composeFile)).composeFile;
-        source = await withPackedTree(dir, input.repo, input.commit, (packed) => staged(client, input.id, input.name, packed));
-    } catch (error) {
-        // A staging cut by the link is the only failure here that is not a refusal: nothing ran, so nothing to undo.
-        const carried = error instanceof ORPCError && error.code === "BAD_GATEWAY";
-        return { kind: carried ? "carried" : "refused", error: errorMessage(error) };
-    }
-    const args: DeployStackToolArgs = { source, name: input.name, composeFile, commit: input.commit, ...input.fields };
+// `deploy_stack` with the managed fields, over `input.id`'s own connection throughout, as `deployDeviceStack` is. How it
+// can end, by status, so a caller tells a refusal from a broken stack (the Deployments extension rolls back only on
+// 422): nothing reached the stack on 400 (the repository), 403 (a switch the machine refused, in its words) or 409 (an
+// agent offline or too old); 502 is a link that dropped while carrying (nothing ran) or while the machine deployed (it
+// may have run), or an answer that could not be read; and 422 UNPROCESSABLE_CONTENT is the machine's own word that the
+// deploy failed there (compose, a hook, health). `mask` puts every value the deploy carried back as its reference in
+// whatever the machine said, the failure included.
+export const deployManagedStack = async (services: StackServices, input: ManagedStackDeploy, mask: (text: string) => string): Promise<DeployStackToolResult> => {
+    const client = managedStackClient(services, input.id);
+    const dir = await repoFolder(services.workspace.root, input.repo);
+    const source = await withPackedTree(dir, input.repo, input.commit, (packed) => staged(client, input.id, input.name, packed));
+    const args: DeployStackToolArgs = { source, name: input.name, composeFile: input.composeFile, commit: input.commit, ...input.fields };
     let text: string;
     try {
         text = await relayTool(services, input.id, "deploy_stack", args, DEPLOY_DEADLINE_MS);
     } catch (error) {
         // relayTool says FORBIDDEN for every answer the machine marked an error, which for deploy_stack is the deploy
-        // failing there (its switches were read by the staging and the stack list before this), and BAD_GATEWAY for a
-        // link that dropped under the call.
+        // failing there (its switches and the stack's owner were read by the stack list and the staging before this),
+        // and BAD_GATEWAY for a link that dropped under the call.
         const said = error instanceof ORPCError && error.code === "FORBIDDEN";
-        return { kind: said ? "machine" : "lost", error: errorMessage(error) };
+        throw new ORPCError(said ? "UNPROCESSABLE_CONTENT" : "BAD_GATEWAY", { message: mask(errorMessage(error)) });
     }
     try {
-        return { kind: "deployed", composeFile, result: parsedToolAnswer(input.id, "deploy_stack", text, DeployStackToolResultSchema) };
+        const result = parsedToolAnswer(input.id, "deploy_stack", text, DeployStackToolResultSchema);
+        return { ...result, output: mask(result.output) };
     } catch (error) {
         // It ran and answered something else: what it did is unknown, as with a dropped link.
-        return { kind: "lost", error: errorMessage(error) };
+        throw new ORPCError("BAD_GATEWAY", { message: mask(errorMessage(error)) });
     }
 };

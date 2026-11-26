@@ -1,27 +1,27 @@
 import { errorMessage } from "@intentic/base/errors";
-import { type StackSpec, stackSecretNames } from "@intentic/sandbox-contract/schemas/deploys";
 import { type StackRegistryLogin, StackRegistryLoginSchema } from "@intentic/sandbox-contract/schemas/device-stacks";
 import type { CredentialGate } from "@intentic/sandbox-contract/schemas/secrets";
-import { gateForName } from "../secrets/credential-gates.js";
-import { secretReference, surfaceForms } from "../secrets/secret-registry.js";
+import { gateForName } from "../../secrets/credential-gates.js";
+import { secretReference, surfaceForms } from "../../secrets/secret-registry.js";
 
-// A MANAGED STACK'S `.env` AND REGISTRY LOGINS, RENDERED BY THE DAEMON (schemas/deploys.ts): never by an agent turn, and
-// only from this sandbox's own secret store. A deploy runs with nobody watching, so every way a value could need a
-// person, or come from somewhere the owner did not hand this stack, refuses instead, in a sentence naming the secret and
-// what to do about it, never its value:
-//   - a name the owner has not granted to this stack on this computer (deploy-grants.ts);
+// A MANAGED STACK'S `.env` AND REGISTRY LOGINS, FILLED BY THE DAEMON (schemas/device-stacks.ts
+// DeviceStackManagedDeployInputSchema): the Deployments extension sends them with `{{secret:NAME}}` references, and only
+// this sandbox's own secret store fills them, never an agent turn or the extension. A deploy runs with nobody watching,
+// so every way a value could need a person, or come from somewhere the owner did not hand this stack, refuses instead,
+// in a sentence naming the secret and what to do about it, never its value:
 //   - a name behind a named approver (credential gates): there is nobody to approve an unattended deploy;
 //   - a name this sandbox's store does not hold, or holds only in a connection's vault or a computer's keyring, which
 //     answer a person's use rather than a server's.
-// Rendering is one pass over the text: a value is never read again for references, so a secret holding
-// `{{deploy:sha}}` or `{{secret:OTHER}}` arrives exactly as stored.
+// Whether the owner granted the stack each name is checked before this (managed-deploy.ts, secrets/stack-grants/stack-grants.ts).
+// Filling is one pass over the text: a value is never read again for references, so a secret holding `{{secret:OTHER}}`
+// arrives exactly as stored, and any other `{{…}}` (the extension's own, which it fills first) is left as it is.
+// (2026-11-25) Moved here from the daemon's own deploy engine, which also filled `{{deploy:…}}` facts: those are the
+// extension's now.
 
-// The deploy's own facts a value may name: `{{deploy:sha}}`, `{{deploy:sha8}}`, `{{deploy:ref}}`, `{{deploy:stack}}`. An
-// absent ref (a deploy of a bare commit) renders empty.
-export interface DeployFacts {
-    readonly sha: string;
-    readonly ref?: string | undefined;
-    readonly stack: string;
+// What the daemon renders: the stack's variables and its registry logins.
+export interface ManagedSpec {
+    readonly env: Readonly<Record<string, string>>;
+    readonly registries: readonly StackRegistryLogin[];
 }
 
 // Where values come from, and what the refusals need to know about the rest.
@@ -36,17 +36,32 @@ export interface RenderSources {
 export type Rendered =
     | {
           readonly ok: true;
-          // The whole `.env`, or undefined when the stack declares no variables (a `.env` already there is then left alone).
+          // The whole `.env`, or undefined when the stack sends no variables (a `.env` already there is then left alone).
           readonly env: string | undefined;
           readonly registries: readonly StackRegistryLogin[];
           readonly secretNames: readonly string[];
-          // Each secret's value, by name, for the masking of what the machine printed back (maskedText); never stored.
+          // Each secret's value, by name, for its mark and the masking of what the machine printed back (maskedText);
+          // never stored, never answered.
           readonly values: ReadonlyMap<string, string>;
       }
     | { readonly ok: false; readonly error: string; readonly secretNames: readonly string[] };
 
-// One reference of either family, in one pass: its family, its name, and whether it asked for a file.
-const REFERENCE = /\{\{(secret|deploy):([A-Za-z0-9_./-]+)(\|file)?\}\}/g;
+// One reference, in one pass: its name, and whether it asked for a file.
+const REFERENCE = /\{\{secret:([A-Za-z0-9_./-]+)(\|file)?\}\}/g;
+
+// The secret names a stack reads: in its variables' values and its registries' passwords (and, refused below, anywhere
+// else in a login). Sorted, once each: what its grant must cover.
+export const secretNamesOf = (spec: ManagedSpec): string[] => {
+    const names = new Set<string>();
+    const texts = [...Object.values(spec.env), ...spec.registries.flatMap((registry) => [registry.host, registry.username, registry.password])];
+    for (const text of texts) {
+        for (const match of text.matchAll(REFERENCE)) {
+            names.add(match[1] ?? "");
+        }
+    }
+    names.delete("");
+    return [...names].toSorted();
+};
 
 // What compose's dotenv reads unquoted as itself: no space, quote, `#`, `$` or backslash.
 const PLAIN = /^[A-Za-z0-9_./:@%+,=-]*$/;
@@ -76,38 +91,26 @@ export const dotenvValue = (value: string): string | undefined => {
 };
 
 // "A", "A and B", "A, B and C", each quoted.
-const listed = (names: readonly string[]): string => {
+export const listedNames = (names: readonly string[]): string => {
     const quoted = names.map((name) => `"${name}"`);
     return quoted.length <= 1 ? (quoted[0] ?? "") : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1) ?? ""}`;
 };
 const isAre = (names: readonly string[]): string => (names.length === 1 ? "is" : "are");
 
-// Every way the stack's names cannot be rendered, each a sentence; empty when every one can.
-const refusalsOf = async (
-    repo: string,
-    spec: Pick<StackSpec, "name" | "device">,
-    names: readonly string[],
-    granted: readonly string[],
-    sources: RenderSources,
-): Promise<string[]> => {
-    const refusals: string[] = [];
-    const ungranted = names.filter((name) => !granted.includes(name));
-    if (ungranted.length > 0) {
-        refusals.push(
-            `${listed(ungranted)} ${isAre(ungranted)} not granted to "${spec.name}" on "${spec.device}": only the owner lets a stack receive a secret (\`deploys grant ${repo} ${spec.name}\` asks them on a card).`,
-        );
-    }
+// Every way the stack's names cannot be filled, each a sentence; empty when every one can.
+const refusalsOf = async (names: readonly string[], sources: RenderSources): Promise<string[]> => {
     let gates: readonly CredentialGate[];
     try {
         gates = await sources.gates();
     } catch (error) {
         // Unreadable must never read as "nothing gated".
-        return [...refusals, `The credential gates could not be read (${errorMessage(error)}): nothing is rendered until they can.`];
+        return [`The credential gates could not be read (${errorMessage(error)}): nothing is filled until they can.`];
     }
+    const refusals: string[] = [];
     const gated = names.filter((name) => gateForName(gates, name) !== undefined);
     if (gated.length > 0) {
         refusals.push(
-            `${listed(gated)} ${isAre(gated)} behind a named approver, and a deploy runs with nobody there to approve it: take the gate off in Secrets, or give the stack a secret of its own.`,
+            `${listedNames(gated)} ${isAre(gated)} behind a named approver, and a deploy runs with nobody there to approve it: take the gate off in Secrets, or give the stack a secret of its own.`,
         );
     }
     for (const name of names) {
@@ -118,40 +121,24 @@ const refusalsOf = async (
         refusals.push(
             elsewhere === undefined
                 ? `No secret named "${name}" is stored in this sandbox: store it (\`secrets ask ${name}\`, or \`secrets import ${name} --stdin\`), then deploy again.`
-                : `"${name}" is held only by ${elsewhere}, and a deploy renders from this sandbox's own secret store alone: store a copy here (\`secrets import ${name} --stdin\`), then deploy again.`,
+                : `"${name}" is held only by ${elsewhere}, and a deploy fills from this sandbox's own secret store alone: store a copy here (\`secrets import ${name} --stdin\`), then deploy again.`,
         );
     }
     return refusals;
 };
 
 // The text with every reference filled in, in one pass. `secrets` holds every name the text may read, checked already.
-const filled = (text: string, facts: DeployFacts, secrets: ReadonlyMap<string, string>): string =>
-    text.replace(REFERENCE, (token, family: string, name: string) => {
-        if (family === "secret") {
-            return secrets.get(name) ?? token;
-        }
-        switch (name) {
-            case "sha":
-                return facts.sha;
-            case "sha8":
-                return facts.sha.slice(0, 8);
-            case "ref":
-                return facts.ref ?? "";
-            case "stack":
-                return facts.stack;
-            default:
-                return token;
-        }
-    });
+const filled = (text: string, secrets: ReadonlyMap<string, string>): string => text.replace(REFERENCE, (token, name: string) => secrets.get(name) ?? token);
 
 // A reference to a file (`{{secret:NAME|file}}`) has no file to become on the computer, and a secret written where the
-// grant cannot see it (a registry's host or user name) would reach the stack ungranted: both refused by where they are.
-const misplaced = (spec: Pick<StackSpec, "env" | "registries">): string[] => {
+// grant cannot see it (a registry's host or user name) would reach the stack in the clear: both refused by where they are.
+const misplaced = (spec: ManagedSpec): string[] => {
     const refusals: string[] = [];
     for (const [key, value] of Object.entries(spec.env)) {
         for (const match of value.matchAll(REFERENCE)) {
-            if (match[3] !== undefined) {
-                refusals.push(`${key} reads {{secret:${match[2] ?? ""}|file}}, and a stack's .env has no file to point at: write {{secret:${match[2] ?? ""}}}, and its value is quoted into the .env with its lines.`);
+            if (match[2] !== undefined) {
+                const name = match[1] ?? "";
+                refusals.push(`${key} reads {{secret:${name}|file}}, and a stack's .env has no file to point at: write {{secret:${name}}}, and its value is quoted into the .env with its lines.`);
             }
         }
     }
@@ -166,17 +153,10 @@ const misplaced = (spec: Pick<StackSpec, "env" | "registries">): string[] => {
     return refusals;
 };
 
-// The stack's `.env` and registry logins, or the refusal. `granted` is what the owner's grant for this stack on this
-// computer covers (empty when there is none).
-export const renderStack = async (
-    repo: string,
-    spec: Pick<StackSpec, "name" | "device" | "env" | "registries">,
-    facts: DeployFacts,
-    granted: readonly string[],
-    sources: RenderSources,
-): Promise<Rendered> => {
-    const secretNames = stackSecretNames(spec);
-    const refusals = [...misplaced(spec), ...(await refusalsOf(repo, spec, secretNames, granted, sources))];
+// The stack's `.env` and registry logins, or the refusal.
+export const renderManaged = async (spec: ManagedSpec, sources: RenderSources): Promise<Rendered> => {
+    const secretNames = secretNamesOf(spec);
+    const refusals = [...misplaced(spec), ...(await refusalsOf(secretNames, sources))];
     if (refusals.length > 0) {
         return { ok: false, error: refusals.join(" "), secretNames };
     }
@@ -186,7 +166,7 @@ export const renderStack = async (
     }
     const lines: string[] = [];
     for (const [key, raw] of Object.entries(spec.env)) {
-        const value = dotenvValue(filled(raw, facts, values));
+        const value = dotenvValue(filled(raw, values));
         if (value === undefined) {
             return {
                 ok: false,
@@ -198,15 +178,11 @@ export const renderStack = async (
     }
     const registries: StackRegistryLogin[] = [];
     for (const registry of spec.registries) {
-        const login = StackRegistryLoginSchema.safeParse({
-            host: filled(registry.host, facts, new Map()),
-            username: filled(registry.username, facts, new Map()),
-            password: filled(registry.password, facts, values),
-        });
+        const login = StackRegistryLoginSchema.safeParse({ ...registry, password: filled(registry.password, values) });
         if (!login.success) {
             // Named by field, never by what the field held: the password is one of them.
             const fields = [...new Set(login.error.issues.map((issue) => String(issue.path[0] ?? "login")))];
-            return { ok: false, error: `The login for ${registry.host} is not one a registry takes (${fields.join(", ")}): fix it in the stacks manifest.`, secretNames };
+            return { ok: false, error: `The login for ${registry.host}, filled, is not one a registry takes (${fields.join(", ")}).`, secretNames };
         }
         registries.push(login.data);
     }
@@ -216,9 +192,9 @@ export const renderStack = async (
 // The shortest value masked in what the machine printed back: shorter ones would mangle the text more than they hide.
 const MASKED_MIN = 4;
 
-// What a hook or compose printed, with every value this deploy rendered put back as its reference, in each form a
-// reader may see it (raw, JSON-escaped, percent-encoded): a hook that echoes its environment must not put a secret into
-// a deploy record, which the workspace keeps where agents read.
+// What a hook or compose printed, with every value this deploy filled put back as its reference, in each form a reader
+// may see it (raw, JSON-escaped, percent-encoded): a hook that echoes its environment must not put a secret into the
+// answer, which the extension keeps in its deploy records where agents read.
 export const maskedText = (text: string, values: ReadonlyMap<string, string>): string => {
     let masked = text;
     const longestFirst = [...values.entries()].filter(([, value]) => value.length >= MASKED_MIN).toSorted(([, left], [, right]) => right.length - left.length);

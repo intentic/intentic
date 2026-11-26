@@ -18,7 +18,7 @@ const SecretUseSchema = z.object({
     // attached it to, a signature the sandbox's ssh agent made with a held key, a window or phone app on one of the
     // owner's computers it was typed into, a window on the sandbox's own desktop, a tool call to an MCP card's server, or
     // (2026-11-25) a managed stack's `.env` or registry login the daemon rendered it into as it deployed
-    // (deploys/deploy-run.ts).
+    // (hosts/stacks/managed-deploy.ts).
     lane: z.enum(["shell", "code", "browser", "gateway", "ssh", "device", "desktop", "mcp", "deploy"]),
     // Where it went, in the reader's terms: the head of the agent's command line, the page's host, the MCP tool and its
     // server's host, or the stack and the computer it was deployed to.

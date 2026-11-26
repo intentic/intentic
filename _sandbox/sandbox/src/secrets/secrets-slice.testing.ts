@@ -13,6 +13,11 @@ import { isStrict, NO_PROGRAMS, type ProgramGuard } from "./guards/program-guard
 import type { NamedSecret } from "./secret-registry.js";
 import type { SecretUse } from "./secret-uses.js";
 import type { SecretsSlice } from "./secrets-slice.js";
+import { markerFor } from "./marks/secret-marks.js";
+import { memoryStackGrants } from "./stack-grants/stack-grants.js";
+
+// The key the fake's secret marks are made under (`markerFor(SUITE_MARK_KEY)` makes the same marks).
+export const SUITE_MARK_KEY = Buffer.alloc(32, 7);
 
 // The secrets slice as route suites stand it up (harness/route-services.testing.ts). Not part of the build.
 
@@ -143,5 +148,9 @@ export const secretsSliceFake = (devices: KeyringDevices & KeyringSyncDevices = 
                 return had;
             },
         },
+        // No stack granted anything until a suite grants it through the store (the real file is tested in
+        // stack-grants.integration.test.ts); marks under a fixed key, so a suite can compute the mark it expects.
+        stackGrants: memoryStackGrants(),
+        secretMarks: { marker: async () => markerFor(SUITE_MARK_KEY) },
     } satisfies SecretsSlice;
 };

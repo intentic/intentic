@@ -57,10 +57,6 @@ import { projectDeliveriesDocument } from "../conversations/land/project-deliver
 import { conversationRecordDocument } from "../conversations/registry/agents-store.js";
 import { pre1308ImportStep } from "../conversations/registry/pre-1308-import.js";
 import { definitionDocument } from "../definition/definition.js";
-import { deployGrantsDocument } from "../deploys/deploy-grants.js";
-import { deploySecretMarksDocument } from "../deploys/deploy-secret-marks.js";
-import { deployWatchDocument } from "../deploys/deploy-watch-store.js";
-import { deploysDocument } from "../deploys/deploys-store.js";
 import { enginePolicyDocument } from "../engines/engine-policy.js";
 import { engineStateDocument } from "../engines/engine-store.js";
 import { runtimeInstallsDocument } from "../environment/runtime-installs.js";
@@ -110,8 +106,10 @@ import { keyringCopiesDocument, keyringDevicesDocument } from "../secrets/device
 import { keyringSyncMailboxDocument } from "../secrets/device/keyring-sync.js";
 import { secretHostGuardsDocument } from "../secrets/guards/host-guards.js";
 import { secretProgramGuardsDocument } from "../secrets/guards/program-guards.js";
+import { secretMarksDocument } from "../secrets/marks/secret-marks.js";
 import { sandboxSecretsDocument } from "../secrets/sandbox-secrets.js";
 import { secretUsesDocument } from "../secrets/secret-uses.js";
+import { stackGrantsDocument } from "../secrets/stack-grants/stack-grants.js";
 import { threadSessionsDocument } from "../sessions/thread-sessions.js";
 import { earlierDefaultsStep } from "../settings/earlier-defaults-step.js";
 import { memberAiLiteracyDocument } from "../settings/member-ai-literacy.js";
@@ -218,10 +216,6 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     projectDeliveriesDocument,
     conversationRecordDocument,
     definitionDocument,
-    deployGrantsDocument,
-    deploySecretMarksDocument,
-    deployWatchDocument,
-    deploysDocument,
     enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
@@ -268,13 +262,13 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     ownerGrantsDocument,
     rolesDocument,
     ruleFiringsDocument,
-];
-
-const documentsPart3 = (): readonly DocumentSpec[] => [
     runnerIdentityDocument,
     safetyLogDocument,
     autostartDocument,
     credentialGatesDocument,
+];
+
+const documentsPart3 = (): readonly DocumentSpec[] => [
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
@@ -283,8 +277,10 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
     keyringSyncMailboxDocument,
     secretHostGuardsDocument,
     secretProgramGuardsDocument,
+    secretMarksDocument,
     sandboxSecretsDocument,
     secretUsesDocument,
+    stackGrantsDocument,
     threadSessionsDocument,
     memberAiLiteracyDocument,
     memberAudienceDocument,

@@ -7,10 +7,12 @@ import { askedRestart, fileRestartResume } from "../system/restart-resume.js";
 import type { RestartAction } from "../system/boot/restarts/restart-record.js";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
+import { noteAudit } from "../audit/audit-http.js";
 import { opt } from "../opt.js";
 import { runDeviceCommand } from "./device-commands.js";
 import { devices, manageDeviceSandbox, runDeviceAgentFlow } from "./device-reports.js";
-import { deployDeviceStack, deviceStackLogs, deviceStackOp, deviceStacks } from "./stacks/device-stacks.js";
+import { deployDeviceStack, deviceHostStats, deviceStackLogs, deviceStackOp, deviceStacks } from "./stacks/device-stacks.js";
+import { deployManaged, managedDeployDeps } from "./stacks/managed-deploy.js";
 import { deviceCiFleet, deviceCiRunnerLogs, deviceCiRunnerOp } from "./ci-fleet/device-ci-fleet.js";
 import { registerDeviceCiRunner, removeDeviceCiRunner } from "../ci/fleet/runner-registration.js";
 import { egressOwnerKeys } from "./egress/owner-keys.js";
@@ -157,6 +159,13 @@ const createDeviceStackRoutes = (services: Services) => {
         deviceStackOp: i.deviceStackOp.handler(async ({ input }) => await deviceStackOp(services, input)),
         deviceStackLogs: i.deviceStackLogs.handler(async ({ input }) => await deviceStackLogs(services, input)),
         deployDeviceStack: i.deployDeviceStack.handler(async ({ input }) => await deployDeviceStack(services, input)),
+        // (2026-11-25) The Deployments extension's managed deploy, its secrets filled here under the stack's grant
+        // (stacks/managed-deploy.ts), and how full the computer is, for its monitor.
+        deployManagedDeviceStack: i.deployManagedDeviceStack.handler(async ({ input }) => {
+            noteAudit({ target: `${input.repo}:${input.name}@${input.id}` });
+            return await deployManaged(managedDeployDeps(services), input);
+        }),
+        deviceHostStats: i.deviceHostStats.handler(async ({ input }) => await deviceHostStats(services, input.id)),
     };
 };
 

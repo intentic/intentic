@@ -406,7 +406,6 @@ COPY --chmod=755 \
     _sandbox/sandbox/bin/instructions \
     _sandbox/sandbox/bin/wallet \
     _sandbox/sandbox/bin/secrets \
-    _sandbox/sandbox/bin/deploys \
     _sandbox/sandbox/bin/privacy \
     _sandbox/sandbox/bin/agents \
     _sandbox/sandbox/bin/diagnostics \

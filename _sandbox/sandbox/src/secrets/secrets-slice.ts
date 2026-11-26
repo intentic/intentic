@@ -35,6 +35,8 @@ import { addGuardHosts, effectiveHostGuards, fileSecretHostGuards, type SecretHo
 import { type SecretRegistry, secretRegistryOf } from "./secret-registry.js";
 import { fileSandboxSecrets, notifyingSandboxSecrets, type SandboxSecrets, sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { fileSecretUses, secretUsesDocument, type SecretUsesStore } from "./secret-uses.js";
+import { fileSecretMarks, type SecretMarks, secretMarksDocument } from "./marks/secret-marks.js";
+import { fileStackGrants, stackGrantsDocument, type StackGrantsStore } from "./stack-grants/stack-grants.js";
 
 // Secret references, their uses, the named-approver gates on spending them, and the hosts each may be sent to.
 export interface SecretsSlice {
@@ -58,6 +60,11 @@ export interface SecretsSlice {
     readonly toolCeiling: ConversationCeilingOf;
     // Secrets a person keeps: pasted into a need's card, or added on the Secrets view.
     readonly sandboxSecrets: SandboxSecrets;
+    // (2026-11-25) Which of them each managed stack may receive, by the owner's grant (stack-grants/stack-grants.ts), and the keyed
+    // marks that tell a value changed without saying it (marks/secret-marks.ts): what a managed deploy reads
+    // (hosts/stacks/managed-deploy.ts), both in the auth root.
+    readonly stackGrants: StackGrantsStore;
+    readonly secretMarks: SecretMarks;
     // A secret was stored or removed here, by any door: open needs check now (2026-10-20). Answers the unsubscribe.
     readonly onSecretsChanged: (listener: () => void) => () => void;
     readonly secretsChanged: () => void;
@@ -237,6 +244,8 @@ export const createSecretsSlice = ({
             hold,
         }),
         sandboxSecrets,
+        stackGrants: fileStackGrants(join(authRoot, stackGrantsDocument.path)),
+        secretMarks: fileSecretMarks(join(authRoot, secretMarksDocument.path)),
         onSecretsChanged: (listener) => {
             secretsListeners.add(listener);
             return () => void secretsListeners.delete(listener);

@@ -19,7 +19,7 @@ import {
     SecretHostGuardSetResultSchema,
     SecretHostGuardSetSchema,
 } from "@intentic/sandbox-contract/schemas/secrets";
-import { DeployAnswerSchema, DeployRecordSchema, DeployRequestSchema } from "@intentic/sandbox-contract/schemas/deploys";
+import { StackGrantRequestSchema } from "@intentic/sandbox-contract/schemas/stack-grants";
 import { sandboxRequestFor } from "@intentic/sandbox-contract";
 
 // The asking commands against the contract itself: each request a CLI sends must be the route the contract declares
@@ -427,37 +427,35 @@ describe("the asking commands speak the needs contract", () => {
         expect(JSON.stringify([held, unflagged, empty])).not.toContain(MOVED);
     });
 
-    it("deploys grant raises the deploy ask the needs route declares, and exits 3 while the owner has not answered", async () => {
-        server.answer = raised({ state: "open", message: "Asked the owner to let web on rog receive the secret DB_URL." });
-        const result = await run(server.port, "deploys", ["grant", "shop", "web", "--why", "the new release reads DB_URL"]);
+    it("secrets grant-stack asks the route the contract declares for the stack, the computer and the names, and exits 3 while unanswered", async () => {
+        const answer: NeedRaised = { state: "open", message: "Asked the owner to let web on rog receive the secret DB_URL." };
+        server.answer = (seen) =>
+            `${seen.method} ${seen.path}` === declared(["stackGrants", "request"], seen.body)
+                ? { status: 200, body: answer }
+                : { status: 404, body: { message: `nothing at ${seen.method} ${seen.path}` } };
+        const result = await run(server.port, "secrets", ["grant-stack", "shop", "web", "rog", "DB_URL", "API_TOKEN", "--why", "the new release reads DB_URL"]);
         expect(result).toEqual({ code: 3, stderr: "", stdout: "Asked the owner to let web on rog receive the secret DB_URL.\n" });
-        expect(NeedRaiseSchema.parse(server.seen[0]?.body)).toEqual({ ask: { kind: "deploy", repo: "shop", stack: "web" }, why: "the new release reads DB_URL" });
-    });
-
-    it("deploys deploy sends the route's body, and with --wait exits by how the deploy ended", async () => {
-        const record = DeployRecordSchema.parse({
-            id: "dep-0001",
+        expect(StackGrantRequestSchema.parse(server.seen[0]?.body)).toEqual({
             repo: "shop",
             stack: "web",
             device: "rog",
-            commit: "0123456789abcdef0123456789abcdef01234567",
-            trigger: { kind: "manual", detail: "hotfix" },
-            outcome: "rolled-back",
-            rolledBackTo: "dep-0000",
-            queuedAt: "2026-11-25T12:00:00.000Z",
-            error: "web did not come up healthy in 60 s",
+            secrets: ["DB_URL", "API_TOKEN"],
+            why: "the new release reads DB_URL",
         });
-        server.answer = (seen) =>
-            `${seen.method} ${seen.path}` === declared(["deploys", "deploy"], seen.body)
-                ? { status: 200, body: DeployAnswerSchema.parse({ record }) }
-                : { status: 404, body: { message: `nothing at ${seen.method} ${seen.path}` } };
-        const result = await run(server.port, "deploys", ["deploy", "shop", "web", "--commit", "0123456", "--why", "hotfix", "--wait"]);
-        expect(result).toEqual({
-            code: 1,
+    });
+
+    it("secrets grant-stack exits 0 when the grant already covers them, 1 when refused, and 2 without a name to grant", async () => {
+        server.answer = () => ({ status: 200, body: { state: "met", message: `"web" on "rog" may receive DB_URL.` } satisfies NeedRaised });
+        expect(await run(server.port, "secrets", ["grant-stack", "shop", "web", "rog", "DB_URL"])).toEqual({ code: 0, stderr: "", stdout: `"web" on "rog" may receive DB_URL.\n` });
+        server.answer = () => ({ status: 200, body: { state: "refused", message: "Nothing was asked: omen is not paired.", code: "invalid_device" } satisfies NeedRaised });
+        expect(await run(server.port, "secrets", ["grant-stack", "shop", "web", "omen", "DB_URL"])).toEqual({ code: 1, stderr: "", stdout: "Nothing was asked: omen is not paired.\n" });
+        const seen = server.seen.length;
+        expect(await run(server.port, "secrets", ["grant-stack", "shop", "web", "rog"])).toEqual({
+            code: 2,
             stderr: "",
-            stdout: "dep-0001 rolled-back, back to dep-0000 · 01234567 on rog · manual (hotfix) · 2026-11-25T12:00:00.000Z — web did not come up healthy in 60 s\n",
+            stdout: "secrets: secrets grant-stack takes <repo> <stack> <device> and at least one NAME\n",
         });
-        expect(DeployRequestSchema.parse(server.seen[0]?.body)).toEqual({ repo: "shop", stack: "web", commit: "0123456", reason: "hotfix", wait: true });
+        expect(server.seen).toHaveLength(seen);
     });
 
     // A daemon holding these guards and approver gates: the reads answer them, a PUT answers the setting it was sent, with

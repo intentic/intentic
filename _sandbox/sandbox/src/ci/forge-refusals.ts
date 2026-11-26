@@ -20,9 +20,9 @@ export class CiRateLimited extends Error {
 /** The forge answered with a refusal other than a spent limit: its HTTP status, and the head of its body for the log. */
 export class CiRefused extends Error {
     constructor(
-        what: string,
+        readonly what: string,
         readonly status: number,
-        body: string,
+        readonly body: string,
     ) {
         super(`${what} failed (${status}): ${body}`);
         this.name = "CiRefused";

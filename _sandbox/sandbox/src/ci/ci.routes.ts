@@ -20,6 +20,8 @@ import { ciInputOf, createCiFailureLog } from "./logs/ci-failure-log.js";
 import { ownerSteps } from "./owner-steps.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
+import { deploymentReportDeps, reportDeployment } from "./forge/forge-deployments.js";
+import { noteAudit } from "../audit/audit-http.js";
 import type { RunsCache } from "./runs-cache.js";
 
 // Backend for the Pipelines rail: reads serve the webhook-freshened cache, backfilled from the vendor's REST API when
@@ -159,6 +161,11 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
         }),
         // From the CI store and the sandbox's own record of test runs: an agent asking whether a failure is main's costs
         // the forge nothing (main-known.ts).
+        // (2026-11-25) A deployment told to the repository's forge, for the Deployments extension (forge/forge-deployments.ts).
+        reportDeployment: i.reportDeployment.handler(async ({ input }) => {
+            noteAudit({ target: `${input.repo}:${input.environment}` });
+            return await reportDeployment(deploymentReportDeps(() => ciProjects(services), fetchFn), input);
+        }),
         main: i.main.handler(() => mainKnown(services, Date.now(), join(logsRoot(services.config.historyRoot), OUTCOMES_DIR))),
         rerun: i.rerun.handler(onRun("rerun")),
         cancel: i.cancel.handler(onRun("cancel")),

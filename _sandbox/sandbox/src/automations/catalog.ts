@@ -1,5 +1,4 @@
 import { CHORES, choreAutomationPrompt } from "@intentic/sandbox-contract/chores";
-import { DEPLOY_EVENT_TYPES, type DeployEventType, DEPLOYS_PROVIDER } from "@intentic/sandbox-contract/schemas/deploys";
 import { type AutomationCatalog, type AutomationTemplate, TriggerSchema, type TriggerSource } from "@intentic/sandbox-contract/schemas/automations";
 import { type AutomationTemplateContribution, extensionIdOf, type ListenerContribution } from "@intentic/extension-manifest";
 import { installedExtensions } from "../capabilities/extension-inventory/installed-extensions.js";
@@ -7,7 +6,7 @@ import type { ExtensionHost, InstalledExtension } from "../capabilities/extensio
 
 // Trigger catalogue for what can wake an agent: sources and templates the composer offers and `upsert` validates
 // against, drawn from one list.
-// Declares only what the daemon itself emits (webchat, ci, issues, deploys); everything else comes from an extension
+// Declares only what the daemon itself emits (webchat, ci, issues); everything else comes from an extension
 // manifest.
 // A template lives beside the source it fires on so payload and prompt stay in one place; a generic-webhook template
 // goes with its connector pack.
@@ -95,39 +94,9 @@ const ISSUES_SOURCE: TriggerSource = {
         "line and stop rather than manufacturing a change.",
 };
 
-// (2026-11-25) The managed environments' deploys (deploys/deploy-events.ts sends them), and what their monitor reads on the
-// servers. `channelId` is `<repo>:<stack>`.
-const DEPLOY_EVENT_LABELS = {
-    deploy_succeeded: "Deploy succeeded",
-    deploy_failed: "Deploy failed",
-    deploy_rolled_back: "Deploy rolled back",
-    deploy_refused: "Deploy refused",
-    stack_unhealthy: "Stack unhealthy",
-    stack_recovered: "Stack recovered",
-    secrets_changed: "A stack's secrets changed",
-    host_low_disk: "Server low on disk",
-    host_low_memory: "Server low on memory",
-} as const satisfies Readonly<Record<DeployEventType, string>>;
-
-const DEPLOYS_SOURCE: TriggerSource = {
-    provider: DEPLOYS_PROVIDER,
-    label: "Deployments",
-    // The rail's own Deployments glyph.
-    icon: "deployments",
-    // No capability requirement: the stacks a repository declares are the connection.
-    requires: [],
-    enabled: true,
-    events: DEPLOY_EVENT_TYPES.map((value) => ({ value, label: DEPLOY_EVENT_LABELS[value] })),
-    channel: { label: "Stack (optional)", placeholder: "every stack", hint: "As <repository>:<stack>, the repository's folder and the stack's name in its stacks manifest." },
-    starterPrompt:
-        "A deploy of one of this workspace's managed stacks just ended, or the monitor saw a stack or its server change. Each payload line is one JSON " +
-        "event: `type` is `deploy_succeeded`, `deploy_failed`, `deploy_rolled_back`, `deploy_refused` or a monitor event; `channelId` is " +
-        "`<repo>:<stack>`, and `extra` carries the record id, commit, device, outcome and its error. For a failure: read the record " +
-        "(`deploys history <repo> <stack>`) and the stack's logs, find the cause in that repository at that commit, fix it there and land it. " +
-        "A refusal names what a person must do (a grant, a secret, an agent update): say so in one line. A success needs nothing.",
-};
-
-export const CORE_TRIGGER_SOURCES: readonly TriggerSource[] = [WEBCHAT_SOURCE, CI_SOURCE, ISSUES_SOURCE, DEPLOYS_SOURCE];
+// (2026-11-25) Not `deploys`: the Deployments extension contributes that provider itself, and a core source of the same
+// name would shadow it.
+export const CORE_TRIGGER_SOURCES: readonly TriggerSource[] = [WEBCHAT_SOURCE, CI_SOURCE, ISSUES_SOURCE];
 
 // Span is open-ended (`git diff <from>`) so an errored turn's uncommitted work still counts as its change.
 const SPAN_NOTE =

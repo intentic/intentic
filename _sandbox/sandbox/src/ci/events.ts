@@ -1,15 +1,16 @@
-import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import { CI_PROVIDER } from "../automations/catalog.js";
 import { dispatchListenerMessage } from "../automations/listeners.js";
 import type { Services } from "../composition.js";
+import { publishCiFeed } from "./feed/ci-feed.js";
 import { runFinished } from "./main-fixer.js";
 import { isMainLine } from "./main-line.js";
 import type { CiProject } from "./projects.js";
 import type { FetchFn } from "./providers.js";
 
 // Turns a finished PipelineRun into `ci` listener messages for the webhook (ci/webhook.routes.ts) and the poller
-// (ci/poller.ts), and a passing one into the deploys its stacks' `ci` triggers ask for (deploys/deploy-triggers.ts); the
+// (ci/poller.ts), and into a `run` frame on the CI feed for programs (feed/ci-feed.ts), however it ended; the
 // previous-conclusion memory is written only here. Canceled and skipped runs produce no message, and
 // only a canceled one reaches main's fix agent. While Repair is on, a repository's main line failing is its one fix agent's (main-fixer.ts), so its failure events reach no
 // automation listening on every branch: one failed main run starts one agent, and none is told to push its own fix to
@@ -106,16 +107,15 @@ export const dispatchCiRun = async (
         runFinished(services, run, fetchFn).catch((error: unknown) =>
             services.logger.warn({ err: error, runId: run.runId }, "ci repair: the finished run could not be read"),
         );
+    if (!isPipelineInFlight(run.status)) {
+        // First, and whatever it ended as: a program reading the feed (the Deployments extension) decides what a run means.
+        publishCiFeed({ kind: "run", run });
+    }
     const result = ciResultOf(run);
     if (result === undefined) {
         // A cancelled run is no result an automation acts on, but main's fix agent still reads it: what passed in it, and
         // a job that ran out of time, which GitHub reports as cancelled (forge/github-cancels.ts).
         return { types: [], fixed: run.status === "canceled" ? fix() : Promise.resolve() };
-    }
-    if (result === "success") {
-        // First, and off this run's clock: a stack whose `ci` trigger names no job deploys the moment its run passes
-        // (deploys/deploy-triggers.ts, which never rejects).
-        void services.deployWatch.ciPassed({ host: run.host, repo: run.repo, branch: run.branch, sha: run.sha, runId: run.runId, workflow: run.workflow, url: run.url });
     }
     const types = typesFor(result, await rememberCiRun(services, run));
     // An automation that names the branch asked for exactly these events (a notice when main fails), so it still hears

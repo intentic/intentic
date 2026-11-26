@@ -23,7 +23,6 @@ import { createBrowserToolsRoutes } from "./browser/window-tools.routes.js";
 import { createOrgRoutes } from "./org/org.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
-import { createDeploysRoutes } from "./deploys/deploys.routes.js";
 import { createComplianceRoutes } from "./compliance/compliance.routes.js";
 import { createDiffRoutes } from "./git/changes/diff-derived.js";
 import type { Services } from "./composition.js";
@@ -52,6 +51,7 @@ import { createPagesRoutes } from "./agent/pages/pages.routes.js";
 import { createNetdiskRoutes } from "./netdisk/netdisk.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
+import { createStackGrantsRoutes } from "./secrets/stack-grants/stack-grants.routes.js";
 import { createNeedsRoutes } from "./needs/needs.routes.js";
 import { unapproveExtension } from "./extensions/extension-removal.js";
 import { ownerApprovals } from "./needs/standing-grants.js";
@@ -184,7 +184,6 @@ export const createRouter = (services: Services): SandboxRouter => ({
     capabilities: createCapabilitiesRoutes(services, probeDockerGpu),
     chores: createChoresRoutes(services),
     ci: createCiRoutes(services),
-    deploys: createDeploysRoutes(services),
     compliance: createComplianceRoutes(services),
     diff: createDiffRoutes(services),
     approvals: createApprovalsRoutes(services),
@@ -206,6 +205,7 @@ export const createRouter = (services: Services): SandboxRouter => ({
     // Connections kept on the owner's computer, saved from here and taken in (hub/).
     hub: createHubRoutes(services),
     skills: createSkillsRoutes(services),
+    stackGrants: createStackGrantsRoutes(services),
     areas: createAreasRoutes(services),
     endpoints: createEndpointsRoutes(services),
     git: createGitRoutes(services),

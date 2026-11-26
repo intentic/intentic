@@ -48,14 +48,15 @@ what you left undone.
 
 ## Managed stacks' secrets (deploy grants)
 
-A stack a repository declares in `.intentic/stacks.json` (the `deploys` command) reads its secrets as
-`{{secret:NAME}}` in its `env` or a registry's `password`, and the sandbox writes their values into the stack's `.env` on
-the computer as it deploys it. Never you: the render is the daemon's, from this sandbox's own secret store only. The
-owner grants each stack, on each computer, exactly the names it reads; a deploy needing one not granted is refused,
-saying so, and `deploys grant <repo> <stack> --why "…"` asks them on a card (exit 3 while it waits; only they can
-press it). A name behind a named approver, or held only by a connection's vault or a computer's keyring, is refused
-too: store a copy with `secrets import`, or give the stack a secret of its own. Each deploy's use shows in the
-inventory's last use as `deploy`, by stack and computer.
+A stack a repository declares in `.intentic/stacks.json` (deployed with the Deployments extension's tools) reads its
+secrets as `{{secret:NAME}}` in its `env` or a registry's `password`, and the sandbox writes their values into the
+stack's `.env` on the computer as it deploys it. Never you, and never the extension: the fill is the daemon's, from this
+sandbox's own secret store only. The owner grants each stack, from its repository, on each computer, exactly the names
+it may receive; a deploy needing one not granted is refused, naming it, and
+`secrets grant-stack <repo> <stack> <device> NAME... --why "…"` asks them on a card (the computer by its device card's
+id, as Devices lists it; exit 3 while it waits; only they can press it). A name behind a named approver, or held only by
+a connection's vault or a computer's keyring, is refused too: store a copy with `secrets import`, or give the stack a
+secret of its own. Each deploy's use shows in the inventory's last use as `deploy`, by stack and computer.
 
 ## Host guards
 

@@ -66,7 +66,7 @@ flowchart LR
   data (`ic uninstall`, which removes `~/.intentic` whole, does not).
 - (2026-11-25) **Managed stacks** ([`tools/stacks/deploy.ts`](src/device/tools/stacks/deploy.ts), the folder's own
   state in `stack-state.ts`, the health wait in `deploy-health.ts`; advertised as `stacks-managed`): the stacks a
-  repository declares in its stacks manifest, which the sandbox deploys and keeps running in place of Komodo. Every
+  repository declares for the Deployments extension, which the sandbox deploys and keeps running in place of Komodo. Every
   deploy records the sandbox that made it (`owner`, from the link, never from the call) in `.intentic-deploy.json`,
   and from then on `deploy_stack`, `stack_action` and `stack_logs` from any other sandbox are refused, saying the stack
   was deployed by another sandbox; `list_stacks` shows the owner. A stack deployed before owners were recorded is
@@ -90,7 +90,7 @@ flowchart LR
   given what is left of it, since the daemon waits 15 for a device call. Every secret it carried is taken out of its
   answer and its errors, and the audit log keeps only how long the `.env` was and how many logins came.
   `host_stats` (advertised as `host-stats`, under "Run commands") reads the free space of Docker's data root and of
-  the stacks folder by statfs, memory (Linux's MemAvailable), load and cpus, for the deploys monitor; a Docker that does
+  the stacks folder by statfs, memory (Linux's MemAvailable), load and cpus, for the Deployments monitor; a Docker that does
   not answer, or whose data root is inside a VM, leaves only its disk out.
 - (2026-11-24) **Self-hosted CI runners** ([`src/ci-fleet/`](src/ci-fleet), tools in
   [`tools/ci-runners/`](src/device/tools/ci-runners/ci-runners.ts), contract `schemas/ci-fleet.ts`): the GitHub Actions

@@ -150,8 +150,6 @@ const STATE_FILES = [
     // Holds no credential (a secret need names the secret, its value goes to the secret store), so it may `carry`: a
     // question a moved sandbox still has to ask. `needs` is the chat cards', the board's and the inbox's shared read.
     { path: ".intentic/records/needs.json", invalidates: ["needs"], portability: "carry" },
-    // (2026-11-25) Every managed stack's deploys, the waiting ones too (deploys/deploys-store.ts); secret names, no value.
-    { path: ".intentic/records/deploys.json", invalidates: ["deploys"], portability: "carry" },
     // Where each agent engine's version comes from: blessed list, upstream newest, a pin, or the image (schemas/engines.ts).
     // The versions themselves are machine state on the daemon's volume (architecture-specific binaries); the policy here
     // travels. `versioned`: a human decision worth reviewing. Own key, not `environment`'s: the engines card reads its own.

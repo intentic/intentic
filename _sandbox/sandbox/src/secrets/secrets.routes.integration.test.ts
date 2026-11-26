@@ -7,7 +7,8 @@ import { clientFor, errorCode, proven, rejectForbidden } from "../harness/route-
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../capabilities/capabilities-slice.testing.js";
 import { fakeDevices, fakeKeyring, pointerOf } from "./device/keyring.testing.js";
-import { secretsSliceFake } from "./secrets-slice.testing.js";
+import { secretsSliceFake, SUITE_MARK_KEY } from "./secrets-slice.testing.js";
+import { markerFor } from "./marks/secret-marks.js";
 
 // Drives the secrets routes over the daemon's HTTP surface the way the browser does; fakes and the client are shared
 // from route-services.testing.ts and its siblings.
@@ -40,6 +41,21 @@ test("secrets.generate stores a random value under a new name and answers its le
     expect(JSON.stringify(made)).not.toContain(value);
     // Defaults: 32 bytes of hex, the shape most readers accept.
     expect(await client.secrets.generate({ key: "WEBHOOK_SECRET" })).toEqual({ key: "WEBHOOK_SECRET", length: 64, stored: "sandbox" });
+});
+
+// A value that must never appear in an answer: found there, it leaked.
+const MARKED = "marked-value-0003cc";
+
+test("secrets.marks answers a keyed mark of each name this sandbox's own store holds, none for the rest, and never a value", async () => {
+    const client = clientFor(createApp(services()));
+    await client.secrets.set({ key: "DB_PASSWORD", value: MARKED });
+    const first = await client.secrets.marks({ names: ["DB_PASSWORD", "NOWHERE", "DB_PASSWORD"] });
+    expect(first).toEqual({ marks: { DB_PASSWORD: markerFor(SUITE_MARK_KEY)("DB_PASSWORD", MARKED) } });
+    expect(JSON.stringify(first)).not.toContain(MARKED);
+    // The same value marks the same; a changed one marks differently.
+    expect(await client.secrets.marks({ names: ["DB_PASSWORD"] })).toEqual(first);
+    await client.secrets.set({ key: "DB_PASSWORD", value: `${MARKED}-rotated` });
+    expect((await client.secrets.marks({ names: ["DB_PASSWORD"] })).marks["DB_PASSWORD"]).toBe(markerFor(SUITE_MARK_KEY)("DB_PASSWORD", `${MARKED}-rotated`));
 });
 
 test("secrets.generate refuses a name something already holds, rather than breaking whatever reads it", async () => {

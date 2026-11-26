@@ -30,6 +30,7 @@ import { environmentNeed } from "./kinds/environment-need.js";
 import { instructionNeed, type InstructionNeedDeps } from "./kinds/instruction-need.js";
 import { claimNeed } from "./kinds/claim-need.js";
 import { deployNeed } from "./kinds/deploy-need.js";
+import { pairedDevice } from "../secrets/stack-grants/stack-grants.js";
 import { routeNeedOf } from "./kinds/route-need.js";
 import { redirectNeedOf } from "./kinds/redirect-need.js";
 import { projectOfRemote } from "../issues/account-outbox.js";
@@ -309,12 +310,12 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             // A person's leave to route as them into another sandbox; the pairing itself is their press.
             route: routeNeedOf(whole),
             redirect: redirectNeedOf(whole),
-            // A managed stack's secrets, granted by the owner's press into the auth root the deploy engine reads (deploys/).
+            // A managed stack's secrets, granted by the owner's press into the auth root a managed deploy reads
+            // (secrets/stack-grants/stack-grants.ts).
             deploy: deployNeed({
-                stackAtHead: (ref) => whole().deploys.stackAtHead(ref),
-                grantFor: async (repo, stack, device) =>
-                    (await whole().deploys.grants()).find((grant) => grant.repo === repo && grant.stack === stack && grant.device === device),
-                grant: (grant) => whole().deploys.grantShown(grant),
+                device: (device) => pairedDevice(whole(), device),
+                grantFor: (ref) => whole().stackGrants.forStack(ref),
+                grant: (ref, secrets, by) => whole().stackGrants.add(ref, secrets, by),
             }),
         },
         logger,

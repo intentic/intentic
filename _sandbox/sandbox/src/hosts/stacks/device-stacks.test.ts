@@ -1,5 +1,5 @@
-import type { DeviceStacks } from "@intentic/sandbox-contract/schemas/device-stacks";
-import { deployDeviceStack, deviceStackLogs, deviceStackOp, deviceStacks } from "./device-stacks.js";
+import type { DeviceStacks, HostStats } from "@intentic/sandbox-contract/schemas/device-stacks";
+import { deployDeviceStack, deviceHostStats, deviceStackLogs, deviceStackOp, deviceStacks } from "./device-stacks.js";
 import { STACK_DEVICE, stackDevice } from "./device-stacks.testing.js";
 
 // The stack routes' relay to a computer's own tools: what reaches the machine, and how each way a call can end reads to
@@ -120,4 +120,24 @@ test("a link that fails under the call is a bad gateway, said as what it means f
         code: "BAD_GATEWAY",
         message: `"${STACK_DEVICE}" dropped its connection while the stack_action call was running (the device went to sleep, lost its network, or its agent restarted). It may or may not have finished there: check before running it again.`,
     });
+});
+
+// (2026-11-25) How full the computer is, for the Deployments extension's monitor: relayed as `host_stats` answers it.
+const STATS: HostStats = {
+    disks: [{ role: "docker", path: "/var/lib/docker", totalBytes: 500e9, freeBytes: 20e9 }],
+    memory: { totalBytes: 16e9, availableBytes: 3e9 },
+    load: [0.5, 0.75, 1],
+    cpus: 8,
+};
+
+test("host stats are relayed as host_stats answers them, and an agent without them is refused before it is asked", async () => {
+    const { services, tools } = stackDevice({ features: ["stacks", "host-stats"], tool: async () => ({ text: JSON.stringify(STATS) }) });
+    expect(await deviceHostStats(services, STACK_DEVICE)).toEqual(STATS);
+    expect(tools.map(({ tool, args }) => ({ tool, args }))).toEqual([{ tool: "host_stats", args: {} }]);
+    const older = stackDevice({ features: ["stacks"] });
+    await expect(deviceHostStats(older.services, STACK_DEVICE)).rejects.toMatchObject({
+        code: "CONFLICT",
+        message: `The agent on "${STACK_DEVICE}" is too old to say how full its disks and memory are: update it there (\`intentic-machine upgrade\`, or Update on its Devices card), then try again.`,
+    });
+    expect(older.tools).toEqual([]);
 });

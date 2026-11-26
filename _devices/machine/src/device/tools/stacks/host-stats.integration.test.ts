@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HostStatsSchema } from "@intentic/sandbox-contract/schemas/deploys";
+import { HostStatsSchema } from "@intentic/sandbox-contract/schemas/device-stacks";
 import { dockerAnswered, fakeDocker, grantWith } from "../../device-testing.js";
 import { ScopeError } from "../../policy.js";
 import { hostStats, readHostStats } from "./host-stats.js";

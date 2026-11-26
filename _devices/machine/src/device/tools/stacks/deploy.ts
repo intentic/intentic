@@ -32,7 +32,7 @@ import {
 
 /* DEPLOYING A STACK (deploy_stack): the pushed repository copied into the stack's folder and brought up there. A plain
    deploy is what it always was, `up --build` with any `.env` in the folder left alone. (2026-11-25) A MANAGED deploy, a
-   stack the repository declares in its stacks manifest (schemas/deploys.ts), also brings what the daemon rendered for it:
+   stack the Deployments extension manages (schemas/device-stacks.ts), also brings what the daemon rendered for it:
    its `.env`, its registry logins, hooks, a health wait and image pins, and it answers with the digests it ran.
    Every deploy records the sandbox that made it, which alone may deploy, drive or read the stack from then on.
 

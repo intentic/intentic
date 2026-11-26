@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
-import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiFeedEvent, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { Context } from "hono";
 import { tokenEquals } from "../auth/auth.js";
 import type { Services } from "../composition.js";
@@ -17,8 +17,10 @@ import {
     githubStatus,
     type GitlabPipelineHook,
     gitlabHookRun,
+    gitlabStatus,
 } from "./providers.js";
-import type { CiPass } from "../deploys/deploy-triggers.js";
+import { ciFeedRoute, publishCiFeed } from "./feed/ci-feed.js";
+import { opt } from "../opt.js";
 import { forgeOf } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
@@ -142,33 +144,38 @@ const gitlabFailedJob = (hook: GitlabJobHook): FailedJob | undefined =>
               reason: hook.build_failure_reason,
           };
 
-// A job that passed, as the deploys watch hears of it (deploys/deploy-triggers.ts): a stack whose `ci` trigger names it
-// deploys now, before the rest of its run ends. A tag's job deploys nothing: a trigger names a branch.
-type PassedJob = Omit<CiPass, "repo">;
+// A job that ended, passed or failed, as the CI feed tells a program of it (feed/ci-feed.ts): the Deployments extension
+// deploys the moment the job publishing its images passes, before the rest of its run ends. Only the forge's own
+// verdicts: a job still going is not one, and a GitLab tag's job names no branch.
+type CompletedJob = Omit<Extract<CiFeedEvent, { kind: "job" }>, "kind" | "repo" | "project">;
 
-const githubPassedJob = (job: GithubJob): PassedJob | undefined =>
-    job.conclusion !== "success" || job.head_sha === undefined || job.head_branch === undefined || job.head_branch === null
+const githubCompletedJob = (job: GithubJob, webBase: string): CompletedJob | undefined =>
+    job.conclusion === undefined || job.conclusion === null || job.head_sha === undefined || job.head_branch === undefined || job.head_branch === null
         ? undefined
         : {
               host: "github",
+              runId: job.run_id,
+              ...opt("workflow", job.workflow_name ?? undefined),
+              job: job.name,
               branch: job.head_branch,
               sha: job.head_sha,
-              runId: job.run_id,
-              workflow: job.workflow_name ?? undefined,
-              job: { id: job.id, name: job.name },
-              url: job.html_url ?? undefined,
+              status: githubStatus("completed", job.conclusion),
+              url: job.html_url ?? `${webBase}/actions/runs/${job.run_id}/job/${job.id}`,
           };
 
-const gitlabPassedJob = (hook: GitlabJobHook): PassedJob | undefined =>
-    hook.build_status !== "success" || hook.tag === true || hook.sha === undefined
+const GITLAB_ENDED: ReadonlySet<string> = new Set(["success", "failed", "canceled", "skipped"]);
+
+const gitlabCompletedJob = (hook: GitlabJobHook, webBase: string): CompletedJob | undefined =>
+    !GITLAB_ENDED.has(hook.build_status) || hook.tag === true || hook.sha === undefined
         ? undefined
         : {
               host: "gitlab",
+              runId: hook.pipeline_id,
+              job: hook.build_name,
               branch: hook.ref,
               sha: hook.sha,
-              runId: hook.pipeline_id,
-              job: { id: hook.build_id, name: hook.build_name },
-              url: hook.project.web_url === undefined ? undefined : `${hook.project.web_url}/-/jobs/${hook.build_id}`,
+              status: gitlabStatus(hook.build_status),
+              url: `${hook.project.web_url ?? webBase}/-/jobs/${hook.build_id}`,
           };
 
 // A run as the board and the automations hear of it, at every phase: what failed in it read first, so the wake payload
@@ -206,7 +213,8 @@ interface Understood {
     readonly toRun?: (project: { repo: string; project: string }) => PipelineRun;
     readonly jobMoved: boolean;
     readonly failedJob?: FailedJob | undefined;
-    readonly passedJob?: PassedJob | undefined;
+    // A job that ended, for the CI feed; its URL is the forge's, or built from the project's page once that is known.
+    readonly completedJob?: ((webBase: string) => CompletedJob | undefined) | undefined;
 }
 
 const githubDeliveryOf = (event: string | undefined, delivery: GithubDelivery): Understood | undefined => {
@@ -221,7 +229,7 @@ const githubDeliveryOf = (event: string | undefined, delivery: GithubDelivery): 
             author: { id: "github", name: "github" },
             jobMoved: true,
             failedJob: delivery.action === "completed" ? githubFailedJob(job) : undefined,
-            passedJob: delivery.action === "completed" ? githubPassedJob(job) : undefined,
+            completedJob: delivery.action === "completed" ? (webBase) => githubCompletedJob(job, webBase) : undefined,
         };
     }
     if (event === "workflow_run" && delivery.workflow_run !== undefined) {
@@ -244,7 +252,13 @@ const gitlabDeliveryOf = (event: string | undefined, payload: Partial<GitlabJobH
             return undefined;
         }
         const hook = delivery as GitlabJobHook;
-        return { sender: gitlabSender(delivery.project), author: { id: "gitlab", name: "gitlab" }, jobMoved: true, failedJob: gitlabFailedJob(hook), passedJob: gitlabPassedJob(hook) };
+        return {
+            sender: gitlabSender(delivery.project),
+            author: { id: "gitlab", name: "gitlab" },
+            jobMoved: true,
+            failedJob: gitlabFailedJob(hook),
+            completedJob: (webBase) => gitlabCompletedJob(hook, webBase),
+        };
     }
     const delivery = payload as Partial<GitlabPipelineHook>;
     if (event !== "Pipeline Hook" || delivery.object_attributes === undefined || delivery.project === undefined) {
@@ -262,22 +276,20 @@ const gitlabDeliveryOf = (event: string | undefined, payload: Partial<GitlabJobH
     };
 };
 
-// A job that ended, handed on off the delivery's clock: a failure to main's fix agent (reading its log and starting or
-// telling the agent takes a while), a pass to the deploys watch (which fetches the commit, reads the manifest and never
-// rejects). Whether the delivery was one.
+// A job that ended, handed on: to the CI feed, passed or failed, and a failure to main's fix agent off the delivery's
+// clock (reading its log and starting or telling the agent takes a while). Whether the delivery was one.
 const handedOffJob = (services: Services, project: CiProject, understood: Understood, fetchFn: FetchFn): boolean => {
-    const { failedJob, passedJob } = understood;
+    const { failedJob } = understood;
+    const completed = understood.completedJob?.(`${project.account.scheme}://${project.account.host}/${project.project}`);
+    if (completed !== undefined) {
+        publishCiFeed({ kind: "job", ...completed, repo: project.repo, project: project.project });
+    }
     if (failedJob !== undefined) {
         void jobFailed(services, project, failedJob, fetchFn).catch((error: unknown) =>
             services.logger.warn({ err: error, repo: project.repo, jobId: failedJob.jobId }, "ci repair: the failed job could not be handled"),
         );
-        return true;
     }
-    if (passedJob !== undefined) {
-        void services.deployWatch.ciPassed({ ...passedJob, repo: project.repo });
-        return true;
-    }
-    return false;
+    return completed !== undefined || failedJob !== undefined;
 };
 
 // Ample room for a workflow run or job delivery, while bounding the memory an unauthenticated caller can make the
@@ -364,5 +376,10 @@ export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetc
     };
 };
 
-// CI webhook receiver, secret-gated in the handler; completed pipelines wake `ci` listener automations.
-export const ciWebhookRawRoutes = defineRawRoutes((services: Services) => ({ "POST /ci/webhook/{host}": createCiWebhookRoute(services) }));
+// CI webhook receiver, secret-gated in the handler; completed pipelines wake `ci` listener automations. Beside it, what it
+// heard as a stream for programs (feed/ci-feed.ts): an extension reaches it by declaring `GET /ci/feed` in its
+// `permissions.daemon`, and no agent or panel token does (protocol/raw/raw-routes.ts).
+export const ciWebhookRawRoutes = defineRawRoutes((services: Services) => ({
+    "POST /ci/webhook/{host}": createCiWebhookRoute(services),
+    "GET /ci/feed": ciFeedRoute(),
+}));

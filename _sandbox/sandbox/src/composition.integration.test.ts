@@ -78,10 +78,9 @@ test("the late seams answer once composing has returned", async () => {
 
 test("the leaf slices are composed beside the core, with the stops of those that start something", () => {
     expect(Object.keys(services)).toEqual(
-        expect.arrayContaining(["git", "hostHub", "linkedChildren", "loops", "workflows", "needs", "orgPolicy", "history", "shares", "walletLedger", "deploys"]),
+        expect.arrayContaining(["git", "hostHub", "linkedChildren", "loops", "workflows", "needs", "orgPolicy", "history", "shares", "walletLedger"]),
     );
-    // (2026-11-25) Two: the deploys engine stops taking deploys off its queue with its slice (deploys/deploys-slice.ts).
-    expect(leafTeardown(services)).toHaveLength(2);
+    expect(leafTeardown(services)).toHaveLength(1);
 });
 
 // The target image's composer composes over read-only mounts of the running sandbox's volumes (compose-overlay.ts): a

@@ -4,13 +4,13 @@ import { dirname } from "node:path";
 import { errnoCode, undefinedIfMissing } from "@intentic/base/errors";
 import { parseJsonWith } from "@intentic/base/json";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { HostStats } from "@intentic/sandbox-contract/schemas/deploys";
+import type { HostStats } from "@intentic/sandbox-contract/schemas/device-stacks";
 import { z } from "zod";
 import { assertScope } from "../../policy.js";
 import { type Docker, machineDocker, READ_TIMEOUT_MS, stacksRoot } from "./stacks.js";
 
-/* HOW FULL THIS MACHINE IS (2026-11-25), for the deploys monitor's low-disk and low-memory alerts (HostStatsSchema in
-   schemas/deploys.ts): free space where Docker keeps its images and volumes and where the stacks live, memory a new
+/* HOW FULL THIS MACHINE IS (2026-11-25), for the Deployments extension's low-disk and low-memory alerts (HostStatsSchema
+   in schemas/device-stacks.ts): free space where Docker keeps its images and volumes and where the stacks live, memory a new
    process could have, and load. Every figure is a cheap read; whatever cannot be read is left out rather than failing
    the rest, so a Docker that does not answer still leaves the stacks' disk, memory and load. */
 

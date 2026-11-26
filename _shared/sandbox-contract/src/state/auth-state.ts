@@ -64,12 +64,13 @@ export const AUTH_STATE_FILES: readonly StateFile[] = [
     { path: "secret-programs.json", portability: "identity", note: "Allow programs to receive secrets again from Secrets." },
     // Per-card credential rules and raw delivery, the owner's widening of a connector's own rules.
     { path: "credential-policy.json", portability: "identity", note: "Set a connection's credential rules and delivery again from Capabilities." },
-    // (2026-11-25) Which secrets each managed stack may receive, on which computer (the daemon's deploys/deploy-grants.ts).
-    { path: "deploy-grants.json", portability: "identity", note: "Let each managed stack receive its secrets again from Deployments." },
-    // (2026-11-25) The key this sandbox marks each managed stack's deployed secret values with, and the marks (HMACs,
-    // never a value), which tell a rotated secret from the one deployed (the daemon's deploys/deploy-secret-marks.ts).
-    // Meaningless under any other key, so a target starts its own with each stack's next deploy.
-    { path: "deploy-secret-marks.json", portability: "identity" },
+    // (2026-11-25) Which secrets each managed stack may receive, from which repository, on which computer (the daemon's
+    // secrets/stack-grants.ts).
+    { path: "stack-grants.json", portability: "identity", note: "Let each managed stack receive its secrets again from Deployments." },
+    // (2026-11-25) The key this sandbox marks secret values with (HMACs, never a value: the daemon's
+    // secrets/marks/secret-marks.ts), which tell a rotated secret from the one a stack was deployed with. Meaningless under
+    // any other key, so a target mints its own, and each stack's marks start again with its next deploy.
+    { path: "secret-marks.json", portability: "identity" },
 
     /* ---- this sandbox's own keys, and what it is paired with ---- */
 

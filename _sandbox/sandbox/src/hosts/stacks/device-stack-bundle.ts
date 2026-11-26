@@ -80,7 +80,7 @@ export const committedStack = async (dir: string, repo: string, composeFile: str
     return { commit, composeFile: await composeFileIn(dir, repo, commit, composeFile, `"${repo}"'s last commit (${commit.slice(0, 12)})`) };
 };
 
-// (2026-11-25) The same for an exact commit, which a managed deploy names (deploys/): a CI run's, a rollback's, the one a
+// (2026-11-25) The same for an exact commit, which a managed deploy names (managed-deploy.ts): a CI run's, a rollback's, the one a
 // promotion copies. `commit` is a full sha already resolved (exactCommit below), so the words name it rather than HEAD.
 export const stackAtCommit = async (dir: string, repo: string, commit: string, composeFile: string | undefined): Promise<CommittedStack> => ({
     commit,
@@ -121,7 +121,7 @@ const resolvedCommit = async (dir: string, wanted: string): Promise<string | und
 
 // (2026-11-25) The full sha of a commit a deploy names. A CI run's commit may not be here yet (the workspace pulls on
 // its own clock), so one the repository lacks is fetched once from its remote and looked up again. `fetch` is the
-// caller's way to the remote (deploys/ hands in the daemon's own git env); it answers why it failed, or nothing.
+// caller's way to the remote (managed-deploy.ts hands in the daemon's own git env); it answers why it failed, or nothing.
 export const exactCommit = async (dir: string, repo: string, wanted: string, fetch: () => Promise<string | undefined>): Promise<string> => {
     if (!/^[0-9a-f]{7,64}$/.test(wanted)) {
         throw refused(`"${wanted}" is not a commit: name one by its sha, full or abbreviated`);

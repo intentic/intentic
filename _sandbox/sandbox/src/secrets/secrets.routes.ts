@@ -18,6 +18,7 @@ import { sandboxSecretsDocument } from "./sandbox-secrets.js";
 import { unmaskableSecrets } from "../agent/tools/agent-redaction.js";
 import { guardForEntry } from "./guards/host-guards.js";
 import { createSecretGenerateRoutes } from "./generate/secret-generate.routes.js";
+import { marksOf } from "./marks/secret-marks.js";
 import { createSecretHostRoutes } from "./guards/secret-hosts.routes.js";
 import { createSecretProgramRoutes } from "./guards/secret-programs.routes.js";
 import { createDeviceSecretRoutes } from "./device/device-secrets.routes.js";
@@ -141,6 +142,11 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccount
             await services.sandboxSecrets.set(input.key, input.value);
             return { ok: true } as const;
         }),
+        // (2026-11-25) A keyed mark of each named value in this sandbox's own store, never the value (marks/secret-marks.ts):
+        // how the Deployments extension tells a secret a stack received changed since.
+        marks: i.marks.handler(async ({ input }) => ({
+            marks: await marksOf(input.names, { marks: services.secretMarks, value: (name) => services.sandboxSecrets.get(name) }),
+        })),
         // Making a random value, new or in place of one a person set (secret-generate.routes.ts).
         ...createSecretGenerateRoutes(services, (key) => keptOnDevice(services, key)),
         list: i.list.handler(async () => ({ keys: Object.keys(await services.sandboxSecrets.all()) })),
