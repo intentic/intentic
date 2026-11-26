@@ -1,6 +1,6 @@
 import type { BootReport, SandboxHosted, SandboxSummary, SetupCode, SetupReport, TrashedSandbox } from "@intentic/api-contract";
 import { demoMode } from "../mode";
-import { DEMO_SANDBOX, DEMO_SANDBOXES, DEMO_TRASH } from "./account";
+import { cloudRow, DEMO_CLOUD_SANDBOXES, DEMO_SANDBOX, DEMO_SANDBOXES, DEMO_TRASH } from "./account";
 import { declineLocalShortcut } from "./browserSeeds";
 
 // THE ACCOUNT'S SANDBOXES AS LIVE STATE: the rows the platform lists, the trash a delete fills, and the setup codes it
@@ -29,7 +29,10 @@ const laptopRow = (): SandboxSummary => ({
     hostReport: null,
 });
 
-const rows: SandboxSummary[] = [...DEMO_SANDBOXES, ...(laptopShown && DEMO_SANDBOXES.length > 0 ? [laptopRow()] : [])].map((row) => ({ ...row }));
+const rows: SandboxSummary[] = [
+    ...DEMO_SANDBOXES,
+    ...(laptopShown && DEMO_SANDBOXES.length > 0 ? [laptopRow(), ...DEMO_CLOUD_SANDBOXES.map(cloudRow)] : []),
+].map((row) => ({ ...row }));
 const trash: TrashedSandbox[] = [...DEMO_TRASH];
 // The rows the visitor made on this page: each one is a sandbox on its first day (world/fresh.ts serves it so).
 const madeHere = new Set<string>();

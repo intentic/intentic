@@ -1,4 +1,4 @@
-import type { HostedMigration, HostedPlanState } from "@intentic/api-contract";
+import type { HostedPlanState } from "@intentic/api-contract";
 import { HOSTED_TIERS } from "@intentic/constants";
 import { useLoaded } from "@intentic/extension-api";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
@@ -8,7 +8,11 @@ import { computed } from "vue";
 import { HOSTED_PLAN } from "../../lib/queryKeys";
 import { apiClient } from "../../lib/useApi";
 import { planBadge } from "./hostedHours";
+import { planMoving } from "./planMoves";
 import { useAccount } from "../../client/auth/useAccount";
+
+// How often the plan is read while a machine restarts onto a new plan: its steps take seconds to a few minutes each.
+const MOVING_EVERY_MS = 3_000;
 
 // The hosted plan's state, read once for the whole app: Billing, the account badge, a hosted sandbox's hours on its own
 // pages and in the chat strip, and whether the platform sells a plan at all. Account-scoped, not sandbox-scoped: a
@@ -22,29 +26,29 @@ export function useHostedPlan() {
         enabled: computed(() => user.value !== null),
         staleTime: 60_000,
         refetchOnWindowFocus: true,
+        // A machine restarting onto a bigger plan is watched every few seconds until it is done, and then no more.
+        refetchInterval: (read) => (planMoving(read.state.data, Date.now()) ? MOVING_EVERY_MS : false),
         retry: 1,
     });
 
     const state = computed<HostedPlanState | undefined>(() => query.data.value);
 
-    // The plan re-read through the cache rather than this caller's observer: the writes below are awaited by Billing's
-    // operations (operations.ts), which outlive the page that started them.
+    // Every write answers the whole plan, which goes straight into the cache every page draws from: the writes are awaited
+    // by operations (operations.ts) that outlive the page that started them, so no observer of this caller's is assumed.
     const client = useQueryClient();
-    const reread = (): Promise<void> => client.invalidateQueries({ queryKey: HOSTED_PLAN.every });
-
-    // Writes to Stripe then re-reads; one at a time is the caller's to keep, so racing presses can't overwrite each other.
-    const setSlots = async (tier: string, quantity: number): Promise<void> => {
-        await apiClient.hostedPlan.setSlots({ tier, quantity });
-        await reread();
+    const settle = (next: HostedPlanState): HostedPlanState => {
+        client.setQueryData(HOSTED_PLAN.every, next);
+        return next;
     };
 
-    /* MOVES ONE SANDBOX ONTO A SLOT AT ANOTHER RUNG, which is a different act from buying the slot: the machine is
-     * restarted on the new shape (or rebuilt beside itself and swapped), and one request answers once that is over. */
-    const changeTier = async (sandboxId: string, tier: string): Promise<HostedMigration> => {
-        const migration = await apiClient.hostedPlan.changeTier({ sandboxId, tier });
-        await reread();
-        return migration;
-    };
+    /* PUTS ONE SANDBOX ON A PLAN (2026-11-26), for a subscriber or a comped account; a first purchase is a checkout. Up is
+     * paid now and its machine restarts in the background (the query then watches it, above); down waits for the renewal
+     * date; its own plan withdraws a change still waiting; a due change's plan again tries a failed resize once more. */
+    const changePlan = async (sandboxId: string, tier: string): Promise<HostedPlanState> => settle(await apiClient.hostedPlan.changePlan({ sandboxId, tier }));
+    /** A plan for a sandbox about to be made at `tier`: an open one there, else one added for the rest of the month. */
+    const reserve = async (tier: string): Promise<HostedPlanState> => settle(await apiClient.hostedPlan.reserve({ tier }));
+    /** Ends one plan no sandbox is on, at the renewal date. */
+    const release = async (tier: string): Promise<HostedPlanState> => settle(await apiClient.hostedPlan.release({ tier }));
 
     return {
         state,
@@ -53,8 +57,9 @@ export function useHostedPlan() {
         priceUsd: computed(() => state.value?.priceUsd ?? 0),
         hosted: computed(() => state.value?.hosted),
         planBadge: computed(() => planBadge(state.value)),
-        setSlots,
-        changeTier,
+        changePlan,
+        reserve,
+        release,
         // Every rung there is, so the page can price the ladder without a second read.
         tiers: HOSTED_TIERS,
         isLoading: query.isLoading,

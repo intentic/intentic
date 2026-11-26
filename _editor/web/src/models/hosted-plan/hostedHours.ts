@@ -4,7 +4,7 @@ import type { StatusVariant, Tip } from "@intentic/ui";
 // Through `@intentic/ui/format`, not the barrel: this module is plain TypeScript, tested without a DOM, and the
 // barrel drags in the component graph — a chart component reaching for `window.matchMedia` at import time takes the
 // whole suite down before a single assertion runs. Same reason `markdown` and `series` have their own subpaths.
-import { formatDateLong, formatDayMonth, formatElapsed } from "@intentic/ui/format";
+import { formatDayMonth, formatElapsed } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 
 // Sentences derived from hosted-plan state so Billing, the account badge, a sandbox's own pages and the chat strip
@@ -14,17 +14,15 @@ import { t } from "@intentic/ui/i18n";
 // shared by every machine that does not stand on a paid slot, or ONE MACHINE's own month on the slot it stands on. A
 // sandbox on its owner's own computer spends neither, so nothing here is ever said about one.
 
+
 /**
- * A calendar day, in the reader's own clock, for "renews on" / "ends on" / "resets on".
+ * A calendar day, in the reader's own clock, for "renews on" / "ends on" / "resets on", without the year it is in.
  *
- * TAKES AN INSTANT, not a calendar day, and the parameter name says so. Handed `"2026-10-01"` these would parse it as
+ * TAKES AN INSTANT, not a calendar day, and the parameter name says so. Handed `"2026-10-01"` this would parse it as
  * UTC midnight and render the 30th of September for every reader behind UTC — correct in the author's zone, wrong for
  * a third of the world, and invisible to whoever writes it. The platform sends `.toISOString()` for all three of
  * these fields; a `CivilDay` would need `civilDayIn` and its own bucketing zone instead.
  */
-export const formatDay = (instant: string): string => formatDateLong(instant);
-
-// Shorter, for the one-line surfaces (the avatar row) where a year is noise. Same contract: an instant, not a day.
 export const formatDayShort = (instant: string): string => formatDayMonth(new Date(instant).getTime());
 
 /** One kind of hours as a bar and a sentence draw it; `fraction` is what is left, 0..1. */

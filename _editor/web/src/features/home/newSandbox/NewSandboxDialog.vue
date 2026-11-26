@@ -9,16 +9,18 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { HOME_PATH } from "../../../lib/routes/firstScreens";
 import AddSandboxForm from "../../setup/add/AddSandboxForm.vue";
-import { ATTACH } from "../../setup/add/useAddSandbox";
+import { ATTACH, HOSTED } from "../../setup/add/useAddSandbox";
 import { closesBackTo, type NewSandboxRun } from "./newSandbox";
 
 const { run } = defineProps<{ run: NewSandboxRun }>();
 
 const t = useT();
 const router = useRouter();
-const { blocked, pick, busy: creating } = run.here.add;
-// An address already answering is connected, not created: the press says which.
-const pressLabel = computed(() => (pick.value === ATTACH ? t(`ui.action.connect`) : t(`home.newSandbox.create`)));
+const { blocked, pick, busy: creating, plan } = run.here.add;
+// An address already answering is connected, not created; a machine of ours on a paid plan carries its price, and is the
+// dialog's one paid step: the press says which.
+const paidPlan = computed(() => (pick.value === HOSTED ? plan.offer.value : undefined));
+const pressLabel = computed(() => (pick.value === ATTACH ? t(`ui.action.connect`) : (paidPlan.value?.label ?? t(`home.newSandbox.create`))));
 
 // Put away. Never pressed: back where the press came from (the chat, or a sandbox the reader was in), else Home's chat;
 // never Back onto a page that would ask again (newSandbox.ts `closesBackTo`).
@@ -56,7 +58,7 @@ const close = (): void => {
                 <Button :label="t(`ui.action.cancel`)" tier="quiet" :disabled="creating" @click="close" />
                 <Button
                     :label="pressLabel"
-                    tier="accent"
+                    :tier="paidPlan?.paid ? `loud` : `accent`"
                     :loading="creating"
                     :disabled="blocked"
                     data-new-sandbox-create

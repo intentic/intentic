@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Button } from "@intentic/ui";
 import GateCard from "./GateCard.vue";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { useSandboxSession } from "../../../client/session/sandboxSession";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
@@ -20,6 +20,11 @@ import { stalledPaths } from "../../../app/perf/perf";
 import { DEADLINE_MS } from "../../../client/sandbox/sandboxAuthFetch";
 import { useT } from "@intentic/ui/i18n";
 import { here, page } from "../../../lib/routes/links";
+import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
+import PlanDialog from "../../settings/hosted-plan/PlanDialog.vue";
+import { nextRung, planLadder, rungOf } from "../../settings/hosted-plan/planLadder";
+import PlanMoveSteps from "../../settings/hosted-plan/PlanMoveSteps.vue";
+import { planMove } from "../../../models/hosted-plan/planMoves";
 
 // Shown whenever the active sandbox's daemon isn't reachable. What it says is a pure function of the classified
 // failure (connectionNotice), so setup, sign-in and account-mismatch causes each get their own words and action.
@@ -95,6 +100,21 @@ const explained = computed(() => notice.value === diagnosed.value && (diagnosis.
 // What the sentence was made of, verbatim, behind the wait's "Technical details".
 const details = useOutageDetails(outage);
 
+// OUT OF HOURS, THE OWNER'S WAY ON IS A BIGGER PLAN, pressed here (2026-11-26): the change dialog on the next plan up,
+// for this sandbox, rather than a link to a page about plans. Billing's door stays for a platform that does not list the
+// machine among the account's plans.
+const { state: planState } = useHostedPlan();
+const planLadderNow = computed(() => planLadder(planState.value));
+const planMachine = computed(() => planState.value?.hosted?.machines.find((row) => row.sandboxId === active.value?.id));
+const nextPlan = computed(() => (planMachine.value === undefined ? undefined : nextRung(planLadderNow.value, planMachine.value.tier)));
+const planOpen = ref(false);
+// A restart onto a bigger plan is why a cloud sandbox is unreachable for a few minutes: said here, step by step.
+const moving = computed(() => {
+    const machine = planMachine.value;
+    const move = machine === undefined ? undefined : planMove(machine, Date.now());
+    return move?.kind === `moving` && machine !== undefined ? { move, machine } : undefined;
+});
+
 // Finishes this sandbox's setup on Home, in its tile and page, rather than offering a blank create form.
 const setupTo = computed(() => (active.value === undefined ? ADD_SANDBOX_HOME_PATH : finishOnHome(active.value.id)));
 // Drops both credentials so re-establishing goes through a fresh Google proof with the account chooser.
@@ -109,7 +129,13 @@ const signIn = async (): Promise<void> => {
 <template>
     <!-- The spinner follows what the notice says is still expected, not whether there's a button. -->
     <GateCard icon="box" :title="notice.title" :spinner="notice.waiting">
-        <p class="text-sm text-muted">{{ notice.body }}</p>
+        <div v-if="moving" class="flex flex-col gap-2 text-left" data-gate-plan-move>
+            <p class="text-sm font-medium text-content">
+                {{ t(`settings.plans.movingTitle`, { name: moving.machine.name, to: rungOf(planLadderNow, moving.move.tier).name }) }}
+            </p>
+            <PlanMoveSteps :move="moving.move" :from="moving.machine.tier" :comped="planState?.comped === true" :name="moving.machine.name" />
+        </div>
+        <p v-else class="text-sm text-muted">{{ notice.body }}</p>
         <ProgressMeter v-if="notice.waiting && notice.wait" :progress="notice.wait" :details="details" class="mt-3" />
         <template #actions>
             <Button v-if="notice.action?.kind === `setup`" :as="RouterLink" :to="setupTo" :label="notice.action.label" icon-pos="right" tier="accent">
@@ -120,12 +146,20 @@ const signIn = async (): Promise<void> => {
             </Button>
             <!-- The plan and the free alternative, side by side; the free option must never read as lesser. -->
             <template v-else-if="notice.action?.kind === `billing`">
-                <Button :as="RouterLink" :to="here(page.account(`billing`))" :label="notice.action.label" icon-pos="right" tier="loud">
+                <Button
+                    v-if="nextPlan && active"
+                    :label="t(`settings.plans.upgradeTo`, { name: nextPlan.name, price: nextPlan.priceUsd })"
+                    tier="loud"
+                    data-gate-upgrade
+                    @click="planOpen = true"
+                />
+                <Button v-else :as="RouterLink" :to="here(page.account(`billing`))" :label="notice.action.label" icon-pos="right" tier="loud">
                     <template #icon><Icon name="arrow-right" /></template>
                 </Button>
                 <Button :as="RouterLink" :to="setupTo" :label="t(`sandbox.words.runOnMyComputer`)" tier="boring" />
             </template>
         </template>
+        <PlanDialog v-if="nextPlan && active" v-model:open="planOpen" :sandbox-id="active.id" :initial="nextPlan.id" />
         <template v-if="recovering || explained" #below>
             <div class="flex flex-col gap-3 border-t border-line pt-4">
                 <p v-if="recovering" class="text-left text-sm font-medium text-content">{{ t(`sandbox.sandboxRecovery.gateHeading`) }}</p>

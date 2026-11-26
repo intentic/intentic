@@ -29,6 +29,8 @@ const config = () =>
             idleStopMinutes: 20,
             monthlyHours: 40,
         },
+        // No plan sold and nobody comped: a restored machine is counted against the free plan alone.
+        hostedPlan: { stripeSecretKey: ``, stripePrices: ``, compEmails: `` },
     }) as unknown as Config;
 
 const trashRow = {
@@ -78,6 +80,8 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof j
         hostedMachine: {
             create: jest.fn().mockResolvedValue({ region: `iad`, warm: false }),
             count: jest.fn().mockResolvedValue(0),
+            // The owner's other sandboxes as their plans read them: none, so a restored machine has its plan to take.
+            findMany: jest.fn().mockResolvedValue([]),
             ...overrides[`hostedMachine`],
         },
         hostedPlan: { findUnique: jest.fn().mockResolvedValue(null), ...overrides[`hostedPlan`] },

@@ -85,6 +85,23 @@ export const HostedPlanMachineSchema = z.object({
     // Times the kernel killed this machine for memory in the last week. A fact, and the only honest reason to put a
     // bigger machine in front of somebody; 0 says nothing and shows nothing.
     oomsThisWeek: z.number().int().nonnegative(),
+    // EVERY CLOUD SANDBOX HAS A PLAN, and these three say where it stands. Optional, so an editor newer than its
+    // platform reads a plan the old way. `paid`: its plan is paid for this month on the account's live subscription
+    // (false on Free, and on a paid-size machine whose plan lapsed, which then spends the free hours).
+    paid: z.boolean().optional(),
+    // A plan change waiting: to `tier` at `at`. `at` in the future is a downgrade the owner scheduled for renewal;
+    // `at` now or past is due, either an upgrade paid for and being applied, or a downgrade waiting for its machine.
+    change: z.object({ tier: z.string(), at: z.iso.datetime() }).optional(),
+    // The machine's latest change of size while it runs, or one that ended unfinished in the last day, so the sandbox
+    // can show the restart in progress or why an upgrade has not landed yet.
+    migration: z
+        .object({
+            state: z.enum(["planned", "snapshotting", "applying", "verifying", "done", "failed", "rolledBack"]),
+            toTier: z.string(),
+            startedAt: z.iso.datetime(),
+            error: z.string().optional(),
+        })
+        .optional(),
 });
 export type HostedPlanMachine = z.infer<typeof HostedPlanMachineSchema>;
 
@@ -99,6 +116,11 @@ export const HostedPlanHostedSchema = z.object({
     freeHours: HostedHoursMeterSchema,
     // The rung a machine lands on with nothing bought, in this deployment's shape (an operator may size free its own way).
     freeTier: z.object({ id: z.string(), shape: HostedShapeSchema, monthlyHours: z.number().int().nonnegative() }),
+    // Paid plans the account is billed for that no sandbox is on, by tier: a slot bought before plans belonged to
+    // sandboxes, or a sandbox deleted or not made yet. The page asks which sandbox each goes on, or ends it at renewal.
+    openSeats: z.record(z.string(), z.number().int().nonnegative()).optional(),
+    // Free sandboxes this account can still have, counting a paid one already scheduled to become free.
+    freeLeft: z.number().int().nonnegative().optional(),
 });
 export type HostedPlanHosted = z.infer<typeof HostedPlanHostedSchema>;
 

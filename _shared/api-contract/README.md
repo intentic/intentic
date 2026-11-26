@@ -20,6 +20,12 @@ flowchart LR
   `requestId`, scoped to the owner for idempotency; offer and provisioning accept an optional hosted `tier`; checkout
   accepts the fixed return destination `/start/hosted`. These are additive fields. An older platform does not advertise
   the protocol, so a newer cloud entry explains that an update is needed rather than charging for an ignored tier.
+- `hostedPlan` sells one plan per cloud sandbox (2026-11-26). `changePlan` puts a sandbox on Free, Standard or Max
+  (up now and prorated, down at renewal); `reserve` and `release` add a plan for a sandbox about to be made and end one
+  no sandbox is on; `checkout` takes the `sandboxId` a first plan is for. A machine in the plan state carries `paid`,
+  a waiting `change` and its latest unfinished `migration`; the account carries `openSeats` and `freeLeft`. All of them
+  are optional, so an editor newer than its platform falls back to reading slots. `setSlots` and `changeTier`, the
+  earlier buy-then-move form, stay on the wire for older editors.
 - `src/ingress/` is the other contract: `PLATFORM_INGRESS`, every route a machine calls outside `/rpc` (the daemon's
   announce, boot report and wallet calls, `ic`'s setup claim and host report, the edge's reachability lookup), each
   with its method, path, credential and body and answer schemas. The platform registers handlers under it and the

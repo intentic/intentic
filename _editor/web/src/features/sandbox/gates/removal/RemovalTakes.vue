@@ -3,12 +3,30 @@
 import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS } from "@intentic/api-contract";
 import { SectionHeader, toneWash } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
+import { computed } from "vue";
+import { formatDayShort } from "../../../../models/hosted-plan/hostedHours";
+import { useHostedPlan } from "../../../../models/hosted-plan/useHostedPlan";
+import { planLapsed, planPaid } from "../../../settings/hosted-plan/planChange";
+import { planLadder, rungOf } from "../../../settings/hosted-plan/planLadder";
 import { removalTakes } from "../switcherRows";
 
 const t = useT();
 
 /** A hosted machine keeps its disk until the restore window ends; a box of the reader's own comes back at a new address. */
-const { hosted } = defineProps<{ hosted: boolean }>();
+const { hosted, sandboxId = undefined } = defineProps<{ hosted: boolean; sandboxId?: string | undefined }>();
+
+// A paid cloud sandbox's plan ends with it, on the renewal date: said here, so removing one is never a surprise on the bill.
+const { state } = useHostedPlan();
+const planEnds = computed(() => {
+    const machine = state.value?.hosted?.machines.find((row) => row.sandboxId === sandboxId);
+    const ladder = planLadder(state.value);
+    if (machine === undefined || !planPaid(machine) || planLapsed(machine, ladder) || state.value?.comped === true) {
+        return undefined;
+    }
+    const plan = rungOf(ladder, machine.tier);
+    const renewsAt = state.value?.renewsAt;
+    return plan.free || renewsAt === undefined ? undefined : t(`sandbox.removeAsk.planEnds`, { name: plan.name, date: formatDayShort(renewsAt) });
+});
 </script>
 
 <template>
@@ -24,6 +42,8 @@ const { hosted } = defineProps<{ hosted: boolean }>();
                 </li>
             </ul>
         </section>
+
+        <p v-if="planEnds" class="text-xs text-content" data-removal-plan>{{ planEnds }}</p>
 
         <!-- The promise the deletion makes. The lanes differ in what comes back: a hosted machine keeps its disk,
              an own-machine sandbox comes back as a name with a new address. -->

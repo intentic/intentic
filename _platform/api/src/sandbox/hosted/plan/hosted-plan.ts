@@ -1,12 +1,14 @@
+import { HOSTED_PLAN_MAX_SLOTS } from "@intentic/api-contract";
 import { FREE_TIER, type HostedTier, type HostedTierId, hostedTier, isHostedTierId, PAID_TIERS } from "@intentic/constants";
 import type { Prisma, PrismaClient, StripeErasure } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../../config.js";
 import { StripeError, type StripeGateway, stripeGateway, type StripePrice, type StripeSubscription } from "./hosted-plan-stripe.js";
+import { nextSeatOf, nextTierOf } from "./plan-change.js";
 
-// The one thing this platform sells: a Stripe subscription for a bigger machine than the free rung, never collected,
-// one slot per sandbox. Nothing else in the product reads it: money changes which machine agents run on, never what
-// they can do.
+// The one thing this platform sells: a plan for one cloud sandbox, a bigger machine than the free rung with hours of
+// its own, all of an account's on one Stripe subscription (plan-change.ts has the rules). Nothing else in the product
+// reads it: money changes which machine agents run on, never what they can do.
 
 /**
  * The Stripe Price each paid rung is sold at, from `tier=price_id` pairs. A rung missing from the list is not on sale;
@@ -50,6 +52,9 @@ export const isOnPlan = (plan: { status: string } | null): boolean => plan !== n
 // Subscriptions Stripe won't let anybody cancel, because they're already over.
 const OVER_STATUSES = new Set([`canceled`, `incomplete_expired`]);
 
+/** A subscription Stripe still bills, paid up or retrying a charge: the one a change of plan writes to. */
+export const isLiveSubscription = (plan: { status: string } | null): boolean => plan !== null && !OVER_STATUSES.has(plan.status);
+
 // Comp list, parsed at ask time, case-folded since an email's case is presentation, not identity.
 const compEmails = (config: Config): readonly string[] =>
     config.hostedPlan.compEmails
@@ -65,7 +70,7 @@ export const compedEmail = (config: Config, email: string): boolean => {
 
 // Whether this account's email is on the operator's comp list; read only when no paid row answered, so the paying path
 // never pays for a lookup.
-export const isComped = async (prisma: PrismaClient, config: Config, userId: string): Promise<boolean> => {
+export const isComped = async (prisma: Pick<PrismaClient, "user">, config: Config, userId: string): Promise<boolean> => {
     if (compEmails(config).length === 0) {
         return false;
     }
@@ -96,29 +101,9 @@ export const paidSlotsOf = (plan: { status: string; items: readonly { tier: stri
     return slots;
 };
 
-/**
- * WHICH MACHINES STAND ON A PAID SLOT THE ACCOUNT HOLDS: at each paid rung, the oldest machines there, as many as the
- * slots held at it. Normally that is every paid machine, since a slot is bought before a machine moves onto it and
- * cannot be sold back from under one; the rest are a lapsed plan's (whose slots count none) and a resubscription that
- * bought back fewer. A machine outside this set spends the account's free hours whatever its size (hosted-usage.ts).
- * `machines` comes oldest first, which is the only order the answer depends on.
- */
-export const slotHolders = (machines: readonly { sandboxId: string; tier: string }[], slots: ReadonlyMap<string, number>): ReadonlySet<string> => {
-    const holders = new Set<string>();
-    const taken = new Map<string, number>();
-    for (const machine of machines) {
-        const used = taken.get(machine.tier) ?? 0;
-        if (machine.tier !== FREE_TIER.id && used < (slots.get(machine.tier) ?? 0)) {
-            holders.add(machine.sandboxId);
-            taken.set(machine.tier, used + 1);
-        }
-    }
-    return holders;
-};
-
 /** An owner's slots by rung, none where absent: free's is `hosted.perUser` and never bought, and a lapsed plan's paid ones count none. */
 export const hostedSlotsOf = async (
-    prisma: Pick<PrismaClient, "hostedPlan">,
+    prisma: Pick<PrismaClient, "hostedPlan" | "user">,
     config: Config,
     userId: string,
 ): Promise<ReadonlyMap<HostedTierId, number>> => {
@@ -127,21 +112,35 @@ export const hostedSlotsOf = async (
     for (const [tier, quantity] of paidSlotsOf(plan)) {
         slots.set(hostedTier(tier).id, quantity);
     }
+    // A comped account is given every paid plan up to the cap, so its sandboxes can be made at any size; none is billed.
+    if (!isOnPlan(plan) && (await isComped(prisma, config, userId))) {
+        for (const tier of PAID_TIERS) {
+            slots.set(tier.id, HOSTED_PLAN_MAX_SLOTS);
+        }
+    }
     return slots;
 };
 
-/** The owner's machines at one rung, `except` one sandbox's own, and the slots left there for another. */
+/**
+ * The owner's sandboxes on one plan, `except` one sandbox's own, and how many more it has room for. Free counts every
+ * sandbox that is or is about to be free (plan-change.ts `nextTierOf`); a paid tier counts the sandboxes whose plan it
+ * bills next month, so what is left there is the plans paid for that no sandbox is on yet.
+ */
 export const hostedSlotUse = async (
-    prisma: Pick<PrismaClient, "hostedPlan" | "hostedMachine">,
+    prisma: Pick<PrismaClient, "hostedPlan" | "hostedMachine" | "user">,
     config: Config,
     ownerId: string,
     tier: HostedTierId,
     except?: string,
 ): Promise<{ used: number; left: number }> => {
-    const [used, slots] = await Promise.all([
-        prisma.hostedMachine.count({ where: { tier, sandbox: { ownerId }, ...(except === undefined ? {} : { NOT: { sandboxId: except } }) } }),
+    const [machines, slots] = await Promise.all([
+        prisma.hostedMachine.findMany({
+            where: { sandbox: { ownerId }, ...(except === undefined ? {} : { NOT: { sandboxId: except } }) },
+            select: { tier: true, paid: true, planTo: true },
+        }),
         hostedSlotsOf(prisma, config, ownerId),
     ]);
+    const used = machines.filter((machine) => (tier === FREE_TIER.id ? nextTierOf(machine) === tier : nextSeatOf(machine) === tier)).length;
     return { used, left: (slots.get(tier) ?? 0) - used };
 };
 
@@ -238,7 +237,23 @@ export const applySubscription = async (
               ).id;
     if (planId !== undefined) {
         await mirrorItems(prisma, config, planId, subscription);
+        if (OVER_STATUSES.has(subscription.status)) {
+            await endPaidPlans(prisma, planId);
+        }
     }
+};
+
+/* A SUBSCRIPTION THAT ENDED TAKES EVERY SANDBOX'S PAID PLAN WITH IT: each keeps its machine and spends the free hours
+ * from now (the lapse the Billing page names), and a change to another paid tier has nothing left to bill it. A change
+ * to Free stays, for the plan-change job to apply; a resubscription pays for a sandbox again by name (checkout). */
+const endPaidPlans = async (prisma: PrismaClient, planId: string): Promise<void> => {
+    const plan = await prisma.hostedPlan.findUnique({ where: { id: planId }, select: { userId: true } });
+    if (plan === null) {
+        return;
+    }
+    const owned = { sandbox: { ownerId: plan.userId } };
+    await prisma.hostedMachine.updateMany({ where: { ...owned, planTo: { in: PAID_TIERS.map((tier) => tier.id) } }, data: { planTo: null, planAt: null } });
+    await prisma.hostedMachine.updateMany({ where: { ...owned, paid: true }, data: { paid: false } });
 };
 
 // The older read wins nothing: `syncedAt` is the platform's own clock at the read, and a write it precedes is dropped.

@@ -7,10 +7,12 @@ import { bodyExcerpt } from "@intentic/base/fetch-json";
 // (fewer dependencies). The host is config (hostedPlan.stripeApiUrl), never set in production, so tests point this same
 // client at a stand-in (@intentic/testing/stripe-fake) and exercise the whole money path.
 
-// What the client needs from the plan's config: the signing key and the host to talk to.
+// What the client needs from the plan's config: the signing key, the host to talk to, and the portal configuration the
+// customer portal opens under (empty for the account's default).
 export interface StripeClientConfig {
     readonly stripeSecretKey: string;
     readonly stripeApiUrl: string;
+    readonly stripePortalConfiguration?: string;
 }
 
 // Why a refusal happened, not just that one did: Stripe's `{ error: { message } }` is meant for a person to act on.
@@ -41,12 +43,13 @@ const refusal = async (call: string, response: Response): Promise<StripeError> =
 
 // Stripe encodes requests as x-www-form-urlencoded with bracketed nesting; the plan needs only one level, spelled
 // literally at each call site.
+type StripeForm = Record<string, string>;
 const send = async (
     fetchFn: typeof fetch,
     client: StripeClientConfig,
     method: `GET` | `POST` | `DELETE`,
     path: string,
-    params?: Record<string, string>,
+    params?: StripeForm,
 ): Promise<unknown> => {
     const headers = new Headers({ authorization: `Bearer ${client.stripeSecretKey}` });
     const init: RequestInit = {
@@ -65,7 +68,7 @@ const send = async (
     return response.json();
 };
 
-const post = (fetchFn: typeof fetch, client: StripeClientConfig, path: string, params: Record<string, string>): Promise<unknown> =>
+const post = (fetchFn: typeof fetch, client: StripeClientConfig, path: string, params: StripeForm): Promise<unknown> =>
     send(fetchFn, client, `POST`, path, params);
 
 const SessionSchema = z.object({ url: z.url() });
@@ -178,9 +181,11 @@ export interface StripeGateway {
         readonly customer?: string;
         readonly successUrl: string;
         readonly cancelUrl: string;
+        // Carried on the session to its completed event: which sandbox the first plan is for (hosted-plan.routes.ts).
+        readonly metadata?: Readonly<Record<string, string>>;
     }) => Promise<{ url: string }>;
-    // Billing Portal session for an existing customer (cancel/payment-method changes), so the platform needs no
-    // subscription-management UI of its own.
+    // Billing Portal session for an existing customer: card, invoices and billing details, under the operator's portal
+    // configuration when one is named (plans change per sandbox in the app, so it should offer no plan changes).
     readonly portalSession: (customerId: string, returnUrl: string) => Promise<{ url: string }>;
     // One subscription, read fresh; the webhook handler pulls this after checkout completes.
     readonly subscription: (id: string) => Promise<StripeSubscription>;
@@ -191,20 +196,22 @@ export interface StripeGateway {
     // any subscription still on it, and keeps the invoices already issued. Refuses with 404 once it is gone.
     readonly deleteCustomer: (id: string) => Promise<void>;
     /**
-     * Sets the whole slot picture in one update, with Stripe's default proration so a mid-month change is prorated:
-     * an entry naming an existing item changes it (quantity 0 deletes it), one naming only a price adds it. Answers
-     * the subscription as it now stands.
+     * Sets the plans the subscription bills in one update: an entry naming an existing item changes it (quantity 0
+     * deletes it), one naming only a price adds it. Prorated unless `proration` says `none` (a downgrade that waits for
+     * the renewal date); `cancelAtPeriodEnd` ends or keeps the subscription at the renewal date in the same write, and
+     * may be all the write carries. Answers the subscription as it now stands.
      */
     readonly setItems: (
         id: string,
         items: readonly { readonly itemId?: string; readonly priceId: string; readonly quantity: number }[],
+        options?: { readonly proration?: `create_prorations` | `none`; readonly cancelAtPeriodEnd?: boolean },
     ) => Promise<StripeSubscription>;
     // The price the plan is configured to sell, as Stripe holds it; refuses when no such price exists for this key.
     readonly price: (id: string) => Promise<StripePrice>;
 }
 
 export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch = fetch, now: () => Date = () => new Date()): StripeGateway => ({
-    checkoutSession: async ({ priceId, clientReferenceId, customerEmail, customer, successUrl, cancelUrl }) =>
+    checkoutSession: async ({ priceId, clientReferenceId, customerEmail, customer, successUrl, cancelUrl, metadata = {} }) =>
         SessionSchema.parse(
             await post(fetchFn, client, `/checkout/sessions`, {
                 mode: `subscription`,
@@ -215,43 +222,44 @@ export const stripeGateway = (client: StripeClientConfig, fetchFn: typeof fetch 
                 ...(customer === undefined ? { customer_email: customerEmail } : { customer }),
                 success_url: successUrl,
                 cancel_url: cancelUrl,
+                ...Object.fromEntries(Object.entries(metadata).map(([key, value]) => [`metadata[${key}]`, value])),
             }),
         ),
-    portalSession: async (customerId, returnUrl) =>
-        SessionSchema.parse(await post(fetchFn, client, `/billing_portal/sessions`, { customer: customerId, return_url: returnUrl })),
+    portalSession: async (customerId, returnUrl) => {
+        const configuration = client.stripePortalConfiguration ?? ``;
+        const named: [string, string][] = configuration === `` ? [] : [[`configuration`, configuration]];
+        const form = Object.fromEntries([[`customer`, customerId], [`return_url`, returnUrl], ...named]);
+        return SessionSchema.parse(await post(fetchFn, client, `/billing_portal/sessions`, form));
+    },
     subscription: async (id) => toSubscription(await send(fetchFn, client, `GET`, `/subscriptions/${encodeURIComponent(id)}`), now),
     cancelSubscription: async (id) => toSubscription(await send(fetchFn, client, `DELETE`, `/subscriptions/${encodeURIComponent(id)}`, {}), now),
     deleteCustomer: async (id) => {
         await send(fetchFn, client, `DELETE`, `/customers/${encodeURIComponent(id)}`, {});
     },
-    setItems: async (id, items) =>
-        toSubscription(
-            await post(fetchFn, client, `/subscriptions/${encodeURIComponent(id)}`, {
-                ...Object.fromEntries(
-                    items.flatMap((item, index): [string, string][] => {
-                        // An existing item is addressed by id and removed with `deleted`; Stripe refuses a price on
-                        // one that already has it. A new one is addressed by price and can only be added.
-                        if (item.itemId === undefined) {
-                            return [
-                                [`items[${index}][price]`, item.priceId],
-                                [`items[${index}][quantity]`, String(item.quantity)],
-                            ];
-                        }
-                        return item.quantity === 0
-                            ? [
-                                  [`items[${index}][id]`, item.itemId],
-                                  [`items[${index}][deleted]`, `true`],
-                              ]
-                            : [
-                                  [`items[${index}][id]`, item.itemId],
-                                  [`items[${index}][quantity]`, String(item.quantity)],
-                              ];
-                    }),
-                ),
-                proration_behavior: `create_prorations`,
-            }),
-            now,
-        ),
+    setItems: async (id, items, options = {}) => {
+        const changes = items.flatMap((item, index): [string, string][] => {
+            // An existing item is addressed by id and removed with `deleted`; Stripe refuses a price on one that
+            // already has it. A new one is addressed by price and can only be added.
+            if (item.itemId === undefined) {
+                return [
+                    [`items[${index}][price]`, item.priceId],
+                    [`items[${index}][quantity]`, String(item.quantity)],
+                ];
+            }
+            return item.quantity === 0
+                ? [
+                      [`items[${index}][id]`, item.itemId],
+                      [`items[${index}][deleted]`, `true`],
+                  ]
+                : [
+                      [`items[${index}][id]`, item.itemId],
+                      [`items[${index}][quantity]`, String(item.quantity)],
+                  ];
+        });
+        const ending: [string, string][] = options.cancelAtPeriodEnd === undefined ? [] : [[`cancel_at_period_end`, String(options.cancelAtPeriodEnd)]];
+        const form = Object.fromEntries([...changes, [`proration_behavior`, options.proration ?? `create_prorations`], ...ending]);
+        return toSubscription(await post(fetchFn, client, `/subscriptions/${encodeURIComponent(id)}`, form), now);
+    },
     price: async (id) => toPrice(await send(fetchFn, client, `GET`, `/prices/${encodeURIComponent(id)}`)),
 });
 

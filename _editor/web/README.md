@@ -35,7 +35,7 @@ flowchart LR
   the conversation's record however far back it is (`pageLookup.ts`). A page that asks is answered there through the
   conversation's one reply, as on its card in the chat.
 - **Two backends, two credentials.** The platform api (`src/lib/useApi.ts`) rides the Better Auth cookie and
-  answers sign-in, the sandbox list, invites and the hosted plan. On a browser that had a sandbox open, the sandbox list
+  answers sign-in, the sandbox list, invites and each cloud sandbox's plan. On a browser that had a sandbox open, the sandbox list
   is asked at the same time as the session check. Its answer is used only if it was made as the account the check then
   enters (`client/sandbox/useSandbox.ts`), so a returning page load waits one platform round trip less. Every workspace call goes directly to the daemon
   through `sandboxRpc`, with a daemon-minted session that a proof establishes (`sandboxSession.ts`). The platform is not
@@ -306,7 +306,7 @@ flowchart LR
   moves them onto the card. The copy holds them as listed (`draftReactions`), both draft card builders wear them as
   `reactions`, and a discard takes each back, since the sandbox cannot tell a discard from an emptied composer.
 - **Work a person starts outlives the view that started it.** Adding a runner on a laptop, cloning a repo, landing an
-  agent or moving a hosted plan keeps running on the server whatever the reader opens next. So its state (running or
+  agent or changing a sandbox's plan keeps running on the server whatever the reader opens next. So its state (running or
   not, the lines it streamed, the answer, the refusal) is kept in the operations ledger
   (`workbench/operations/operations.ts`), keyed by what the work is about and stamped with the sandbox it began on
   (a key under `account/`, such as a plan change, is filed once for every sandbox), never in the component. Any view naming the same key reads the same run, so the page the reader comes back to still

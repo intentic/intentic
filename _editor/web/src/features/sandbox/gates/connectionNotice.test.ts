@@ -302,7 +302,7 @@ describe(`a hosted machine whose hours are spent`, () => {
         const shown = notice(asleep, { hostedMachine: true, hoursSpent: true, owner: true, outageMs: 0 });
         expect(shown.title).toBe(`"laptop" has used its hours for this month`);
         expect(shown.body).toContain(`where nothing is metered`);
-        expect(shown.action).toEqual({ kind: `billing`, label: `See the plan` });
+        expect(shown.action).toEqual({ kind: `billing`, label: `See its plan` });
     });
 
     it(`outranks the stuck-machine door once the minute has passed`, () => {

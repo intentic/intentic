@@ -469,7 +469,7 @@ const confirmLabel = computed(() => {
 
                 <!-- Only the owner's removal takes anything or promises anything back; a member leaving has the one line. -->
                 <template v-if="shown.tier === 'owner'">
-                    <RemovalTakes :hosted="shown.hosted !== null" />
+                    <RemovalTakes :hosted="shown.hosted !== null" :sandbox-id="shown.id" />
 
                     <!-- The hosted lane's machine goes with it anyway, so the choice below is only for a box of the reader's own. -->
                     <div v-if="shown.hosted === null && cleanupCommand !== undefined" class="border-t border-line pt-4">

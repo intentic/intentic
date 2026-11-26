@@ -1,9 +1,9 @@
 import type { HostedPlanState } from "@intentic/api-contract";
-import { FREE_TIER, hostedTier } from "@intentic/constants";
-import { hoursPerWorkday, monthlyTotalUsd, planLadder, rungsOnSale } from "./planLadder";
+import { FREE_TIER } from "@intentic/constants";
+import { hoursPerWorkday, nextRung, planLadder, rungOf, rungsOnSale } from "./planLadder";
 
-// The ladder Billing draws: a buy button only where the platform can actually sell, one rung recommended, and a
-// subscriber's month added up from the slots it holds.
+// The plans every surface about money draws: a buy button only where the platform can actually sell, one plan
+// recommended, and the next plan up only where it can be bought.
 
 const offer = (extra: Partial<HostedPlanState> = {}): HostedPlanState => ({ enabled: true, onPlan: false, priceUsd: 20, ...extra });
 
@@ -37,21 +37,16 @@ test(`the free rung takes this deployment's shape and hours, not the published o
     expect(free).toMatchObject({ free: true, hours: 20, machine: { cpus: 2, memoryMb: 2048 } });
 });
 
-test(`a subscriber's month is the slots held at each paid rung, the free one costing nothing`, () => {
-    const standard = hostedTier(`standard`);
-    const ladder = planLadder(
-        offer({
-            onPlan: true,
-            hosted: {
-                slots: 4,
-                slotsByTier: { free: 1, standard: 2, max: 1 },
-                machines: [],
-                freeHours: { kind: `free`, usedMinutes: 0, allowanceMinutes: 2400, resetsAt: `2026-11-01T00:00:00.000Z` },
-                freeTier: { id: `free`, shape: FREE_TIER, monthlyHours: 40 },
-            },
-        }),
-    );
-    expect(monthlyTotalUsd(ladder)).toBe(2 * standard.priceUsd + hostedTier(`max`).priceUsd);
+test(`the next plan up is the next one on sale, and none above the top`, () => {
+    const ladder = planLadder(offer({ onSale: [`standard`, `max`] }));
+    expect(nextRung(ladder, `free`)?.id).toBe(`standard`);
+    expect(nextRung(ladder, `standard`)?.id).toBe(`max`);
+    expect(nextRung(ladder, `max`)).toBeUndefined();
+    expect(nextRung(planLadder(offer({ onSale: [`max`] })), `free`)?.id).toBe(`max`);
+});
+
+test(`a plan the ladder does not know is drawn as itself rather than hidden`, () => {
+    expect(rungOf(planLadder(offer()), `gold`)).toMatchObject({ id: `gold`, name: `gold`, priceUsd: 0, onSale: false });
 });
 
 test(`a month of hours is said per workday, never as zero`, () => {

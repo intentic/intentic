@@ -268,6 +268,10 @@ export const configSchema = z.object({
             stripePrices: z.string().default(``),
             // Comma-separated emails treated as on-plan without a subscription; checked live, never seeded as rows.
             compEmails: z.string().default(``),
+            // The Stripe customer portal configuration (`bpc_…`) Billing's "Payment and invoices" opens, or empty for the
+            // account's default. Plans change per sandbox in the app, so the one named here should offer the card,
+            // invoices and billing details only: a cancel or quantity change made in the portal bypasses every sandbox.
+            stripePortalConfiguration: z.string().default(``),
         })
         .prefault({}),
     api: z

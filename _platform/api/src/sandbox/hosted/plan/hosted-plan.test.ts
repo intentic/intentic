@@ -1,4 +1,7 @@
 import { createHmac } from "node:crypto";
+import { HOSTED_PLAN_MAX_SLOTS } from "@intentic/api-contract";
+import { Hono } from "hono";
+import type { Logger } from "pino";
 import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import { configSchema, type Config } from "../../../config.js";
@@ -14,7 +17,6 @@ import {
     hostedSlotsOf,
     onHostedPlan,
     paidSlotsOf,
-    slotHolders,
 } from "./hosted-plan.js";
 import { StripeError, type StripeGateway, type StripePrice } from "./hosted-plan-stripe.js";
 import { hostedPlanRoutes } from "./hosted-plan.orpc.js";
@@ -77,12 +79,24 @@ interface ErasureRow {
     subscriptionId: string | null;
 }
 
+// A cloud sandbox's row as the checkout webhook reads and writes it: its tier, its owner, and its plan.
+interface MachineRow {
+    sandboxId: string;
+    ownerId: string;
+    tier: string;
+    paid: boolean;
+    planTo: string | null;
+    planAt: Date | null;
+}
+
 // Enough Prisma for the plan: the user lookup the comp list needs, the plan reads/writes the webhook makes, the
 // per-rung slot rows it writes beside them, and the queue a deleted account's customer waits in.
-const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: string }[]; erasures?: ErasureRow[] }) => {
+const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: string }[]; erasures?: ErasureRow[]; machines?: MachineRow[] }) => {
     const plans = seed?.plans ?? [];
     const users = seed?.users ?? [];
     const erasures = seed?.erasures ?? [];
+    const machines = seed?.machines ?? [];
+    const machineOf = (sandboxId: string) => machines.find((machine) => machine.sandboxId === sandboxId);
     const planById = (id: string) => plans.find((plan) => (plan.id ?? `plan-1`) === id);
     const prisma = {
         user: { findUnique: jest.fn(async ({ where }: { where: { id: string } }) => users.find((user) => user.id === where.id) ?? null) },
@@ -148,6 +162,17 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
             }),
         },
     };
+    // The sandboxes a completed checkout may name, read with their owner and updated in place.
+    const machineRows = {
+        hostedMachine: {
+            findUnique: jest.fn(async ({ where }: { where: { sandboxId: string } }) => {
+                const machine = machineOf(where.sandboxId);
+                return machine === undefined ? null : { ...machine, sandbox: { ownerId: machine.ownerId, owner: { email: `buyer@intentic.dev` } } };
+            }),
+            update: jest.fn(async ({ where, data }: { where: { sandboxId: string }; data: Partial<MachineRow> }) => Object.assign(machineOf(where.sandboxId) ?? {}, data)),
+            updateMany: jest.fn(async () => ({ count: 0 })),
+        },
+    };
     const erasureQueue = {
         stripeErasure: {
             upsert: jest.fn(async ({ where, create, update }: { where: { customerId: string }; create: ErasureRow; update: Partial<ErasureRow> }) => {
@@ -168,7 +193,7 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
             }),
         },
     };
-    return { prisma: { ...prisma, ...erasureQueue } as unknown as PrismaClient, plans, erasures };
+    return { prisma: { ...prisma, ...erasureQueue, ...machineRows } as unknown as PrismaClient, plans, erasures, machines };
 };
 
 const row = (status: string, over: Partial<PlanRow> = {}): PlanRow => ({
@@ -273,6 +298,33 @@ describe(`the hosted plan`, () => {
                 ],
                 syncedAt: expect.any(Date),
             },
+        ]);
+    });
+
+    /* A FIRST PLAN BOUGHT FOR A NAMED SANDBOX lands on it the moment Stripe says it is paid for: the purchase is never
+     * a plan with nothing on it (the "1 Standard slot, 0 in use" a buyer read as nothing happening). */
+    it(`puts a first plan bought for a named sandbox on that sandbox, due to be resized at once, and never on somebody else's`, async () => {
+        const free = (sandboxId: string, ownerId: string): MachineRow => ({ sandboxId, ownerId, tier: FREE_TIER.id, paid: false, planTo: null, planAt: null });
+        const { prisma, machines } = fakePrisma({ machines: [free(`mine`, `user-1`), free(`theirs`, `user-2`)] });
+        const gateway = unstubbed<StripeGateway>(`stripe`, { subscription: jest.fn(async () => subscription()) });
+        const app = new Hono<{ Variables: { logger: Logger } }>();
+        app.use(async (c, next) => {
+            c.set(`logger`, logger);
+            await next();
+        });
+        app.route(`/`, hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW }));
+        const completed = (sandboxId: string) =>
+            JSON.stringify({
+                type: `checkout.session.completed`,
+                data: { object: { mode: `subscription`, client_reference_id: `user-1`, subscription: `sub_9`, metadata: { sandboxId, tier: ENTRY.id } } },
+            });
+        for (const sandboxId of [`mine`, `theirs`]) {
+            const payload = completed(sandboxId);
+            expect((await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) })).status).toBe(200);
+        }
+        expect(machines).toEqual([
+            { sandboxId: `mine`, ownerId: `user-1`, tier: FREE_TIER.id, paid: true, planTo: ENTRY.id, planAt: NOW },
+            free(`theirs`, `user-2`),
         ]);
     });
 
@@ -586,9 +638,31 @@ describe(`the doors to Stripe`, () => {
                     customerEmail: `buyer@intentic.dev`,
                     successUrl: `${baseConfig.webOrigin}${success}`,
                     cancelUrl: `${baseConfig.webOrigin}${cancel}`,
+                    metadata: {},
                 },
             ],
         ]);
+    });
+
+    it(`opens no second subscription beside one whose charge Stripe is still retrying`, async () => {
+        const checkoutSession = jest.fn<StripeGateway[`checkoutSession`]>(async () => ({ url: `https://checkout.test/session` }));
+        const { prisma } = fakePrisma({ plans: [row(`past_due`)] });
+        await expect(
+            call(hostedPlanRoutes(unstubbed<StripeGateway>(`stripe`, { checkoutSession })).checkout, { tier: ENTRY.id }, { context: contextFor(prisma) }),
+        ).rejects.toMatchObject({ code: `PRECONDITION_FAILED`, data: { reason: `card` } });
+        expect(checkoutSession).not.toHaveBeenCalled();
+    });
+
+    it(`names the sandbox a first plan is for on its checkout, and only one of the buyer's own`, async () => {
+        const checkoutSession = jest.fn<StripeGateway[`checkoutSession`]>(async () => ({ url: `https://checkout.test/session` }));
+        const gateway = unstubbed<StripeGateway>(`stripe`, { checkoutSession });
+        const owned = (ownerId: string): MachineRow => ({ sandboxId: `s1`, ownerId, tier: FREE_TIER.id, paid: false, planTo: null, planAt: null });
+        await call(hostedPlanRoutes(gateway).checkout, { tier: ENTRY.id, sandboxId: `s1` }, { context: contextFor(fakePrisma({ machines: [owned(`user-1`)] }).prisma) });
+        expect(checkoutSession.mock.calls[0]?.[0].metadata).toEqual({ sandboxId: `s1`, tier: ENTRY.id });
+        await expect(
+            call(hostedPlanRoutes(gateway).checkout, { tier: ENTRY.id, sandboxId: `s1` }, { context: contextFor(fakePrisma({ machines: [owned(`user-2`)] }).prisma) }),
+        ).rejects.toMatchObject({ code: `NOT_FOUND` });
+        expect(checkoutSession).toHaveBeenCalledTimes(1);
     });
 
     it(`answers a refused checkout with Stripe's reason, not an unhandled error`, async () => {
@@ -635,6 +709,15 @@ describe(`hosted slots`, () => {
         expect(Object.fromEntries(await hostedSlotsOf(fakePrisma({ plans }).prisma, config, `user-1`))).toEqual(expected);
     });
 
+    it(`gives a comped account every paid plan up to the cap, so its sandboxes can be made at any size`, async () => {
+        const comped = { ...config, hostedPlan: { ...config.hostedPlan, compEmails: `friend@example.com` } };
+        const { prisma } = fakePrisma({ users: [{ id: `user-1`, email: `friend@example.com` }] });
+        expect(Object.fromEntries(await hostedSlotsOf(prisma, comped, `user-1`))).toEqual({
+            free: 1,
+            ...Object.fromEntries(PAID_TIERS.map((tier) => [tier.id, HOSTED_PLAN_MAX_SLOTS])),
+        });
+    });
+
     it(`holds paid slots only while the plan is paid for, and never one at the free rung`, () => {
         const items = [
             { tier: ENTRY.id, quantity: 2 },
@@ -645,24 +728,6 @@ describe(`hosted slots`, () => {
         expect(Object.fromEntries(paidSlotsOf({ status: `trialing`, items }))).toEqual({ [ENTRY.id]: 2 });
         expect(paidSlotsOf({ status: `past_due`, items }).size).toBe(0);
         expect(paidSlotsOf(null).size).toBe(0);
-    });
-
-    /* WHICH MACHINES A SLOT'S HOURS BELONG TO (hosted-usage.ts): at each rung, the oldest machines up to the slots held
-     * there. A free machine never stands on a paid slot, and a machine past the count spends the free hours. */
-    it(`gives each rung's slots to its oldest machines, and none to a free one`, () => {
-        const machines = [
-            { sandboxId: `free-1`, tier: FREE_TIER.id },
-            { sandboxId: `standard-old`, tier: ENTRY.id },
-            { sandboxId: `max-1`, tier: `max` },
-            { sandboxId: `standard-new`, tier: ENTRY.id },
-        ];
-        const slots = new Map([
-            [ENTRY.id, 1],
-            [`max`, 1],
-            [FREE_TIER.id, 5],
-        ]);
-        expect([...slotHolders(machines, slots)]).toEqual([`standard-old`, `max-1`]);
-        expect([...slotHolders(machines, new Map())]).toEqual([]);
     });
 
     it(`reads the comp list case-folded, and reads nothing into an empty one`, () => {

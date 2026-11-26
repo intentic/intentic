@@ -25,8 +25,6 @@ import { computed, ref } from "vue";
 import { fileToSquareDataUrl, fileToSvgDataUrl } from "../../../lib/imageDataUrl";
 import { useSandboxVersion } from "../../../models/sandbox/useSandboxVersion";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
-import { sandboxHoursLine } from "../../../models/hosted-plan/hostedHours";
-import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
 import { sandboxAvailabilityVisual } from "./availability";
 import { useSandboxAvailability } from "./useSandboxAvailability";
 import { useSandboxPlacement } from "./useSandboxPlacement";
@@ -34,6 +32,7 @@ import { useWorkspaceTree } from "../../../models/workspace/tree/useWorkspaceTre
 import { useSelfResources } from "../../../models/sandbox/devices/useSelfResources";
 import { useTier } from "../../../client/sandbox/useTier";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
+import SandboxPlanCard from "../../settings/hosted-plan/SandboxPlanCard.vue";
 import SandboxReceivedCard from "./received/SandboxReceivedCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
@@ -51,9 +50,7 @@ import SandboxColorValue from "./logo/SandboxColorValue.vue";
 import SandboxLogoStyleDialog from "./logo/SandboxLogoStyleDialog.vue";
 import { sandboxColor } from "./logo/sandboxColor";
 import { useT } from "@intentic/ui/i18n";
-import { ADD_SANDBOX_HOME_PATH } from "../../../models/sandbox/addSandbox";
 import { askRemoveSandbox } from "../../../models/sandbox/removeSandbox";
-import { here, page } from "../../../lib/routes/links";
 
 // Overview tab: sandbox identity (name, logo), self-reported image/version/URL relayed live via /info, and the
 // non-blocking update prompt. Excludes per-tab status links or a running list: those duplicate badges and panels
@@ -90,20 +87,10 @@ const isOwner = computed(() => sandbox.active.value?.tier === `owner`);
 const platformAnswering = computed(() => !platformHealth.down.value && !directMode.value);
 const canEditIdentity = computed(() => platformAnswering.value && (isOwner.value || sandbox.active.value?.tier === `maintainer`));
 const agentUrl = computed(() => sandbox.daemonUrl.value ?? undefined);
-// Platform-hosted (starter) sandbox; the upgrade card below keys on this.
+// A sandbox on a machine of ours: its Plan card below keys on this.
 const hosted = computed(() => (sandbox.active.value?.hosted ?? null) !== null);
 // Which machine this sandbox stands on, said in words beside its name.
 const placement = useSandboxPlacement();
-// The hours THIS sandbox's machine spends, in the sentence Billing and the chat strip use for it: its own month on a
-// paid slot, or the account's free hours.
-const { state: hostedPlan, offered: planOffered } = useHostedPlan();
-const machineStanding = computed(() => sandboxHoursLine(hostedPlan.value, sandbox.active.value?.id));
-// Whether that machine is the free one: only it is a "small starter machine", and a paid rung is not to be called one.
-const starterMachine = computed(() => {
-    const lane = hostedPlan.value?.hosted;
-    const machine = lane?.machines.find((row) => row.sandboxId === sandbox.active.value?.id);
-    return machine === undefined || machine.tier === lane?.freeTier.id;
-});
 
 // THIS SANDBOX'S SHARE OF ITS MACHINE, beside the image and the URL it already reports. The Devices tab can change
 // it too, but only for a reader who knows which machine to open first; this is the same form reached from the facts
@@ -509,28 +496,9 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
              Up here only while the disk is short; otherwise below the update and backup prompts. -->
         <SandboxStorageCard v-if="diskUrgent" />
 
-        <!-- Upgrade path for hosted sandboxes only (a member can't create one for the owner). -->
-        <Card v-if="hosted && isOwner" class="flex flex-col gap-2">
-            <div class="flex items-center gap-2 text-sm font-medium text-content">
-                <Icon name="bolt" class="text-link" /> {{ t(`sandbox.sandboxOverview.needMorePower`) }}
-            </div>
-            <!-- The cost fact is shown first: what a reader of this card usually comes here to check. -->
-            <p v-if="machineStanding" class="text-xs text-muted">
-                <span class="text-content">{{ machineStanding }}</span>
-                <template v-if="planOffered">
-                    ·
-                    <RouterLink :to="here(page.account(`billing`))" class="text-link hover:underline">{{
-                        t(`sandbox.sandboxOverview.billing`)
-                    }}</RouterLink></template
-                >
-            </p>
-            <p class="text-xs leading-relaxed text-muted">
-                {{ starterMachine ? t(`sandbox.sandboxOverview.sandboxSmallStarterMachine`) : t(`sandbox.sandboxOverview.sandboxHostedMachine`) }}
-                <span class="text-content">{{ t(`sandbox.sandboxOverview.ownDevice`) }}</span
-                >{{ t(`sandbox.sandboxOverview.noHourLimitNothing`) }}
-            </p>
-            <RouterLink :to="ADD_SANDBOX_HOME_PATH" class="text-xs text-link hover:underline">{{ t(`sandbox.sandboxOverview.setUp`) }}</RouterLink>
-        </Card>
+        <!-- A cloud sandbox's plan, for its owner only (a member can neither pay for one nor change it): what it is on, its
+             hours, and the one way to change it. Self-hides for a sandbox on the owner's own computer. -->
+        <SandboxPlanCard v-if="hosted && isOwner && sandbox.active.value" :sandbox-id="sandbox.active.value.id" />
 
         <!-- The files here exist nowhere else and the reader is at a computer that could change that; self-hides otherwise. -->
         <!-- What other sandboxes the reader is in dropped here as them: shown only while something waits. -->

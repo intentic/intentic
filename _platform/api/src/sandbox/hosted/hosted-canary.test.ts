@@ -41,6 +41,8 @@ const config = (over: Record<string, unknown> = {}): Config =>
             canaryEmail: `canary@intentic.test`,
             ...over,
         },
+        // No plan sold and nobody comped: the canary's machine is counted against the free plan alone.
+        hostedPlan: { stripeSecretKey: ``, stripePrices: ``, compEmails: `` },
     }) as unknown as Config;
 
 // lastSeenAt is written by the daemon's check-in; setting it in a fixture means a machine that came up.
@@ -74,6 +76,8 @@ const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string,
         hostedMachine: {
             create: jest.fn().mockResolvedValue({}),
             findUnique: jest.fn(async ({ where }: { where: { appName?: string } }) => (where.appName ? null : { appName: `intentic-sbx-canary` })),
+            // The canary's owner has no other sandbox, so its free plan is there to take (hosted-plan.ts hostedSlotUse).
+            findMany: jest.fn().mockResolvedValue([]),
             count: jest.fn().mockResolvedValue(0),
         },
         hostedPoolMachine: {

@@ -30,6 +30,9 @@ export const JOB_SETUP_FAILURE_MAIL = 12;
 export const JOB_HOSTED_WAKE = 13;
 // One refresh of the public integration catalogs across platform replicas.
 export const JOB_MODEL_CATALOG = 14;
+// Applies the sandbox plan changes that are due (a downgrade at renewal, an upgrade to retry); two replicas would
+// resize one machine twice.
+export const JOB_HOSTED_PLAN = 15;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });

@@ -143,8 +143,8 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof j
             deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
             ...overrides[`hostedPoolMachine`],
         },
-        // `findMany` is the hour meter's live read (an owner's open stretches): none open unless a test says so;
-        // `count` is the owner's slot use at the row write, none unless a test says so.
+        // `findMany` is the hour meter's live read (an owner's open stretches) and the owner's plans at the row write
+        // (hosted-plan.ts hostedSlotUse): none unless a test says so.
         hostedMachine: {
             update: jest.fn().mockResolvedValue({}),
             findUnique: jest.fn().mockResolvedValue(null),
@@ -1631,7 +1631,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     /* A PAID SLOT'S HOURS ARE ITS MACHINE'S. The account's free hours, spent, refuse a free machine's wake; a machine
      * standing on a held Standard slot spends its own month instead, and wakes. The same machine with the slot gone
      * (a plan that stopped paying) spends the free hours again, and is refused with them. */
-    it(`wakes a machine on a held paid slot past the free hours, and refuses it once the slot is gone`, async () => {
+    it(`wakes a machine on a paid plan past the free hours, and refuses it once the plan stops paying`, async () => {
         stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
         const spent = (tier: string, plan: { status: string; items: { tier: string; quantity: number }[] }) =>
             fakePrisma({
@@ -1650,7 +1650,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 hostedPlan: { findUnique: jest.fn().mockResolvedValue(plan) },
                 // The account's one machine as the meter reads it, and the row the wake opens its stretch on.
                 hostedMachine: {
-                    findMany: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier, wokeAt: null }]),
+                    findMany: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier, wokeAt: null, paid: tier !== FREE_TIER.id, planTo: null, planAt: null }]),
                     findUnique: jest.fn().mockResolvedValue({ wokeAt: null }),
                 },
             });
@@ -1688,7 +1688,12 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const fetchSpy = stubFetch([]);
         const prisma = fakePrisma({
             sandbox: { findFirst: jest.fn().mockResolvedValue(ownedRow) },
-            hostedMachine: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(1) },
+            // The account's one free sandbox, already made.
+            hostedMachine: {
+                findUnique: jest.fn().mockResolvedValue(null),
+                findMany: jest.fn().mockResolvedValue([{ tier: FREE_TIER.id, paid: false, planTo: null }]),
+                count: jest.fn().mockResolvedValue(1),
+            },
         });
         await expect(
             call(sandboxRoutes.hostedProvision, { sandboxId: `s1`, token: `t0k3n` }, { context: routeContext({ prisma }) }),

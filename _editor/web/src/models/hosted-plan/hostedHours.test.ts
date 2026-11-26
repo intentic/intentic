@@ -36,7 +36,7 @@ const RENEWS_AT = `2026-10-01T00:00:00.000Z`;
 const subscriber = (over: Partial<HostedPlanState> = {}): HostedPlanState => state({ onPlan: true, status: `active`, renewsAt: RENEWS_AT, ...over });
 
 // The free plan's chip; the same answer for spent hours, unspent hours, no ceiling, and no machine at all.
-const FREE = { label: `free`, variant: `neutral`, detail: { title: `Free plan` } } as const;
+const FREE = { label: `free`, variant: `neutral`, detail: { title: `Nothing paid` } } as const;
 
 describe(`the meter`, () => {
     it(`is absent for an owner the ceiling does not apply to`, () => {
@@ -90,14 +90,14 @@ describe(`the account menu's plan chip`, () => {
 
     it(`turns hosted into ending once the plan is cancelling`, () => {
         expect(planBadge(subscriber())).toEqual({
-            label: `hosted`,
+            label: `paid`,
             variant: `primary`,
-            detail: { title: `Hosted plan`, rows: [{ label: `Renews`, value: formatDayShort(RENEWS_AT) }] },
+            detail: { title: `Paid sandboxes`, rows: [{ label: `Renews`, value: formatDayShort(RENEWS_AT) }] },
         });
         expect(planBadge(subscriber({ cancelAtPeriodEnd: true }))).toEqual({
             label: `ending`,
             variant: `warning`,
-            detail: { title: `Hosted plan`, tone: `warning`, rows: [{ label: `Ends`, value: formatDayShort(RENEWS_AT) }], note: `Then the free plan` },
+            detail: { title: `Paid sandboxes`, tone: `warning`, rows: [{ label: `Ends`, value: formatDayShort(RENEWS_AT) }], note: `Then each sandbox moves to Free` },
         });
     });
 
@@ -105,14 +105,14 @@ describe(`the account menu's plan chip`, () => {
         expect(planBadge(subscriber({ status: `trialing` }))).toEqual({
             label: `trial`,
             variant: `info`,
-            detail: { title: `Hosted trial`, rows: [{ label: `Ends`, value: formatDayShort(RENEWS_AT) }] },
+            detail: { title: `Trial`, rows: [{ label: `Ends`, value: formatDayShort(RENEWS_AT) }] },
         });
         expect(planBadge(state({ onPlan: true, comped: true }))).toEqual({
             label: `complimentary`,
             variant: `info`,
-            detail: { title: `Hosted plan`, note: `No card, no renewal` },
+            detail: { title: `Paid sandboxes`, note: `No card, no renewal` },
         });
-        expect(planBadge(state({ onPlan: true }))).toEqual({ label: `hosted`, variant: `primary`, detail: { title: `Hosted plan` } });
+        expect(planBadge(state({ onPlan: true }))).toEqual({ label: `paid`, variant: `primary`, detail: { title: `Paid sandboxes` } });
     });
 
     it(`takes the danger tone for a failing card, ahead of the free plan`, () => {

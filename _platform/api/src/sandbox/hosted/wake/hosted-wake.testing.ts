@@ -17,7 +17,7 @@ export const hostedWakeSandbox = (id = "s1"): HostedWakeSandbox => ({
     id, ownerId: "u1", token: `connect-${id}`, owner: { email: "owner@example.com" },
     hosted: {
         id: `h-${id}`, sandboxId: id, appName: `app-${id}`, machineId: `m-${id}`, volumeId: `vol-${id}`,
-        region: "iad", warm: false, tier: "free", cpuKind: "shared", cpus: 2, memoryMb: 4096, volumeGb: 10,
+        region: "iad", warm: false, tier: "free", cpuKind: "shared", cpus: 2, memoryMb: 4096, volumeGb: 10, paid: false, planTo: null, planAt: null,
         wokeAt: null, idleWarnedAt: null, image: null, baseImage: null, baseDigest: null, environmentHash: null,
         buildingId: null, migratingId: null, strandedAt: null, strandedDetail: null, previousImage: null,
         previousEnvironmentHash: null, unprovenImage: null, skippedDigest: null, probationSince: null, probationStrikes: 0,

@@ -209,6 +209,9 @@ services:
             HOSTED_PLAN_STRIPE_PRICES: ${HOSTED_PLAN_STRIPE_PRICES:-}
             # Comma-separated emails that count as on the plan WITHOUT a subscription (comped).
             HOSTED_PLAN_COMP_EMAILS: ${HOSTED_PLAN_COMP_EMAILS:-}
+            # The Stripe customer portal configuration (`bpc_…`) Billing opens for card and invoices. Plans change per
+            # sandbox in the app, so make it one with subscription cancel and update switched off; empty = the default.
+            HOSTED_PLAN_STRIPE_PORTAL_CONFIGURATION: ${HOSTED_PLAN_STRIPE_PORTAL_CONFIGURATION:-}
             # Where the Stripe client sends its calls: Stripe itself unless a test points it at a stand-in.
             HOSTED_PLAN_STRIPE_API_URL: ${HOSTED_PLAN_STRIPE_API_URL:-}
             # The agent wallet's signer: the credential authenticating this platform to the custody provider

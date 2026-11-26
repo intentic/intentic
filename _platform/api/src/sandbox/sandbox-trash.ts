@@ -11,6 +11,10 @@ import { runningImageOf } from "./hosted/gate/state-gate.js";
 import { dropHostedMachine } from "./hosted/hosted-usage.js";
 import { lockHostedSandbox } from "./hosted/hosted-cleanup.js";
 import { mintSandbox } from "./mint-sandbox.js";
+import { hostedPlanEnabled } from "./hosted/plan/hosted-plan.js";
+import { stripeGateway } from "./hosted/plan/hosted-plan-stripe.js";
+import { decideRelease, nextSeatOf } from "./hosted/plan/plan-change.js";
+import { carryOutPlanChange } from "./hosted/plan/plan-ledger.js";
 
 /* THE OWNER HAS NO SANDBOX IN THE TRASH BY THAT ID. */
 export class TrashedSandboxGone extends Error {}
@@ -105,8 +109,22 @@ export const trashSandbox = async (prisma: PrismaClient, config: Config, logger:
     // Stopped once the row is gone, never before: a wake between a stop and the delete would restart it unbilled.
     if (hosted !== null) {
         await stopForTrash(config, logger, hosted);
+        await endPlanOf(prisma, config, logger, sandbox.ownerId, hosted);
     }
     return { purgeAfter };
+};
+
+/* A DELETED SANDBOX'S PLAN ENDS WITH IT, at the renewal date: kept until then, since it was paid for, and billed no more
+ * after. Best effort: a Stripe that would not answer leaves it as a plan no sandbox is on, which Billing shows the owner
+ * with the same "end it" beside it. */
+const endPlanOf = async (prisma: PrismaClient, config: Config, logger: Logger, ownerId: string, machine: HostedMachine): Promise<void> => {
+    const tier = nextSeatOf(machine);
+    if (tier === undefined || !hostedPlanEnabled(config)) {
+        return;
+    }
+    await carryOutPlanChange(prisma, config, stripeGateway(config.hostedPlan), ownerId, undefined, (ledger) =>
+        decideRelease(ledger.account, ledger.machines, tier),
+    ).catch((error: Error) => logger.warn({ err: error, ownerId, tier }, `a deleted sandbox's plan could not be ended; Billing shows it as open`));
 };
 
 export interface TrashedSummary {

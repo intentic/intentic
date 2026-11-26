@@ -90,10 +90,17 @@ flowchart LR
   hand-off its deep link never brought by asking `desktop.pending` with its verifier (sessionless; it returns only the
   row's id, which `redeem` still needs that verifier to spend).
 - The free hosted machine, the trial and the Repair agent need a Google sign-in linked to the account
-  (`src/sandbox/hosted/free-lane.ts`). `hostedOffer` answers `needsGoogle` to an email-only account with no paid slot,
-  and a refused call carries the reason `google-required`, so the editor can offer linking Google, buying a machine, or
-  running the sandbox on the reader's own computer. An email-only account that holds an unused paid slot has its
-  machine built straight onto that slot's rung, never the free one, and none of the free lane's limits apply to it.
+  (`src/sandbox/hosted/free-lane.ts`). `hostedOffer` answers `needsGoogle` to an email-only account with no open paid
+  plan, and a refused call carries the reason `google-required`, so the editor can offer linking Google, buying a plan,
+  or running the sandbox on the reader's own computer. An email-only account that pays for a plan no sandbox is on yet
+  has its machine built straight onto that plan's tier, never the free one, and none of the free lane's limits apply.
+- Every cloud sandbox has a plan (`src/sandbox/hosted/plan/plan-change.ts`, the rules; `plan-ledger.ts`, the writes;
+  `hosted-plan-changes.ts`, the resizes and the job that applies due changes every ten minutes). `hostedPlan.changePlan`
+  moves one sandbox between Free and the paid tiers: up now and prorated, down at the renewal date. `checkout` names the
+  sandbox a first plan is for, and its completed webhook puts the plan on it. `reserve` and `release` add a plan for a
+  sandbox about to be made and end one no sandbox is on. `setSlots` and `changeTier`, the earlier two-step form, stay
+  for older editors. `HOSTED_PLAN_STRIPE_PORTAL_CONFIGURATION` names the customer portal configuration Billing opens;
+  make it one with subscription cancel and update switched off, since a change made there bypasses every sandbox.
 - `ADMIN_EMAILS` opens the operator panel only to a verified address with a Google account linked, unless
   `ADMIN_SIGN_IN=any` (the default is `google`), so a mailed code alone never reaches `/admin`.
 - The team's own accounts (`src/me/internal-accounts.ts`): every `ADMIN_EMAILS` address, `HOSTED_CANARY_EMAIL`, and

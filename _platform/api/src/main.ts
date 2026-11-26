@@ -13,6 +13,7 @@ import { startHostedCanary } from "./sandbox/hosted/hosted-canary.js";
 import { startHostedCleanup } from "./sandbox/hosted/hosted-cleanup.js";
 import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
+import { startHostedPlanChanges } from "./sandbox/hosted/plan/hosted-plan-changes.js";
 import { startHostedWakeAlarms } from "./sandbox/hosted/wake/hosted-wake-alarm.js";
 import { startHostedProbation } from "./sandbox/hosted/hosted-probation.js";
 import { checkHostedPlanPrices, hostedPlanEnabled } from "./sandbox/hosted/plan/hosted-plan.js";
@@ -98,6 +99,7 @@ startHostedPool(prisma, config, logger);
 startHostedBuilds(prisma, config, logger);
 // Closes the stretch of every stopped machine and stops a free machine whose owner's month is spent.
 startHostedMeter(prisma, config, logger);
+startHostedPlanChanges(prisma, config, logger);
 startHostedWakeAlarms(prisma, config, logger);
 // Stops a free machine at full load for a whole window, on the provider's own meter (hosted-abuse.ts).
 startHostedAbuse(prisma, config, logger);

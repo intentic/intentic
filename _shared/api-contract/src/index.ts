@@ -250,17 +250,33 @@ export const desktopContract = {
     googleIdToken: oc.route({ method: "POST", path: "/desktop/google-id-token" }).output(z.object({ idToken: z.string().optional() })),
 };
 
-// Billing page state and actions. Slots are bought by rung (`setSlots`) and machines are moved onto them separately
-// (`changeTier`), which is what keeps a failed move a paid-for empty slot rather than a charge with nothing behind
-// it. `checkout`/`portal` return Stripe-hosted URLs; all of them 404 on a platform with no plan configured.
+// Billing state and actions. EVERY CLOUD SANDBOX HAS A PLAN (2026-11-26): `changePlan` is the one way a sandbox moves
+// between Free, Standard and Max, paying and resizing as one act; upgrades start at once and are prorated, downgrades
+// wait for the renewal date. One Stripe subscription per account carries them all, a quantity per paid tier.
+// `setSlots`/`changeTier` are the earlier two-step form (buy a slot, then move onto it), kept for editors that still
+// send them. `checkout`/`portal` return Stripe-hosted URLs; all of them 404 on a platform with no plan configured.
 export const hostedPlanContract = {
     state: oc.route({ method: "GET", path: "/hosted-plan" }).output(HostedPlanStateSchema),
     checkout: oc
         .route({ method: "POST", path: "/hosted-plan/checkout" })
-        // Which rung the first slot is bought at; omitted — as a field or as the whole body — buys the cheapest on sale.
-        .input(z.object({ tier: z.string().optional(), returnTo: z.literal(`/start/hosted`).optional() }).optional())
+        // Which tier the first plan is bought at; omitted — as a field or as the whole body — buys the cheapest on sale.
+        // `sandboxId` names the sandbox it is for, upgraded as soon as the payment lands; without one it is for a new
+        // sandbox, made on return (`returnTo`).
+        .input(z.object({ tier: z.string().optional(), returnTo: z.literal(`/start/hosted`).optional(), sandboxId: z.string().optional() }).optional())
         .output(z.object({ url: z.url() })),
     portal: oc.route({ method: "POST", path: "/hosted-plan/portal" }).output(z.object({ url: z.url() })),
+    // Puts one sandbox on a plan, for a subscriber (a first purchase is `checkout`). Up: paid for the rest of the month
+    // now, and the machine restarts on the bigger size in the background (watch the machine's `change`/`migration`).
+    // Down: from the renewal date, kept until then. Its own current tier withdraws a change still waiting.
+    changePlan: oc
+        .route({ method: "POST", path: "/hosted-plan/plan" })
+        .input(z.object({ sandboxId: z.string(), tier: z.string() }))
+        .output(HostedPlanStateSchema),
+    // A plan for a sandbox about to be made at `tier`, for a subscriber: reuses an open one there, else adds one, paid
+    // for the rest of the month. Provisioning at that tier then lands on it.
+    reserve: oc.route({ method: "POST", path: "/hosted-plan/reserve" }).input(z.object({ tier: z.string() })).output(HostedPlanStateSchema),
+    // Ends one open plan at `tier` (one no sandbox is on) at the renewal date.
+    release: oc.route({ method: "POST", path: "/hosted-plan/release" }).input(z.object({ tier: z.string() })).output(HostedPlanStateSchema),
     setSlots: oc
         .route({ method: "POST", path: "/hosted-plan/slots" })
         // 0 gives the rung's last slot back; refused while a machine still stands on one.

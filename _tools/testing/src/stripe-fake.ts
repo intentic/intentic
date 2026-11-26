@@ -1,6 +1,7 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { applyItemChanges, checkoutRefusal, id, PERIOD_DAYS, sessionOf, wireSubscription } from "./stripe-fake-wire.js";
 
 // Stand-in for Stripe: the calls the hosted plan makes and the webhooks it listens for, so the money path runs end to
 // end with no real account. Not a test of Stripe itself; delivery is injected (`deliver`) so the in-process and browser
@@ -64,6 +65,8 @@ export interface FakeSession {
     readonly quantity: number;
     readonly success_url: string;
     readonly cancel_url: string;
+    // The `metadata[…]` the platform put on the session (the sandbox a first plan is for), carried to its completed event.
+    readonly metadata: Record<string, string>;
     status: "open" | "complete";
     subscription?: string;
 }
@@ -110,11 +113,7 @@ export interface FakeStripe {
     close(): Promise<void>;
 }
 
-const id = (prefix: string): string => `${prefix}_${randomBytes(9).toString("hex")}`;
-
 const seconds = (date: Date): number => Math.floor(date.getTime() / 1000);
-
-const PERIOD_DAYS = 30;
 
 /** Stripe's signature header over a payload: `t=<seconds>,v1=<hex HMAC-SHA256(secret, "<t>.<payload>")>`. */
 export const signStripePayload = (payload: string, secret: string, at: Date): string => {
@@ -161,83 +160,6 @@ const readBody = (req: IncomingMessage): Promise<string> =>
 const escapeHtml = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const form = (action: string, label: string): string => `<form method="post" action="${action}"><button type="submit">${label}</button></form>`;
-
-// Subscription in the basil wire shape (period on the item), as both the API and its events return it; fields like
-// `latest_invoice` are absent on purpose, since the client must not need them.
-const wireSubscription = (subscription: FakeSubscription): Record<string, unknown> => ({
-    id: subscription.id,
-    object: "subscription",
-    customer: subscription.customer,
-    status: subscription.status,
-    cancel_at_period_end: subscription.cancel_at_period_end,
-    created: subscription.created,
-    items: {
-        object: "list",
-        data: subscription.items.map((item) => ({
-            id: item.id,
-            object: "subscription_item",
-            price: { id: item.price, object: "price" },
-            quantity: item.quantity,
-            current_period_start: subscription.current_period_end - PERIOD_DAYS * 86_400,
-            current_period_end: subscription.current_period_end,
-        })),
-    },
-});
-
-/* ONE SUBSCRIPTION UPDATE'S ITEM GROUPS, applied the way Stripe applies them: an `id` addresses an existing item
- * and `deleted` removes it, a bare `price` adds a new one. Answers Stripe's own refusal text, or undefined. */
-const applyItemChanges = (subscription: FakeSubscription, params: Record<string, string>): string | undefined => {
-    for (let index = 0; params[`items[${index}][id]`] !== undefined || params[`items[${index}][price]`] !== undefined; index += 1) {
-        const itemId = params[`items[${index}][id]`];
-        const quantity = params[`items[${index}][quantity]`];
-        const counted = quantity !== undefined && /^\d+$/.test(quantity);
-        if (itemId === undefined) {
-            if (!counted) {
-                return `Invalid integer: items[${index}][quantity]`;
-            }
-            subscription.items.push({ id: id("si"), price: params[`items[${index}][price]`] ?? "", quantity: Number(quantity) });
-            continue;
-        }
-        const existing = subscription.items.find((item) => item.id === itemId);
-        if (existing === undefined) {
-            return `No such subscription_item: '${itemId}'`;
-        }
-        if (params[`items[${index}][deleted]`] === "true") {
-            subscription.items = subscription.items.filter((item) => item.id !== itemId);
-            continue;
-        }
-        if (!counted) {
-            return `Invalid integer: items[${index}][quantity]`;
-        }
-        existing.quantity = Number(quantity);
-    }
-    return undefined;
-};
-
-// The refusals Stripe makes of a checkout request that the client's encoding must never provoke.
-const checkoutRefusal = (params: Record<string, string>, customers: Map<string, FakeCustomer>, price: FakePrice): string | undefined => {
-    if (params["mode"] !== "subscription") {
-        return "Invalid mode: the hosted plan is sold in subscription mode";
-    }
-    if ([params["line_items[0][price]"], params["client_reference_id"], params["success_url"], params["cancel_url"]].includes(undefined)) {
-        return "Missing required param: line_items[0][price], client_reference_id, success_url and cancel_url are required";
-    }
-    const asked = params["line_items[0][price]"];
-    if (asked !== price.id) {
-        return `No such price: '${asked ?? ""}'`;
-    }
-    if (!price.active) {
-        return "The price specified is inactive. This field only accepts active prices.";
-    }
-    const customer = params["customer"];
-    if (customer !== undefined && params["customer_email"] !== undefined) {
-        return "You may only specify one of these parameters: customer, customer_email";
-    }
-    if (customer !== undefined && !customers.has(customer)) {
-        return `No such customer: '${customer}'`;
-    }
-    return undefined;
-};
 
 // the routes
 
@@ -362,6 +284,7 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
             client_reference_id: session.client_reference_id,
             customer: customer.id,
             subscription: subscription.id,
+            metadata: session.metadata,
         });
         return { subscription, delivered };
     };
@@ -409,19 +332,7 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
                 if (refusal !== undefined) {
                     return refuse(res, 400, refusal);
                 }
-                const sessionId = id("cs_test");
-                const session: FakeSession = {
-                    id: sessionId,
-                    url: `${origin}/checkout/${sessionId}`,
-                    client_reference_id: params["client_reference_id"] ?? "",
-                    ...(params["customer"] === undefined ? {} : { customer: params["customer"] }),
-                    ...(params["customer_email"] === undefined ? {} : { customer_email: params["customer_email"] }),
-                    price: params["line_items[0][price]"] ?? "",
-                    quantity: Number(params["line_items[0][quantity]"] ?? "1"),
-                    success_url: params["success_url"] ?? "",
-                    cancel_url: params["cancel_url"] ?? "",
-                    status: "open",
-                };
+                const session = sessionOf(params, origin);
                 sessions.set(session.id, session);
                 json(res, { id: session.id, object: "checkout.session", url: session.url, mode: "subscription", status: "open" });
             }),
@@ -488,7 +399,7 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
                 if (subscription === undefined) {
                     return refuse(hit.res, 404, `No such subscription: '${hit.match[1]}'`);
                 }
-                // Every `items[n][…]` group in one update, the way Stripe takes them.
+                // Every `items[n][…]` group in one update, the way Stripe takes them, and the renewal-date end beside them.
                 const refused = applyItemChanges(subscription, params);
                 if (refused !== undefined) {
                     return refuse(hit.res, 400, refused);

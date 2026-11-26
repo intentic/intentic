@@ -3,6 +3,7 @@ import {
     type HostedHoursMeter,
     type HostedMigration as HostedMigrationState,
     type HostedPlanHosted,
+    type HostedPlanMachine,
     type HostedPlanState,
 } from "@intentic/api-contract";
 import { FREE_TIER, type HostedTier, hostedTier, isHostedTierId, PAID_TIERS } from "@intentic/constants";
@@ -13,9 +14,22 @@ import type { OrpcContext } from "../../../context.js";
 import { requireUser } from "../../../guards.js";
 import { hostedEnabled } from "../hosted.js";
 import { HostedAtCapacity } from "../hosted-capacity.js";
-import { applySubscription, entryTier, hostedPlanEnabled, hostedPrices, hostedSlotsOf, hostedSlotUse, isComped, isOnPlan } from "./hosted-plan.js";
+import {
+    applySubscription,
+    entryTier,
+    hostedPlanEnabled,
+    hostedPrices,
+    hostedSlotsOf,
+    hostedSlotUse,
+    isComped,
+    isLiveSubscription,
+    isOnPlan,
+} from "./hosted-plan.js";
 import { HostedMigrationRefused, type MigrationRefusal, migrateHosted } from "../migrate/hosted-migrate.js";
 import { StripeError, type StripeGateway, stripeGateway } from "./hosted-plan-stripe.js";
+import { freeLeftOf, nextSeatOf, openSeatsOf } from "./plan-change.js";
+import { planChangeRoutes, requireOwnedMachine } from "./hosted-plan-changes.orpc.js";
+import { planLedgerOf } from "./plan-ledger.js";
 import { hostedTierIn, shapeOfRow } from "../hosted-shape.js";
 import { accountHoursOf, type HostedBudget, hostedOomsSince, usageResetsAt } from "../hosted-usage.js";
 import { DAY_MS } from "../../../durations.js";
@@ -52,7 +66,7 @@ const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPl
     const { prisma, config } = context;
     const now = new Date();
     const free = hostedTierIn(config, FREE_TIER.id);
-    const [slots, machines, hours] = await Promise.all([
+    const [slots, machines, hours, ledger, plan] = await Promise.all([
         hostedSlotsOf(prisma, config, userId),
         prisma.hostedMachine.findMany({
             where: { sandbox: { ownerId: userId } },
@@ -64,32 +78,75 @@ const hostedFor = async (context: OrpcContext, userId: string): Promise<HostedPl
                 cpus: true,
                 memoryMb: true,
                 volumeGb: true,
+                paid: true,
+                planTo: true,
+                planAt: true,
                 sandbox: { select: { id: true, name: true } },
             },
             orderBy: { createdAt: `asc` },
         }),
         accountHoursOf(prisma, config, userId, now),
+        planLedgerOf(prisma, config, userId),
+        prisma.hostedPlan.findUnique({ where: { userId }, select: { status: true } }),
     ]);
-    // Each machine's own week of out-of-memory kills: the machine's, not the account's.
+    // Each machine's own week of out-of-memory kills: the machine's, not the account's. And its latest resize, while it
+    // runs or for a day after it ended unfinished, so the sandbox can say what is happening to it.
     const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
-    const ooms = await Promise.all(machines.map((machine) => hostedOomsSince(prisma, machine.sandbox.id, weekAgo)));
+    const [ooms, resizes] = await Promise.all([
+        Promise.all(machines.map((machine) => hostedOomsSince(prisma, machine.sandbox.id, weekAgo))),
+        Promise.all(machines.map((machine) => latestResizeOf(context, machine.sandbox.id, now))),
+    ]);
+    const live = isLiveSubscription(plan);
     return {
         slots: [...slots.values()].reduce((sum, count) => sum + count, 0),
         slotsByTier: Object.fromEntries(slots),
-        machines: machines.map((machine, index) => ({
-            sandboxId: machine.sandbox.id,
-            name: machine.sandbox.name,
-            region: machine.region,
-            wokeAt: machine.wokeAt?.toISOString() ?? null,
-            tier: machine.tier,
-            // The machine's own numbers, never the rung's: the two part company the moment a migration starts.
-            shape: shapeOfRow(machine),
-            hours: meterOf(hours.machines.get(machine.sandbox.id) ?? hours.free, now),
-            oomsThisWeek: ooms[index] ?? 0,
-        })),
+        machines: machines.map((machine, index) => {
+            const row: HostedPlanMachine = {
+                sandboxId: machine.sandbox.id,
+                name: machine.sandbox.name,
+                region: machine.region,
+                wokeAt: machine.wokeAt?.toISOString() ?? null,
+                tier: machine.tier,
+                // The machine's own numbers, never the rung's: the two part company the moment a migration starts.
+                shape: shapeOfRow(machine),
+                hours: meterOf(hours.machines.get(machine.sandbox.id) ?? hours.free, now),
+                oomsThisWeek: ooms[index] ?? 0,
+                paid: live && machine.paid,
+            };
+            if (machine.planTo !== null && machine.planAt !== null) {
+                row.change = { tier: machine.planTo, at: machine.planAt.toISOString() };
+            }
+            const resize = resizes[index];
+            if (resize !== undefined) {
+                row.migration = resize;
+            }
+            return row;
+        }),
         freeHours: meterOf(hours.free, now),
         freeTier: { id: free.id, shape: shapeOfRow(free), monthlyHours: free.monthlyHours },
+        openSeats: Object.fromEntries(openSeatsOf(ledger.account, ledger.machines)),
+        freeLeft: freeLeftOf(ledger.account, ledger.machines),
     };
+};
+
+// A resize the sandbox's page should know of: one still running, or one that ended unfinished in the last day.
+const RESIZE_SHOWN_MS = DAY_MS;
+const latestResizeOf = async (context: OrpcContext, sandboxId: string, now: Date): Promise<NonNullable<HostedPlanMachine[`migration`]> | undefined> => {
+    const row = await context.prisma.hostedMigration.findFirst({ where: { sandboxId }, orderBy: { startedAt: `desc` } });
+    if (row === null) {
+        return undefined;
+    }
+    const running = row.finishedAt === null;
+    const recentFailure = !running && row.state !== `done` && now.getTime() - (row.finishedAt?.getTime() ?? 0) < RESIZE_SHOWN_MS;
+    if (!running && !recentFailure) {
+        return undefined;
+    }
+    const { state, toTier, startedAt, error } = migrationStateOf(row);
+    const shown: NonNullable<HostedPlanMachine[`migration`]> = { state, toTier, startedAt };
+    if (error !== undefined) {
+        shown.error = error;
+    }
+    return shown;
 };
 
 // What every answer carries, signed in or not: whether this platform sells a machine at all, and what the cheapest
@@ -182,6 +239,36 @@ const migrationStateOf = (row: {
     ...(row.error === null ? {} : { error: row.error }),
 });
 
+// A second checkout on the plan would be a second subscription; upsert-by-user keeps one row instead. One whose charge
+// Stripe is still retrying is live too: its card is the way on, never another subscription beside it.
+const requireNoSubscription = (plan: { status: string } | null): void => {
+    if (isOnPlan(plan)) {
+        throw new ORPCError(`CONFLICT`, { message: `you are already on the hosted plan` });
+    }
+    if (isLiveSubscription(plan)) {
+        throw new ORPCError(`PRECONDITION_FAILED`, { message: `the last payment did not go through; update the card on Stripe first`, data: { reason: `card` } });
+    }
+};
+
+// The sandbox a first plan is for, carried on the checkout to its completed event, which upgrades it as soon as the
+// payment lands (hosted-plan.routes.ts). Nothing for a plan bought for a sandbox not made yet.
+const checkoutMetadataOf = async (context: OrpcContext, userId: string, tier: string, sandboxId?: string): Promise<Record<string, string>> => {
+    if (sandboxId === undefined) {
+        return {};
+    }
+    await requireOwnedMachine(context, userId, sandboxId);
+    return { sandboxId, tier };
+};
+
+// A finished move on the earlier two-step form: on a paid rung it took one of the plans the account pays for, on Free it
+// gave its plan back, and either way any change that was waiting is over.
+const settleMove = async <Row extends { state: string }>(context: OrpcContext, sandboxId: string, row: Row, tier: HostedTier): Promise<Row> => {
+    if (row.state === `done`) {
+        await context.prisma.hostedMachine.update({ where: { sandboxId }, data: { paid: tier.priceUsd > 0, planTo: null, planAt: null } });
+    }
+    return row;
+};
+
 // The browser half of the plan: Billing page state, Stripe-hosted doors, and the one write the platform makes itself
 // (slots). Checkout carries the user id as client_reference_id; the webhook turns a completed payment into a plan row.
 export const hostedPlanRoutes = (gateway?: StripeGateway) => {
@@ -212,11 +299,8 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             }
             const entry = { tier: asked.tier, priceId: asked.priceId === `` ? (hostedPrices(config).get(asked.tier.id) as string) : asked.priceId };
             const plan = await prisma.hostedPlan.findUnique({ where: { userId: user.id }, select: { status: true, stripeCustomerId: true } });
-            // A second checkout on the plan would be a second subscription; upsert-by-user keeps one row instead.
-            if (isOnPlan(plan)) {
-                throw new ORPCError(`CONFLICT`, { message: `you are already on the hosted plan` });
-            }
-            return throughStripe(() =>
+            requireNoSubscription(plan);
+            return throughStripe(async () =>
                 stripe(context).checkoutSession({
                     priceId: entry.priceId,
                     clientReferenceId: user.id,
@@ -224,6 +308,7 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
                     // A resubscriber is the same Stripe customer they were: one invoice history, one portal.
                     ...(plan === null ? {} : { customer: plan.stripeCustomerId }),
                     ...checkoutUrls(context, entry.tier.id, input?.returnTo !== undefined),
+                    metadata: await checkoutMetadataOf(context, user.id, entry.tier.id, input?.sandboxId),
                 }),
             );
         }),
@@ -237,9 +322,8 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             }
             return throughStripe(() => stripe(context).portalSession(plan.stripeCustomerId, billingUrl(context)));
         }),
-        // How many slots this account holds at one rung; refused below the machines already standing on them, since
-        // a slot with a machine on it cannot be sold back. Written on Stripe with proration, mirrored at once rather
-        // than waiting on the webhook.
+        // The earlier two-step form's slot count at one rung, refused below the sandboxes whose plan it bills next month;
+        // prorated on Stripe and mirrored at once. Today's editor uses reserve/release (hosted-plan-changes.orpc.ts).
         setSlots: os.hostedPlan.setSlots.handler(async ({ context, input }) => {
             const { config, prisma } = context;
             const user = requireUser(context);
@@ -249,7 +333,7 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             if (!isOnPlan(plan) || plan === null) {
                 throw new ORPCError(`PRECONDITION_FAILED`, { message: `subscribe to the hosted plan first` });
             }
-            const standing = await prisma.hostedMachine.count({ where: { tier: tier.id, sandbox: { ownerId: user.id } } });
+            const standing = (await planLedgerOf(prisma, config, user.id)).machines.filter((machine) => nextSeatOf(machine) === tier.id).length;
             if (input.quantity < standing) {
                 throw new ORPCError(`BAD_REQUEST`, {
                     message: `${standing} of your sandboxes are on ${tier.name}; move one down a rung before giving up its slot`,
@@ -291,7 +375,7 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
             }
             try {
                 const row = await migrateHosted(prisma, config, logger, machine, { tier: tier.id }, user.email.toLowerCase());
-                return migrationStateOf(row);
+                return migrationStateOf(await settleMove(context, input.sandboxId, row, tier));
             } catch (error) {
                 if (error instanceof HostedMigrationRefused) {
                     throw new ORPCError(MIGRATION_REFUSALS[error.code], { message: error.message });
@@ -305,5 +389,6 @@ export const hostedPlanRoutes = (gateway?: StripeGateway) => {
                 throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `changing the machine failed` });
             }
         }),
+        ...planChangeRoutes({ stripe, stateOf: hostedPlanStateOf, requireEnabled: requirePlanEnabled }),
     };
 };

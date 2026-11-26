@@ -53,6 +53,8 @@ const fixture = () => {
         hostedMachine: {
             findUnique: jest.fn(async () => state.sandbox.hosted),
             count: jest.fn(async () => (state.sandbox.hosted === null ? 0 : 1)),
+            // The owner's sandboxes as their plans read them: this one's free machine, while it has one.
+            findMany: jest.fn(async () => (state.sandbox.hosted === null ? [] : [{ tier: `free`, paid: false, planTo: null }])),
             create: jest.fn(async ({ data }: { data: { appName: string; wokeAt: Date | null } }) => {
                 state.sandbox.hosted = { id: `h1`, ...data };
             }),

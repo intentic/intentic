@@ -1,5 +1,5 @@
 import type { SandboxSummary, SetupCode } from "@intentic/api-contract";
-import { DEFAULT_SANDBOX_MODE, type HostedTierId, type SandboxMode } from "@intentic/constants";
+import { DEFAULT_SANDBOX_MODE, FREE_TIER, type HostedTierId, type SandboxMode } from "@intentic/constants";
 import { syncFolder } from "@intentic/sandbox-contract/ids/hostnames";
 import type { NoticeModel } from "@intentic/ui";
 import { engineCapacity, type OsMark } from "@intentic/ui/device-machine";
@@ -27,6 +27,7 @@ import { type SetupRow, type SetupRowHost, useSetupRow } from "../flow/useSetupR
 import { useAddAttach } from "./useAddAttach";
 import { useAddCommand } from "./useAddCommand";
 import { useCodeRenewal } from "./useCodeRenewal";
+import { type AddPlan, type AddPlans, plansSold, useAddPlan } from "./useAddPlan";
 
 // THE NEW SANDBOX, MADE IN PLACE (Home's dialog and page; a phone's dialog). One press for what starts in one press: this
 // computer in the app, a connected machine, a machine of ours. "More ways" in the same form, never another page: a command
@@ -74,7 +75,11 @@ export interface AddSandboxHost {
     // The browser's own sandbox credential, which an address already answering is probed with before it is recorded.
     readonly getIdToken: () => Promise<string | undefined>;
     readonly probe: typeof probeDaemon;
+    // The account's plans, where a machine of ours can be made on a paid one (2026-11-26); without it, every machine of
+    // ours is made as the address asked, as before plans belonged to sandboxes.
+    readonly plans?: AddPlans;
 }
+
 
 export interface AddOption {
     readonly value: string;
@@ -139,7 +144,10 @@ interface Flows {
     readonly mintedFor: Ref<string | undefined>;
     // The form's answer to "Who handles the code here?", which every way of starting the row carries to the machine.
     readonly mode: Ref<SandboxMode>;
+    // The plan a machine of ours is made on, as the picker holds it (useAddPlan).
+    readonly plan: AddPlan;
 }
+
 
 // Where it can run: the platform's two offers, read once the dialog opens (an unreadable one offers nothing rather
 // than guessing), and the connected machines that can make a sandbox. "More ways" beside them: the command wherever the
@@ -161,7 +169,8 @@ const useAddOffers = ({ host, row, hosted, setup }: Flows) => {
         if (hosted.hostedOffer.value?.needsGoogle === true || hosted.refusedForGoogle.value) {
             return `google`;
         }
-        if (hosted.hostedSpent.value) {
+        // The free machine in use is a dead end only where no plan can be bought: otherwise the plan picker offers the rest.
+        if (hosted.hostedSpent.value && !plansSold(host.plans)) {
             return `occupied`;
         }
         return hosted.hostedFull.value ? `full` : undefined;
@@ -172,7 +181,15 @@ const useAddOffers = ({ host, row, hosted, setup }: Flows) => {
             : []),
         ...onMachine.doors.value.map(machineOption),
         ...(hosted.hostedOffered.value && hostedProblem.value === undefined
-            ? [{ value: HOSTED, label: t(`setup.addSandbox.intenticMachine`), icon: `cloud` as const, note: hostedNote(hosted.hostedOffer.value?.hours) }]
+            ? [
+                  {
+                      value: HOSTED,
+                      label: t(`setup.addSandbox.intenticMachine`),
+                      icon: `cloud` as const,
+                      // The free hours left say what a new one starts on only where Free is all there is; the plan says it otherwise.
+                      note: hostedNote(plansSold(host.plans) ? undefined : hosted.hostedOffer.value?.hours),
+                  },
+              ]
             : []),
     ]);
     const moreOptions = computed<readonly AddOption[]>(() => [
@@ -324,6 +341,7 @@ const useAddPresses = (flows: Flows, offers: AddOffers, form: AddForm, starts: A
     );
     const busy = computed(() => creating.value || attach.attaching.value);
 
+
     // The row is made only on the press, under the typed name, then started where it was picked. An address makes it
     // only once the sandbox there let this account in.
     const create = async (): Promise<void> => {
@@ -339,6 +357,10 @@ const useAddPresses = (flows: Flows, offers: AddOffers, form: AddForm, starts: A
         creating.value = true;
         error.value = null;
         try {
+            // A paid plan is held (or bought) before anything is made: a payment that does not go through leaves no row.
+            if (target === HOSTED && !(await flows.plan.payFirst((notice) => (error.value = notice)))) {
+                return;
+            }
             const sandboxName = name.value.trim();
             try {
                 row.created.value = await host.sandbox.create(sandboxName);
@@ -394,9 +416,15 @@ const useAddPresses = (flows: Flows, offers: AddOffers, form: AddForm, starts: A
         }
     };
 
-    // The app's install on this computer given up for a machine of ours on the same row (a slow download, a restart the
-    // reader would rather not make): the app stops it, since the machine takes over the sandbox's address, and the run
-    // becomes the machine's wait. Offered only while one can start now.
+    return { creating, blocked, busy, create, resume };
+};
+
+// The app's install on this computer given up for a machine of ours on the same row (a slow download, a restart the
+// reader would rather not make): the app stops it, since the machine takes over the sandbox's address, and the run
+// becomes the machine's wait. Offered only while one can start now.
+const useHostedInstead = (flows: Flows, offers: AddOffers, starts: AddStarts) => {
+    const { host, row, hosted } = flows;
+    const { started, startHosted } = starts;
     const hostedInstead = computed(() => started.value?.kind === `here` && hosted.hostedOffered.value && offers.hostedProblem.value === undefined);
     const toHosted = async (): Promise<void> => {
         const target = row.created.value;
@@ -408,7 +436,7 @@ const useAddPresses = (flows: Flows, offers: AddOffers, form: AddForm, starts: A
         await startHosted();
     };
 
-    return { creating, blocked, busy, create, resume, hostedInstead, toHosted };
+    return { hostedInstead, toHosted };
 };
 
 export const useAddSandbox = (host: AddSandboxHost) => {
@@ -417,8 +445,10 @@ export const useAddSandbox = (host: AddSandboxHost) => {
     // Preselected by the profile the reader arrived in (a link from intentic.dev/desk preselects hands-off), and asked on
     // the form either way: nothing decides how a sandbox runs but the answer its maker gives here.
     const mode = ref<SandboxMode>(arrivingMode() ?? DEFAULT_SANDBOX_MODE);
-    const hosted = useHostedLane({ platform, sandbox, row, project: undefined, appTakesProjects: () => false, tier: host.tier, mode: () => mode.value });
-    const flows: Flows = { host, row, hosted, setup: ref<SetupCode | null>(null), mintedFor: ref<string | undefined>(undefined), mode };
+    // The offer is read for the address's plan: its "none left" is Free's only where that plan is Free.
+    const plan = useAddPlan(host.plans, host.sandbox, host.tier, () => (host.tier === undefined || host.tier === FREE_TIER.id) && hosted.hostedSpent.value);
+    const hosted = useHostedLane({ platform, sandbox, row, project: undefined, appTakesProjects: () => false, tier: plan.laneTier, mode: () => mode.value });
+    const flows: Flows = { host, row, hosted, setup: ref<SetupCode | null>(null), mintedFor: ref<string | undefined>(undefined), mode, plan };
     // Opens the workspace once the row reports in (and, for a machine of ours, once it is ready to be used).
     useRegistryWatch({ sandbox, row, hosted, mintedFor: flows.mintedFor });
     const offers = useAddOffers(flows);
@@ -445,11 +475,13 @@ export const useAddSandbox = (host: AddSandboxHost) => {
     const command = useAddCommand({ setup: renewal.live, started: starts.started, row, mobile: host.mobile });
     // An address already answering: probed first, the row made only once it let this account in (useAddAttach.ts).
     const attach = useAddAttach({ host, row, error: starts.error, name: form.name, started: starts.started, minted: () => flows.setup.value?.hostname });
-    const presses = useAddPresses(flows, offers, form, starts, attach);
+    const presses = { ...useAddPresses(flows, offers, form, starts, attach), ...useHostedInstead(flows, offers, starts) };
 
     return {
         ...form,
         mode,
+        // The plan a machine of ours is made on: the pick, the plans offered and why one cannot be, and the press's words.
+        plan,
         ...presses,
         options: offers.options,
         moreOptions: offers.moreOptions,

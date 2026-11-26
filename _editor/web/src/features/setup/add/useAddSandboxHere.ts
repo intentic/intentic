@@ -1,12 +1,14 @@
 import type { HostedTierId } from "@intentic/constants";
 import { useDevice } from "@intentic/ui";
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { desktopVersion, openDesktopLink } from "../../../app/environments/desktop";
 import { environment } from "../../../app/environments/environment";
 import { scriptSource } from "../../../app/environments/scriptCommand";
 import { useGoogleIdentity } from "../../../client/auth/useGoogleIdentity";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { apiClient } from "../../../lib/useApi";
+import { useHostedPlan } from "../../../models/hosted-plan/useHostedPlan";
+import { useStripeErrand } from "../../settings/hosted-plan/useStripeErrand";
 import { markJustSetUp } from "../../../models/sandbox/live/justSetUp";
 import { useDesktopSetup } from "../desktopSetup";
 import { platformUrlOf } from "../flow/installCommand";
@@ -39,6 +41,10 @@ export const useAddSandboxHere = (options: AddSandboxHereOptions) => {
     const { mobile } = useDevice();
     const { getIdToken, warmIdToken } = useGoogleIdentity();
     const platformUrl = platformUrlOf(environment.api.url);
+    // The account's plans, for a machine of ours made on a paid one: reserved by an account already paying, bought on
+    // Stripe's page first by anyone else (the browser comes back to the cloud entry, which opens this dialog on the plan).
+    const plan = useHostedPlan();
+    const errand = useStripeErrand();
 
     const add = useAddSandbox({
         sandbox: {
@@ -58,6 +64,14 @@ export const useAddSandboxHere = (options: AddSandboxHereOptions) => {
         mobile,
         openDesktopLink,
         tier: options.tier,
+        plans: {
+            state: () => plan.state.value,
+            reserve: async (tier) => {
+                await plan.reserve(tier);
+            },
+            // allow(route-literal): the contract takes this one return address as a literal, not any path a builder makes.
+            checkout: (tier) => errand.open(`checkout`, () => apiClient.hostedPlan.checkout({ tier, returnTo: `/start/hosted` })),
+        },
         getIdToken: () => getIdToken(),
         probe: probeDaemon,
         warmCredential: async () => {
@@ -76,6 +90,16 @@ export const useAddSandboxHere = (options: AddSandboxHereOptions) => {
             options.reportedIn(id);
         },
     });
+
+    // A machine of ours made: the account's plans read again, so a plan reserved for it is shown on it, not waiting.
+    watch(
+        () => add.hostedRow.value !== null,
+        (made) => {
+            if (made) {
+                void plan.refetch();
+            }
+        },
+    );
 
     const desktop = useDesktopSetup();
     // The app's report, while it is about this sandbox: its module state may still hold an earlier install's last word.

@@ -4,7 +4,8 @@ import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
 
 // The terms, as the questions people actually ask before paying, folded until asked. Each answer is a sentence or two:
-// what an hour is, what running out does, what is never counted, how teams and cancelling work.
+// what an hour is, what running out does, what Free gives, how a sandbox changes plan, what is never counted, how teams
+// and cancelling work. Every cloud sandbox has a plan of its own (2026-11-26), so nothing here speaks of anything else.
 
 const t = useT();
 
@@ -14,7 +15,8 @@ const questions = computed(() => [
     { q: t(`settings.hostedPlanFaq.awakeQ`), a: t(`settings.hostedPlanFaq.awakeA`) },
     { q: t(`settings.hostedPlanFaq.runOutQ`), a: t(`settings.hostedPlanFaq.runOutA`) },
     { q: t(`settings.hostedPlanFaq.freeQ`), a: t(`settings.hostedPlanFaq.freeA`, { hours: props.freeHours }) },
-    { q: t(`settings.hostedPlanFaq.switchQ`), a: t(`settings.hostedPlanFaq.switchA`) },
+    { q: t(`settings.hostedPlanFaq.changeQ`), a: t(`settings.hostedPlanFaq.changeA`) },
+    { q: t(`settings.hostedPlanFaq.billQ`), a: t(`settings.hostedPlanFaq.billA`) },
     { q: t(`settings.hostedPlanFaq.ownQ`), a: t(`settings.hostedPlanFaq.ownA`) },
     { q: t(`settings.hostedPlanFaq.teamsQ`), a: t(`settings.hostedPlanFaq.teamsA`) },
     { q: t(`settings.hostedPlanFaq.cancelQ`), a: t(`settings.hostedPlanFaq.cancelA`) },

@@ -20,7 +20,7 @@ import { hostedSlotUse } from "./plan/hosted-plan.js";
 export type HostedArrival = { readonly lane: `free` } | { readonly lane: `slot`; readonly tier: HostedTierId } | { readonly lane: `needs-google` };
 
 export const hostedArrivalFor = async (
-    prisma: Pick<PrismaClient, "account" | "hostedPlan" | "hostedMachine">,
+    prisma: Pick<PrismaClient, "account" | "hostedPlan" | "hostedMachine" | "user">,
     config: Config,
     userId: string,
     requestedTier?: HostedTierId,

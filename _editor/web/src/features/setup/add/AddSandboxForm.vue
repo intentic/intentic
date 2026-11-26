@@ -16,7 +16,8 @@ import { sandboxLanding } from "../../../lib/routes/firstScreens";
 import AddSandboxAttach from "./AddSandboxAttach.vue";
 import AddSandboxWays from "./AddSandboxWays.vue";
 import { HERE } from "../flow/useSetupOnMachine";
-import { ATTACH } from "./useAddSandbox";
+import { ATTACH, HOSTED } from "./useAddSandbox";
+import PlanChoice from "../../settings/hosted-plan/PlanChoice.vue";
 import type { AddSandboxHere } from "./useAddSandboxHere";
 
 const { add } = defineProps<{ add: AddSandboxHere[`add`] }>();
@@ -24,7 +25,10 @@ const { add } = defineProps<{ add: AddSandboxHere[`add`] }>();
 const emit = defineEmits<{ submit: [] }>();
 
 const t = useT();
-const { name, problem, pick, options, moreOptions, hostedProblem, hostedHeldBy, loaded, busy, error, attach, mode } = add;
+const { name, problem, pick, options, moreOptions, hostedProblem, hostedHeldBy, loaded, busy, error, attach, mode, plan } = add;
+// The plan a machine of ours is made on, asked once the cloud is the pick and the platform sells one (useAddPlan.ts).
+const planShown = computed(() => pick.value === HOSTED && plan.sold.value);
+const planId = useId();
 const nothingOffered = computed(() => loaded.value && options.value.length === 0);
 const morePicked = computed(() => moreOptions.value.some((option) => option.value === pick.value));
 // Open by itself where nothing starts in one press, or where one of its ways is already the pick.
@@ -129,6 +133,15 @@ const notice = computed(() => (pick.value === ATTACH ? attach.notice.value : err
                     }}</RouterLink>
                 </p>
             </template>
+        </div>
+
+        <!-- THE PLAN IT IS MADE ON, for a machine of ours: Free, or a paid plan with its price, and what the press pays. -->
+        <div v-if="planShown" class="flex flex-col gap-1.5" data-add-sandbox-plan>
+            <span :id="planId" class="ui-field-label">{{ t(`settings.plans.newSandbox.label`) }}</span>
+            <fieldset :disabled="busy" class="min-w-0">
+                <PlanChoice v-model="plan.tier.value" :rungs="plan.rungs.value" :refused="plan.refused.value" :labelled-by="planId" compact />
+            </fieldset>
+            <p v-if="plan.offer.value?.price" class="text-xs text-muted">{{ plan.offer.value.price }}</p>
         </div>
 
         <AddSandboxAttach v-if="pick === ATTACH" :attach="attach" @submit="emit(`submit`)" />

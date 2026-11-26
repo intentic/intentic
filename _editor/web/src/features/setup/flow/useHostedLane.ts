@@ -3,7 +3,7 @@ import { FREE_TIER, type HostedTierId, type SandboxMode } from "@intentic/consta
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
 import { t } from "@intentic/ui/i18n";
-import { computed, onScopeDispose, type Ref, ref, shallowReactive } from "vue";
+import { computed, type MaybeRefOrGetter, onScopeDispose, type Ref, ref, shallowReactive, toValue } from "vue";
 import { z } from "zod";
 import { track } from "../../../app/analytics";
 import { arrivingMode } from "../../../app/useProfile";
@@ -52,7 +52,8 @@ const hostOf = (url: string | null | undefined): string | undefined => {
 };
 
 export interface HostedLaneHost {
-    readonly tier?: HostedTierId | undefined;
+    // The plan a new machine is made on: the address's (the pricing page's), or the new sandbox's plan picker; Free unnamed.
+    readonly tier?: MaybeRefOrGetter<HostedTierId | undefined>;
     // How the new sandbox runs, as its maker answered "Who handles the code here?"; a lane that never asked takes what the
     // arriving profile preselects (useProfile.ts arrivingMode), as it took the profile itself before the question.
     readonly mode?: (() => SandboxMode | undefined) | undefined;
@@ -74,8 +75,9 @@ const holdsProjects = (offer: Readonly<Ref<HostedOffer | null>>, appTakesProject
 
 // The store's provision names no folder, so a project's machine is asked of the platform directly, with the mode the
 // store would have sent; the store's list learns the machine at the registry watch's next read.
-const provisionFor = ({ platform, sandbox, project, tier, mode: asked }: HostedLaneHost, sandboxId: string, token: string): Promise<SandboxSummary> => {
-    const mode = asked?.() ?? arrivingMode();
+const provisionFor = ({ platform, sandbox, project, tier: asked, mode: askedMode }: HostedLaneHost, sandboxId: string, token: string): Promise<SandboxSummary> => {
+    const mode = askedMode?.() ?? arrivingMode();
+    const tier = toValue(asked);
     return project === undefined && tier === undefined
         ? sandbox.hostedProvision(sandboxId, token, mode)
         : platform.hostedProvision({ sandboxId, token, project, tier, mode });
@@ -219,7 +221,8 @@ export const useHostedLane = (host: HostedLaneHost) => {
     // Re-reads what the account has left, since releasing a machine changes it; a failed re-read keeps the last answer.
     const refreshHostedOffer = async (): Promise<void> => {
         try {
-            hostedOffer.value = await platform.hostedOffer(host.tier === undefined ? undefined : { tier: host.tier });
+            const tier = toValue(host.tier);
+            hostedOffer.value = await platform.hostedOffer(tier === undefined ? undefined : { tier });
         } catch {
             // A platform that cannot be asked keeps the answer it already gave.
         }
@@ -278,7 +281,7 @@ export const useHostedLane = (host: HostedLaneHost) => {
                 }
             }
             const updated = ran?.state === `done` ? ran.value : undefined;
-            countCreated(updated, { tier: host.tier, resumed: row.resuming.value, rebuild });
+            countCreated(updated, { tier: toValue(host.tier), resumed: row.resuming.value, rebuild });
             if (updated === undefined || updated === null || !provisionLands(action, target.id)) {
                 return false;
             }

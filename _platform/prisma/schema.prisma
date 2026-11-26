@@ -397,6 +397,16 @@ model HostedMachine {
     cpus      Int
     memoryMb  Int
     volumeGb  Int
+    /* THIS SANDBOX'S PLAN (api plan/plan-change.ts). Every cloud sandbox has one, and the row is its ledger: `paid` says
+     * its plan is paid for on the owner's subscription, which is what gives a machine at a paid rung hours of its own
+     * (hosted-usage.ts); the subscription's quantities only say what the NEXT invoice bills. `planTo`/`planAt` is a
+     * change waiting: a downgrade the owner scheduled for the renewal date (`planAt` ahead), or one due now (an upgrade
+     * paid for and still being applied, a downgrade waiting for its machine to sleep), which the plan-change job and
+     * the routes apply by migrating the machine. (2026-11-26: replaced "slots bought, machines moved onto them", whose
+     * paid-for empty slot read to buyers as a purchase that did nothing.) */
+    paid      Boolean   @default(false)
+    planTo    String?
+    planAt    DateTime?
     /* These fields identify the applied image, environment overlay, and at-most-one active build. */
     image           String?
     baseImage       String?
@@ -440,6 +450,7 @@ model HostedMachine {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
+    @@index([planAt])
     @@map("hosted_machine")
 }
 

@@ -92,7 +92,8 @@ afterEach(() => {
 // One account's month as the meter reads it: its machines (oldest first), its plan, its settled rows and the account.
 const month = (
     read: {
-        machines?: { sandboxId: string; tier: string; wokeAt?: Date | null }[];
+        // `paid`, `planTo` and `planAt` are the machine's plan (plan-change.ts); absent, it is on none.
+        machines?: { sandboxId: string; tier: string; wokeAt?: Date | null; paid?: boolean; planTo?: string | null; planAt?: Date | null }[];
         plan?: { status: string; items: { tier: string; quantity: number }[] } | null;
         rows?: { sandboxId: string | null; tier: string; minutes: number }[];
         owner?: { createdAt: Date; email: string } | null;
@@ -102,7 +103,7 @@ const month = (
         hostedMachine: {
             update: jest.fn(),
             findUnique: jest.fn().mockResolvedValue(null),
-            findMany: jest.fn().mockResolvedValue((read.machines ?? []).map((machine) => ({ wokeAt: null, ...machine }))),
+            findMany: jest.fn().mockResolvedValue((read.machines ?? []).map((machine) => ({ wokeAt: null, paid: false, planTo: null, planAt: null, ...machine }))),
         },
         hostedPlan: { findUnique: jest.fn().mockResolvedValue(read.plan ?? null) },
         hostedUsage: {
@@ -206,12 +207,12 @@ describe(`the hosted hour meter`, () => {
         });
     });
 
-    /* A PAID SLOT'S HOURS ARE ITS MACHINE'S, and only while the slot is held: a machine that moved up keeps the free
-     * minutes it spent before the move in the free hours, and a machine whose slot lapsed spends the free hours again. */
+    /* A PAID PLAN'S HOURS ARE ITS MACHINE'S, and only while it is paid for: a machine that moved up keeps the free
+     * minutes it spent before the move in the free hours, and a machine whose plan lapsed spends the free hours again. */
     describe(`a machine's own month on a paid slot`, () => {
-        it(`meters a machine on a held slot against its rung's hours, apart from the free ones it spent before`, async () => {
+        it(`meters a machine on a paid plan against its rung's hours, apart from the free ones it spent before`, async () => {
             const prisma = month({
-                machines: [{ sandboxId: `s1`, tier: STANDARD.id }],
+                machines: [{ sandboxId: `s1`, tier: STANDARD.id, paid: true }],
                 plan: standardSlots(1),
                 rows: [
                     { sandboxId: `s1`, tier: FREE_TIER.id, minutes: FREE_MINUTES },
@@ -232,36 +233,46 @@ describe(`the hosted hour meter`, () => {
 
         // The operator's knob is the free rung's alone; a paid rung's month is the ladder's and not a deployment's.
         it(`leaves a paid slot metered where the operator has switched the free ceiling off`, async () => {
-            const prisma = month({ machines: [{ sandboxId: `s1`, tier: STANDARD.id }], plan: standardSlots(1) });
+            const prisma = month({ machines: [{ sandboxId: `s1`, tier: STANDARD.id, paid: true }], plan: standardSlots(1) });
             const hours = await accountHoursOf(prisma, config(0), `u1`, now);
             expect(hours.free.metered).toBe(false);
             expect(hours.machines.get(`s1`)).toMatchObject({ kind: `slot`, metered: true, allowanceMinutes: STANDARD_MINUTES });
         });
 
         it(`spends the free hours on a machine whose plan stopped paying, whatever size it still is`, async () => {
-            const prisma = month({ machines: [{ sandboxId: `s1`, tier: STANDARD.id }], plan: standardSlots(1, `past_due`) });
+            const prisma = month({ machines: [{ sandboxId: `s1`, tier: STANDARD.id, paid: true }], plan: standardSlots(1, `past_due`) });
             const hours = await accountHoursOf(prisma, config(), `u1`, now);
             expect(hours.machines.get(`s1`)).toBe(hours.free);
         });
 
-        // A resubscription that bought back fewer slots than machines stand at the rung: the oldest keep theirs.
-        it(`gives the held slots to the oldest machines at the rung, and the free hours to the rest`, async () => {
+        // A machine's own hours are its plan's (plan-change.ts onPaidPlan): a machine of the same size whose plan is not
+        // paid for, one from a lapsed plan that a resubscription did not put back on one, spends the free hours.
+        it(`gives own hours to the machine whose plan is paid for, and the free hours to one of the same size whose is not`, async () => {
             const prisma = month({
                 machines: [
-                    { sandboxId: `older`, tier: STANDARD.id },
-                    { sandboxId: `newer`, tier: STANDARD.id },
+                    { sandboxId: `older`, tier: STANDARD.id, paid: false },
+                    { sandboxId: `newer`, tier: STANDARD.id, paid: true },
                 ],
                 plan: standardSlots(1),
             });
             const hours = await accountHoursOf(prisma, config(), `u1`, now);
-            expect(hours.machines.get(`older`)).toMatchObject({ kind: `slot`, tier: STANDARD.id });
-            expect(hours.machines.get(`newer`)).toBe(hours.free);
+            expect(hours.machines.get(`newer`)).toMatchObject({ kind: `slot`, tier: STANDARD.id });
+            expect(hours.machines.get(`older`)).toBe(hours.free);
+        });
+
+        // A downgrade waiting for its machine keeps the plan's own hours until its date, and spends the free ones after.
+        it(`keeps a scheduled downgrade on its own hours until the renewal date`, async () => {
+            const scheduled = (planAt: string) =>
+                month({ machines: [{ sandboxId: `s1`, tier: STANDARD.id, paid: true, planTo: FREE_TIER.id, planAt: new Date(planAt) }], plan: standardSlots(0) });
+            expect((await accountHoursOf(scheduled(`2026-08-26T00:00:00.000Z`), config(), `u1`, now)).machines.get(`s1`)).toMatchObject({ kind: `slot` });
+            const past = await accountHoursOf(scheduled(`2026-08-01T00:00:00.000Z`), config(), `u1`, now);
+            expect(past.machines.get(`s1`)).toBe(past.free);
         });
 
         // An open stretch on a slot counts towards the slot, never towards the free hours beside it.
         it(`counts a paid machine's open stretch towards its own month only`, async () => {
             const prisma = month({
-                machines: [{ sandboxId: `s1`, tier: STANDARD.id, wokeAt: new Date(`2026-08-13T11:00:00.000Z`) }],
+                machines: [{ sandboxId: `s1`, tier: STANDARD.id, paid: true, wokeAt: new Date(`2026-08-13T11:00:00.000Z`) }],
                 plan: standardSlots(1),
             });
             const hours = await accountHoursOf(prisma, config(), `u1`, now);
@@ -289,7 +300,7 @@ describe(`the hosted hour meter`, () => {
         });
 
         it(`leaves a comped subscriber's slot on its own month`, async () => {
-            const prisma = month({ owner: friend, machines: [{ sandboxId: `s1`, tier: STANDARD.id }], plan: standardSlots(1) });
+            const prisma = month({ owner: friend, machines: [{ sandboxId: `s1`, tier: STANDARD.id, paid: true }], plan: standardSlots(1) });
             const hours = await accountHoursOf(prisma, comped, `u1`, now);
             expect(hours.machines.get(`s1`)).toMatchObject({ kind: `slot`, metered: true, allowanceMinutes: STANDARD_MINUTES });
             expect(hours.free.metered).toBe(true);
@@ -326,7 +337,7 @@ describe(`the hosted hour meter`, () => {
 
         // A slot bought on day one keeps its hours: the ramp is a brake on the free plan, not on a purchase.
         it(`cannot pull a paid slot below what was bought`, async () => {
-            const prisma = month({ owner: born(1), machines: [{ sandboxId: `s1`, tier: STANDARD.id }], plan: standardSlots(1) });
+            const prisma = month({ owner: born(1), machines: [{ sandboxId: `s1`, tier: STANDARD.id, paid: true }], plan: standardSlots(1) });
             const hours = await accountHoursOf(prisma, config(40, ramp), `u1`, now);
             expect(hours.machines.get(`s1`)).toMatchObject({ allowanceMinutes: STANDARD_MINUTES });
             expect(hours.machines.get(`s1`)?.rampUntil).toBeUndefined();
@@ -335,7 +346,7 @@ describe(`the hosted hour meter`, () => {
     });
 
     /* WHAT A MINUTE WAS CHARGED TO is written when it is charged, by the same rule the meter reads with: the machine's
-     * own rung while it stands on a held slot, the account's free hours otherwise. */
+     * own rung while its plan is paid for, the account's free hours otherwise. */
     describe(`which hours a charge lands on`, () => {
         const settleOn = async (tier: string, plan: { status: string; items: { tier: string; quantity: number }[] } | null) => {
             stubMachine(`stopped`, `2026-08-13T10:30:00.000Z`);
@@ -343,8 +354,7 @@ describe(`the hosted hour meter`, () => {
             const prisma = prismaWith({
                 hostedMachine: {
                     update: jest.fn().mockResolvedValue({}),
-                    findUnique: jest.fn().mockResolvedValue({ wokeAt, tier }),
-                    findMany: jest.fn().mockResolvedValue([{ sandboxId: `s1`, tier }]),
+                    findUnique: jest.fn().mockResolvedValue({ wokeAt, tier, paid: tier !== FREE_TIER.id, planTo: null, planAt: null }),
                 },
                 hostedPlan: { findUnique: jest.fn().mockResolvedValue(plan) },
             });
@@ -352,7 +362,7 @@ describe(`the hosted hour meter`, () => {
             return prisma;
         };
 
-        it(`charges a machine on a held slot to its rung`, async () => {
+        it(`charges a machine whose plan is paid for to its rung`, async () => {
             expect((await settleOn(STANDARD.id, standardSlots(1))).hostedUsage.upsert).toHaveBeenCalledWith({
                 where: { sandboxId_month_tier: { sandboxId: `s1`, month: `2026-08`, tier: STANDARD.id } },
                 create: { sandboxId: `s1`, ownerId: `u1`, month: `2026-08`, tier: STANDARD.id, minutes: 30 },

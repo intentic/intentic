@@ -10,15 +10,19 @@ import { RouterLinkStub } from "../../../testing/routerLinkStub";
 import { homePath, page } from "@intentic/sandbox-contract/app-routes";
 
 // Pins the one answer this card owes on a sandbox's Usage tab: whether its awake time costs hours. A sandbox on its
-// owner's own computer is told it never does, whatever the account's hosted hours say; a hosted one's owner sees the
-// hours that machine spends and when they come back; a guest is told whose hours they are; and a platform that hosts
-// nothing gets no card at all.
+// owner's own computer is told it never does, whatever the account's hosted hours say; a hosted one's owner sees its plan
+// (SandboxPlanCard.vue): the hours that plan gives it and when they come back; a guest is told whose hours they are; and a
+// platform that hosts nothing gets no card at all.
 
 const active = ref<Partial<SandboxSummary> | undefined>(undefined);
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active }) }));
 const hostedPlan = ref<HostedPlanState | undefined>(undefined);
 const planOffered = ref(true);
-jest.mock(`../../../models/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ state: hostedPlan, offered: planOffered }) }));
+jest.mock(`../../../models/hosted-plan/useHostedPlan`, () => ({
+    useHostedPlan: () => ({ state: hostedPlan, offered: planOffered, changePlan: jest.fn() }),
+}));
+// The change dialog is its own surface (Stripe, the platform's writes); here only the card that opens it is read.
+jest.mock(`../../settings/hosted-plan/PlanDialog.vue`, () => ({ default: { name: `PlanDialog`, render: () => null } }));
 // SAFETY: the card's one link passes a string `to`, which the stub renders as the anchor RouterLink would; vue-router's
 // own type describes the whole component API, which no stub can claim to be.
 jest.mock(`vue-router`, () => ({ ...vueRouterOriginal, RouterLink: RouterLinkStub as never }));
@@ -70,19 +74,21 @@ it(`shows a hosted sandbox's owner the free hours its machine spends, and when t
     await nextTick();
     expect(root.textContent).toContain(`Free hours`);
     expect(root.textContent).toContain(`12h of 40h left this month`);
-    expect(root.textContent).toContain(`shared by every hosted sandbox of yours that isn't on a paid slot`);
+    expect(root.textContent).toContain(`Awake hours come back on Oct 1.`);
+    expect(root.textContent).toContain(`removed after a few weeks unopened`);
     // No route on screen here, so the account's billing opens where it needs no sandbox: in Home's frame.
     expect(root.querySelector(`a`)?.getAttribute(`href`)).toBe(homePath(undefined, page.account(`billing`)));
 });
 
-it(`shows a machine on a paid slot its own month, named by its rung`, async () => {
+it(`shows a sandbox on a paid plan its own month, named by its plan, and what that plan costs`, async () => {
     active.value = { id: `box`, tier: `owner`, hosted: HOSTED };
     hostedPlan.value = holding(spentHours(600, STANDARD.monthlyHours * 60, `slot`), STANDARD.id);
     const root = mount();
     await nextTick();
     expect(root.textContent).toContain(`Standard hours`);
     expect(root.textContent).toContain(`210h of 220h left this month`);
-    expect(root.textContent).toContain(`This sandbox's own hours, on its Standard slot`);
+    expect(root.textContent).toContain(`Standard · $${STANDARD.priceUsd}/month`);
+    expect(root.textContent).not.toContain(`removed after a few weeks unopened`);
 });
 
 it(`says a comped owner's hours are counted against no limit, with no bar to fill`, async () => {

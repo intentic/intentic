@@ -3,7 +3,7 @@ import { hostedPower, provisionHosted, releaseHosted, runCommandLater, wakeHoste
 import { attachRow, createRow, deleteRow, leaveRow, mintSetupCode, restoreRow, rowOf, sandboxRows, trashRows, updateRow } from "../world/sandboxRegistry";
 import { FREE_TIER } from "@intentic/constants";
 import { buildStatus, building, hashOf, rollBack, startBuild } from "../world/builds";
-import { dropMachine, placeMachine, slotsLeft, slotsLeftAt } from "../world/plan";
+import { dropMachine, placeMachine, provisionRefusal, startableAt } from "../world/plan";
 import { zonesFor } from "../world/zones";
 import { outageMachine, wakeOutage } from "../outage";
 import { type PlatformRouter, refusePlatform } from "./serve";
@@ -37,17 +37,20 @@ export const sandboxAnswers = {
         leaveRow(sandboxId);
         return { ok: true };
     },
-    hostedOffer: () => ({
+    // What a new machine of ours at the tier asked for (Free unless named) can start on: the Free sandbox an account has,
+    // or a paid plan waiting for a sandbox (world/plan.ts).
+    hostedOffer: (input) => ({
         enabled: true,
         startJourney: true,
-        remaining: slotsLeft(),
+        remaining: startableAt(input?.tier ?? FREE_TIER.id),
         hours: { allowance: FREE_TIER.monthlyHours, remaining: FREE_TIER.monthlyHours },
     }),
-    // A machine stands on a slot at its rung (world/plan.ts): the free one unless the visitor bought another.
+    // A machine is made on its plan (world/plan.ts): Free while the account has it, else a plan reserved for it.
     hostedProvision: ({ sandboxId, tier = FREE_TIER.id }) => {
         if (owned(sandboxId).hosted === null) {
-            if (slotsLeftAt(tier) <= 0) {
-                return refusePlatform(`Your free machine is already in use. Buy another on the Billing page, or run this sandbox on your own computer.`, 409);
+            const refused = provisionRefusal(tier);
+            if (refused !== undefined) {
+                return refusePlatform(refused, 409);
             }
             placeMachine(sandboxId, tier);
             provisionHosted(sandboxId);

@@ -40,7 +40,9 @@ const here = useAddSandboxHere({
         opening.value = true;
     },
 });
-const { blocked, pick, busy, started, created, onMachine } = here.add;
+const { blocked, pick, busy, started, created, onMachine, plan } = here.add;
+// A machine of ours on a paid plan: the press carries its price, and is the dialog's one paid step.
+const paidPlan = computed(() => (pick.value === HOSTED ? plan.offer.value : undefined));
 if (asked.machine === `hosted`) {
     pick.value = HOSTED;
 }
@@ -92,8 +94,8 @@ const machineFailed = computed(() => started.value?.kind === `machine` && onMach
                 <template v-if="started === undefined">
                     <Button :label="t(`ui.action.cancel`)" tier="quiet" @click="emit(`close`)" />
                     <Button
-                        :label="pick === ATTACH ? t(`ui.action.connect`) : t(`ui.action.create`)"
-                        tier="accent"
+                        :label="pick === ATTACH ? t(`ui.action.connect`) : (paidPlan?.label ?? t(`ui.action.create`))"
+                        :tier="paidPlan?.paid ? `loud` : `accent`"
                         :loading="busy"
                         :disabled="blocked"
                         @click="here.add.create"

@@ -36,6 +36,8 @@ export interface WaitFailure {
     readonly problem: string;
     readonly remedy: string;
     readonly action: "remake" | "reboot" | "none";
+    // The platform's decision, where it is one: spent hours are answered with a bigger plan (AddSandboxRun.vue).
+    readonly refusal?: WakeRefusal;
 }
 
 // The two shapes the platform refuses to start a machine in (sandbox.wake: PAYMENT_REQUIRED, FORBIDDEN). Each is a
@@ -44,12 +46,13 @@ export type WakeRefusal = "hours" | "suspended";
 
 // Built when read, so the sentences follow the language picked after boot.
 const refused = (): Record<WakeRefusal, WaitFailure> => ({
-    // The hours may be the account's free ones or the machine's own month on a paid slot; the refusal does not say
+    // The hours may be the account's free ones or the machine's own month on its paid plan; the refusal does not say
     // which, so the sentence names neither.
     hours: {
         problem: t(`setup.hostedWait.hoursProblem`),
         remedy: t(`setup.hostedWait.hoursRemedy`),
         action: `none`,
+        refusal: `hours`,
     },
     suspended: {
         problem: t(`setup.hostedWait.suspendedProblem`),

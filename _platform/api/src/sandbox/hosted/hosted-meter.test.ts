@@ -38,7 +38,8 @@ const config = (over: Record<string, unknown> = {}, compEmails = ``): Config =>
         betterAuth: { secret: `meter-test-secret` },
     }) as unknown as Config;
 
-// One machine with an open stretch, as the tick selects it.
+// One machine with an open stretch, as the tick selects it. A paid-size one is on a paid plan unless a test says not
+// (`paid`, plan-change.ts); whether that plan is paid for is the subscription's to say.
 const machine = (over: Record<string, unknown> = {}) => ({
     id: `h1`,
     sandboxId: `s1`,
@@ -47,6 +48,9 @@ const machine = (over: Record<string, unknown> = {}) => ({
     machineId: `m1`,
     wokeAt: new Date(NOW.getTime() - 10 * 60_000),
     sandbox: { ownerId: `u1` },
+    paid: over[`tier`] !== undefined && over[`tier`] !== FREE_TIER.id,
+    planTo: null,
+    planAt: null,
     ...over,
 });
 
@@ -134,8 +138,8 @@ describe(`the hour meter's stop`, () => {
     });
 
     /* A PAID MACHINE IS NOT UNMETERED, it has a bigger month. Awake for 100 of this month's hours is past the free
-     * rung's 40 and well inside Standard's, and the slot the machine stands on is what decides which. */
-    it(`judges a machine on a paid slot against its own rung's hours, not the free plan's`, async () => {
+     * rung's 40 and well inside Standard's, and the plan the machine is on is what decides which. */
+    it(`judges a machine on a paid plan against its own rung's hours, not the free plan's`, async () => {
         const awake = { wokeAt: new Date(NOW.getTime() - 100 * 60 * 60_000) };
         stubFly(`started`);
         expect(await stopOverBudgetHosted(prismaWith([machine(awake)]), config(), logger, NOW)).toEqual({ stopped: 1 });

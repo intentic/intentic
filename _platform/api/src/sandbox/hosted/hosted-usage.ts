@@ -3,7 +3,8 @@ import type { Prisma, PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import type { Config } from "../../config.js";
 import { DAY_MS } from "../../durations.js";
-import { compedEmail, isOnPlan, paidSlotsOf, slotHolders } from "./plan/hosted-plan.js";
+import { compedEmail, isOnPlan } from "./plan/hosted-plan.js";
+import { onPaidPlan } from "./plan/plan-change.js";
 import { hostedTierIn } from "./hosted-shape.js";
 import { getMachineDetail, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 import { carriedFreeMinutes, carriedStandingOf, GOOGLE_SUBJECT_SELECT } from "./abuse/carried-standing.js";
@@ -84,7 +85,7 @@ const rampedFreeHours = (config: Config, createdAt: Date | undefined, full: numb
 const liveMinutes = (wokeAt: Date | null, month: string, now: Date): number =>
     wokeAt === null || usageMonth(wokeAt) !== month ? 0 : Math.max(0, Math.floor((now.getTime() - wokeAt.getTime()) / 60_000));
 
-// Oldest first, ties by id: the order slotHolders decides in, so the meter and the charge read the same machines.
+// Oldest first, ties by id, so the machines are listed in the order they were made.
 const OLDEST_FIRST: Prisma.HostedMachineOrderByWithRelationInput[] = [{ createdAt: `asc` }, { id: `asc` }];
 
 /**
@@ -103,12 +104,17 @@ export const accountHoursOf = async (
     const [owner, plan, machines, rows] = await Promise.all([
         prisma.user.findUnique({ where: { id: ownerId }, select: { createdAt: true, email: true, ...GOOGLE_SUBJECT_SELECT } }),
         prisma.hostedPlan.findUnique({ where: { userId: ownerId }, select: { status: true, items: { select: { tier: true, quantity: true } } } }),
-        prisma.hostedMachine.findMany({ where: { sandbox: { ownerId } }, select: { sandboxId: true, tier: true, wokeAt: true }, orderBy: OLDEST_FIRST }),
+        prisma.hostedMachine.findMany({
+            where: { sandbox: { ownerId } },
+            select: { sandboxId: true, tier: true, wokeAt: true, paid: true, planTo: true, planAt: true },
+            orderBy: OLDEST_FIRST,
+        }),
         prisma.hostedUsage.groupBy({ by: [`sandboxId`, `tier`], where: { ownerId, month }, _sum: { minutes: true } }),
     ]);
     // A paying account is a subscriber first, as the plan state reads it; the comp list answers only for the rest.
     const comped = !isOnPlan(plan) && owner !== null && compedEmail(config, owner.email);
-    const holders = slotHolders(machines, paidSlotsOf(plan));
+    // A machine spends hours of its own while its plan is paid for (plan-change.ts onPaidPlan), the free ones otherwise.
+    const holders = new Set(machines.filter((machine) => onPaidPlan(machine, isOnPlan(plan), now)).map((machine) => machine.sandboxId));
     const settled = (counts: (row: { sandboxId: string | null; tier: string }) => boolean): number =>
         rows.reduce((sum, row) => (counts(row) ? sum + (row._sum.minutes ?? 0) : sum), 0);
 
@@ -153,27 +159,20 @@ export const hostedBudgetOf = async (
 export const hostedArrivalBudget = async (prisma: PrismaClient, config: Config, ownerId: string, now: Date = new Date()): Promise<HostedBudget> =>
     (await accountHoursOf(prisma, config, ownerId, now)).free;
 
-// The hours a minute this machine spends right now is charged to: its own rung while it stands on a paid slot the
-// account holds, the account's free hours otherwise. Read inside the charge's own transaction, by the same rule the
-// meter reads with (slotHolders), so a minute is recorded as the hours it was counted against.
+// The hours a minute this machine spends right now is charged to: its own rung while its plan is paid for, the
+// account's free hours otherwise. Read inside the charge's own transaction, by the same rule the meter reads with
+// (plan-change.ts onPaidPlan), so a minute is recorded as the hours it was counted against.
 const chargedTierOf = async (tx: Prisma.TransactionClient, machine: { sandboxId: string; ownerId: string }): Promise<string> => {
-    const own = await tx.hostedMachine.findUnique({ where: { sandboxId: machine.sandboxId }, select: { tier: true } });
-    // No row, the free rung, or a rung the ladder does not know: nothing that could stand on a paid slot.
+    const own = await tx.hostedMachine.findUnique({
+        where: { sandboxId: machine.sandboxId },
+        select: { tier: true, paid: true, planTo: true, planAt: true },
+    });
+    // No row, the free rung, or a rung the ladder does not know: nothing that could be on a paid plan.
     if (own === null || own.tier === FREE_TIER.id || !isHostedTierId(own.tier)) {
         return FREE_TIER.id;
     }
-    const slots = paidSlotsOf(
-        await tx.hostedPlan.findUnique({ where: { userId: machine.ownerId }, select: { status: true, items: { select: { tier: true, quantity: true } } } }),
-    );
-    if (!slots.has(own.tier)) {
-        return FREE_TIER.id;
-    }
-    const peers = await tx.hostedMachine.findMany({
-        where: { tier: own.tier, sandbox: { ownerId: machine.ownerId } },
-        select: { sandboxId: true, tier: true },
-        orderBy: OLDEST_FIRST,
-    });
-    return slotHolders(peers, slots).has(machine.sandboxId) ? own.tier : FREE_TIER.id;
+    const plan = await tx.hostedPlan.findUnique({ where: { userId: machine.ownerId }, select: { status: true } });
+    return onPaidPlan(own, isOnPlan(plan), new Date()) ? own.tier : FREE_TIER.id;
 };
 
 // Adds minutes to what they were charged to this month; an atomic upsert, so two stretches (or a build) landing on one

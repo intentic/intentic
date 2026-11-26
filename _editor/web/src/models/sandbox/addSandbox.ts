@@ -1,6 +1,6 @@
 import { useDevice } from "@intentic/ui";
 import { readonly, ref } from "vue";
-import { type LocationQuery, useRouter, type RouteLocationRaw } from "vue-router";
+import { type LocationQuery, type LocationQueryRaw, useRouter, type RouteLocationRaw } from "vue-router";
 import { z } from "zod";
 import { localFace } from "../../app/environments/local";
 import { localHost } from "../../app/environments/localHost";
@@ -57,13 +57,21 @@ export const LOCAL_ADD_SANDBOX_PATH = localPath(`newSandbox`);
 
 /**
  * Where a link to a new sandbox goes from this window, the machine picked or not: Home's ask in the workspace, and the
- * folder window's own page on This computer, which has no Home (its router sends an unknown address to Files).
+ * folder window's own page on This computer, which has no Home (its router sends an unknown address to Files). A machine
+ * of ours may name its plan (`tier`), as Billing's "a new sandbox" for a plan no sandbox is on does.
  */
-export const newSandboxLink = (machine?: `hosted`): RouteLocationRaw => {
+export const newSandboxLink = (machine?: `hosted`, tier?: string): RouteLocationRaw => {
     if (localFace() !== undefined && localHost().newSandbox !== undefined) {
         return machine === undefined ? LOCAL_ADD_SANDBOX_PATH : { path: LOCAL_ADD_SANDBOX_PATH, query: { on: machine } };
     }
-    return machine === undefined ? ADD_SANDBOX_HOME_PATH : { path: toHome(), query: { [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE, machine } };
+    if (machine === undefined) {
+        return ADD_SANDBOX_HOME_PATH;
+    }
+    const query: LocationQueryRaw = { [ADD_SANDBOX_QUERY]: ADD_SANDBOX_VALUE, machine };
+    if (tier !== undefined) {
+        query[`tier`] = tier;
+    }
+    return { path: toHome(), query };
 };
 
 // allow(module-state): one Add sandbox dialog for the window, asked for from wherever its press is

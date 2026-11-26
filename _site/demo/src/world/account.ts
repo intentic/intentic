@@ -1,9 +1,9 @@
 import type { HostedPlanState, SandboxSummary, TrashedSandbox, User } from "@intentic/api-contract";
-import { FREE_TIER, hostedTier } from "@intentic/constants";
+import { FREE_TIER, type HostedTierId, hostedTier } from "@intentic/constants";
 import { DESK_SANDBOX_NAME } from "../fixture/desk";
 import { homeSandboxLogos } from "../fixture/home/logos";
 import { HOME_SANDBOXES } from "../fixture/home/sandboxes";
-import { deskEdition, demoTier, homeRecording, noSandboxes } from "../mode";
+import { deskEdition, demoMode, demoTier, homeRecording, noSandboxes } from "../mode";
 import { outageHosted, outageReport } from "../outage";
 import { DEMO_DAEMON_ORIGIN } from "../transport";
 
@@ -66,6 +66,46 @@ export const DEMO_SANDBOXES: readonly SandboxSummary[] = noSandboxes
             },
         ]
       : [DEMO_SANDBOX];
+
+// THE OWNER'S CLOUD SANDBOXES, in the modes that show every state (world/sandboxRegistry.ts lists them beside the laptop,
+// world/plan.ts puts each on its plan): one on Free running short of hours and of memory, one on Standard, one on Max
+// scheduled down to Standard at renewal. Billing then shows every row a reader can meet, and each one's Overview its card.
+export const cloudShown = demoMode.id === `full` || demoMode.id === `busy`;
+
+export interface CloudSeed {
+    readonly id: string;
+    readonly name: string;
+    readonly tier: HostedTierId;
+    // Awake minutes spent this month before the page loaded.
+    readonly usedMinutes: number;
+    // Times its machine was killed for memory this week.
+    readonly ooms: number;
+    // A downgrade scheduled for the renewal date.
+    readonly downTo?: HostedTierId;
+    readonly color: string;
+}
+
+export const DEMO_CLOUD_SANDBOXES: readonly CloudSeed[] = cloudShown
+    ? [
+          { id: `cloud-scratch`, name: `scratch`, tier: `free`, usedMinutes: (FREE_TIER.monthlyHours - 6) * 60, ooms: 3, color: `#c2703d` },
+          { id: `cloud-api`, name: `api-staging`, tier: `standard`, usedMinutes: 40 * 60, ooms: 0, color: `#5b7fa6` },
+          { id: `cloud-docs`, name: `docs-site`, tier: `max`, usedMinutes: 22 * 60, ooms: 0, downTo: `standard`, color: `#8a6fb0` },
+      ]
+    : [];
+
+/** A cloud sandbox as the platform lists it: the owner's, on a machine of ours, awake, at an address of its own. */
+export const cloudRow = (seed: CloudSeed): SandboxSummary => ({
+    ...DEMO_SANDBOX,
+    id: seed.id,
+    name: seed.name,
+    image: null,
+    color: seed.color,
+    daemonUrl: `https://${seed.name}.demo.invalid`,
+    tier: `owner`,
+    token: `demo-connect-${seed.id}`,
+    hosted: { state: `awake`, region: `arn`, warm: true, canRollBack: false },
+    hostReport: null,
+});
 
 // The rung the demo account's machine is on; the Billing page reads its shape off the machine, not the account.
 const DEMO_MACHINE_TIER = hostedTier(`standard`);

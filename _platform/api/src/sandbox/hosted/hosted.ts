@@ -104,6 +104,10 @@ export const withHostedSlot = async <T>(
             throw new HostedSlotsExhausted(slotsMessage(used));
         }
         const result = await write(tx);
+        // Made on a paid tier, it took one of the plans the owner pays for no sandbox was on (plan/plan-change.ts).
+        if (args.tier !== FREE_TIER.id) {
+            await tx.hostedMachine.update({ where: { sandboxId }, data: { paid: true } });
+        }
         await tx.hostedCleanup.deleteMany({ where: { appName } });
         return result;
     });
