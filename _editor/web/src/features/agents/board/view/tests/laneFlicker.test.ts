@@ -53,7 +53,7 @@ it(`reports a layout flipping under unchanged lanes, naming both layouts`, () =>
         hear(picture(cards, flip % 2 === 0 ? `three` : `paired`));
         tick(100);
     }
-    expect(reports).toEqual([{ flips: FLIPS, spanMs: FLIPS * 100, moved: ``, layoutA: `three`, layoutB: `paired` }]);
+    expect(reports).toEqual([{ flips: FLIPS, spanMs: FLIPS * 100, moved: ``, layoutA: `three`, layoutB: `paired`, ring: `-` }]);
 });
 
 it(`stays quiet for a board that moves on, or flips back only now and then`, () => {
@@ -71,4 +71,18 @@ it(`stays quiet for a board that moves on, or flips back only now and then`, () 
         tick(WINDOW_MS / 2);
     }
     expect(reports).toEqual([]);
+});
+
+it(`reports a tray or a ring flipping under unchanged lanes, quoting both`, () => {
+    const { reports, hear, tick } = watching();
+    const parent = card(`parent`, { status: `running` });
+    const child = card(`child`, { status: `running` });
+    const tray = { asks: [], lead: [child], groups: [], folded: 0, open: false, tail: [], lines: new Map() };
+    for (let flip = 0; flip <= FLIPS; flip++) {
+        const open = flip % 2 === 0;
+        hear({ ...picture([parent]), ring: open ? `parent` : `other`, trays: () => (open ? tray : undefined) });
+        tick(16);
+    }
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ moved: ``, ringA: `parent`, ringB: `other`, traysA: `parent[child]`, traysB: `` });
 });

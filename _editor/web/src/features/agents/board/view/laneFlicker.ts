@@ -1,6 +1,7 @@
 import { reportClient } from "../../../../app/clientDiagnostics";
 import type { FleetLane } from "../../../../models/agent-status/agentStatus-lanes";
 import { ownReading } from "../../../../models/fleet/board/activePhase";
+import type { Tray } from "../../../../models/fleet/board/childFold";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 
 // A BOARD THAT WILL NOT SETTLE, CAUGHT IN THE ACT. Reported 2026-11-26: with a new chat's message box emptied, the cards
@@ -16,6 +17,9 @@ export interface BoardPicture {
     // The lanes' grid and card fit, the corner, and whether the chat's own rail holds Usage left: the layout inputs.
     readonly layout: string;
     readonly lanes: Readonly<Record<FleetLane, readonly FleetAgent[]>>;
+    // The card wearing the ring, and what each card's tray draws under it.
+    readonly ring?: string | undefined;
+    readonly trays?: (card: FleetAgent) => Tray | undefined;
 }
 
 // Alternations between the same two pictures, within WINDOW_MS, that count as a board not settling. A real change
@@ -24,12 +28,31 @@ export const FLIPS = 4;
 export const WINDOW_MS = 3_000;
 // How many card ids a report names; a flicker is usually one or two cards fighting.
 const MOVED_KEPT = 4;
+// How much of each picture's trays a report quotes.
+const TRAYS_KEPT = 400;
 
 const LANES: readonly FleetLane[] = [`attention`, `active`, `finished`];
 
 /** The picture as one comparable string: the layout, then each lane's ids in order. */
+// What a card's tray draws, row ids in drawing order; empty for a card with no tray.
+const trayIds = (picture: BoardPicture, card: FleetAgent): string => {
+    const tray = picture.trays?.(card);
+    return tray === undefined
+        ? ``
+        : [...tray.asks, ...tray.lead, ...tray.groups.flatMap((group) => group.shown), ...tray.tail].map((row) => row.id).join(`,`);
+};
+
+// Every card with a tray, as `card[rows]`: what the trays draw, in the board's order.
+const traysOf = (picture: BoardPicture): string =>
+    LANES.flatMap((lane) =>
+        picture.lanes[lane].flatMap((card) => {
+            const rows = trayIds(picture, card);
+            return rows === `` ? [] : [`${card.id}[${rows}]`];
+        }),
+    ).join(` `);
+
 const pictureKey = (picture: BoardPicture): string =>
-    `${picture.layout}#${LANES.map((lane) => picture.lanes[lane].map((card) => card.id).join(`,`)).join(`|`)}`;
+    `${picture.layout}#ring=${picture.ring ?? `-`}#${LANES.map((lane) => picture.lanes[lane].map((card) => card.id).join(`,`)).join(`|`)}#${traysOf(picture)}`;
 
 const placeOf = (picture: BoardPicture, id: string): string => {
     for (const lane of LANES) {
@@ -72,6 +95,10 @@ export const flickerFields = (a: BoardPicture, b: BoardPicture, flips: number, s
         [`spanMs`, spanMs],
         [`moved`, moved.join(`,`)],
         ...(a.layout === b.layout ? [[`layout`, a.layout] as const] : [[`layoutA`, a.layout] as const, [`layoutB`, b.layout] as const]),
+        ...(a.ring === b.ring ? [[`ring`, a.ring ?? `-`] as const] : [[`ringA`, a.ring ?? `-`] as const, [`ringB`, b.ring ?? `-`] as const]),
+        ...(traysOf(a) === traysOf(b)
+            ? []
+            : [[`traysA`, traysOf(a).slice(0, TRAYS_KEPT)] as const, [`traysB`, traysOf(b).slice(0, TRAYS_KEPT)] as const]),
         ...moved.flatMap((id, at) => [
             [`card${at}`, id] as const,
             [`card${at}A`, `${placeOf(a, id)} ${sortFacts(cardOf(a, id))}`] as const,
