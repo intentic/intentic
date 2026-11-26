@@ -4,6 +4,7 @@
 // app's native player and does nothing anywhere else. This answers it in the browser: an HTML media element laid over
 // the medium's picture, and a control bar where the editor places the desktop app's.
 import type { MediaProblem } from "../../../src/protocol.js";
+import { clockOf, ICONS, iconOf, type Labels, labelsFor, STYLE, STYLE_ID } from "./media-controls.js";
 
 // A rectangle in the editor frame's CSS pixels.
 export interface Rect {
@@ -69,103 +70,54 @@ export const transformOf = (data: Pick<PlayerData, "Rotation" | "FlipH" | "FlipV
 // A volume between 0 and 1 from the editor's thousandths of a percent; full where it gives none.
 export const volumeOf = (volume: number | null | undefined): number => (volume === null || volume === undefined ? 1 : Math.min(1, Math.max(0, volume / 100_000)));
 
-// `m:ss` for a time in seconds.
-export const clockOf = (seconds: number): string => {
-    const whole = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
-    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, `0`)}`;
-};
-
-// The control bar's labels, in the editor's interface languages that Intentic has; English otherwise.
-interface Labels {
-    readonly play: string;
-    readonly pause: string;
-    readonly mute: string;
-    readonly unmute: string;
-    readonly seek: string;
-}
-
-const LABELS = new Map<string, Labels>([
-    [`en`, { play: `Play`, pause: `Pause`, mute: `Mute`, unmute: `Unmute`, seek: `Position` }],
-    [`pl`, { play: `Odtwórz`, pause: `Wstrzymaj`, mute: `Wycisz`, unmute: `Włącz dźwięk`, seek: `Pozycja` }],
-    [`de`, { play: `Abspielen`, pause: `Pause`, mute: `Stummschalten`, unmute: `Ton an`, seek: `Position` }],
-    [`es`, { play: `Reproducir`, pause: `Pausa`, mute: `Silenciar`, unmute: `Activar sonido`, seek: `Posición` }],
-    [`fr`, { play: `Lire`, pause: `Pause`, mute: `Couper le son`, unmute: `Rétablir le son`, seek: `Position` }],
-]);
-
-const ENGLISH: Labels = { play: `Play`, pause: `Pause`, mute: `Mute`, unmute: `Unmute`, seek: `Position` };
-
-export const labelsFor = (lang: string): Labels => LABELS.get(lang.split(/[-_]/)[0]?.toLowerCase() ?? ``) ?? ENGLISH;
-
 // While the player is showing, how often it asks the editor where the medium is now: the editor says so on scroll and
 // zoom, but not when the slideshow moves on or the shape is dragged.
 const FOLLOW_MS = 250;
-// Above the slideshow (its container stacks at 1003) and every panel of the editor.
-const Z_INDEX = 2_147_483_000;
-
-const STYLE_ID = `oo-media-player-css`;
-const STYLE = [
-    `#oo-media-player { position: fixed; inset: 0; pointer-events: none; z-index: ${Z_INDEX}; }`,
-    `#oo-media-player .stage { position: absolute; display: none; background: #000; }`,
-    `#oo-media-player video { width: 100%; height: 100%; object-fit: fill; display: block; }`,
-    `#oo-media-player .bar { position: absolute; display: none; box-sizing: border-box; align-items: center; gap: 8px; padding: 0 10px;`,
-    `  border-radius: 6px; pointer-events: auto; font: 12px/1 Arial, Helvetica, sans-serif; user-select: none;`,
-    `  background: rgba(255, 255, 255, 0.94); color: #333; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); }`,
-    `#oo-media-player .bar[data-theme="dark"] { background: rgba(48, 48, 48, 0.94); color: #eee; }`,
-    `#oo-media-player button { all: unset; display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center;`,
-    `  border-radius: 4px; cursor: pointer; }`,
-    `#oo-media-player button:hover { background: rgba(127, 127, 127, 0.2); }`,
-    `#oo-media-player button:focus-visible { outline: 2px solid #4a90e2; }`,
-    `#oo-media-player button:disabled { opacity: 0.4; cursor: default; }`,
-    `#oo-media-player svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; }`,
-    `#oo-media-player input[type="range"] { flex: 1; min-width: 40px; margin: 0; accent-color: #4a90e2; cursor: pointer; }`,
-    `#oo-media-player .time { white-space: nowrap; font-variant-numeric: tabular-nums; }`,
-].join(`\n`);
-
-// SVG paths on a 24-unit grid: filled shapes, and strokes for the mute cross.
-const ICONS = {
-    play: { fill: [`M8 5v14l11-7z`], stroke: [] },
-    pause: { fill: [`M6 5h4v14H6z`, `M14 5h4v14h-4z`], stroke: [] },
-    sound: { fill: [`M3 9v6h4l5 5V4L7 9H3z`, `M16.5 12A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z`], stroke: [] },
-    muted: { fill: [`M3 9v6h4l5 5V4L7 9H3z`], stroke: [`M16 9l5 6`, `M21 9l-5 6`] },
-} satisfies Record<string, { fill: readonly string[]; stroke: readonly string[] }>;
-
-const SVG = `http://www.w3.org/2000/svg`;
-
-const iconOf = (doc: Document, icon: (typeof ICONS)[keyof typeof ICONS]): SVGSVGElement => {
-    const svg = doc.createElementNS(SVG, `svg`);
-    svg.setAttribute(`viewBox`, `0 0 24 24`);
-    svg.setAttribute(`aria-hidden`, `true`);
-    for (const d of icon.fill) {
-        const path = doc.createElementNS(SVG, `path`);
-        path.setAttribute(`d`, d);
-        path.setAttribute(`stroke`, `none`);
-        svg.append(path);
-    }
-    for (const d of icon.stroke) {
-        const path = doc.createElementNS(SVG, `path`);
-        path.setAttribute(`d`, d);
-        path.setAttribute(`fill`, `none`);
-        path.setAttribute(`stroke-width`, `2`);
-        path.setAttribute(`stroke-linecap`, `round`);
-        svg.append(path);
-    }
-    return svg;
-};
+// While a slideshow's new slide comes in, how often it is asked whether its transition is over, and for how many tries
+// before its video is left to its play button.
+const AUTOPLAY_MS = 100;
+const AUTOPLAY_TRIES = 100;
 
 // The vendor's media handle: the picture the medium belongs to, and that picture's slide.
 export interface MediaData {
     getDrawing?: () => { parent?: object | null } | null;
 }
 
+// A drawing on a slide, as far as finding its video goes: a group holds its own drawings.
+export interface SlideDrawing {
+    readonly isVideo?: () => boolean;
+    readonly getMediaData?: () => MediaData | null;
+    readonly spTree?: readonly SlideDrawing[];
+}
+
+export interface Slide {
+    readonly cSld?: { readonly spTree?: readonly SlideDrawing[] };
+}
+
+// The first video on a slide, groups included, in the slide's own order.
+export const firstVideoOf = (slide: Slide | undefined): MediaData | undefined => {
+    const find = (drawings: readonly SlideDrawing[]): MediaData | undefined => {
+        for (const drawing of drawings) {
+            const found = drawing.spTree === undefined ? (drawing.isVideo?.() === true ? (drawing.getMediaData?.() ?? undefined) : undefined) : find(drawing.spTree);
+            if (found !== undefined) {
+                return found;
+            }
+        }
+        return undefined;
+    };
+    return find(slide?.cSld?.spTree ?? []);
+};
+
 export interface PlayerApi {
     mediaData?: MediaData | null;
     callMediaPlayerCommand?: (command: string | null | undefined, data: MediaData | null) => void;
     getPlayerData?: (command: string) => PlayerData | null;
+    asc_registerCallback?: (name: string, callback: (...args: unknown[]) => void) => void;
     WordControl?: {
         // Only the presentation editor's has it: what tells this guard it is in one.
         GetMediaPlayerData?: unknown;
-        DemonstrationManager?: { Mode?: boolean; SlideNum?: number };
-        m_oLogicDocument?: { CurPage?: number; Slides?: readonly object[] };
+        DemonstrationManager?: { Mode?: boolean; SlideNum?: number; Transition?: { IsPlaying?: () => boolean } };
+        m_oLogicDocument?: { CurPage?: number; Slides?: readonly Slide[] };
     };
 }
 
@@ -207,6 +159,7 @@ class MediaPlayer {
     private data: PlayerData | undefined;
     private controls = false;
     private follow: number | undefined;
+    private autoplay: number | undefined;
     // The editor's handle on the medium shown: the editor drops its own when it hides the controls (in a slideshow, as
     // soon as the pointer leaves the medium), and a medium that goes on playing is still followed through this one.
     private held: MediaData | undefined;
@@ -242,6 +195,8 @@ class MediaPlayer {
             return;
         }
         const parts = this.build();
+        // Already playing this medium: a play from the slideshow's timing (a click on the slide) plays on, not over.
+        const playingIt = this.isPlaying(data.MediaFile);
         if (parts === undefined || !this.load(parts, data)) {
             this.hide();
             return;
@@ -255,7 +210,7 @@ class MediaPlayer {
                 this.controls = true;
                 break;
             case `play`:
-                if (action.from !== undefined) {
+                if (action.from !== undefined && !playingIt) {
                     parts.media.currentTime = action.from;
                 }
                 this.start(parts);
@@ -277,6 +232,10 @@ class MediaPlayer {
         }
         this.layout(parts, data);
         this.keepFollowing();
+    }
+
+    private isPlaying(file: string | null | undefined): boolean {
+        return this.parts !== undefined && !this.parts.media.paused && this.file !== undefined && file === this.file;
     }
 
     private inSlideshow(): boolean {
@@ -383,7 +342,7 @@ class MediaPlayer {
         }
         this.follow = this.frame.setInterval(() => {
             const parts = this.parts;
-            const data = this.whereNow();
+            const data = this.placementOf(this.api.mediaData ?? this.held);
             const moved = !this.onItsSlide() || this.inSlideshow() !== this.shownInSlideshow;
             if (parts === undefined || data?.FrameRect === undefined || data.ControlRect === undefined || moved) {
                 this.letGo();
@@ -394,20 +353,65 @@ class MediaPlayer {
         }, FOLLOW_MS);
     }
 
-    // Where the editor places the medium now. Its placement reads the medium it holds, so for one it dropped while it
-    // plays on, the held one stands in for that one read.
-    private whereNow(): PlayerData | null {
+    // Where the editor places a medium now. Its placement reads only the medium it holds, so another (one it dropped
+    // while it plays on, or one about to start) stands in for that one read.
+    private placementOf(medium: MediaData | undefined): PlayerData | null {
         const api = this.api;
         const current = api.mediaData;
-        if ((current !== null && current !== undefined) || this.held === undefined) {
+        if (medium === undefined || medium === current) {
             return api.getPlayerData?.(`update`) ?? null;
         }
-        api.mediaData = this.held;
+        api.mediaData = medium;
         try {
             return api.getPlayerData?.(`update`) ?? null;
         } finally {
             api.mediaData = current;
         }
+    }
+
+    // A slideshow moved to a slide: once the slide shows (its transition over, so the editor can place its video), the
+    // slide's first video plays, as a video set to start by itself would. One the slide's timing already started plays on.
+    slideShown(): void {
+        if (this.autoplay !== undefined) {
+            this.frame.clearInterval(this.autoplay);
+        }
+        const target = this.api.WordControl?.DemonstrationManager?.SlideNum;
+        if (target === undefined) {
+            this.autoplay = undefined;
+            return;
+        }
+        let tries = 0;
+        this.autoplay = this.frame.setInterval(() => {
+            tries += 1;
+            if (tries > AUTOPLAY_TRIES || this.autoplayed(target)) {
+                this.frame.clearInterval(this.autoplay);
+                this.autoplay = undefined;
+            }
+        }, AUTOPLAY_MS);
+    }
+
+    // One look at the slide a slideshow moved to: true once its video is playing, or there is nothing left to wait for.
+    private autoplayed(target: number): boolean {
+        const control = this.api.WordControl;
+        const demo = control?.DemonstrationManager;
+        if (!this.inSlideshow() || demo?.SlideNum !== target) {
+            return true;
+        }
+        if (demo.Transition?.IsPlaying?.() === true) {
+            return false;
+        }
+        const medium = firstVideoOf(control?.m_oLogicDocument?.Slides?.[target]);
+        if (medium === undefined) {
+            return true;
+        }
+        const data = this.placementOf(medium);
+        if (data?.FrameRect === undefined || data.ControlRect === undefined) {
+            return false;
+        }
+        if (!this.isPlaying(data.MediaFile)) {
+            this.api.callMediaPlayerCommand?.(`play`, medium);
+        }
+        return true;
     }
 
     private layout(parts: Parts, data: PlayerData): void {
@@ -562,6 +566,7 @@ export const installMediaPlayer = (frame: Window, hooks: PlayerHooks): boolean =
         }
         player.command(command, this.getPlayerData?.(command) ?? null);
     };
+    api.asc_registerCallback?.(`asc_onDemonstrationSlideChanged`, () => player.slideShown());
     playing.add(api);
     return true;
 };

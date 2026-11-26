@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { waitFor } from "@intentic/testing/bun";
 import type { MediaProblem } from "../../../src/protocol.js";
-import { actionOf, clockOf, installMediaPlayer, labelsFor, type MediaData, type PlayerApi, type PlayerData, transformOf, volumeOf } from "./media-player.js";
+import { clockOf, labelsFor } from "./media-controls.js";
+import { actionOf, firstVideoOf, installMediaPlayer, type MediaData, type PlayerApi, type PlayerData, type Slide, transformOf, volumeOf } from "./media-player.js";
 
 // The player against a scripted presentation editor in this window: what each command shows, where, and what it tells
 // the page. Playback itself is the browser's and is checked in a real one (scripts/browser-engine-harness.ts).
@@ -44,28 +45,48 @@ it(`labels the controls in the interface language, English otherwise`, () => {
 
 const frameRect = { X: 100, Y: 80, W: 320, H: 240 };
 const controlRect = { X: 110, Y: 270, W: 300, H: 40 };
-const slide = {};
-const otherSlide = {};
+// The first slide holds a picture and, in a group, the video; the second holds nothing.
 const handle: MediaData = { getDrawing: () => ({ parent: slide }) };
+const slide: Slide = {
+    cSld: { spTree: [{ isVideo: () => false, getMediaData: () => null }, { spTree: [{ isVideo: () => true, getMediaData: () => handle }] }] },
+};
+const otherSlide: Slide = {};
+
+// Each test's editor, closed once the test is over: a player keeps following its medium on this shared window until its
+// editor hides it and places nothing any more.
+const closers: (() => void)[] = [];
 
 // A presentation editor whose medium sits on the first slide, and the media its document holds.
 const scripted = (overrides: Partial<PlayerData> = {}) => {
+    let open = true;
     const problems: MediaProblem[] = [];
+    const callbacks = new Map<string, () => void>();
     const logic = { CurPage: 0, Slides: [slide, otherSlide] };
     const api: PlayerApi = {
         WordControl: { GetMediaPlayerData: () => undefined, DemonstrationManager: { Mode: false, SlideNum: 0 }, m_oLogicDocument: logic },
+        asc_registerCallback: (name, callback) => callbacks.set(name, callback),
         getPlayerData(this: PlayerApi, command: string) {
-            return this.mediaData === null || this.mediaData === undefined
+            return !open || this.mediaData === null || this.mediaData === undefined
                 ? { Cmd: command }
                 : { Cmd: command, MediaFile: `display8image1.mp4`, FrameRect: frameRect, ControlRect: controlRect, IsVideo: true, Theme: `dark`, ...overrides };
         },
         callMediaPlayerCommand: () => undefined,
     };
+    closers.push(() => {
+        open = false;
+        api.callMediaPlayerCommand?.(`hideMediaControl`, null);
+    });
     const urls = { getImageUrl: (name: string) => (name === `display8image1.mp4` ? `blob:https://office.example/clip` : undefined) };
     const frame = Object.assign(window, { Asc: { editor: api }, AscCommon: { g_oDocumentUrls: urls } });
     expect(installMediaPlayer(frame, { mediaProblem: (problem) => problems.push(problem), lang: `en` })).toBe(true);
-    return { api, logic, problems };
+    return { api, logic, problems, callbacks };
 };
+
+it(`finds a slide's first video, in a group too`, () => {
+    expect(firstVideoOf(slide)).toBe(handle);
+    expect(firstVideoOf(otherSlide)).toBeUndefined();
+    expect(firstVideoOf(undefined)).toBeUndefined();
+});
 
 const bar = (): HTMLElement | null => document.querySelector(`#oo-media-player .bar`);
 const stage = (): HTMLElement | null => document.querySelector(`#oo-media-player .stage`);
@@ -77,6 +98,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    for (const close of closers.splice(0)) {
+        close();
+    }
     jest.restoreAllMocks();
     Reflect.deleteProperty(window, `Asc`);
     Reflect.deleteProperty(window, `AscCommon`);
@@ -141,6 +165,55 @@ describe(`installMediaPlayer`, () => {
         }
         await waitFor(() => expect(stage()?.style.display).toBe(`none`));
         expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(1);
+    });
+
+    it(`starts a slideshow slide's video once the slide's transition is over`, async () => {
+        const { api, callbacks } = scripted();
+        let transitioning = true;
+        const demo = api.WordControl?.DemonstrationManager;
+        if (demo !== undefined) {
+            Object.assign(demo, { Mode: true, SlideNum: 0, Transition: { IsPlaying: () => transitioning } });
+        }
+        callbacks.get(`asc_onDemonstrationSlideChanged`)?.();
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+        transitioning = false;
+        await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1));
+        expect(api.mediaData).toBe(handle);
+        // Started, not hovered: the controls wait for the pointer.
+        expect(bar()?.style.display).toBe(`none`);
+    });
+
+    it(`starts nothing on a slideshow slide without a video`, async () => {
+        const { api, callbacks } = scripted();
+        const demo = api.WordControl?.DemonstrationManager;
+        if (demo !== undefined) {
+            Object.assign(demo, { Mode: true, SlideNum: 1 });
+        }
+        callbacks.get(`asc_onDemonstrationSlideChanged`)?.();
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+        expect(bar()).toBeNull();
+    });
+
+    it(`plays on, not over, when the slide's timing plays the video already playing`, () => {
+        const { api } = scripted();
+        api.callMediaPlayerCommand?.(`showMediaControl`, handle);
+        const seeks: number[] = [];
+        const media = video();
+        if (media !== null) {
+            Object.defineProperties(media, {
+                paused: { get: () => false },
+                currentTime: {
+                    get: () => 5,
+                    set: (at: number) => {
+                        seeks.push(at);
+                    },
+                },
+            });
+        }
+        api.callMediaPlayerCommand?.(`playFrom(0)`, handle);
+        expect(seeks).toEqual([]);
     });
 
     it(`keeps a click on its controls from reaching the slide under them`, () => {

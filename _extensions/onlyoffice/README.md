@@ -90,6 +90,10 @@ flowchart LR
   medium's picture and a control bar where the editor would place the desktop app's, for a selected medium while
   editing and a hovered one in a slideshow, and follows the slideshow's own play and pause. While editing it is cut to
   the editing area; in a fullscreen slideshow it goes inside the fullscreen element, outside which nothing shows.
+- In a slideshow a slide's first video starts by itself once the slide's transition ends, whatever its PowerPoint
+  start setting; a click that the slide's timing turns into a play leaves a playing video where it is. Hiding the
+  controls (the pointer leaving the video, the video deselected) hides only the bar: the video plays on until it is
+  paused, its slide is left, or the slideshow ends.
 - A file refused at insert, and a medium in the document this browser cannot play (a .wmv from an old deck), reach the
   viewer as `media-problem` and show as a notice. Media already in a presentation keep their bytes through every save.
 - The server engine keeps ONLYOFFICE's own behaviour: no media buttons, and media show as their pictures.
