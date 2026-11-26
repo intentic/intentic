@@ -16,8 +16,9 @@ export const DEMO_SANDBOX: SandboxSummary = {
     id: `demo`,
     name: deskEdition ? DESK_SANDBOX_NAME : `acme-shop`,
     image: null,
-    // Picked by its owner, so the demo opens in a sandbox's own colour rather than in one derived from its id.
-    color: `#00aab1`,
+    // Picked by its owner, so the demo opens in a sandbox's own colour rather than in one derived from its id: the
+    // picker's ochre swatch (_editor/ui/src/lib/themeColor.ts), the nearest to the site's own gold around the demo.
+    color: `#b9995f`,
     daemonUrl: DEMO_DAEMON_ORIGIN,
     lastSeenAt: new Date().toISOString(),
     setupCodeClaimedAt: null,
