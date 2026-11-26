@@ -4,7 +4,7 @@ import type { Model } from "@intentic/sandbox-contract/schemas/providers/provide
 import { discoveredCatalog } from "../../../agent/models/model-catalog.js";
 import { opt } from "../../../opt.js";
 import { cacheFile } from "../../../store/open-document.js";
-import type { AcpConnections } from "../../acp/acp-connection.js";
+import { type AcpConnections, withConnection } from "../../acp/acp-connection.js";
 import { type ModelChoice, sessionModelsOf, sessionThoughtsOf, thoughtTiers } from "@intentic/acp-events/model";
 import { type DevinStore, liveDevinAccounts } from "../accounts/devin-credentials.js";
 import { devinAgentId, devinCli, devinLaunch } from "../devin-cli.js";
@@ -91,11 +91,16 @@ export const createDevinCatalog = (deps: DevinCatalogDeps): DevinCatalog => {
         }
         try {
             await mkdir(deps.probeDir, { recursive: true });
-            // The account's own warm process, the one its turns use, so the list costs no second sign-in.
-            const connection = await deps.connections().acquire(devinAgentId(account.id), devinLaunch(binary, account.apiKey, deps.sessionsDir), deps.probeDir);
-            const created = await connection.agent.request(methods.agent.session.new, { cwd: deps.probeDir, mcpServers: [] });
-            // Nobody resumes a probe, so it leaves Devin's own session list as soon as it has answered.
-            connection.release(created.sessionId);
+            // The account's own warm process, the one its turns use, so the list costs no second sign-in. One the probe
+            // started itself ends a short grace after it lets go, unless a conversation's turn has opened a session on it
+            // by then (acp-connection.ts): no Devin process outlives a model list by the 15-minute idle reap.
+            const launch = devinLaunch(binary, account.apiKey, deps.sessionsDir);
+            const created = await withConnection(deps.connections().acquire(devinAgentId(account.id), launch, deps.probeDir), async (connection) => {
+                const opened = await connection.agent.request(methods.agent.session.new, { cwd: deps.probeDir, mcpServers: [] });
+                // Nobody resumes a probe, so it leaves Devin's own session list as soon as it has answered.
+                connection.release(opened.sessionId);
+                return opened;
+            });
             const models = sessionModelsOf(created.configOptions);
             // As of CLI 3000.11.3 Devin offers no `thought_level` option (DEVIN.effort stays false); read anyway, so the
             // day it does the catalog already says which depths the account's default takes.

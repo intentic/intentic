@@ -4,6 +4,7 @@ import { NeedKindSchema } from "./need-kinds.js";
 import { AutomationSchema, WatchKindSchema } from "./automations.js";
 import { DeployNeedAskSchema, DeployNeedSchema } from "./stack-grants.js";
 import { HostPowerFindingSchema } from "./host-power.js";
+import { WslMemoryNeedSchema } from "./wsl-memory.js";
 import { entryId } from "./internal.js";
 import { PASS_SCOPES } from "../protocol/doors/pass-scopes.js";
 import { SECRET_HOSTS_MAX } from "../policy/secret-hosts.js";
@@ -270,6 +271,7 @@ export const NeedSubjectSchema = z
         AutomationNeedSchema,
         InstructionNeedSchema,
         HostPowerNeedSchema,
+        WslMemoryNeedSchema,
         ClaimNeedSchema,
         RouteNeedSchema,
         RedirectNeedSchema,

@@ -263,3 +263,87 @@ describe(`the first press`, () => {
         }
     });
 });
+
+// 2026-11-26: a composer opened only to type in left 856 MB of speech model loaded on the owner's laptop, its memory
+// nearly gone: the pointer passing over the mic had prepared it. Only a person who dictates gets that head start now.
+describe(`the head start a hover asks for`, () => {
+    const habitOf = (recent: boolean) => {
+        const noted: string[] = [];
+        return { habit: { recent: () => recent, dictated: () => noted.push(`dictated`) }, noted };
+    };
+    const prepares = (): string[] => sandboxJson.mock.calls.map(([path]) => path).filter((path) => path.startsWith(`/speech/prepare`));
+    const unloaded = { provisioned: true, model: `ready`, engine: `parakeet`, loaded: false } as const;
+    // Lets every answer already due land, so "nothing happened" is read after it would have.
+    const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 20));
+
+    beforeEach(() => {
+        sandboxJson.mockReset();
+        track.mockClear();
+    });
+
+    it(`sends no prepare, on hover or focus, for a person who has not dictated lately`, async () => {
+        sandboxJson.mockImplementation(async () => unloaded);
+        const voice = useVoiceInput({ lang: () => `pl-PL`, habit: habitOf(false).habit });
+        voice.warm();
+        voice.warm();
+        await settled();
+        expect(prepares()).toEqual([]);
+        expect(voice.model.value).toBeUndefined();
+    });
+
+    it(`prepares ahead for a person who dictated lately, at most once a minute`, async () => {
+        sandboxJson.mockImplementation(async () => unloaded);
+        const voice = useVoiceInput({ lang: () => `pl-PL`, habit: habitOf(true).habit });
+        voice.warm();
+        voice.warm();
+        await waitFor(() => expect(voice.model.value).toEqual(unloaded));
+        expect(prepares()).toEqual([`/speech/prepare?lang=pl-PL`]);
+    });
+
+    // A short sandbox answers a guess with where the model stands and loads nothing; an older or failing one may refuse.
+    it(`takes a prepare that loaded nothing, or was refused, as no head start: no failure, the press loads the model`, async () => {
+        sandboxJson.mockImplementation(() => Promise.reject(new SandboxHttpError(503, `Service Unavailable`)));
+        const refused = useVoiceInput({ lang: () => `pl-PL`, habit: habitOf(true).habit });
+        refused.warm();
+        await waitFor(() => expect(prepares()).toHaveLength(1));
+        await settled();
+        expect([refused.model.value, refused.error.value]).toEqual([undefined, undefined]);
+        expect(track).not.toHaveBeenCalled();
+
+        sandboxJson.mockImplementation(async () => unloaded);
+        const polite = useVoiceInput({ lang: () => `pl-PL`, habit: habitOf(true).habit });
+        polite.warm();
+        await waitFor(() => expect(polite.model.value).toEqual(unloaded));
+        expect(polite.error.value).toBeUndefined();
+    });
+
+    it(`gives a press with no head start the same listening at once, and its words make the person one who dictates`, async () => {
+        const graph = audioGraph();
+        try {
+            sandboxJson.mockImplementation(async (path: string) => {
+                if (path.startsWith(`/speech/status`)) {
+                    return unloaded;
+                }
+                if (path.startsWith(`/speech/transcribe`)) {
+                    return { text: `just typing, then talking` };
+                }
+                throw new Error(`unexpected ${path}`);
+            });
+            const { habit, noted } = habitOf(false);
+            const heard: string[] = [];
+            const voice = useVoiceInput({ lang: () => `en`, habit });
+            voice.warm();
+            voice.start((text) => heard.push(text));
+            await waitFor(() => expect(voice.state.value).toBe(`listening`));
+            expect(noted).toEqual([]);
+            graph.speak(500, 0.1);
+            graph.speak(1600, 0.001);
+            await waitFor(() => expect(heard).toEqual([`just typing, then talking`]));
+            expect(noted).toEqual([`dictated`]);
+            expect(prepares()).toEqual([]);
+            voice.stop();
+        } finally {
+            graph.restore();
+        }
+    });
+});

@@ -49,6 +49,14 @@ const powerTitle = (state: AgentRunState): string =>
           ? t(`sandbox.agentRun.powerChanged`)
           : t(`sandbox.agentRun.powerChanging`);
 
+// The WSL memory card's yes: a file written, which the VM takes at WSL's next start.
+const wslMemoryTitle = (state: AgentRunState): string =>
+    state === `failed`
+        ? t(`sandbox.agentRun.wslMemoryFailed`)
+        : state === `done`
+          ? t(`sandbox.agentRun.wslMemoryWritten`)
+          : t(`sandbox.agentRun.wslMemoryWriting`);
+
 /** The strip's headline: what is happening, or what happened, in one line. */
 export const agentRunTitle = (run: AgentRun): string => {
     const n = count(run.links);
@@ -79,6 +87,8 @@ export const agentRunTitle = (run: AgentRun): string => {
                     : t(`sandbox.agentRun.restarting`);
         case `power-stay-on`:
             return powerTitle(run.state);
+        case `wsl-memory`:
+            return wslMemoryTitle(run.state);
         default:
             return run.op satisfies never;
     }
@@ -109,6 +119,7 @@ export const agentRefusal = (op: DeviceAgentOp): string =>
         restart: t(`sandbox.agentRun.restartRefused`),
         "forget-unreachable": t(`sandbox.agentRun.forgetRefused`),
         "power-stay-on": t(`sandbox.agentRun.powerRefused`),
+        "wsl-memory": t(`sandbox.agentRun.wslMemoryRefused`),
     } satisfies Record<DeviceAgentOp, string>)[op];
 
 /** What the environment's row says beside its spinner while the run is live: the verb, short enough for the row's meta. */
@@ -118,6 +129,7 @@ export const agentRunWorking = (op: DeviceAgentOp): string =>
         restart: t(`sandbox.agentRun.workingRestart`),
         "forget-unreachable": t(`sandbox.agentRun.workingForget`),
         "power-stay-on": t(`sandbox.agentRun.workingPower`),
+        "wsl-memory": t(`sandbox.agentRun.workingWslMemory`),
     } satisfies Record<DeviceAgentOp, string>)[op];
 
 /** What the Devices row and the machine's card say while one is out on a machine, before `doingOn` names the machine. */
@@ -127,6 +139,7 @@ export const agentRunDoing = (op: DeviceAgentOp): string =>
         restart: t(`sandbox.deviceOps.workingAgentRestart`),
         "forget-unreachable": t(`sandbox.deviceOps.workingAgentForget`),
         "power-stay-on": t(`sandbox.deviceOps.workingAgentPower`),
+        "wsl-memory": t(`sandbox.deviceOps.workingAgentWslMemory`),
     } satisfies Record<DeviceAgentOp, string>)[op];
 
 // Update and restart both stop the resident process carrying the request, so the page can't claim an
@@ -142,4 +155,6 @@ export const agentRunAsked = (op: DeviceAgentOp): string =>
         "forget-unreachable": t(`sandbox.deviceOps.askedForget`),
         // Nothing restarts: the machine's own answer ends the wait, and failing that its next reading does.
         "power-stay-on": t(`sandbox.deviceOps.askedPower`),
+        // Nor does writing .wslconfig (the WSL memory card's yes): the VM takes it at WSL's next start, not now.
+        "wsl-memory": t(`sandbox.deviceOps.askedWslMemory`),
     } satisfies Record<DeviceAgentOp, string>)[op];

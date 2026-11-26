@@ -65,6 +65,7 @@ import { cachedScan, listenerFingerprint } from "./ports/port-scan.js";
 import { scanPortsWith } from "./ports/owned-ports.js";
 import { transcriptSearchMetrics } from "./sessions/search/transcript-search.js";
 import { createSpeech, type Speech } from "@intentic/speech/transcribe";
+import { shortOfMemory } from "./runners/fleet-advice.js";
 import { composeSpokenReply } from "./agent/models/spoken-reply.js";
 import { createVoice, type Voice } from "@intentic/speech/voice/voice";
 import { createHeldCards, type HeldCards } from "./guard/held-cards.js";
@@ -502,8 +503,6 @@ const createDaemonMembers = (
             commandPolicyLines(ownerGrants, (message) => logger.warn(message)),
         ),
         driftSweep: createDriftSweep({ workspace, runtimeInstalls, conversations, logger }),
-        // Bound to the daemon logger so a CLI run's lifecycle is attributable from daemon.log.
-        speech: createSpeech({ cacheDir: statePath(workspace.root, ".intentic/local/cache/"), log: (message) => logger.info(`speech: ${message}`) }),
         // Reads live sockets through the shared scan rather than the assigned port, since a monorepo can pin its own.
         panelUpstreamOf: createPanelUpstreamResolver({
             workspaceRoot: workspace.root,
@@ -514,6 +513,16 @@ const createDaemonMembers = (
         }),
     };
 };
+
+// Dictation (speech/transcribe.ts), bound to the daemon logger so a CLI run's lifecycle is attributable from daemon.log.
+// What it loads on a guess, and how long it keeps an idle model, yield to this sandbox's room as the fleet reads it
+// (runners/fleet-advice.ts shortOfMemory), read through `whole` since the budget is composed in the same object.
+const speechOf = (whole: () => Services, workspaceRoot: string, logger: Services["logger"]): Speech =>
+    createSpeech({
+        cacheDir: statePath(workspaceRoot, ".intentic/local/cache/"),
+        log: (message) => logger.info(`speech: ${message}`),
+        short: () => shortOfMemory(whole().resources),
+    });
 
 // Speaking replies aloud (speech/voice/voice.ts). Settings, secrets and the spoken-reply job are read through `whole` on
 // every utterance, so a change is heard on the next one.
@@ -795,6 +804,7 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         reaper,
         // Each source reads the finished services per call; none runs before composing returns.
         environmentSources: environmentSourcesOf(whole),
+        speech: speechOf(whole, workspace.root, logger),
         voice: voiceOf(whole, workspace.root, logger, sandboxSettings),
     };
     wireReactions(services);

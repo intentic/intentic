@@ -8,6 +8,7 @@ import {
     decodeWslListing,
     DROP_COOLDOWN_MS,
     dropLine,
+    lowSpellSince,
     nextDropCooldown,
     recoveredFromTight,
     runningDistrosFrom,
@@ -78,12 +79,20 @@ export const startCacheDrop = (
     // How long the next drop under the low line waits: longer after each drop that gave Windows little (nextDropCooldown).
     let cooldownMs = DROP_COOLDOWN_MS;
     let underway: Promise<void> | undefined;
+    // (2026-11-26) When the host first went under the low line this spell: sandboxes' own cgroup reclaim has
+    // RECLAIM_GRACE_MS from here before the blanket drop runs (above the floor).
+    let lowSince: number | undefined;
     const attempt = async (): Promise<void> => {
         const before = read();
-        if (before !== undefined && recoveredFromTight(before)) {
+        if (before === undefined) {
+            return;
+        }
+        if (recoveredFromTight(before)) {
             cooldownMs = DROP_COOLDOWN_MS;
         }
-        if (before === undefined || !shouldDropCache(before, lastDropAt, now(), cooldownMs)) {
+        // The spell starts before the first drop is considered, so the sandboxes' grace runs from its first tick.
+        lowSince = lowSpellSince(before, lowSince, now());
+        if (!shouldDropCache(before, lastDropAt, now(), cooldownMs, lowSince)) {
             return;
         }
         // Counted from the attempt, not the success: a drop that keeps failing is tried again in five minutes, not every tick.

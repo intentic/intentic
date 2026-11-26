@@ -106,9 +106,44 @@ test("a baked model is ready at once, and loaded only once something asked for i
     const fake = fakeProcess();
     const speech = speechWith({ process: fake.make });
     expect(await speech.status("pl-PL")).toEqual({ provisioned: true, model: "ready", engine: "parakeet", loaded: false });
-    expect(await speech.prepare("pl-PL")).toMatchObject({ model: "ready", engine: "parakeet" });
+    expect(await speech.prepare("pl-PL", "guess")).toMatchObject({ model: "ready", engine: "parakeet" });
     await waitFor(() => expect(fake.asked).toEqual([{ kind: "load", spec: expect.objectContaining({ engine: "parakeet" }) }]));
     expect(await speech.status("pl-PL")).toMatchObject({ model: "ready", loaded: true });
+});
+
+// A hover over the mic is a guess; on a short machine it must cost nothing, while the press it guessed at still loads.
+test("while memory is short a guessed prepare loads nothing and says where the model stands; a press loads it all the same", async () => {
+    const fake = fakeProcess();
+    const logged: string[] = [];
+    let shortAsked = 0;
+    const speech = speechWith({
+        process: fake.make,
+        log: (message) => logged.push(message),
+        short: async () => {
+            shortAsked += 1;
+            return true;
+        },
+    });
+    expect(await speech.prepare("pl-PL", "guess")).toEqual({ provisioned: true, model: "ready", engine: "parakeet", loaded: false });
+    expect([fake.asked, shortAsked]).toEqual([[], 1]);
+    expect(logged).toEqual(["memory is short: a guessed prepare leaves the parakeet speech model unloaded, for the press to load"]);
+    expect(await speech.prepare("pl-PL", "press")).toMatchObject({ model: "ready", engine: "parakeet" });
+    await waitFor(() => expect(fake.asked).toEqual([{ kind: "load", spec: expect.objectContaining({ engine: "parakeet" }) }]));
+    expect(await speech.status("pl-PL")).toMatchObject({ loaded: true });
+});
+
+test("a guess finds memory with room, or a reading that fails, and loads the model as before", async () => {
+    for (const short of [
+        async () => false,
+        async () => {
+            throw new Error("no cgroup here");
+        },
+    ]) {
+        const fake = fakeProcess();
+        const speech = speechWith({ process: fake.make, short });
+        await speech.prepare("pl-PL", "guess");
+        await waitFor(() => expect(fake.asked.map(({ kind }) => kind)).toEqual(["load"]));
+    }
 });
 
 test("an absent model starts fetching on the first status, tells its progress, and the transcribe door says wait meanwhile", async () => {

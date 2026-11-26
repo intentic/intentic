@@ -36,9 +36,23 @@ export const EARLY_DROP_COOLDOWN_MS = 30 * 60_000;
    100-260 MB/s. So after a drop that gave back less than WORTHWHILE_DROP_BYTES the next one under the low line waits
    twice as long, up to MAX_DROP_COOLDOWN_MS; one that gave back that much, or Windows climbing out of tight altogether,
    brings the five minutes back. Under the 1.5 GiB floor, where rog froze, the five minutes hold however little the last
-   drop gave: there a quarter of a gigabyte can be the difference. */
+   drop gave: there a quarter of a gigabyte can be the difference.
+
+   SANDBOXES RECLAIM FROM THEIR OWN CGROUPS FIRST (2026-11-26). Each sandbox sees the same host-low reading and
+   reclaims cold cache from its own cgroup via `memory.reclaim`, sized and paced to avoid stalling active turns
+   (hosts/reclaim/host-reclaim.ts in @intentic/sandbox). The blanket drop becomes a fallback: above the floor it
+   waits for the sandboxes' own reclaim instead (they have RECLAIM_GRACE_MS to act), and under the floor it runs as
+   before since the floor is where Windows froze. Measured on rog the same day, a sandbox's own 1 GiB reclaim freed
+   that much inside the VM but in blocks too small for free page reporting, and Windows' Available memory did not move
+   beyond its noise in the 30 s after: the drop, which compacts, is still what hands memory back. The grace costs at
+   most RECLAIM_GRACE_MS once per low spell, since the spell (lowSpellSince) lasts until Windows is over a fifth of its
+   memory again. */
 export const WORTHWHILE_DROP_BYTES = 0.5 * 1024 ** 3;
 export const MAX_DROP_COOLDOWN_MS = 60 * 60_000;
+
+// How long to wait for sandboxes' own cgroup reclaim before the blanket drop runs. Two heartbeats give each sandbox
+// at least one chance to see the host-low reading and reclaim from its own cgroup.
+export const RECLAIM_GRACE_MS = 60_000;
 
 // The cooldown under the low line after a drop gave back `freedBytes` (undefined: the drop failed, or Windows could not
 // be read after it, which says nothing about whether drops help).
@@ -52,14 +66,37 @@ export const nextDropCooldown = (cooldownMs: number, freedBytes: number | undefi
 // Windows out of tight altogether: whatever drops did before, the next time it runs low starts at five minutes again.
 export const recoveredFromTight = (memory: HostMemory): boolean => memory.availableBytes >= EARLY_DROP_SHARE * memory.totalBytes;
 
+// When the low spell `memory` belongs to began, for shouldDropCache's `lowSince`: kept while Windows stays tight, begun
+// `now` when it first goes under the host line, ended once it has recovered over a fifth of its memory.
+export const lowSpellSince = (memory: HostMemory, lowSince: number | undefined, now: number): number | undefined => {
+    if (recoveredFromTight(memory)) {
+        return undefined;
+    }
+    return lowSince ?? (memory.availableBytes < hostMemoryLowBytes(memory.totalBytes) ? now : undefined);
+};
+
 // Whether to drop the VM's cache now: Windows is under the 1.5 GiB floor and the last drop is DROP_COOLDOWN_MS old, under
 // the host line both sides keep (hostMemoryLowBytes) and the last drop is `cooldownMs` old (nextDropCooldown), or under a
 // fifth of the machine and the last drop is EARLY_DROP_COOLDOWN_MS old, or `cooldownMs` if longer. Never asked whether
 // WSL runs: that is a spawn, paid only once this says yes.
-export const shouldDropCache = (memory: HostMemory, lastDropAt: number, now: number, cooldownMs: number = DROP_COOLDOWN_MS): boolean => {
+//
+// (2026-11-26) Above the 1.5 GiB floor, the drop waits for RECLAIM_GRACE_MS after the host first went low
+// (`lowSince`), so sandboxes' own cgroup reclaim has a chance to bring it back without throwing away every sandbox's
+// cache. Under the floor the drop runs at once as before: that is where Windows froze.
+export const shouldDropCache = (
+    memory: HostMemory,
+    lastDropAt: number,
+    now: number,
+    cooldownMs: number = DROP_COOLDOWN_MS,
+    lowSince: number | undefined = undefined,
+): boolean => {
     const since = now - lastDropAt;
     if (memory.availableBytes < HOST_LOW_FLOOR_BYTES) {
         return since >= DROP_COOLDOWN_MS;
+    }
+    // Above the floor: give sandboxes time to reclaim from their own cgroups first.
+    if (lowSince !== undefined && now - lowSince < RECLAIM_GRACE_MS) {
+        return false;
     }
     if (memory.availableBytes < hostMemoryLowBytes(memory.totalBytes)) {
         return since >= cooldownMs;

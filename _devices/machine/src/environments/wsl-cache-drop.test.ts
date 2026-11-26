@@ -1,5 +1,5 @@
 import type { HostMemory } from "@intentic/sandbox-contract/schemas/hosts";
-import { DROP_COOLDOWN_MS } from "./windows-memory.js";
+import { DROP_COOLDOWN_MS, RECLAIM_GRACE_MS } from "./windows-memory.js";
 import { DROP_SCRIPT, startCacheDrop } from "./wsl-cache-drop.js";
 
 const GIB = 1024 ** 3;
@@ -57,21 +57,39 @@ test("drops that give back little come further apart, and Windows recovering bri
     const stuck = { availableBytes: 2.4 * GIB, totalBytes: 31.4 * GIB };
     const littleBack = { availableBytes: 2.6 * GIB, totalBytes: 31.4 * GIB };
     const recovered = { availableBytes: 9 * GIB, totalBytes: 31.4 * GIB };
-    // Each pass reads Windows once before and, when it drops, once after: drop, held, drop, recovered, drop.
-    const run = harness([stuck, littleBack, stuck, stuck, littleBack, recovered, stuck, littleBack], ["archlinux"]);
+    // Each pass reads Windows once before and, when it drops, once after.
+    // (2026-11-26) Above the floor, the first drop is deferred by RECLAIM_GRACE_MS.
+    // Flow: grace → drop(little) → held → drop(little) → recovered → grace → drop(little).
+    const run = harness(
+        [stuck, stuck, littleBack, stuck, stuck, littleBack, recovered, stuck, stuck, littleBack],
+        ["archlinux"],
+    );
+    // 1. First low reading: sets lowSince, deferred by grace period.
+    await run.cache.pass();
+    expect(run.dropped).toHaveLength(0);
+    // 2. Grace period expired: drop runs, gave back little (2.4 → 2.6).
+    run.advance(RECLAIM_GRACE_MS);
     await run.cache.pass();
     expect(run.dropped).toHaveLength(1);
     expect(run.lines[0]).toContain("the next drop waits 10 min");
+    // 3. Within doubled cooldown (10 min): held.
     run.advance(DROP_COOLDOWN_MS);
     await run.cache.pass();
     expect(run.dropped).toHaveLength(1);
+    // 4. Doubled cooldown passed: drop, gave back little again.
     run.advance(DROP_COOLDOWN_MS);
     await run.cache.pass();
     expect(run.dropped).toHaveLength(2);
     expect(run.lines[1]).toContain("the next drop waits 20 min");
-    // Recovered: the next time Windows is low, five minutes after the last drop is enough again.
+    // 5. Recovered: cooldown and lowSince reset.
     run.advance(DROP_COOLDOWN_MS);
     await run.cache.pass();
+    // 6. Low again: lowSince set fresh, grace period starts.
+    run.advance(RECLAIM_GRACE_MS);
+    await run.cache.pass();
+    expect(run.dropped).toHaveLength(2);
+    // 7. Grace period expired: drop runs with the original cooldown.
+    run.advance(RECLAIM_GRACE_MS);
     await run.cache.pass();
     expect(run.dropped).toHaveLength(3);
 });
@@ -112,4 +130,30 @@ test("a drop flushes first, drops cache and slab, then compacts where the kernel
     expect(DROP_SCRIPT.startsWith("sync;")).toBe(true);
     expect(DROP_SCRIPT).toContain("echo 3 > /proc/sys/vm/drop_caches");
     expect(DROP_SCRIPT).toContain("if [ -w /proc/sys/vm/compact_memory ]; then echo 1 > /proc/sys/vm/compact_memory; fi");
+});
+
+// (2026-11-26) Above the 1.5 GiB floor, sandboxes' own cgroup reclaim runs first.
+test("above the floor, the blanket drop waits for sandboxes to reclaim from their own cgroups", async () => {
+    const underLow = { availableBytes: 2.5 * GIB, totalBytes: 31.4 * GIB };
+    const run = harness([underLow, underLow, underLow, underLow], ["Ubuntu"]);
+    // First tick: sets lowSince, deferred by grace period.
+    await run.cache.pass();
+    expect(run.dropped).toHaveLength(0);
+    // Still within grace period.
+    run.advance(30_000);
+    await run.cache.pass();
+    expect(run.dropped).toHaveLength(0);
+    // Grace period expired: drop runs.
+    run.advance(RECLAIM_GRACE_MS);
+    await run.cache.pass();
+    expect(run.dropped).toHaveLength(1);
+});
+
+test("under the 1.5 GiB floor, the blanket drop runs immediately without grace period", async () => {
+    const underFloor = { availableBytes: 1.0 * GIB, totalBytes: 32 * GIB };
+    const afterDrop = { availableBytes: 7 * GIB, totalBytes: 32 * GIB };
+    const run = harness([underFloor, afterDrop], ["Ubuntu"]);
+    await run.cache.pass();
+    // Under the floor: drops on the first tick, no grace period.
+    expect(run.dropped).toHaveLength(1);
 });

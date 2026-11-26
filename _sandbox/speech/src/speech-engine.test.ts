@@ -82,3 +82,85 @@ test("an idle process is stopped, and what it held is no longer in memory", asyn
     await waitFor(() => expect(child.spawned[0]?.killed).toBe(true));
     expect(speech.loaded("parakeet")).toBe(false);
 });
+
+// 2026-11-26: on a laptop with its memory nearly gone, a hover over the mic kept 856 MB loaded for ten minutes.
+test("while memory is short, an idle process is stopped after the short wait rather than the full one, and says why", async () => {
+    const child = fakeChild((ask) => ({ id: ask.id, ok: true, text: "" }));
+    const logged: string[] = [];
+    const speech = createSpeechProcess({
+        log: (message) => logged.push(message),
+        spawn: child.spawn,
+        idleMs: 60_000,
+        shortIdleMs: 20,
+        short: async () => true,
+    });
+    await speech.load(SPEC);
+    await waitFor(() => expect(child.spawned[0]?.killed).toBe(true));
+    expect(speech.loaded("parakeet")).toBe(false);
+    expect(logged).toEqual(["speech process idle while memory is short, stopping it early to free its memory"]);
+});
+
+test("while memory has room the full wait stands, and the process is let go at the first look after memory turns short", async () => {
+    const child = fakeChild((ask) => ({ id: ask.id, ok: true, text: "" }));
+    let looks = 0;
+    let short = false;
+    const speech = createSpeechProcess({
+        log: () => {},
+        spawn: child.spawn,
+        idleMs: 60_000,
+        shortIdleMs: 10,
+        short: async () => {
+            looks += 1;
+            return short;
+        },
+    });
+    await speech.load(SPEC);
+    await waitFor(() => expect(looks).toBeGreaterThanOrEqual(3));
+    expect([child.spawned[0]?.killed, speech.loaded("parakeet")]).toEqual([false, true]);
+    short = true;
+    await waitFor(() => expect(child.spawned[0]?.killed).toBe(true));
+    speech.close();
+});
+
+test("a memory reading that fails is no shortage: the process stays for the full wait", async () => {
+    const child = fakeChild((ask) => ({ id: ask.id, ok: true, text: "" }));
+    let looks = 0;
+    const speech = createSpeechProcess({
+        log: () => {},
+        spawn: child.spawn,
+        idleMs: 60_000,
+        shortIdleMs: 10,
+        short: async () => {
+            looks += 1;
+            throw new Error("no cgroup here");
+        },
+    });
+    await speech.load(SPEC);
+    await waitFor(() => expect(looks).toBeGreaterThanOrEqual(3));
+    expect(child.spawned[0]?.killed).toBe(false);
+    speech.close();
+});
+
+test("a phrase asked while a look waits on the memory reading keeps the process: the look speaks for a spell that ended", async () => {
+    // Decodes are held, so the phrase is still in hand when memory answers.
+    const child = fakeChild((ask) => (ask.kind === "decode" ? undefined : { id: ask.id, ok: true, text: "" }));
+    const readings: ((short: boolean) => void)[] = [];
+    const speech = createSpeechProcess({
+        log: () => {},
+        spawn: child.spawn,
+        idleMs: 60_000,
+        shortIdleMs: 10,
+        short: () => new Promise<boolean>((resolve) => readings.push(resolve)),
+    });
+    await speech.load(SPEC);
+    // The look is out, waiting on memory; a phrase arrives meanwhile, and only then does memory answer "short".
+    await waitFor(() => expect(readings).toHaveLength(1));
+    const phrase = speech.decode(SPEC, new Float32Array(1));
+    await waitFor(() => expect(child.spawned[0]?.asks).toHaveLength(2));
+    readings[0]?.(true);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(child.spawned[0]?.killed).toBe(false);
+    child.spawned[0]?.emit("message", { id: 1, ok: true, text: "kept" } satisfies WorkerAnswer);
+    expect(await phrase).toBe("kept");
+    speech.close();
+});

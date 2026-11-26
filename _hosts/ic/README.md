@@ -126,7 +126,9 @@ flowchart LR
   checkout's daemon needs. Any other answer lets it sleep once the daemon's fresh answer agrees. The heartbeat screens
   first, so only a sandbox it would sleep has node started inside it; a failed answer leaves it awake, and a daemon
   from before the socket sleeps on its heartbeat. A person's `ic sandbox sleep` takes the heartbeat's alarm when the
-  daemon cannot answer, rather than refusing. (2026-10-18: the minute-old `work.json` heartbeat alone was rejected
+  daemon cannot answer, rather than refusing. `--reason <text>` (2026-11-26) puts the asker's why ahead of ic's own
+  sentence in the sandbox's record of the stop (`restart-intent.json`, "put to sleep because …"): the keeper names the
+  computer's memory when it sleeps one sandbox to give memory back. (2026-10-18: the minute-old `work.json` heartbeat alone was rejected
   because a booking saved after it could lose its alarm.) Each sleep posts a host report with `asleep: true`, tried again twice while the platform does not answer (2026-10-29: a lost one left a sleeping sandbox reading as broken until the platform learned to read the sleep off the asks below too). `ic sandbox wakes` (polled by the agent while anything
   sleeps, run by the desktop app the moment its page asks, and asking docker nothing when nothing does) sends the asleep sandboxes' report keys to the platform's
   `POST /host-report/wakes`, every platform at once, and starts each one somebody has opened as soon as its own

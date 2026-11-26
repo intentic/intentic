@@ -1008,6 +1008,17 @@ flowchart LR
   whichever is more, and is told so by name ("rog, the machine this sandbox runs on, is low on memory: …"). A person's
   turn is never held for the host. No such machine, a distro whose Windows side is not connected, an agent older than
   the field, or an answer over two minutes old is no host constraint, never "no room".
+- (2026-11-26) While that host reading is under the same line, the daemon also gives memory back from its own cgroup
+  (`hosts/reclaim/host-reclaim.ts`, ticked every 10 s from `bootstrap/boot-schedulers.ts`) by writing a byte target to
+  `memory.reclaim`, with `swappiness=0` (file cache only) while turns run and `swappiness=200` (cold anon into zram too)
+  when idle, where the kernel takes the key. Every sandbox on the PC sees the same shortfall, so each takes half of it
+  scaled by its own size against half the host's memory, 0.3 of that while turns run, at most 2 GiB, and none while
+  its memory pressure is 15% or more. A minute later the host reading is logged against the one before:
+  a reclaim Windows did not feel doubles the wait before the next, up to ten minutes. `memory.reclaim` answering EAGAIN
+  is a partial reclaim; one that cannot be written at all turns this off until the daemon restarts. Measured on rog
+  that day, a 1 GiB reclaim took under 1.1 s and freed that much in the VM, in blocks too small for free page reporting
+  to hand to Windows, whose available memory did not move beyond its noise: the machine agent's drop stays the
+  fallback (its README).
 - (2026-11-25) Every agent turn running here holds a lease on what it is expected to grow into, so how many agents run
   at once across the sandbox is set by what agents here measure, not by a count. `system/resources/agent-envelope.ts`
   learns the envelope from the minute's process scan: each conversation's processes the heavy-command queue does not

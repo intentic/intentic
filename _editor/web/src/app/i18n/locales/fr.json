@@ -6713,6 +6713,16 @@
             "approve": "Modifier ces paramètres sur {device}",
             "working": "Modification des paramètres sur {device}…"
         },
+        "wslMemory": {
+            "lead": "Sur {device}, Windows avait moins que son seuil bas de {low} disponible dans {share} % des relevés des {hours} dernières heures, pendant que la VM WSL occupait une médiane de {vm} sur {total} ; l'usage propre de Windows hors de la VM atteignait {outside}.",
+            "unset": "memory= non défini (la moitié de la RAM)",
+            "file": "Une ligne de {path} change ; le fichier tel qu'il était est gardé à côté.",
+            "floor": "C'est le minimum qui fait encore tourner un sandbox : Windows peut rester à court.",
+            "caps": "Sandboxes plafonnés au-dessus, qu'une VM plus petite laisse sans plafond : {caps}. Baisse-les aussi.",
+            "restart": "Rien ne change avant le redémarrage de WSL, qui redémarre tous les sandboxes de {device}, celui-ci compris. Le redémarrage te revient (wsl --shutdown), quand plus rien là-bas ne doit tourner.",
+            "approve": "Écrire {setting}",
+            "working": "Écriture de .wslconfig sur {device}…"
+        },
         "deploy": {
             "lead": "{stack} de {repo} se déploie sur {device}. Accorder permet à ce sandbox d'écrire ces secrets dans son .env à chaque déploiement :",
             "new": "nouveau",
@@ -7018,10 +7028,15 @@
             "updated": "Mise à jour terminée",
             "updating": "Mise à jour de son agent…",
             "workingPower": "Modification de l'alimentation…",
+            "workingWslMemory": "Écriture de .wslconfig…",
             "powerChanging": "Modification de ses paramètres d'alimentation…",
             "powerChanged": "Paramètres d'alimentation modifiés",
             "powerFailed": "Impossible de modifier ses paramètres d'alimentation",
-            "powerRefused": "Cet appareil n'a pas modifié ses paramètres d'alimentation."
+            "powerRefused": "Cet appareil n'a pas modifié ses paramètres d'alimentation.",
+            "wslMemoryWriting": "Écriture de son .wslconfig…",
+            "wslMemoryWritten": ".wslconfig écrit : s'applique au redémarrage de WSL",
+            "wslMemoryFailed": "Impossible d'écrire son .wslconfig",
+            "wslMemoryRefused": "Cet appareil n'a pas modifié son .wslconfig."
         },
         "agentMemory": {
             "addToMemory": "Ajouter à la mémoire",
@@ -8111,6 +8126,7 @@
             "doneClean": "Sortie de build vidée. Les suppressions retenues se synchronisent en quelques secondes.",
             "askedForget": "Abandon des liens qui ne répondent plus. Le compteur ici se met à jour quand sa boucle revient.",
             "askedPower": "Modification de ses paramètres d'alimentation. Cette page se met à jour à sa prochaine lecture.",
+            "askedWslMemory": "Écriture de son .wslconfig. Cette page se met à jour à sa prochaine lecture.",
             "askedRestart": "Redémarrage. Cette page se met à jour quand sa boucle revient.",
             "askedUpgrade": "Mise à jour. La nouvelle version s'affiche ici quand sa boucle revient.",
             "batchDidntRestart": "{count} sandbox n'a pas redémarré sur {machine}. | {count} sandboxes n'ont pas redémarré sur {machine}.",
@@ -8166,6 +8182,7 @@
             "verbHeader": "{verb} {name} ?",
             "workingAgentForget": "Abandon des liens morts d'un appareil",
             "workingAgentPower": "Modification des paramètres d'alimentation d'un appareil",
+            "workingAgentWslMemory": "Écriture du .wslconfig d'un appareil",
             "workingAgentRestart": "Redémarrage de l'agent d'un appareil",
             "workingAgentUpgrade": "Mise à jour des agents d'une machine",
             "workingClean": "Vidage de la sortie de build",

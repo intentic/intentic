@@ -1,4 +1,4 @@
-import { AGENT_VERB, runStop } from "./agent.js";
+import { AGENT_VERB, agentArgv, runStop } from "./agent.js";
 
 /* THE TWO THINGS ABOUT THIS TOOL THAT ARE DECISIONS RATHER THAN PLUMBING. */
 
@@ -11,7 +11,16 @@ test("every op maps to the CLI verb that actually performs it", () => {
         "forget-unreachable": ["device", "forget-unreachable"],
         // The owner's yes to keeping this computer on while plugged in (power/), which restarts nothing.
         "power-stay-on": ["power", "stay-on"],
+        // The owner's yes to a smaller WSL VM (environments/wslconfig-memory.ts), which restarts nothing either.
+        "wsl-memory": ["wsl-memory", "apply"],
     });
+});
+
+// The size is the one the owner approved on the card, never one this agent works out again; without one, nothing runs.
+test("wsl-memory carries the size approved and why, and refuses without a size", () => {
+    expect(agentArgv({ op: "wsl-memory", memoryGb: 15 }, () => "Windows was short")).toEqual(["wsl-memory", "apply", "--gb", "15", "--why", "Windows was short"]);
+    expect(() => agentArgv({ op: "wsl-memory" })).toThrow("The wsl-memory op needs the size approved (memoryGb), and none came with it: nothing was changed.");
+    expect(agentArgv({ op: "power-stay-on", memoryGb: 15 })).toEqual(["power", "stay-on"]);
 });
 
 /* A RUN THAT STOPPED IS A REFUSAL, not the settled sentence (2026-10-21: "Update finished" over an EPERM). */

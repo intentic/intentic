@@ -6713,6 +6713,16 @@
             "approve": "Cambiar estos ajustes en {device}",
             "working": "Cambiando los ajustes en {device}…"
         },
+        "wslMemory": {
+            "lead": "En {device}, Windows tuvo menos de su línea baja de {low} disponible en el {share}% de las lecturas de las últimas {hours} horas, mientras la VM de WSL retenía una mediana de {vm} de {total}; el uso propio de Windows fuera de la VM llegó a {outside}.",
+            "unset": "memory= sin fijar (la mitad de la RAM)",
+            "file": "Cambia una línea de {path}; el archivo tal como estaba se guarda a su lado.",
+            "floor": "Es lo mínimo con lo que aún funciona un sandbox: Windows puede seguir quedándose corto.",
+            "caps": "Sandboxes con un límite por encima, que una VM más pequeña deja sin límite: {caps}. Bájalos también.",
+            "restart": "Nada cambia hasta que WSL se reinicie, y eso reinicia todos los sandboxes de {device}, incluido este. Reiniciarlo te toca a ti (wsl --shutdown), cuando nada allí necesite seguir en marcha.",
+            "approve": "Escribir {setting}",
+            "working": "Escribiendo .wslconfig en {device}…"
+        },
         "deploy": {
             "lead": "{stack} de {repo} se despliega en {device}. Al concederlo, este sandbox escribe estos secretos en su .env cada vez que lo despliega:",
             "new": "nuevo",
@@ -7018,10 +7028,15 @@
             "updated": "Actualización terminada",
             "updating": "Actualizando su agente…",
             "workingPower": "Cambiando ajustes de energía…",
+            "workingWslMemory": "Escribiendo .wslconfig…",
             "powerChanging": "Cambiando sus ajustes de energía…",
             "powerChanged": "Ajustes de energía cambiados",
             "powerFailed": "No se pudieron cambiar sus ajustes de energía",
-            "powerRefused": "Ese dispositivo no cambió sus ajustes de energía."
+            "powerRefused": "Ese dispositivo no cambió sus ajustes de energía.",
+            "wslMemoryWriting": "Escribiendo su .wslconfig…",
+            "wslMemoryWritten": ".wslconfig escrito: se aplica cuando WSL se reinicie",
+            "wslMemoryFailed": "No se pudo escribir su .wslconfig",
+            "wslMemoryRefused": "Ese dispositivo no cambió su .wslconfig."
         },
         "agentMemory": {
             "addToMemory": "Añadir a la memoria",
@@ -8111,6 +8126,7 @@
             "doneClean": "Salida de compilación borrada. Los borrados retenidos se sincronizan en unos segundos.",
             "askedForget": "Quitando los enlaces que dejaron de responder. El recuento de aquí se pondrá al día cuando vuelva su bucle.",
             "askedPower": "Cambiando sus ajustes de energía. Esta página se pondrá al día con su próxima lectura.",
+            "askedWslMemory": "Escribiendo su .wslconfig. Esta página se pondrá al día con su próxima lectura.",
             "askedRestart": "Reiniciando. Esta página se pondrá al día cuando vuelva su bucle.",
             "askedUpgrade": "Actualizando. La nueva versión aparecerá aquí cuando vuelva su bucle.",
             "batchDidntRestart": "{count} sandbox no se reinició en {machine}. | {count} sandboxes no se reiniciaron en {machine}.",
@@ -8166,6 +8182,7 @@
             "verbHeader": "¿{verb} {name}?",
             "workingAgentForget": "Quitando los enlaces muertos de un dispositivo",
             "workingAgentPower": "Cambiando los ajustes de energía de un dispositivo",
+            "workingAgentWslMemory": "Escribiendo el .wslconfig de un dispositivo",
             "workingAgentRestart": "Reiniciando el agente de un dispositivo",
             "workingAgentUpgrade": "Actualizando los agentes de una máquina",
             "workingClean": "Borrando la salida de compilación",

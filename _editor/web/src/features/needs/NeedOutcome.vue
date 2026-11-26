@@ -27,8 +27,9 @@ const reason = computed(() => (need.status === `declined` && note.value === unde
 const change = computed(() => (met.value && subject.value.kind === `capability` && subject.value.mode === `change` ? subject.value : undefined));
 // The one met sentence that names something the title cannot: the connection a new one was saved as.
 const connected = computed(() => (met.value && subject.value.kind === `capability` && subject.value.mode === `connect` ? need.outcome : undefined));
-// What a yes changed on that computer, in the daemon's words: "Done" says the card was answered, not what it does now.
-const power = computed(() => (met.value && subject.value.kind === `host-power` ? need.outcome : undefined));
+// What a yes changed on that computer, in the daemon's words: "Done" says the card was answered, not what it does now. A
+// WSL memory card's says what was written and that the VM keeps its old size until WSL restarts.
+const power = computed(() => (met.value && (subject.value.kind === `host-power` || subject.value.kind === `wsl-memory`) ? need.outcome : undefined));
 // Closed by the agent (`needs done`) after a person said in the chat it was fixed: what its retry showed, since no
 // person pressed anything on the card.
 const byAgent = computed(() => (met.value && need.byAgent === true ? need.outcome : undefined));

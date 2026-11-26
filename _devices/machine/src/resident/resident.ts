@@ -40,6 +40,7 @@ import { startMemoryLog } from "./memory-log.js";
 import { startWatchdog, type Watchdog } from "./watchdog.js";
 import { WINDOWS_SIDE } from "../environments/wsl.js";
 import { type CacheDrop, startCacheDrop } from "../environments/wsl-cache-drop.js";
+import { watchWslMemory, type WslMemoryWatch } from "../environments/wsl-memory-watch.js";
 import { startedBeforeSignIn } from "../device/session.js";
 
 // This environment's one resident process; it re-reads what it serves every tick, so only a new binary or `run` restarts it.
@@ -305,6 +306,8 @@ interface Runtime {
     readonly autoUpgrade: AutoUpgrade | undefined;
     // The Windows side only: gives the WSL VM's file cache back to Windows when Windows runs low (wsl-cache-drop.ts).
     readonly cacheDrop: CacheDrop | undefined;
+    // The Windows side only: whether the WSL VM's size fits this PC, for the facts (wsl-memory-watch.ts).
+    readonly wslMemory: WslMemoryWatch | undefined;
     readonly finish: (code: number) => Promise<never>;
 }
 
@@ -386,7 +389,8 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
     }
     // Before sign-in too: a PC short of memory is short whoever is signed in, and the drop needs no desktop.
     const cacheDrop = WINDOWS_SIDE ? startCacheDrop(log) : undefined;
-    return { beforeSignIn, connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, cacheDrop, finish };
+    const wslMemory = WINDOWS_SIDE ? watchWslMemory(log) : undefined;
+    return { beforeSignIn, connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, cacheDrop, wslMemory, finish };
 };
 
 // The lease, and for an agent started before sign-in a sign-in's request to hand over: either ends this agent here.
@@ -450,6 +454,8 @@ const tick = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<void>
     }
     // Not awaited: one `os.freemem()` on a tick with memory to spare, and a drop that is due runs beside the loop.
     runtime.cacheDrop?.tick();
+    // Not awaited either: a reading every five minutes, beside the loop.
+    runtime.wslMemory?.tick();
     await stampLinks(runtime.connections, now?.links);
     await stampAlive();
 };

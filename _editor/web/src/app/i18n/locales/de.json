@@ -6713,6 +6713,16 @@
             "approve": "Diese Einstellungen auf {device} ändern",
             "working": "Die Einstellungen auf {device} werden geändert…"
         },
+        "wslMemory": {
+            "lead": "Auf {device} hatte Windows in {share} % der Messungen der letzten {hours} Stunden weniger als seine Untergrenze von {low} verfügbar, während die WSL-VM im Median {vm} von {total} belegte; Windows' eigener Bedarf außerhalb der VM erreichte {outside}.",
+            "unset": "memory= nicht gesetzt (die Hälfte des RAM)",
+            "file": "Eine Zeile in {path} ändert sich; die Datei, wie sie war, bleibt daneben erhalten.",
+            "floor": "Das ist das Mindeste, mit dem noch eine Sandbox läuft: Windows kann trotzdem knapp bleiben.",
+            "caps": "Sandboxes mit einer höheren Grenze, die eine kleinere VM ohne Grenze lässt: {caps}. Senke sie ebenfalls.",
+            "restart": "Nichts ändert sich, bis WSL neu startet, und das startet jede Sandbox auf {device} neu, diese eingeschlossen. Den Neustart machst du selbst (wsl --shutdown), wenn dort nichts weiterlaufen muss.",
+            "approve": "{setting} schreiben",
+            "working": ".wslconfig auf {device} wird geschrieben…"
+        },
         "deploy": {
             "lead": "{stack} in {repo} wird auf {device} bereitgestellt. Mit der Freigabe schreibt diese Sandbox bei jeder Bereitstellung diese Secrets in seine .env:",
             "new": "neu",
@@ -7018,10 +7028,15 @@
             "updated": "Aktualisierung abgeschlossen",
             "updating": "Sein Agent wird aktualisiert…",
             "workingPower": "Energieeinstellungen werden geändert…",
+            "workingWslMemory": ".wslconfig wird geschrieben…",
             "powerChanging": "Seine Energieeinstellungen werden geändert…",
             "powerChanged": "Energieeinstellungen geändert",
             "powerFailed": "Seine Energieeinstellungen konnten nicht geändert werden",
-            "powerRefused": "Dieses Gerät hat seine Energieeinstellungen nicht geändert."
+            "powerRefused": "Dieses Gerät hat seine Energieeinstellungen nicht geändert.",
+            "wslMemoryWriting": "Seine .wslconfig wird geschrieben…",
+            "wslMemoryWritten": ".wslconfig geschrieben: gilt, sobald WSL neu startet",
+            "wslMemoryFailed": "Seine .wslconfig konnte nicht geschrieben werden",
+            "wslMemoryRefused": "Dieses Gerät hat seine .wslconfig nicht geändert."
         },
         "agentMemory": {
             "addToMemory": "Zum Gedächtnis hinzufügen",
@@ -8111,6 +8126,7 @@
             "doneClean": "Build-Ausgabe entfernt. Zurückgehaltene Löschungen werden in wenigen Sekunden synchronisiert.",
             "askedForget": "Die Verbindungen, die nicht mehr antworten, werden entfernt. Die Zahl hier zieht nach, sobald seine Schleife zurück ist.",
             "askedPower": "Ändert die Energieeinstellungen. Diese Seite zieht mit seiner nächsten Meldung nach.",
+            "askedWslMemory": "Schreibt seine .wslconfig. Diese Seite zieht mit seiner nächsten Meldung nach.",
             "askedRestart": "Startet neu. Diese Seite zieht nach, sobald seine Schleife zurück ist.",
             "askedUpgrade": "Wird aktualisiert. Die neue Version erscheint hier, sobald seine Schleife zurück ist.",
             "batchDidntRestart": "{count} Sandbox auf {machine} wurde nicht neu gestartet. | {count} Sandboxes auf {machine} wurden nicht neu gestartet.",
@@ -8166,6 +8182,7 @@
             "verbHeader": "{verb} {name}?",
             "workingAgentForget": "Tote Verbindungen eines Geräts werden entfernt",
             "workingAgentPower": "Die Energieeinstellungen eines Geräts werden geändert",
+            "workingAgentWslMemory": "Die .wslconfig eines Geräts wird geschrieben",
             "workingAgentRestart": "Der Agent eines Geräts wird neu gestartet",
             "workingAgentUpgrade": "Die Agenten eines Rechners werden aktualisiert",
             "workingClean": "Build-Ausgabe wird entfernt",

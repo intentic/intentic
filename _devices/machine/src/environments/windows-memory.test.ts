@@ -4,8 +4,10 @@ import {
     DROP_COOLDOWN_MS,
     dropLine,
     EARLY_DROP_COOLDOWN_MS,
+    lowSpellSince,
     MAX_DROP_COOLDOWN_MS,
     nextDropCooldown,
+    RECLAIM_GRACE_MS,
     recoveredFromTight,
     runningDistrosFrom,
     shouldDropCache,
@@ -104,4 +106,41 @@ test("a backed-off wait holds under the low line and above it, never under the 1
 test("Windows over a fifth of its memory has recovered; at a fifth or under it has not", () => {
     expect(recoveredFromTight({ availableBytes: 6.3 * GIB, totalBytes: 31.4 * GIB })).toBe(true);
     expect(recoveredFromTight({ availableBytes: 6.2 * GIB, totalBytes: 31.4 * GIB })).toBe(false);
+});
+
+// (2026-11-26) Above the floor, sandboxes' cgroup reclaim runs first; the blanket drop waits RECLAIM_GRACE_MS.
+test("above the floor, the blanket drop waits for sandboxes to reclaim from their own cgroups", () => {
+    const underLow = { availableBytes: 2.5 * GIB, totalBytes: 31.4 * GIB };
+    const lowSince = NOW - 10_000;
+    // Within the grace period: no drop even with the cooldown passed.
+    expect(shouldDropCache(underLow, NEVER, NOW, DROP_COOLDOWN_MS, lowSince)).toBe(false);
+    // Grace period expired: drop runs.
+    const longAgo = NOW - RECLAIM_GRACE_MS;
+    expect(shouldDropCache(underLow, NEVER, NOW, DROP_COOLDOWN_MS, longAgo)).toBe(true);
+});
+
+test("under the 1.5 GiB floor, the blanket drop runs immediately regardless of grace period", () => {
+    const underFloor = { availableBytes: 1.0 * GIB, totalBytes: 31.4 * GIB };
+    const lowSince = NOW - 1_000;
+    // Under the floor: drops even within the grace period.
+    expect(shouldDropCache(underFloor, NEVER, NOW, DROP_COOLDOWN_MS, lowSince)).toBe(true);
+});
+
+test("without lowSince (no tracking), the blanket drop runs as before", () => {
+    const underLow = { availableBytes: 2.5 * GIB, totalBytes: 31.4 * GIB };
+    // No lowSince: same as the old behaviour, respects only cooldown.
+    expect(shouldDropCache(underLow, NEVER, NOW)).toBe(true);
+    expect(shouldDropCache(underLow, NEVER, NOW, DROP_COOLDOWN_MS, undefined)).toBe(true);
+});
+
+test("a low spell begins the first time Windows is under its line, holds while it stays tight, and ends over a fifth", () => {
+    const at = (availableGib: number) => ({ availableBytes: availableGib * GIB, totalBytes: 31.4 * GIB });
+    // Over the low line (3.14 GiB here) but under a fifth: no spell starts, one already running holds.
+    expect(lowSpellSince(at(5), undefined, 1_000)).toBeUndefined();
+    expect(lowSpellSince(at(5), 500, 1_000)).toBe(500);
+    // Under the line: a spell starts now, or keeps its start.
+    expect(lowSpellSince(at(2), undefined, 1_000)).toBe(1_000);
+    expect(lowSpellSince(at(2), 500, 1_000)).toBe(500);
+    // Over a fifth of the machine: the spell is over.
+    expect(lowSpellSince(at(7), 500, 1_000)).toBeUndefined();
 });

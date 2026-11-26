@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { type SpeechEngine, speechEngineFor, speechLanguage, type SpeechStatus } from "@intentic/sandbox-contract/schemas/speech";
 import { createModelStore, type FetchLike, type ModelStore } from "./model-store.js";
-import { createSpeechProcess, type SpeechProcess } from "./speech-engine.js";
+import { createSpeechProcess, shortNow, type SpeechProcess } from "./speech-engine.js";
 import type { RecognizerSpec } from "./speech-recognizers.js";
 import { BAKED_SPEECH_MODELS_DIR, modelBytes, SPEECH_MODELS } from "./speech-models.js";
 import { wavSamples } from "./wav.js";
@@ -24,8 +24,12 @@ export const MAX_UTTERANCE_WAV_BYTES = 2 * 1024 * 1024;
 export interface Speech {
     /** Where voice stands for this locale. Asking while its model is absent starts fetching it, so an older composer's poll still prepares it. */
     readonly status: (locale: string | undefined) => Promise<SpeechStatus>;
-    /** Fetch the locale's model if it is missing and load it into memory, in the background; answers the status now. */
-    readonly prepare: (locale: string | undefined) => Promise<SpeechStatus>;
+    /**
+     * Fetch the locale's model if it is missing and load it into memory, in the background; answers the status now.
+     * `press` is a person who pressed the mic and is speaking. `guess` is a head start nobody asked for (the composer's
+     * hover over the mic), which does nothing while memory is short: the press that may follow loads the model itself.
+     */
+    readonly prepare: (locale: string | undefined, why: SpeechPrepareReason) => Promise<SpeechStatus>;
     /** One WAV utterance to its text; empty when it held no words. Refuses while the model is not on disk yet. */
     readonly transcribe: (wav: Buffer, locale: string | undefined) => Promise<string>;
     /** One phrase of 16 kHz mono samples to its text, waiting for the model however long it takes to arrive. */
@@ -36,6 +40,9 @@ export interface Speech {
     readonly subscribe: (listener: () => void) => () => void;
     readonly close: () => void;
 }
+
+/** Why the model is being prepared: a person speaking now, or a guess that they are about to. */
+export type SpeechPrepareReason = "press" | "guess";
 
 // Refusals the routes answer with a status of their own; anything else is a plain 500.
 export class SpeechUnprovisionedError extends Error {
@@ -126,9 +133,13 @@ export interface SpeechDeps {
     readonly fetch?: FetchLike;
     readonly process?: (onChange: () => void) => SpeechProcess;
     readonly provisioned?: () => boolean;
+    // Whether the sandbox or its host is short of memory right now (the daemon's reading of its room). While it is, a
+    // guessed prepare loads nothing and an idle model is let go sooner (speech-engine.ts). Absent, memory is never short.
+    readonly short?: () => Promise<boolean>;
 }
 
-export const createSpeech = ({ cacheDir, log, bakedDir = BAKED_SPEECH_MODELS_DIR, fetch, process: makeProcess, provisioned }: SpeechDeps): Speech => {
+export const createSpeech = (deps: SpeechDeps): Speech => {
+    const { cacheDir, log, bakedDir = BAKED_SPEECH_MODELS_DIR, fetch, process: makeProcess, provisioned, short } = deps;
     const listeners = new Set<() => void>();
     const changed = (): void => {
         for (const listener of listeners) {
@@ -143,7 +154,7 @@ export const createSpeech = ({ cacheDir, log, bakedDir = BAKED_SPEECH_MODELS_DIR
         onChange: changed,
         ...(fetch === undefined ? {} : { fetch }),
     });
-    const speechProcess = makeProcess?.(changed) ?? createSpeechProcess({ log, onChange: changed });
+    const speechProcess = makeProcess?.(changed) ?? createSpeechProcess({ log, onChange: changed, short });
 
     // whisper.cpp's model from before this engine: 1.6 GB per sandbox nothing reads any more.
     void rm(join(cacheDir, "whisper"), { recursive: true, force: true }).catch((error: unknown) =>
@@ -199,8 +210,12 @@ export const createSpeech = ({ cacheDir, log, bakedDir = BAKED_SPEECH_MODELS_DIR
             }
             return status;
         },
-        prepare: async (locale) => {
+        prepare: async (locale, why) => {
             const engine = speechEngineFor(locale);
+            if (why === "guess" && isProvisioned() && !speechProcess.loaded(engine) && (await shortNow(short))) {
+                log(`memory is short: a guessed prepare leaves the ${engine} speech model unloaded, for the press to load`);
+                return statusOf(engine);
+            }
             if (isProvisioned()) {
                 void (async () => {
                     const dir = await fetchInBackground(engine);

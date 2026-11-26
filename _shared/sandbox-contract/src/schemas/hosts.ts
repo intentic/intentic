@@ -1,6 +1,7 @@
 // hosts: the user's own connected devices (the `host` capability's live half)
 import { z } from "zod";
 import { HostPowerSchema } from "./host-power.js";
+import { WslMemorySchema } from "./wsl-memory.js";
 import { IntenticOsFactsSchema } from "./intentic-os.js";
 // Manifest says which machines are intended; this says which actually hold a socket now. Nothing persists across a
 // daemon restart except the enrollment itself, so a closed laptop reads offline within a heartbeat.
@@ -112,6 +113,10 @@ export const DeviceFactsSchema = z.object({
     // settings (Windows' native side, a Linux or macOS host), never by a WSL distro. Absent from an agent older than the
     // field, and where the settings could not be read.
     power: HostPowerSchema.optional(),
+    // (2026-11-26) The WSL2 VM's `memory=` and, when it is too big for this PC, the size proposed for it (WslMemorySchema,
+    // wsl-memory.ts). Said by Windows' own side alone, once it has read `.wslconfig`; absent everywhere else and from an
+    // agent older than the field.
+    wslMemory: WslMemorySchema.optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
@@ -238,6 +243,9 @@ export const DeviceFeatureSchema = z.enum([
     // (2026-11-25) `host_stats`: disk free under Docker's root and the stacks folder, memory and load, for the deploys
     // monitor's low-disk and low-memory alerts (HostStatsSchema in schemas/device-stacks.ts).
     "host-stats",
+    // (2026-11-26) The `wsl-memory` agent op: `memory=` in this PC's `.wslconfig` rewritten to the size the owner approved
+    // on a card (`DeviceFacts.wslMemory`), by `intentic-machine wsl-memory apply`. Advertised by Windows' own side.
+    "wsl-memory",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -263,6 +271,7 @@ export const DEVICE_FEATURE_POWER: DeviceFeature = "power";
 export const DEVICE_FEATURE_ADMIN_RUN: DeviceFeature = "admin-run";
 export const DEVICE_FEATURE_STACKS_MANAGED: DeviceFeature = "stacks-managed";
 export const DEVICE_FEATURE_HOST_STATS: DeviceFeature = "host-stats";
+export const DEVICE_FEATURE_WSL_MEMORY: DeviceFeature = "wsl-memory";
 // What `ic features --json` answers (_hosts/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
 // implements, as strings, since a newer ic's word means nothing to an older agent.
 export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });

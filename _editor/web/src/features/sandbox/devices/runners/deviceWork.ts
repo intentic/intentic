@@ -209,7 +209,7 @@ const dropSpent = (): void => {
 
 // The ops that leave the agent's process as it was: a new pid never comes, so a reading taken after the press is the
 // answer when the machine's own sentence did not arrive.
-const KEEPS_PROCESS: ReadonlySet<DeviceAgentOp> = new Set([`power-stay-on`]);
+const KEEPS_PROCESS: ReadonlySet<DeviceAgentOp> = new Set([`power-stay-on`, `wsl-memory`]);
 
 // Whether a reading shows this side's agent back from the press: a live, unstalled loop serving the build on disk, run
 // by a different process than the one the press was made against. A pid on both sides decides it; without one, an

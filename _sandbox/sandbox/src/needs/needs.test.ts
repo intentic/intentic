@@ -84,6 +84,7 @@ const harness = (): Harness => {
         automation: handler,
         instruction: handler,
         "host-power": { ...handler, tellsAgent: false },
+        "wsl-memory": { ...handler, tellsAgent: false },
         claim: handler,
         route: handler,
         redirect: { ...handler, wakesOn: "declined" },

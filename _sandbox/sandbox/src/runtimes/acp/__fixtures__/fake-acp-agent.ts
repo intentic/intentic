@@ -348,6 +348,7 @@ export const fakeAcpConnection = (app: AgentApp, capabilities: AgentCapabilities
             }
         },
         release: (sessionId) => releaseSession(connection, sessionId, () => {}),
+        letGo: () => {},
         kill: () => {
             dead = true;
         },

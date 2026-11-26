@@ -5,7 +5,7 @@ import { z } from "zod";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
 import { opt } from "../../opt.js";
 import { cacheFile } from "../../store/open-document.js";
-import type { AcpConnection, AcpConnections } from "../acp/acp-connection.js";
+import { type AcpConnection, type AcpConnections, withConnection } from "../acp/acp-connection.js";
 import { sessionModelsOf, sessionThoughtsOf, thoughtTiers } from "@intentic/acp-events/model";
 import { type CliStore, liveCliAccounts } from "./vendor-cli-store.js";
 import { cliAgentId, cliBinary, type VendorCli } from "./vendor-cli.js";
@@ -115,17 +115,20 @@ export const createCliCatalog = ({ cli, store, connections, persistPath, probeDi
         try {
             await mkdir(probeDir, { recursive: true });
             const launch = cli.launch(binary, store.homeOf(account.id));
-            // The account's own warm process, the one its turns use, so the list costs no second sign-in.
-            const connection = await connections().acquire(cliAgentId(cli, account.id), launch, probeDir);
-            const created = await connection.agent.request(methods.agent.session.new, {
-                cwd: probeDir,
-                mcpServers: [],
-                ...opt("_meta", launch.sessionMeta === undefined ? undefined : { ...launch.sessionMeta }),
+            // The account's own warm process, the one its turns use, so the list costs no second sign-in. One the probe
+            // started itself ends a short grace after it lets go, unless a conversation's turn has opened a session on it
+            // by then (acp-connection.ts).
+            return await withConnection(connections().acquire(cliAgentId(cli, account.id), launch, probeDir), async (connection) => {
+                const created = await connection.agent.request(methods.agent.session.new, {
+                    cwd: probeDir,
+                    mcpServers: [],
+                    ...opt("_meta", launch.sessionMeta === undefined ? undefined : { ...launch.sessionMeta }),
+                });
+                const offered = await offeredModels(connection, created.sessionId, created.configOptions);
+                // Nobody resumes a probe, so it leaves the CLI's own session list as soon as it has answered.
+                connection.release(created.sessionId);
+                return offered;
             });
-            const offered = await offeredModels(connection, created.sessionId, created.configOptions);
-            // Nobody resumes a probe, so it leaves the CLI's own session list as soon as it has answered.
-            connection.release(created.sessionId);
-            return offered;
         } catch (error) {
             store.logger.warn({ err: error }, `${cli.runtime}: model discovery failed, serving the last-known-good list`);
             return [];

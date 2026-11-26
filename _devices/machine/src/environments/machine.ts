@@ -34,6 +34,9 @@ export interface MachineConfig {
     // Minutes a sandbox this environment keeps goes unneeded before the keeper puts it to sleep (sandbox-rounds/sleep.ts);
     // absent is the default, 0 never.
     readonly sandboxSleepMinutes?: number;
+    // A sandbox nobody has used for an hour put to sleep while the computer stays short of memory
+    // (device/sandbox-rounds/memory-relief/memory-sleep.ts); the Windows side's or a Linux host's, which alone read the computer's memory.
+    readonly memorySleep?: boolean;
     readonly upgradeFailure?: { readonly target: string; readonly count: number; readonly at: number };
     readonly skippedAgent?: { readonly version: string; readonly at: number };
 }

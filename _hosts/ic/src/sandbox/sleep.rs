@@ -27,6 +27,9 @@ pub struct Args {
     pub idle: Option<u64>,
     pub json: bool,
     pub source: Source,
+    /// Why, from whoever asked (the machine agent's keeper names the computer's memory), for the sandbox's own record
+    /// of the stop; None leaves ic's own sentence.
+    pub reason: Option<String>,
 }
 
 /// Whether the daemon's work signal lets a sandbox sleep.
@@ -275,6 +278,21 @@ fn dev_checkout_holds_awake(slug: &str, container: &str) -> Option<String> {
     held_by_checkout(ran.code, &ran.stdout)
 }
 
+/// The sentence the sandbox's record of an idle sleep carries: the asker's why first, when it gave one, then the quiet
+/// that let it. Pure.
+fn idle_reason(reason: Option<&str>, quiet: &str, idle_ms: u64) -> String {
+    let because = reason.map_or(String::new(), |why| format!(" because {why}"));
+    format!(
+        "put to sleep{because}: no agent turn was running and it was {quiet}, past the {} limit; the next wake starts it again.",
+        crate::util::plural((idle_ms / 60_000) as usize, "minute")
+    )
+}
+
+/// The same for a sleep asked for now, which has no limit to name. Pure.
+fn asked_reason(why: &str) -> String {
+    format!("put to sleep because {why}; the next wake starts it again.")
+}
+
 /// How long a sandbox has been quiet, for the line that says it slept. Pure.
 fn quiet_for(signal: Option<WorkSignal>, now_ms: u64) -> String {
     let minutes = signal
@@ -322,15 +340,21 @@ pub fn run(args: Args) -> Result<()> {
         ui::send_human_to_stderr();
     }
     docker::require_daemon()?;
+    let reason = args
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|why| !why.is_empty());
     match args.idle {
-        None => sleep_now(args.slug, args.json, args.source),
-        Some(minutes) => sleep_idle(args.slug, minutes, args.json, args.source),
+        None => sleep_now(args.slug, args.json, args.source, reason),
+        Some(minutes) => sleep_idle(args.slug, minutes, args.json, args.source, reason),
     }
 }
 
 /// The explicit form: this sandbox, now, as `ic sandbox stop` would take it down. Fails when it cannot.
-fn sleep_now(slug: Option<String>, json: bool, source: Source) -> Result<()> {
+fn sleep_now(slug: Option<String>, json: bool, source: Source, reason: Option<&str>) -> Result<()> {
     let slug = resolve_slug(slug, "ic sandbox sleep")?;
+    let _why = reason.map(|why| crate::sandbox::intent::Reason::hold(asked_reason(why), &[]));
     let _held = lock::hold_for_person(&slug)?;
     let container = container_of(&slug);
     let mut alarm = None;
@@ -369,7 +393,13 @@ fn sleep_now(slug: Option<String>, json: bool, source: Source) -> Result<()> {
 
 /// The keeper's form: every sandbox this side keeps (or the one named), each slept only if it has been quiet long
 /// enough. A sandbox that stays awake is an answer, not a failure.
-fn sleep_idle(slug: Option<String>, minutes: u64, json: bool, source: Source) -> Result<()> {
+fn sleep_idle(
+    slug: Option<String>,
+    minutes: u64,
+    json: bool,
+    source: Source,
+    reason: Option<&str>,
+) -> Result<()> {
     let idle_ms = minutes.saturating_mul(60_000);
     let slugs = match slug {
         Some(slug) => vec![resolve_slug(Some(slug), "ic sandbox sleep")?],
@@ -386,7 +416,7 @@ fn sleep_idle(slug: Option<String>, minutes: u64, json: bool, source: Source) ->
         },
     };
     for slug in slugs {
-        let (slept, why, alarm) = consider(&slug, idle_ms, source);
+        let (slept, why, alarm) = consider(&slug, idle_ms, source, reason);
         say(&slug, slept, &why, alarm, json);
     }
     Ok(())
@@ -407,12 +437,22 @@ fn swept_awake(slug: &str) -> Option<&'static str> {
 
 /// One sandbox through every reason to leave it awake, put to sleep when none holds: whether it slept, why, and the
 /// alarm its sleep set.
-fn consider(slug: &str, idle_ms: u64, source: Source) -> (bool, String, Option<u64>) {
-    let (slept, why, alarm) = considered(slug, idle_ms, source);
+fn consider(
+    slug: &str,
+    idle_ms: u64,
+    source: Source,
+    reason: Option<&str>,
+) -> (bool, String, Option<u64>) {
+    let (slept, why, alarm) = considered(slug, idle_ms, source, reason);
     (slept, why, alarm.filter(|_| slept))
 }
 
-fn considered(slug: &str, idle_ms: u64, source: Source) -> (bool, String, Option<u64>) {
+fn considered(
+    slug: &str,
+    idle_ms: u64,
+    source: Source,
+    reason: Option<&str>,
+) -> (bool, String, Option<u64>) {
     if let Some(why) = swept_awake(slug) {
         return (false, why.to_string(), None);
     }
@@ -465,13 +505,8 @@ fn considered(slug: &str, idle_ms: u64, source: Source) -> (bool, String, Option
                 return (false, why.to_string(), None);
             }
             let quiet = quiet_for(signal, now);
-            let _why = crate::sandbox::intent::Reason::hold(
-                format!(
-                    "put to sleep: no agent turn was running and it was {quiet}, past the {} limit; the next wake starts it again.",
-                    crate::util::plural((idle_ms / 60_000) as usize, "minute")
-                ),
-                &[],
-            );
+            let _why =
+                crate::sandbox::intent::Reason::hold(idle_reason(reason, &quiet, idle_ms), &[]);
             let alarm = signal.and_then(|signal| signal.next_wake_at);
             match put_to_sleep(slug, source, alarm) {
                 Ok(()) => (true, quiet, alarm),
@@ -1328,6 +1363,19 @@ mod tests {
         );
         assert_eq!(quiet_for(Some(quiet(40)), NOW), "quiet for 40 minutes");
         assert_eq!(quiet_for(Some(quiet(1)), NOW), "quiet for 1 minute");
+        // The sandbox's own record of the stop: ic's sentence alone, or the asker's why ahead of it.
+        assert_eq!(
+            idle_reason(None, "quiet for 40 minutes", 30 * MIN),
+            "put to sleep: no agent turn was running and it was quiet for 40 minutes, past the 30 minutes limit; the next wake starts it again."
+        );
+        assert_eq!(
+            idle_reason(Some("this computer was short of memory"), "quiet for 75 minutes", 60 * MIN),
+            "put to sleep because this computer was short of memory: no agent turn was running and it was quiet for 75 minutes, past the 60 minutes limit; the next wake starts it again."
+        );
+        assert_eq!(
+            asked_reason("this computer was short of memory"),
+            "put to sleep because this computer was short of memory; the next wake starts it again."
+        );
         assert_eq!(
             serde_json::from_str::<Value>(&woke_line("s", None, WakeFor::Visit)).expect("JSON"),
             json!({ "slug": "s", "woke": true })

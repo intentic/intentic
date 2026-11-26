@@ -41,7 +41,10 @@ import type { BootPhase } from "./boot-phase.js";
 import { inBackground } from "../system/background-git.js";
 import { publicAddressOf } from "../env.config.js";
 import { reportedPairings } from "../hosts/device-reports.js";
+import { liveTurnConversations } from "../conversations/actor/conversation-holdings.js";
 import { hostRoomSource } from "../hosts/host-memory.js";
+import { startHostReclaim } from "../hosts/reclaim/host-reclaim.js";
+import { readCgroup } from "../system/resources/cgroup.js";
 import { startGpuWatch } from "../hosts/gpu/gpu-watch.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { announceUnwatchedWrite, subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
@@ -221,14 +224,26 @@ const startAutomations = ({ role, services, shutdown }: Pick<BootPhase, "role" |
 // Work held for memory looks again the moment a turn, a background job or a spawned child lets memory go, rather than
 // at its next interval: measured before, a held heavy command waited ~2.5 s past the room being there (2026-10-20).
 // Wired here, above both the workload budget and the agent layer, which the budget may not import.
-const wireRoomWakes = (services: BootPhase["services"], shutdown: BootPhase["shutdown"]): void => {
+const wireRoomWakes = (services: BootPhase["services"], logger: BootPhase["logger"], shutdown: BootPhase["shutdown"]): void => {
     const { events, resources, answerToHost } = services;
     const roomFreed = (): void => resources.changed();
     for (const stop of [events.subscribe("run.settled", roomFreed), onJobEnded(roomFreed), onChildSettled(roomFreed)]) {
         shutdown.push(stop);
     }
     // Heavy work also waits for the machine this sandbox runs on while that machine is short (2026-11-02).
-    answerToHost(hostRoomSource(() => services));
+    const hostSource = hostRoomSource(() => services);
+    answerToHost(hostSource);
+
+    // (2026-11-26) Targeted reclaim from this sandbox's cgroup when the host is under its low line, so the machine
+    // agent's blanket drop_caches becomes a fallback instead of the first resort (host-reclaim.ts).
+    const reclaim = startHostReclaim(logger, {
+        hostSource,
+        readCgroup: async () => readCgroup(),
+        activeTurns: () => liveTurnConversations(services.conversations).length,
+    });
+    const reclaimTimer = setInterval(() => reclaim.tick(), 10_000);
+    reclaimTimer.unref();
+    shutdown.push(() => clearInterval(reclaimTimer));
 };
 
 // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it; its parent
@@ -266,7 +281,7 @@ const startAcrossSandboxes = (services: BootPhase["services"], shutdown: BootPha
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
     startAutomations({ role, services, shutdown });
-    wireRoomWakes(services, shutdown);
+    wireRoomWakes(services, logger, shutdown);
 
     // Open needs outlive every turn and every restart (docs/architecture/needs.md): their cards are told what they wait
     // on, answers a restart interrupted are delivered, and the checks against the world start.

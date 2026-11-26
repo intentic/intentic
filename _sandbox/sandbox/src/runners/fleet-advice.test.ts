@@ -11,8 +11,10 @@ import {
     readRunners,
     type RunnerReading,
     type SessionFit,
+    shortOfMemory,
     suggestionFor,
 } from "./fleet-advice.js";
+import type { BudgetSnapshot } from "../workload/resource-budget.js";
 
 // Which machine a new session should start on. The verdicts are read by a person deciding where their work goes, so
 // each case is a moment they would recognise: a box filling up, a quiet machine across the room, a suggestion that
@@ -247,5 +249,50 @@ describe("the fleet as one reading", () => {
         const stale = { ...windows(0.5), at: Date.now() - 10 * 60_000 };
         expect((await omenOf(deps({ omen: idle() }, 0, { "omen-pc": stale }))).facts?.memoryFreeMb).toBe(28_000);
         expect((await omenOf(deps({ omen: idle() }))).facts?.memoryFreeMb).toBe(28_000);
+    });
+});
+
+// What work nobody asked for gives way to (a dictation model loaded on a hover, an idle one kept): this sandbox's own
+// budget reading, its host's room folded in, judged by the line its standing reads busy at.
+describe("whether this sandbox is short of memory", () => {
+    const GIB = 1024 ** 3;
+    const budget = (snapshot: { readonly freeGib?: number; readonly stall?: number; readonly host?: { readonly availableGib: number } }) => ({
+        snapshot: async (): Promise<BudgetSnapshot> => ({
+            at: Date.now(),
+            reading: {
+                limitBytes: 16 * GIB,
+                usedBytes: 16 * GIB - (snapshot.freeGib ?? 8) * GIB,
+                swapBytes: 0,
+                stallPercent: snapshot.stall ?? 0,
+                oomKills: 0,
+                host:
+                    snapshot.host === undefined
+                        ? undefined
+                        : { name: "rog", availableBytes: snapshot.host.availableGib * GIB, totalBytes: 32 * GIB, reserveBytes: 3 * GIB },
+            },
+            reservedBytes: 0,
+            freeBytes: (snapshot.freeGib ?? 8) * GIB,
+            personNeedBytes: GIB,
+            stallLimitPercent: 20,
+            stallSustainedLimitPercent: 10,
+        }),
+    });
+
+    test("reads short when memory is busy or full, or while memory stalls, and not with room", async () => {
+        expect(await shortOfMemory(budget({ freeGib: 8 }))).toBe(false);
+        expect(await shortOfMemory(budget({ freeGib: 0.5 }))).toBe(true);
+        // Busy: room for a person's turn but for fewer than a few more agents, where a guessed model load tips it full.
+        expect(await shortOfMemory(budget({ freeGib: 1.9 }))).toBe(true);
+        expect(await shortOfMemory(budget({ freeGib: 8, stall: 25 }))).toBe(true);
+    });
+
+    // 2026-11-26: the owner's laptop, its Windows nearly out of memory, while the sandbox's own cgroup read as roomy.
+    test("reads short when the host has no room above its reserve, however roomy the sandbox's own reading", async () => {
+        expect(await shortOfMemory(budget({ freeGib: 8, host: { availableGib: 3.5 } }))).toBe(true);
+        expect(await shortOfMemory(budget({ freeGib: 8, host: { availableGib: 12 } }))).toBe(false);
+    });
+
+    test("a budget that cannot be read is no shortage", async () => {
+        expect(await shortOfMemory({ snapshot: () => Promise.reject(new Error("no cgroup here")) })).toBe(false);
     });
 });

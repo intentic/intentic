@@ -6353,10 +6353,15 @@
             "updated": "Aktualizacja zakończona",
             "updating": "Aktualizowanie jego agenta…",
             "workingPower": "Zmieniam zasilanie…",
+            "workingWslMemory": "Zapisuję .wslconfig…",
             "powerChanging": "Zmienianie jego ustawień zasilania…",
             "powerChanged": "Ustawienia zasilania zmienione",
             "powerFailed": "Nie udało się zmienić jego ustawień zasilania",
-            "powerRefused": "Tamto urządzenie nie zmieniło swoich ustawień zasilania."
+            "powerRefused": "Tamto urządzenie nie zmieniło swoich ustawień zasilania.",
+            "wslMemoryWriting": "Zapisuję jego .wslconfig…",
+            "wslMemoryWritten": ".wslconfig zapisany: zadziała po ponownym uruchomieniu WSL",
+            "wslMemoryFailed": "Nie udało się zapisać jego .wslconfig",
+            "wslMemoryRefused": "Tamto urządzenie nie zmieniło swojego .wslconfig."
         },
         "agentMemory": {
             "addToMemory": "Dodaj do pamięci",
@@ -7496,6 +7501,7 @@
             "doneClean": "Wyniki budowania usunięte. Wstrzymane usunięcia zsynchronizują się w ciągu kilku sekund.",
             "askedForget": "Usuwanie powiązań, które przestały odpowiadać. Licznik tutaj nadrobi, gdy jego pętla wróci.",
             "askedPower": "Zmienianie ustawień zasilania. Ta strona nadrobi przy jego następnym odczycie.",
+            "askedWslMemory": "Zapisywanie jego .wslconfig. Ta strona nadrobi przy jego następnym odczycie.",
             "askedRestart": "Restartowanie. Ta strona nadrobi, gdy jego pętla wróci.",
             "askedUpgrade": "Aktualizowanie. Nowa wersja pojawi się tutaj, gdy jego pętla wróci.",
             "batchDidntRestart": "{count} sandbox nie zrestartował się na {machine}. | {count} sandboxy nie zrestartowały się na {machine}. | {count} sandboxów nie zrestartowało się na {machine}.",
@@ -7551,6 +7557,7 @@
             "verbHeader": "{verb}: {name}?",
             "workingAgentForget": "Usuwanie martwych powiązań urządzenia",
             "workingAgentPower": "Zmienianie ustawień zasilania urządzenia",
+            "workingAgentWslMemory": "Zapisywanie .wslconfig urządzenia",
             "workingAgentRestart": "Restartowanie agenta urządzenia",
             "workingAgentUpgrade": "Aktualizowanie agentów maszyny",
             "workingClean": "Czyszczenie wyników budowania",
@@ -14399,6 +14406,16 @@
             "leadUndated": "{device} przerwie zaplanowaną na nim pracę.",
             "approve": "Zmień te ustawienia na {device}",
             "working": "Zmieniam ustawienia na {device}…"
+        },
+        "wslMemory": {
+            "lead": "Na {device} Windows miał mniej niż swoją dolną granicę {low} dostępnej pamięci w {share}% odczytów z ostatnich {hours} godzin, podczas gdy maszyna wirtualna WSL trzymała medianę {vm} z {total}; własne zużycie Windows poza maszyną wirtualną sięgało {outside}.",
+            "unset": "memory= nieustawione (połowa RAM)",
+            "file": "Zmienia się jedna linia w {path}; plik w poprzedniej postaci zostaje obok.",
+            "floor": "To najmniej, przy czym wciąż działa jeden sandbox: Windowsowi może nadal brakować pamięci.",
+            "caps": "Sandboxy z limitem powyżej tej wartości, który przy mniejszej maszynie wirtualnej przestaje działać: {caps}. Obniż je również.",
+            "restart": "Nic się nie zmieni, dopóki WSL się nie uruchomi ponownie, a to restartuje każdy sandbox na {device}, także ten. Restart należy do ciebie (wsl --shutdown), gdy nic tam nie musi dalej działać.",
+            "approve": "Zapisz {setting}",
+            "working": "Zapisuję .wslconfig na {device}…"
         },
         "deploy": {
             "lead": "{stack} z {repo} wdraża się na {device}. Zgoda pozwala tej piaskownicy wpisywać te sekrety do jego .env przy każdym wdrożeniu:",

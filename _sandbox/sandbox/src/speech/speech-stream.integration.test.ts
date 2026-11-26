@@ -29,11 +29,15 @@ interface Heard {
 // A model that hears a phrase as how many samples it had, so a test can read what reached it off the text.
 const fakeSpeech = (options: { readonly guessable?: boolean; readonly delayMs?: (samples: number) => number } = {}) => {
     const heard: Heard[] = [];
+    const prepared: string[] = [];
     const listeners = new Set<() => void>();
     let status = READY;
     const speech: Speech = {
         status: async () => status,
-        prepare: async () => status,
+        prepare: async (_locale, why) => {
+            prepared.push(why);
+            return status;
+        },
         transcribe: async () => "",
         hear: async (samples, locale) => {
             heard.push({ samples: samples.length, locale });
@@ -53,7 +57,7 @@ const fakeSpeech = (options: { readonly guessable?: boolean; readonly delayMs?: 
             listener();
         }
     };
-    return { speech, heard, move };
+    return { speech, heard, prepared, move };
 };
 
 const stand = async (speech: Speech, query = "lang=pl-PL") => {
@@ -90,6 +94,18 @@ const stand = async (speech: Speech, query = "lang=pl-PL") => {
 const frame = (samples: number): Buffer => Buffer.alloc(samples * 2, 1);
 
 const finals = (said: SpeechServerMessage[]) => said.flatMap((message) => (message.type === "final" ? [message] : []));
+
+// Opening the stream is a press: the model loads for it however short memory is, unlike a hover's guess.
+test("opening the stream prepares the model as a press, and says where it stands", async () => {
+    const fake = fakeSpeech();
+    const wire = await stand(fake.speech);
+    try {
+        await waitFor(() => expect(wire.said[0]).toEqual({ type: "status", status: READY }));
+        expect(fake.prepared).toEqual(["press"]);
+    } finally {
+        wire.close();
+    }
+});
 
 test("each ended phrase comes back once, in order, heard as far as the composer kept it, in the socket's language", async () => {
     const fake = fakeSpeech({ delayMs: (samples) => (samples > 10_000 ? 50 : 0) });

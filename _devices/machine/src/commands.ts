@@ -11,6 +11,7 @@ import { sandboxRoutes } from "./device/sandbox-cli.js";
 import { environmentRoutes, updates } from "./environments/commands.js";
 import { keyringCommands } from "./keyring/commands.js";
 import { powerRoutes } from "./power/power-command.js";
+import { wslMemoryRoutes } from "./environments/wsl-memory-command.js";
 import { type MachineUpgradeEnd, realMachineIo, upgradeMachine } from "./environments/machine-upgrade.js";
 import { runForeground } from "./resident/resident.js";
 import { readResident, restartResident, stopResident } from "./resident/supervision.js";
@@ -163,6 +164,9 @@ export const commands = buildRouteMap({
         // The computer's own power plans (power/): what would sleep it through work left running, and on Windows the
         // mains-power values changed at the owner's word (the sandbox's `power-stay-on` op runs `power stay-on`).
         power: powerRoutes,
+        // The WSL VM's memory= in this PC's .wslconfig, set at the owner's word (the sandbox's `wsl-memory` op runs
+        // `wsl-memory apply`; environments/wslconfig-memory.ts).
+        "wsl-memory": wslMemoryRoutes,
         // The self-hosted CI runners on a Linux computer and the root service that keeps them (ci-fleet/).
         "ci-fleet": ciFleetRoutes,
         run,

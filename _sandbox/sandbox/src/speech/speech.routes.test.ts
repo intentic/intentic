@@ -42,19 +42,21 @@ test("GET /speech/status answers the engine's report for the asked locale verbat
     expect(asked).toBe("ja-JP");
 });
 
-test("POST /speech/prepare arms the locale's model and answers where it stands", async () => {
-    let asked: string | undefined;
+// A prepare is a hover over the mic, not a press: a guess, which a short sandbox answers without loading anything.
+test("POST /speech/prepare arms the locale's model as a guess and answers where it stands", async () => {
+    let asked: readonly [string | undefined, string] | undefined;
     const app = speechApp(
         speechDeps({
-            prepare: async (locale) => {
-                asked = locale;
+            prepare: async (locale, why) => {
+                asked = [locale, why];
                 return { provisioned: true, model: "ready", engine: "parakeet", loaded: false };
             },
         }),
     );
     const response = await app.request("/speech/prepare?lang=pl", { method: "POST" });
+    expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ provisioned: true, model: "ready", engine: "parakeet", loaded: false });
-    expect(asked).toBe("pl");
+    expect(asked).toEqual(["pl", "guess"]);
 });
 
 test("POST /speech/transcribe hands the WAV and locale to the engine and answers its text", async () => {

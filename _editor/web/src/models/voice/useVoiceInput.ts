@@ -3,6 +3,7 @@ import { Latest } from "@intentic/base/async";
 import { ref, type Ref, shallowRef } from "vue";
 import { track } from "../../app/analytics";
 import { type BrowserSpeech, browserSpeechFor } from "./browserSpeech";
+import { type DictationHabit, dictationHabit, notingDictation } from "./dictationHabit";
 import { openMicStream } from "./micChoice";
 import { openSpeechLink, prepareSpeech, type SpeechLink, type SpeechTransport } from "./speechLink";
 import { createSegmenter, resampleTo16k, type Segmenter } from "./voiceAudio";
@@ -97,7 +98,8 @@ export interface Heard {
     readonly live: boolean;
 }
 
-// The prepare a hover or focus sends ahead of a press, at most this often: it loads a model for ten minutes.
+// The prepare a hover or focus sends ahead of a press, at most this often, and only for a person who dictates
+// (dictationHabit.ts): it loads a model the sandbox keeps for ten minutes.
 const WARM_EVERY_MS = 60_000;
 // A press that stopped with phrases still being heard keeps the link this long for them, then lets go.
 const DRAIN_MS = 120_000;
@@ -136,12 +138,34 @@ export interface VoiceInput {
     dismiss(): void;
     /** Ask the sandbox to fetch the model again after a failed download. */
     retry(): void;
-    /** Load the model ahead of a press the pointer is about to make. */
+    /** Load the model ahead of a press the pointer is about to make, for a person who dictated lately; nothing otherwise. */
     warm(): void;
 }
 
-export function useVoiceInput(options: { readonly lang?: () => string; readonly page?: object } = {}): VoiceInput {
+/**
+ * The prepare a hover or focus sends ahead of a press (`warm`), for a person who dictated lately and at most every
+ * WARM_EVERY_MS, and the one a retry after a failed download sends at once. `landed` hears each answer the daemon gave.
+ */
+const headStart = (lang: () => string, habit: DictationHabit, landed: (status: SpeechStatus, asked: `warm` | `retry`) => void) => {
+    let warmedAt = 0;
+    const ask = (asked: `warm` | `retry`): void => {
+        warmedAt = Date.now();
+        void prepareSpeech(lang()).then((status) => status !== undefined && landed(status, asked));
+    };
+    return {
+        // Someone who has not dictated lately is more likely typing: the press loads the model if it comes.
+        warm: (): void => {
+            if (habit.recent() && Date.now() - warmedAt >= WARM_EVERY_MS) {
+                ask(`warm`);
+            }
+        },
+        retry: (): void => ask(`retry`),
+    };
+};
+
+export function useVoiceInput(options: { readonly lang?: () => string; readonly page?: object; readonly habit?: DictationHabit } = {}): VoiceInput {
     const lang = options.lang ?? (() => navigator.language);
+    const habit = options.habit ?? dictationHabit();
     const state = ref<VoiceState>(`idle`);
     const level = ref(0);
     const pending = ref(0);
@@ -223,29 +247,18 @@ export function useVoiceInput(options: { readonly lang?: () => string; readonly 
         drainTimer = setTimeout(closeLink, DRAIN_MS);
     };
 
-    let warmedAt = 0;
-    const warm = (): void => {
-        if (Date.now() - warmedAt < WARM_EVERY_MS) {
-            return;
+    // A hover's answer is only a head start, never news over a press's own link; a retry's is the person's to see.
+    const { warm, retry: fetchAgain } = headStart(lang, habit, (status, asked) => {
+        if (asked === `retry` || link === undefined) {
+            model.value = status;
         }
-        warmedAt = Date.now();
-        void prepareSpeech(lang()).then((status) => {
-            if (status !== undefined && link === undefined) {
-                model.value = status;
-            }
-        });
-    };
+    });
 
     const retry = (): void => {
         if (error.value === `fetch-failed`) {
             error.value = undefined;
         }
-        warmedAt = Date.now();
-        void prepareSpeech(lang()).then((status) => {
-            if (status !== undefined) {
-                model.value = status;
-            }
-        });
+        fetchAgain();
     };
 
     const start = (onTranscript: (text: string, heard: Heard) => void): void => {
@@ -476,5 +489,7 @@ export function useVoiceInput(options: { readonly lang?: () => string; readonly 
         })();
     };
 
-    return { state, level, pending, speaking, interim, model, bridged, error, repeats, resting, start, stop, abandon, dismiss, retry, warm };
+    // Words written by dictation are what makes a person one who dictates: the next hover's head start.
+    const press = (onTranscript: (text: string, heard: Heard) => void): void => start(notingDictation(habit, onTranscript));
+    return { state, level, pending, speaking, interim, model, bridged, error, repeats, resting, start: press, stop, abandon, dismiss, retry, warm };
 }

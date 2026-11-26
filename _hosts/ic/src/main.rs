@@ -1033,6 +1033,10 @@ enum SandboxCommand {
         /// desktop app
         #[arg(long, value_enum, default_value_t = FixSource::Command)]
         source: FixSource,
+        /// Why, in a few words, for the sandbox's own record of the stop (restart-intent.json, which it reads at its next
+        /// boot): the machine agent's keeper names the computer's memory when it sleeps a sandbox to give memory back
+        #[arg(long, value_name = "TEXT")]
+        reason: Option<String>,
     },
     /// Start every sandbox asleep on this side that somebody has opened since (asks the platform; polled by the
     /// machine agent while anything sleeps)
@@ -1569,12 +1573,14 @@ fn execute(mut cli: Cli) -> i32 {
                 idle,
                 json,
                 source,
+                reason,
             } => keeper_if(source == FixSource::Agent, || {
                 sandbox::sleep::run(sandbox::sleep::Args {
                     slug,
                     idle,
                     json,
                     source: source.source(),
+                    reason,
                 })
             }),
             SandboxCommand::Wakes { json, source, wait } => {
@@ -3267,6 +3273,7 @@ mod tests {
                     idle,
                     json,
                     source,
+                    reason,
                 }),
         }) = parse(&["sandbox", "sleep", "abc123"])
         else {
@@ -3274,6 +3281,7 @@ mod tests {
         };
         assert_eq!((slug.as_deref(), idle, json), (Some("abc123"), None, false));
         assert_eq!(source, FixSource::Command);
+        assert_eq!(reason, None);
         // The machine agent's keeper's own command line.
         let Ok(Cli {
             command:
@@ -3282,6 +3290,7 @@ mod tests {
                     idle,
                     json,
                     source,
+                    ..
                 }),
         }) = parse(&[
             "sandbox", "sleep", "--idle", "30", "--json", "--source", "agent",
@@ -3291,6 +3300,36 @@ mod tests {
         };
         assert_eq!((slug, idle, json), (None, Some(30), true));
         assert_eq!(source, FixSource::Agent);
+        // The keeper's sleep for memory: one sandbox, an hour quiet, with why for its record.
+        let Ok(Cli {
+            command:
+                Command::Sandbox(SandboxCommand::Sleep {
+                    slug, idle, reason, ..
+                }),
+        }) = parse(&[
+            "sandbox",
+            "sleep",
+            "abc123",
+            "--idle",
+            "60",
+            "--json",
+            "--source",
+            "agent",
+            "--reason",
+            "this computer was short of memory",
+        ])
+        else {
+            panic!("sleep --reason did not parse")
+        };
+        assert_eq!(
+            (slug.as_deref(), idle, reason.as_deref()),
+            (
+                Some("abc123"),
+                Some(60),
+                Some("this computer was short of memory")
+            )
+        );
+        assert!(parse(&["sandbox", "sleep", "--reason"]).is_err());
         assert!(
             parse(&["sandbox", "sleep", "--idle", "0"]).is_err(),
             "at least a minute"

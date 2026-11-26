@@ -91,6 +91,8 @@ const AGENT_COMMAND: Record<DeviceAgentOp, string> = {
     restart: `run`,
     "forget-unreachable": `device forget-unreachable`,
     "power-stay-on": `power stay-on`,
+    // The size goes with it (`--gb <N>`); the WSL memory card's yes names it.
+    "wsl-memory": `wsl-memory apply`,
 };
 
 export const agentFallback = (op: DeviceAgentOp): string => `intentic-machine ${AGENT_COMMAND[op]}`;

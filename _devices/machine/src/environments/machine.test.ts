@@ -1,4 +1,4 @@
-import { withSwitches } from "./commands.js";
+import { switchRows, withSwitches } from "./commands.js";
 import { profileFromBase64, supervisedByWindows, withChild, withoutChild } from "./machine.js";
 
 describe("the children registry", () => {
@@ -47,6 +47,16 @@ describe("withSwitches", () => {
         const off = withSwitches({ sandboxTidy: false }, { disk: "off" });
         expect(off).toEqual({ sandboxTidy: false, engineDiskRelief: false });
         expect(withSwitches(off, { disk: "on" })).toEqual({ sandboxTidy: false });
+    });
+
+    // A sandbox nobody uses is put to sleep while the computer is short of memory (sandbox-rounds/memory-relief/memory-sleep.ts) unless
+    // this is off.
+    it("stores the memory sleep off under its own key, on as its absence, and shows it among the switches", () => {
+        const off = withSwitches({ engineDiskRelief: false }, { memory: "off" });
+        expect(off).toEqual({ engineDiskRelief: false, memorySleep: false });
+        expect(withSwitches(off, { memory: "on" })).toEqual({ engineDiskRelief: false });
+        expect(switchRows({}).find((row) => row.item.name === "memory")?.later).toEqual(["turn memory off", "intentic-machine updates --memory off"]);
+        expect(switchRows(off).find((row) => row.item.name === "memory")?.item.tone).toBe("skip");
     });
 });
 

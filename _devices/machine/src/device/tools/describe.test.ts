@@ -1,6 +1,6 @@
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
 import type { LinkReading } from "../config.js";
-import { agentLines, linkFacts, powerLines } from "./describe.js";
+import { agentLines, linkFacts, powerLines, wslMemoryLines } from "./describe.js";
 import { icOverrides } from "./ic-binary.js";
 
 // What a sandbox is told about the links this machine holds to OTHER sandboxes. Counts and an age, never addresses:
@@ -74,4 +74,40 @@ test("describe says what the power settings would do, that nothing would where n
     });
     expect(line).toContain("Sleeps after 5 hours without input on mains power (plan: Turbo). Windows Update may restart it between 02:00 and 08:00 local time.");
     expect(line).toContain("do not change them yourself");
+});
+
+const GIB = 1024 ** 3;
+
+test("describe says a WSL VM too big for its PC is the owner's to change, a new size not yet in force, and nothing otherwise", () => {
+    const configPath = "C:\\Users\\radar\\.wslconfig";
+    expect(wslMemoryLines({})).toEqual([]);
+    expect(wslMemoryLines({ wslMemory: { configPath, configuredGb: 22 }, engine: { memoryBytes: 21.5 * GIB, cpus: 16 } })).toEqual([]);
+    const [fit] = wslMemoryLines({
+        wslMemory: {
+            configPath,
+            configuredGb: 22,
+            fit: {
+                at: 1,
+                windowMs: 4 * 3_600_000,
+                readings: 48,
+                totalBytes: 31.4 * GIB,
+                lowLineBytes: 3.14 * GIB,
+                underLowShare: 0.875,
+                availableMedianBytes: 2.6 * GIB,
+                vmMedianBytes: 16.2 * GIB,
+                outsideBytes: 12.5 * GIB,
+                configuredGb: 22,
+                proposedGb: 15,
+                atFloor: false,
+                text: "Windows was short.",
+            },
+        },
+    });
+    expect(fit).toBe(
+        "WSL VM memory: Windows was short. Changing it is the owner's: the sandbox asks them on a card, and it takes effect only when WSL restarts, which restarts every sandbox on this PC, so do not edit C:\\Users\\radar\\.wslconfig or run wsl --shutdown yourself.",
+    );
+    // Written, not yet in force: the engine still runs with what the VM started with.
+    expect(wslMemoryLines({ wslMemory: { configPath, configuredGb: 15 }, engine: { memoryBytes: 21.5 * GIB, cpus: 16 } })).toEqual([
+        "WSL VM memory: C:\\Users\\radar\\.wslconfig sets memory=15GB, but the VM still runs with 21.5 GiB: the new size takes effect when WSL restarts (wsl --shutdown), which restarts every sandbox on this PC. That is the owner's to do.",
+    ]);
 });

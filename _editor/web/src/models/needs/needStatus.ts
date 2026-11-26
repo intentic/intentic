@@ -18,6 +18,8 @@ export const NEED_ICONS: Readonly<Record<NeedKind, IconName>> = {
     instruction: `book`,
     // A computer that would sleep through booked work: the glyph the Devices page gives a sleeping machine.
     "host-power": `moon`,
+    // A PC whose WSL VM is too big for it: the glyph of memory.
+    "wsl-memory": `memory`,
     // A project claimed so the owner's other sandboxes report its problems here: the Settings ▸ Projects row's glyph.
     claim: `folder`,
     // A person's leave for this sandbox to act as them in another: the glyph linked sandboxes wear.
@@ -54,14 +56,18 @@ export const workingLine = (need: Pick<Need, "status" | "subject">): string | un
     if (need.subject.kind === `host-power`) {
         return t(`needs.hostPower.working`, { device: need.subject.device });
     }
+    if (need.subject.kind === `wsl-memory`) {
+        return t(`needs.wslMemory.working`, { device: need.subject.device });
+    }
     return need.subject.kind === `environment` ? t(`needs.card.approvedRebuild`) : t(`needs.card.settingUp`);
 };
 
 // Said on a closed card only when the agent has not heard the outcome yet. Hearing it, on the call or in a turn, is what
 // a closed card means, so it goes unsaid. A power card's answer is the person's alone: its conversation is never woken
-// to hear it (a woken turn would run the booked work early), so there is nobody left to tell.
+// to hear it (a woken turn would run the booked work early), so there is nobody left to tell; nor is a WSL memory card's,
+// which is about the PC, not the conversation's work.
 export const unheardLine = (need: Pick<Need, "status" | "told" | "subject">): string | undefined => {
-    if ((need.status !== `met` && need.status !== `declined`) || need.subject.kind === `host-power`) {
+    if ((need.status !== `met` && need.status !== `declined`) || need.subject.kind === `host-power` || need.subject.kind === `wsl-memory`) {
         return undefined;
     }
     switch (need.told) {

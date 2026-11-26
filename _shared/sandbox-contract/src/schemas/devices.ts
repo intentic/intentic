@@ -220,9 +220,14 @@ export type DeviceFlowLine = z.infer<typeof DeviceFlowLineSchema>;
 // eight minutes), and one sandbox's button disconnected the machine from another.
 // `power-stay-on` (2026-11-22) changes the power settings that would sleep the computer through scheduled work, on mains
 // power only (`intentic-machine power stay-on`, `DeviceFacts.power`); only an agent advertising DEVICE_FEATURE_POWER has it.
-export const DeviceAgentOpSchema = z.enum(["upgrade", "restart", "forget-unreachable", "power-stay-on"]);
+export const DeviceAgentOpSchema = z.enum(["upgrade", "restart", "forget-unreachable", "power-stay-on", "wsl-memory"]);
 export type DeviceAgentOp = z.infer<typeof DeviceAgentOpSchema>;
-export const DeviceAgentFlowSchema = z.strictObject({ op: DeviceAgentOpSchema });
+// (2026-11-26) `memoryGb` goes with `wsl-memory` alone, the size the owner approved; sent only to an agent that advertises
+// `wsl-memory`, since the input is strict and an older agent refuses a field it does not know.
+export const DeviceAgentFlowSchema = z.strictObject({
+    op: DeviceAgentOpSchema,
+    memoryGb: z.number().int().min(1).max(1024).optional(),
+});
 export type DeviceAgentFlow = z.infer<typeof DeviceAgentFlowSchema>;
 // Adds the device id to the flow input.
 export const DeviceAgentFlowInputSchema = DeviceAgentFlowSchema.extend({ id: z.string().min(1) });

@@ -17,6 +17,7 @@ import {
     DEVICE_FEATURE_STACKS_MANAGED,
     DEVICE_FEATURE_HOST_STATS,
     DEVICE_FEATURE_CI_RUNNERS,
+    DEVICE_FEATURE_WSL_MEMORY,
     type DeviceFacts,
 } from "@intentic/sandbox-contract/schemas/hosts";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -35,6 +36,7 @@ import { NO_DESKTOP_YET, runningBeforeSignIn } from "../session.js";
 import { keyringAdvertised } from "../../keyring/feature.js";
 import { remotedAdvertised } from "../remote/remoted-binary.js";
 import { powerFacts } from "../../power/host-power.js";
+import { wslMemoryFacts } from "../../environments/wsl-memory-watch.js";
 
 // What this device IS: without it an agent guesses (apt-get on Fedora, bash on Windows, paths outside its own
 // boundary) and reports the refusal as a bug. Sent unprompted in the hello frame and on the sandbox's
@@ -171,7 +173,7 @@ export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => 
             ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
             ...(remotedAdvertised() ? [DEVICE_FEATURE_REMOTE, DEVICE_FEATURE_REMOTE_ICE] : []),
             ...(remotedAdvertised() && platform() === "win32" ? [DEVICE_FEATURE_REMOTE_SERVICE, DEVICE_FEATURE_ADMIN_RUN] : []),
-            ...(WINDOWS_SIDE ? [DEVICE_FEATURE_POWER] : []),
+            ...(WINDOWS_SIDE ? [DEVICE_FEATURE_POWER, DEVICE_FEATURE_WSL_MEMORY] : []),
             ...(platform() === "linux" ? [DEVICE_FEATURE_CI_RUNNERS] : []),
         ],
     };
@@ -200,12 +202,47 @@ export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => 
     if (intenticOs !== undefined) {
         facts.intenticOs = intenticOs;
     }
+    return withHostReadings(facts, power, wslMemoryFacts());
+};
+
+// What the computer's own settings say of it, where they were read.
+const withHostReadings = (facts: DeviceFacts, power: DeviceFacts["power"], wslMemory: DeviceFacts["wslMemory"]): DeviceFacts => {
     // (2026-11-22) What this computer's own power settings would do to work left running on it, said only by the
     // environment that owns them (Windows' own side, a Linux host, a Mac); absent in a WSL distro and until a read works.
     if (power !== undefined) {
         facts.power = power;
     }
+    // (2026-11-26) The WSL VM's memory= and, when it is too big for this PC, the size proposed (environments/wsl-memory-watch.ts):
+    // Windows' own side's resident agent alone, once it has read .wslconfig.
+    if (wslMemory !== undefined) {
+        facts.wslMemory = wslMemory;
+    }
     return facts;
+};
+
+const GIB = 1024 ** 3;
+
+// The line describe adds about the WSL VM's size: too big for this PC (what was measured and proposed, and that it is the
+// owner's to change on a card), or a new memory= not yet in force (the VM runs with what it started with until WSL
+// restarts). Nothing where neither. Pure.
+export const wslMemoryLines = (facts: Pick<DeviceFacts, "wslMemory" | "engine">): string[] => {
+    const memory = facts.wslMemory;
+    if (memory === undefined) {
+        return [];
+    }
+    if (memory.fit !== undefined) {
+        return [
+            `WSL VM memory: ${memory.fit.text} Changing it is the owner's: the sandbox asks them on a card, and it takes effect only when WSL restarts, which restarts every sandbox on this PC, so do not edit ${memory.configPath} or run wsl --shutdown yourself.`,
+        ];
+    }
+    // The engine runs a little under what memory= gives the VM (its kernel's own): only a gap past a GB is a size not yet in force.
+    const running = facts.engine?.memoryBytes;
+    if (memory.configuredGb !== undefined && running !== undefined && running / GIB - memory.configuredGb > 1) {
+        return [
+            `WSL VM memory: ${memory.configPath} sets memory=${memory.configuredGb}GB, but the VM still runs with ${(running / GIB).toFixed(1)} GiB: the new size takes effect when WSL restarts (wsl --shutdown), which restarts every sandbox on this PC. That is the owner's to do.`,
+        ];
+    }
+    return [];
 };
 
 // The line describe adds where the power settings were read: what would stop work left running, in the agent's own
@@ -281,6 +318,7 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             ...agentLines(ic, icOverrides(process.env), { version: MACHINE_VERSION, startedAt: thisRun()?.startedAt, previous: previousExit() }),
             ...(runningBeforeSignIn() ? [`Session: none yet. ${NO_DESKTOP_YET}`] : []),
             ...powerLines(facts),
+            ...wslMemoryLines(facts),
             ...(facts.icOutOfDate === undefined ? [] : [facts.icOutOfDate]),
             // All a sandbox can use, so a reshape is asked for in numbers this engine has.
             ...(facts.engine === undefined

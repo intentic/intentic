@@ -485,10 +485,31 @@ flowchart LR
   hour; one that gave back more, or Windows climbing over a fifth of the machine, brings the five minutes back, and under
   1.5 GiB they hold regardless. rog's Windows never left that line while its VM kept the 22 GB `.wslconfig` gives it: 287
   drops in 39 hours, five minutes apart, a median 0.2 GiB back each, and each one cost every sandbox up to 8.5 GB of
-  cache read back from disk. The same side answers the
+  cache read back from disk. (2026-11-26) Each sandbox on such a PC first reclaims from its own cgroup when its host
+  reading is under the same line (the sandbox's `hosts/reclaim/host-reclaim.ts`), so above 1.5 GiB the drop waits a
+  minute into each low spell (`RECLAIM_GRACE_MS`) before it runs; under 1.5 GiB it runs at once as before. Measured on
+  rog that day, a sandbox's own 1 GiB reclaim did not move Windows' available memory beyond its noise: the drop, which
+  compacts, is still what gives memory back. The same side answers the
   sandbox's heartbeat (`ping`) with Windows' available and total memory, which the sandbox's heavy-command gate holds
   work back on while this PC is the one running it ([sandbox README](../../_sandbox/sandbox/README.md)); a distro's agent
   and other platforms answer `{ ok: true }` as before.
+- (2026-11-26) **A WSL VM too big for its PC.** Dropping cache could not help rog: its `.wslconfig` gives the VM 22 GB
+  of 31.4 GiB and the VM keeps it. So the same side reads Windows' available memory and vmmemWSL's working set every
+  five minutes (`tasklist`, about 150 ms; `Get-Process` would add private bytes for a PowerShell's 0.35 s of CPU) and
+  keeps four hours of readings in memory ([`environments/wsl-memory-watch.ts`](src/environments/wsl-memory-watch.ts)).
+  When Windows was under its low line in at least 60% of three or more hours of them, while the VM's median working
+  set was a third of the RAM or more and above the size that fits, it proposes `memory=` as the RAM less Windows' own
+  use outside the VM (its 90th percentile), the low line and 0.5 GiB, rounded down to a whole GB, never under 8 GB
+  (the heaviest command the heavy-command queue prices plus the agent running it), and only when that is at least
+  2 GB under what the VM may take now ([`environments/wsl-memory-fit.ts`](src/environments/wsl-memory-fit.ts)). On
+  rog's readings: 15 GB, with both 18 GiB sandbox caps named as past it. The device facts carry it
+  (`DeviceFacts.wslMemory`); the sandbox asks the owner on a card, and their yes runs the `wsl-memory` op,
+  `intentic-machine wsl-memory apply --gb <N> --why <…>`: the file is copied to `.wslconfig.bak.<date>` (`.2`, `.3`
+  on a day that has one), then only the `memory=` line of `[wsl2]` is rewritten (or added) with a dated line above it
+  in the owner's own style, every other line, its line endings and its encoding as found
+  ([`environments/wslconfig-memory.ts`](src/environments/wslconfig-memory.ts)). Nothing restarts WSL: that restarts
+  every sandbox on the PC, and is the owner's to do. Readings are not kept across a restart of the agent, so after an
+  update it decides nothing for three hours.
 - (2026-11-03) The same heartbeat answer carries the GPU resets and crashes Windows logged in the last day
   (`crashes`, [`environments/windows-crash-events.ts`](src/environments/windows-crash-events.ts)). On 2026-11-02 a
   sandbox's browser rendered on rog's display GPU through WSL, the driver lost the device (LiveKernelEvent 0x141) and
@@ -1072,7 +1093,8 @@ clock.
 
 (2026-10-10) A PC holding a dozen sandboxes, one or two of them in use, kept every one up: about 1.4 GB each on rog.
 The keeper now puts an unneeded sandbox to sleep and wakes it when somebody opens it
-([`device/sandbox-rounds/sleep.ts`](src/device/sandbox-rounds/sleep.ts)).
+([`device/sandbox-rounds/sleep.ts`](src/device/sandbox-rounds/sleep.ts)), and puts one more to sleep while the
+computer stays short of memory (below).
 
 - **Sleep.** Right after each sweep the keeper runs `ic sandbox sleep --idle <minutes> --json --source agent`. ic stops,
   through Docker (so `--restart unless-stopped` leaves it down), every running sandbox of this side whose daemon has
@@ -1111,6 +1133,24 @@ The keeper now puts an unneeded sandbox to sleep and wakes it when somebody open
   [Power settings](#power-settings) below).
   `intentic-machine sandbox sleep <slug>` puts one sandbox to sleep now. An `ic` without the verbs is said once and
   nothing sleeps.
+- **When memory is short** (2026-11-26). rog sat under its low line for hours while a second sandbox nobody had opened
+  for 15 hours held about 1.9 GB. So, apart from the stretch above, the keeper puts ONE sandbox to sleep for memory
+  ([`device/sandbox-rounds/memory-relief/memory-sleep.ts`](src/device/sandbox-rounds/memory-relief/memory-sleep.ts)): once the computer has been
+  under the low line both sides keep (`hostMemoryLowBytes`) for ten minutes running, as Windows' side reads Windows
+  (`windows-memory.ts`) and a Linux host reads its kernel's `MemAvailable` (never a WSL distro, whose meminfo is the
+  VM's). Of the sandboxes this side keeps, it reads each one's work signal (`docker exec … cat /run/intentic/work.json`,
+  the daemon's answer to idle-stop's questions) and asks ic to sleep the one quiet longest, at least an hour, with
+  nothing it promised due within a quarter of an hour: `ic sandbox sleep <slug> --idle 60 --json --source agent
+  --reason "<why>"`. ic decides as for every sleep and asks the daemon again just before the stop. It never sleeps the
+  only sandbox awake on the engine (the other side's count), a runner, one another flow is touching, or one kept awake
+  by its own "Sleep when unused". One it leaves awake is skipped for the next. After a sleep the next look waits ten
+  minutes and reads memory again first, so another sandbox sleeps only while the computer is still short. A look that
+  slept nothing waits five minutes and says why once. The log says
+  `keeper <slug>: put to sleep to give memory back: …`, with the figures, how long it had been unused and that opening
+  it wakes it. `--reason` puts the same cause into the sandbox's own record of the stop, which it reads at its next
+  boot. An ic from before the flag is asked without it, and for an hour after. Waking is the same as for any sleeping
+  sandbox, above. The switch is the PC's `memorySleep` (`intentic-machine updates --memory on|off`, absent means on);
+  `sleep-after off` does not turn it off, and a sandbox's "Sleep when unused" keeps that one up.
 
 ### Power settings
 

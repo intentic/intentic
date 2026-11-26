@@ -6713,6 +6713,16 @@
             "approve": "Change these settings on {device}",
             "working": "Changing the settings on {device}…"
         },
+        "wslMemory": {
+            "lead": "On {device}, Windows had less than its {low} low line available in {share}% of the readings over the last {hours} hours, while the WSL VM held a median {vm} of {total}; Windows' own use outside the VM reached {outside}.",
+            "unset": "memory= not set (half the RAM)",
+            "file": "One line of {path} changes; the file as it was is kept beside it.",
+            "floor": "That is the least that still runs one sandbox: Windows may still be short.",
+            "caps": "Sandboxes capped above that, which a smaller VM leaves with no cap: {caps}. Lower them too.",
+            "restart": "Nothing changes until WSL restarts, and that restarts every sandbox on {device}, this one included. Restarting is yours to do (wsl --shutdown), when nothing there needs to keep running.",
+            "approve": "Write {setting}",
+            "working": "Writing .wslconfig on {device}…"
+        },
         "deploy": {
             "lead": "{stack} in {repo} deploys to {device}. Granting lets this sandbox write these secrets into its .env each time it deploys it:",
             "new": "new",
@@ -7018,10 +7028,15 @@
             "updated": "Update finished",
             "updating": "Updating its agent…",
             "workingPower": "Changing power settings…",
+            "workingWslMemory": "Writing .wslconfig…",
             "powerChanging": "Changing its power settings…",
             "powerChanged": "Power settings changed",
             "powerFailed": "Couldn't change its power settings",
-            "powerRefused": "That device didn't change its power settings."
+            "powerRefused": "That device didn't change its power settings.",
+            "wslMemoryWriting": "Writing its .wslconfig…",
+            "wslMemoryWritten": ".wslconfig written: takes effect when WSL restarts",
+            "wslMemoryFailed": "Couldn't write its .wslconfig",
+            "wslMemoryRefused": "That device didn't change its .wslconfig."
         },
         "agentMemory": {
             "addToMemory": "Add to memory",
@@ -8111,6 +8126,7 @@
             "doneClean": "Build output cleared. Held-back deletions sync within a few seconds.",
             "askedForget": "Dropping the links that stopped answering. The count here catches up when its loop comes back.",
             "askedPower": "Changing its power settings. This page catches up with its next reading.",
+            "askedWslMemory": "Writing its .wslconfig. This page catches up with its next reading.",
             "askedRestart": "Restarting. This page catches up when its loop comes back.",
             "askedUpgrade": "Updating. The new version shows here when its loop comes back.",
             "batchDidntRestart": "{count} sandbox didn't restart on {machine}. | {count} sandboxes didn't restart on {machine}.",
@@ -8166,6 +8182,7 @@
             "verbHeader": "{verb} {name}?",
             "workingAgentForget": "Dropping a device's dead links",
             "workingAgentPower": "Changing a device's power settings",
+            "workingAgentWslMemory": "Writing a device's .wslconfig",
             "workingAgentRestart": "Restarting a device's agent",
             "workingAgentUpgrade": "Updating a machine's agents",
             "workingClean": "Clearing build output",

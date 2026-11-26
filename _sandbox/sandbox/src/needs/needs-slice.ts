@@ -42,6 +42,7 @@ import { checkWatchSource } from "../automations/watch/contributed-check.js";
 import { catalogWatchKinds } from "../automations/watch/watch-kinds.js";
 import { grantNeed } from "./kinds/grant-need.js";
 import { hostPowerNeed } from "./kinds/host-power-need.js";
+import { wslMemoryNeed } from "./kinds/wsl-memory-need.js";
 import { runDeviceAgentFlow } from "../hosts/device-reports.js";
 import { releaseNeed } from "./kinds/release-need.js";
 import { keepOnDevice } from "./kinds/secret-keep-on.js";
@@ -157,18 +158,28 @@ const hostPowerNeedOf = (whole: NeedsSliceDeps["whole"]) =>
         refresh: (device) => whole().hostHub.refresh(device, POWER_REFRESH_MS),
     });
 
+// A wsl-memory need over the PC's facts as the hub holds them, its agent op run as the power card's is.
+const wslMemoryNeedOf = (whole: NeedsSliceDeps["whole"]) =>
+    wslMemoryNeed({
+        facts: (device) => whole().hostHub.state(device).facts,
+        online: (device) => whole().hostHub.online(device),
+        runAgentFlow: (device, flow) => runDeviceAgentFlow(whole(), device, flow),
+        refresh: (device) => whole().hostHub.refresh(device, POWER_REFRESH_MS),
+    });
+
 // A raised need's push, to the people the conversation's asks wait on (push/push-audience.ts), and its words in the
 // channel the conversation came from, where its person may be the only place it reaches them.
 // (2026-11-22) A host-power card is about one of the owner's own computers, and only a maintainer may answer it
 // (kinds/host-power-need.ts `mayAnswer`): it goes to the sandbox's operators, never to the conversation's other people,
-// and never into the channel it came from, where nobody could act on it.
+// and never into the channel it came from, where nobody could act on it. (2026-11-26) A wsl-memory card is the same: the
+// owner's PC, a maintainer's answer.
 const notifyNeed =
     (whole: NeedsSliceDeps["whole"], logger: NeedsSliceDeps["logger"]): NeedsDeps["notify"] =>
     (need) => {
         const services = whole();
         const entry = services.agents.entry(need.conversationId);
         const raised = needRaised(need, entry?.social.title?.text);
-        if (need.subject.kind === "host-power") {
+        if (need.subject.kind === "host-power" || need.subject.kind === "wsl-memory") {
             void services.pushSender.notifyIfAway(raised, OPERATORS);
             return;
         }
@@ -302,6 +313,7 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             // On the main tree, the owner's own copy, never a conversation's checkout.
             instruction: instructionNeed(mainTreeFiles(workspaceRoot, whole)),
             "host-power": hostPowerNeedOf(whole),
+            "wsl-memory": wslMemoryNeedOf(whole),
             // The platform's directory, asked over the connect token; the claim itself is the owner's press.
             claim: claimNeed({
                 normalize: projectOfRemote,

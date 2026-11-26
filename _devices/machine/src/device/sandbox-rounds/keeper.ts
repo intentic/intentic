@@ -16,6 +16,7 @@ import { readChannelSlugs } from "./swap-records.js";
 import { fleet, holdIcFlow, icInFlight, runIc } from "../tools/sandboxes.js";
 import { keptRunners, machineRunnerSeams, newRunnerKeeperState, type RunnerKeeperSeams, type RunnerKeeperState, runRunnerRound } from "./runner-keeper.js";
 import { type KeeperScope, keeperScope, type ListedSandbox, readTrashed } from "./keeper-scope.js";
+import { machineMemorySleepSeams, type MemorySleepSeams, type MemorySleepState, newMemorySleepState, runMemorySleep } from "./memory-relief/memory-sleep.js";
 import {
     newSleepers,
     runSleep,
@@ -276,6 +277,9 @@ export interface KeeperSeams {
     readonly side?: () => Promise<RestartSide>;
     readonly writeIntent?: (container: string, intent: KeeperRestartIntent) => Promise<void>;
     readonly runners?: RunnerKeeperSeams;
+    // The computer's memory, the sandboxes' work signals and a sleep of one sandbox for it (memory-sleep.ts); absent,
+    // nothing is put to sleep for memory.
+    readonly memorySleep?: MemorySleepSeams;
 }
 
 interface Wait {
@@ -309,6 +313,8 @@ export interface KeeperState {
     // What this agent knows sleeps, shared with the wake round.
     readonly sleepers: Sleepers;
     readonly runners: RunnerKeeperState;
+    // How long the computer has been short of memory, and the pace of the looks that put a sandbox to sleep for it.
+    readonly memory: MemorySleepState;
 }
 
 export const newKeeperState = (start: number, sleepers: Sleepers = newSleepers()): KeeperState => ({
@@ -324,6 +330,7 @@ export const newKeeperState = (start: number, sleepers: Sleepers = newSleepers()
     on: undefined,
     sleepers,
     runners: newRunnerKeeperState(start + FIRST_SWEEP_MS),
+    memory: newMemorySleepState(),
 });
 
 // Says `line` under `key` unless it is what was said there last.
@@ -665,6 +672,26 @@ const sleepUnneeded = async (state: KeeperState, seams: KeeperSeams, scope: Keep
     }
 };
 
+// While the computer stays short of memory, the sandbox this side keeps that nobody has used longest goes to sleep
+// (memory-sleep.ts), one per look. Held like a fix, so no other round starts work under it; a sandbox it put to sleep is
+// one the wake round asks about, and its link going down is the sleep, as with the keeper's own.
+const sleepForMemory = async (state: KeeperState, seams: KeeperSeams, log: Log): Promise<void> => {
+    if (seams.memorySleep === undefined) {
+        return;
+    }
+    state.fixing = true;
+    try {
+        const slept = await runMemorySleep(state.memory, seams.memorySleep, { listing: seams.listing, busy: seams.busy, hold: seams.hold, now: seams.now }, log);
+        if (slept !== undefined) {
+            state.sleepers.slugs.add(slept.slug);
+            state.sleepers.counted = Math.max(state.sleepers.counted, state.sleepers.slugs.size);
+            state.waits.delete(slept.slug);
+        }
+    } finally {
+        state.fixing = false;
+    }
+};
+
 // The first sandbox of this machine whose link has failed for a minute, that still exists here and is this side's, and
 // that nothing is waiting out. A gone one is said once and left alone.
 const dueTarget = async (
@@ -719,6 +746,9 @@ export const runKeeperRound = async (state: KeeperState, seams: KeeperSeams, log
             return;
         }
     }
+    if (scope.own.length > 0) {
+        await sleepForMemory(state, seams, log);
+    }
     const known = new Set([...records, ...(state.listed ?? []).map((row) => row.slug)]);
     const target = await dueTarget(state, seams, links, known, scope, log, seams.now());
     if (target !== undefined) {
@@ -768,6 +798,7 @@ export const machineKeeperSeams = ({ links, loopback, watching, poke }: KeeperWi
     side: sideOf,
     writeIntent: writeIntentInto,
     runners: machineRunnerSeams(async (args) => await runIc(args, () => undefined, {}, { deadlineMs: FIX_DEADLINE_MS }), icInFlight, (slug) => holdIcFlow(slug, KEEPER_HOLD)),
+    memorySleep: machineMemorySleepSeams(async (args, deadlineMs) => await runIc(args, () => undefined, {}, { deadlineMs })),
 });
 
 // The keeper and its wake round, which runs whatever the switch says: a sandbox asleep when the keeper was switched off

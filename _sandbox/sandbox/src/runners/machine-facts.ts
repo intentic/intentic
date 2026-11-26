@@ -129,7 +129,7 @@ const freeMbOf = (snapshot: BudgetSnapshot): number | undefined => {
 };
 
 // The budget's own reading, not a second one: what the turn door admits by is what "free" means everywhere.
-const budgetFigures = (snapshot: BudgetSnapshot | undefined): Pick<RunnerFacts, "memoryFreeMb" | "memoryLimitMb" | "memoryStall"> => {
+export const budgetFigures = (snapshot: BudgetSnapshot | undefined): Pick<RunnerFacts, "memoryFreeMb" | "memoryLimitMb" | "memoryStall"> => {
     if (snapshot === undefined) {
         return {};
     }

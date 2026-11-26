@@ -18,7 +18,9 @@ import { parseJsonOr } from "@intentic/base/json";
 
 // Audio in, words out, off oRPC since audio doesn't fit its JSON contract.
 // - `GET /speech/status?lang=` says where the locale's model stands; asking while it is absent starts fetching it.
-// - `POST /speech/prepare?lang=` fetches and loads it in the background, so the first phrase does not wait on a load.
+// - `POST /speech/prepare?lang=` fetches and loads it in the background, so the first phrase does not wait on a load. It
+//   is a guess (the composer's hover over the mic), so while memory is short it loads nothing and answers where the model
+//   stands: no head start, and the press loads it.
 // - `POST /speech/transcribe?lang=` takes one WAV utterance (16 kHz mono s16le) and answers its text, empty for
 //   silence; 501 means no runtime for this machine, 409 that the model is still on its way, unless `wait=1` asked to
 //   wait it out. Discord's calls and an older composer use it.
@@ -59,7 +61,7 @@ export const createSpeechRoute = (
     wakeClaims = createWakeClaims(),
 ): RawRouteTable<"GET /speech/status" | "POST /speech/prepare" | "POST /speech/transcribe" | "POST /speech/wake"> => ({
     "GET /speech/status": async (c) => c.json(await services.speech.status(c.req.query("lang"))),
-    "POST /speech/prepare": async (c) => c.json(await services.speech.prepare(c.req.query("lang"))),
+    "POST /speech/prepare": async (c) => c.json(await services.speech.prepare(c.req.query("lang"), "guess")),
 
     "POST /speech/transcribe": async (c) => {
         // Counted as it arrives: a chunked body declares no length, and would otherwise be read whole first.
@@ -262,7 +264,7 @@ export const createSpeechStreamRoute = (services: SpeechStreamDeps) =>
                 }
                 unsubscribe = speech.subscribe(() => void pushStatus(ws));
                 // Opening the stream is the person reaching for the mic: fetch and load the model now, while they speak.
-                send(ws, { type: "status", status: await speech.prepare(locale) });
+                send(ws, { type: "status", status: await speech.prepare(locale, "press") });
                 if (guesses) {
                     ticker = setInterval(() => void guess(ws), TICK_MS);
                 }

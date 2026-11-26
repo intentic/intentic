@@ -23,6 +23,7 @@ import { runnerOfConversation, steerOnRunner } from "./runner-steer.js";
 import { bookingFor, bookingOfAsk, unbookable } from "./booking-ask.js";
 import { bookContinuation, continueQueued } from "./continuation.js";
 import { checkBookedPower } from "../../../hosts/power/host-power.js";
+import { checkWslMemoryFor } from "../../../hosts/wsl-memory/wsl-memory.js";
 import { queuedMessageOf, requestOf } from "./queued-message.js";
 import { HALTED_WORDS, haltOf, liftHalt } from "../../../conversations/actor/conversation-halt.js";
 
@@ -303,6 +304,11 @@ export const createAdmission = (
         const run = turnRunOf(services().conversations, turn.conversationId);
         if (person && run?.id === started.id && run !== undefined) {
             carrying.set(turn.conversationId, [...(carrying.get(turn.conversationId) ?? []), { run, batch }]);
+        }
+        // (2026-11-26) A person is here: if the PC this sandbox runs on says its WSL VM is too big for it, the card goes up
+        // in this conversation (hosts/wsl-memory/wsl-memory.ts). Never waited for.
+        if (person) {
+            void checkWslMemoryFor(services(), turn.conversationId);
         }
         return started.id;
     };

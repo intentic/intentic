@@ -15,6 +15,7 @@ import NeedDeployBody from "./NeedDeployBody.vue";
 import NeedEnvironmentBody from "./NeedEnvironmentBody.vue";
 import NeedGrantBody from "./NeedGrantBody.vue";
 import NeedHostPowerBody from "./NeedHostPowerBody.vue";
+import NeedWslMemoryBody from "./NeedWslMemoryBody.vue";
 import NeedInstructionBody from "./NeedInstructionBody.vue";
 import NeedReleaseBody from "./NeedReleaseBody.vue";
 import NeedSecretBody from "./NeedSecretBody.vue";
@@ -67,6 +68,10 @@ const decline = async (): Promise<void> => {
     <NeedHostPowerBody v-else-if="need.subject.kind === `host-power`" :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="false" @open="decline" /></template>
     </NeedHostPowerBody>
+    <!-- The same for a WSL memory card: no agent hears it, so "Not now" is one press, and it stays down for 30 days. -->
+    <NeedWslMemoryBody v-else-if="need.subject.kind === `wsl-memory`" :need="need" :subject="need.subject">
+        <template #decline><NeedDecline :busy="busy" :declining="false" @open="decline" /></template>
+    </NeedWslMemoryBody>
     <NeedClaimBody v-else-if="need.subject.kind === `claim`" :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedClaimBody>

@@ -17,7 +17,7 @@ import type { Services } from "../composition.js";
 import { hostRoomFrom } from "../hosts/host-room.js";
 import { opt } from "../opt.js";
 import { refreshRunnerFacts } from "./fleet-facts.js";
-import { machineFacts, onHost } from "./machine-facts.js";
+import { budgetFigures, machineFacts, onHost } from "./machine-facts.js";
 import { credentialsTravel, runnerSlots } from "./runner-scheduler.js";
 
 // WHICH MACHINE A NEW SESSION SHOULD START ON (settings `offload.sessions`, GET /offload/placement). Every machine, this
@@ -64,7 +64,8 @@ interface Strains {
     readonly busy: MachineStrain[];
 }
 
-const strainsOf = (facts: RunnerFacts, agents: number, slots: number): Strains => {
+// Memory's part of the strains: free memory against a person's turn and the stall, each full or busy.
+const memoryStrainsOf = (facts: Pick<RunnerFacts, "memoryFreeMb" | "memoryStall">): Strains => {
     const full: MachineStrain[] = [];
     const busy: MachineStrain[] = [];
     const free = facts.memoryFreeMb;
@@ -79,6 +80,28 @@ const strainsOf = (facts: RunnerFacts, agents: number, slots: number): Strains =
     } else if (stall >= STALL_SUSTAINED_PERCENT) {
         busy.push("memory-stall");
     }
+    return { full, busy };
+};
+
+/** A machine whose memory is strained at all: busy (room for fewer than a few more agents) or full, or stalling. */
+const memoryStrained = (facts: Pick<RunnerFacts, "memoryFreeMb" | "memoryStall">): boolean => {
+    const { full, busy } = memoryStrainsOf(facts);
+    return full.length + busy.length > 0;
+};
+
+/**
+ * Whether this sandbox is short of memory now, by the reading its turn door admits by with its host's room folded in
+ * (machine-facts.ts budgetFigures): what work nobody asked for (a dictation model loaded on a guess, an idle one kept)
+ * gives way to. Busy counts, not only full: a model of nearly a gigabyte loaded on a guess is what would take a busy
+ * machine to full (2026-11-26, rog: the composer said "busy, 1.9 GB free" while a hover loaded 856 MB). A budget that
+ * cannot be read is no shortage.
+ */
+export const shortOfMemory = async (budget: Pick<Services["resources"], "snapshot">): Promise<boolean> =>
+    // allow(silent-catch): an unreadable budget measures nothing, and nothing measured is never "short" (host-room.ts fails open the same way).
+    memoryStrained(budgetFigures(await budget.snapshot().catch(() => undefined)));
+
+const strainsOf = (facts: RunnerFacts, agents: number, slots: number): Strains => {
+    const { full, busy } = memoryStrainsOf(facts);
     const pressure = facts.cpuPressure ?? 0;
     if (facts.load >= CPU_FULL_LOAD || pressure >= CPU_FULL_PRESSURE) {
         full.push("cpu");

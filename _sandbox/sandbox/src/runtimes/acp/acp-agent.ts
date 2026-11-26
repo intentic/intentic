@@ -385,6 +385,9 @@ export const createAcpAgent = (connections: AcpConnections, timeouts: AcpTimeout
         const model = { wanted: options.model, announced: false };
         yield* vendorTurn(request, {
             open: () => connections.acquire(id, launch, request.spec.cwd),
+            // The turn's use of the process ends with it: one that opened no conversation's session (a helper's) goes
+            // after the short grace rather than the idle reap (acp-connection.ts).
+            close: (connection) => connection.letGo(),
             unopened: "ACP agent failed to start",
             // A session/new failure or a connection torn down mid-turn, with the agent's own stderr folded in.
             failure: (error, connection) => withStderrTail(failureOf(error), connection.stderrTail()),

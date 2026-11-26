@@ -1,9 +1,11 @@
 import { pollUntil } from "@intentic/base/async";
 import { isProcessAlive, spawnDetached } from "@intentic/local-agent";
-import type { DeviceAgentOp } from "@intentic/sandbox-contract/schemas/devices";
+import type { DeviceAgentFlow, DeviceAgentOp } from "@intentic/sandbox-contract/schemas/devices";
 import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
 import { forgetPowerReading } from "../../power/host-power.js";
+import { fitReason } from "../../environments/wsl-memory-fit.js";
+import { rereadWslMemory, wslMemoryFacts } from "../../environments/wsl-memory-watch.js";
 import { machineLauncher } from "../../resident/supervision.js";
 import { SWAP_WAIT_MAX_MS } from "../sandbox-rounds/swap-records.js";
 import { onFileChange } from "./programs/file-changes.js";
@@ -24,6 +26,28 @@ export const AGENT_VERB: Record<DeviceAgentOp, readonly string[]> = {
     // (2026-11-22) The owner's yes on the sandbox's host-power card: this computer's power plans changed so it stays on
     // while plugged in (power/apply.ts). No restart: the agent keeps serving.
     "power-stay-on": ["power", "stay-on"],
+    // (2026-11-26) The owner's yes on the sandbox's wsl-memory card: memory= in this PC's .wslconfig set to the size they
+    // approved (environments/wslconfig-memory.ts), which agentArgv adds. Nothing restarts: WSL takes it at its next start.
+    "wsl-memory": ["wsl-memory", "apply"],
+};
+
+// Why the line .wslconfig gets says what it does: what this agent measured, where it still holds the finding the card
+// came from, else the finding's gist.
+const wslMemoryWhy = (): string => {
+    const fit = wslMemoryFacts()?.fit;
+    return fit === undefined ? "Windows sat under its low line for hours while the WSL VM held its memory" : fitReason(fit);
+};
+
+/** The argv of a flow: the op's verb, and for `wsl-memory` the size approved and why. */
+export const agentArgv = (flow: DeviceAgentFlow, why: () => string = wslMemoryWhy): readonly string[] => {
+    const verb = AGENT_VERB[flow.op];
+    if (flow.op !== "wsl-memory") {
+        return verb;
+    }
+    if (flow.memoryGb === undefined) {
+        throw new Error("The wsl-memory op needs the size approved (memoryGb), and none came with it: nothing was changed.");
+    }
+    return [...verb, "--gb", String(flow.memoryGb), "--why", why()];
 };
 
 // How the log of a detached run is followed (2026-10-20). Lines are read when the log changes (fs.watch), not on a
@@ -152,6 +176,9 @@ const started = (op: DeviceAgentOp, installed: string | undefined): string => {
     if (op === "power-stay-on") {
         return `Changing this computer's power settings so it stays on while plugged in: no sleep, hibernate or lid action on mains power. Battery settings are left as they are; this connection stays up.`;
     }
+    if (op === "wsl-memory") {
+        return `Setting memory= in this PC's .wslconfig, with the file as it was kept beside it. Nothing restarts: this connection stays up.`;
+    }
     return `Dropping this device's links to sandboxes that have stopped answering. The agent closes them on its next pass; this connection stays up.`;
 };
 
@@ -162,6 +189,7 @@ const settled: Record<DeviceAgentOp, string> = {
     restart: `The agent was restarted on this device.`,
     "forget-unreachable": `The drop ran on this device. What it removed is in the lines above; this device's link count catches up within a few seconds.`,
     "power-stay-on": `This computer's power settings were changed: on mains power it no longer sleeps or hibernates by itself, and what each finding became is in the lines above. \`intentic-machine power restore\` on it puts the old values back.`,
+    "wsl-memory": `memory= in this PC's .wslconfig was set, the file as it was kept beside it (the lines above name it). The WSL VM takes the new size only when WSL restarts (wsl --shutdown), which restarts every sandbox on this PC, this one included: that is the owner's to do.`,
 };
 
 // The ops that end in this agent restarting.
@@ -191,14 +219,14 @@ export const runStop = (lines: readonly string[]): string | undefined => {
     return [(lines[at] ?? "").slice("error: ".length), ...(end === -1 ? rest : rest.slice(0, end))].join("\n");
 };
 
-export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => void): Promise<string> => {
+export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => void, flow: Pick<DeviceAgentFlow, "memoryGb"> = {}): Promise<string> => {
     if (RESTARTS.has(op)) {
         await waitOutOwnSwaps(onLine);
     }
     onLine(started(op, installedBuild()));
     // Taken before the spawn: the log is append-only and long-lived, and a reader sees only this run's lines.
     const at = await logSize(agentLogPath);
-    const argv = AGENT_VERB[op];
+    const argv = agentArgv({ ...flow, op });
     const pid = await spawnDetached(agentLogPath, machineLauncher(), argv, { finishes: true });
     onLine(`Started ${argv.join(" ")} (pid ${pid}), detached from this connection so it finishes either way. Log: ${agentLogPath}`);
     const lines: string[] = [];
@@ -216,6 +244,9 @@ export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => vo
         // The facts this agent answers read the settings again, rather than keep the reading from before the change.
         if (op === "power-stay-on") {
             forgetPowerReading();
+        }
+        if (op === "wsl-memory") {
+            await rereadWslMemory();
         }
     }
     const stop = runStop(lines);

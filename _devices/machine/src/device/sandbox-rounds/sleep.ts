@@ -59,6 +59,10 @@ const linesAs = <T>(schema: z.ZodType<T>, output: string): T[] =>
             return parsed === undefined ? [] : [parsed];
         });
 
+// Every sandbox ic said it considered, whether it slept and why, as it said it: for a caller that names the why of one
+// left awake (memory-sleep.ts). Pure.
+export const sleepAnswers = (output: string): z.infer<typeof SleptSchema>[] => linesAs(SleptSchema, output);
+
 // `alarms`: the moment each sleep's alarm is set for, by slug, for the ones that set one.
 export type SleepReading =
     | { readonly unavailable: string }
