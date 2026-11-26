@@ -433,32 +433,29 @@ onBeforeUnmount(() => {
                     <!-- Ending the whole failure by hand, for when the reader knows better than the forge: quiet, and asked
                          first, since every workflow on it goes at once. Its glyph alone in a narrow card, where it keeps the
                          title's line (the group above is `order-last`) and the pill and the press share the next one. -->
-                    <span class="hidden @md:contents">
-                        <Button
-                            data-resolve
-                            class="order-last"
-                            :label="t(`mainFailure.resolve`)"
-                            size="small"
-                            tier="quiet"
-                            :loading="busy === resolveKey"
-                            :disabled="busy !== undefined"
-                            @click="resolving = true"
-                        />
-                    </span>
-                    <span class="contents @md:hidden">
-                        <Button
-                            data-resolve
-                            size="small"
-                            tier="quiet"
-                            :aria-label="t(`mainFailure.resolve`)"
-                            :loading="busy === resolveKey"
-                            :disabled="busy !== undefined"
-                            v-tooltip.top="t(`mainFailure.resolve`)"
-                            @click="resolving = true"
-                        >
-                            <template #icon><Icon name="check-circle" /></template>
-                        </Button>
-                    </span>
+                    <Button
+                        data-resolve
+                        class="order-last @max-md:hidden"
+                        :label="t(`mainFailure.resolve`)"
+                        size="small"
+                        tier="quiet"
+                        :loading="busy === resolveKey"
+                        :disabled="busy !== undefined"
+                        @click="resolving = true"
+                    />
+                    <Button
+                        data-resolve
+                        class="@md:hidden"
+                        size="small"
+                        tier="quiet"
+                        :aria-label="t(`mainFailure.resolve`)"
+                        :loading="busy === resolveKey"
+                        :disabled="busy !== undefined"
+                        v-tooltip.top="t(`mainFailure.resolve`)"
+                        @click="resolving = true"
+                    >
+                        <template #icon><Icon name="check-circle" /></template>
+                    </Button>
                 </div>
 
                 <!-- Where the fix stands and the reader's move, in one sentence. -->

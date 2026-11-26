@@ -41,45 +41,43 @@ const tintId = `assistant-tint-${useId()}`;
         role="img"
         :aria-label="label"
     >
-        <!-- The breath moves this HTML box, never the <svg>: Chromium composites a transform on an SVG element only at an
-             effective zoom of 1, which a display scaled to 125% never is, and there every breathing face re-painted the
-             page (and re-ran its tint filter) on the main thread every frame. -->
-        <span class="assistant-art block h-full w-full">
-            <svg
-                class="block h-full w-full select-none overflow-visible"
-                :viewBox="`0 0 ${ASSISTANT_CANVAS} ${ASSISTANT_CANVAS}`"
-                aria-hidden="true"
-                focusable="false"
-            >
-                <defs>
-                    <!-- Grey clay to the body color: desaturate, then map dark, mid, light and highlight per channel. -->
-                    <filter :id="tintId" color-interpolation-filters="sRGB">
-                        <feColorMatrix type="saturate" values="0" />
-                        <feComponentTransfer>
-                            <feFuncR type="table" :tableValues="tint.r" />
-                            <feFuncG type="table" :tableValues="tint.g" />
-                            <feFuncB type="table" :tableValues="tint.b" />
-                        </feComponentTransfer>
-                    </filter>
-                </defs>
-                <image
-                    v-for="(layer, index) in layers"
-                    :key="index"
-                    :href="layer.src"
-                    :x="layer.rect[0]"
-                    :y="layer.rect[1]"
-                    :width="layer.rect[2]"
-                    :height="layer.rect[3]"
-                    :filter="layer.tint ? `url(#${tintId})` : undefined"
-                />
-            </svg>
-        </span>
+        <!-- The breath moves this HTML box, the root, never the <svg>: Chromium composites a transform on an SVG element
+             only at an effective zoom of 1, which a display scaled to 125% never is, and there every breathing face
+             re-painted the page (and re-ran its tint filter) on the main thread every frame. -->
+        <svg
+            class="block h-full w-full select-none overflow-visible"
+            :viewBox="`0 0 ${ASSISTANT_CANVAS} ${ASSISTANT_CANVAS}`"
+            aria-hidden="true"
+            focusable="false"
+        >
+            <defs>
+                <!-- Grey clay to the body color: desaturate, then map dark, mid, light and highlight per channel. -->
+                <filter :id="tintId" color-interpolation-filters="sRGB">
+                    <feColorMatrix type="saturate" values="0" />
+                    <feComponentTransfer>
+                        <feFuncR type="table" :tableValues="tint.r" />
+                        <feFuncG type="table" :tableValues="tint.g" />
+                        <feFuncB type="table" :tableValues="tint.b" />
+                    </feComponentTransfer>
+                </filter>
+            </defs>
+            <image
+                v-for="(layer, index) in layers"
+                :key="index"
+                :href="layer.src"
+                :x="layer.rect[0]"
+                :y="layer.rect[1]"
+                :width="layer.rect[2]"
+                :height="layer.rect[3]"
+                :filter="layer.tint ? `url(#${tintId})` : undefined"
+            />
+        </svg>
     </span>
 </template>
 
 <style scoped>
 /* A tiny rise and breath keep the illustration alive without moving its allocated space. */
-.assistant-face[data-animated="true"] .assistant-art {
+.assistant-face[data-animated="true"] {
     transform-origin: 50% 85%;
     animation: assistant-breathe var(--assistant-duration) ease-in-out var(--assistant-delay) infinite;
 }
@@ -94,7 +92,7 @@ const tintId = `assistant-tint-${useId()}`;
     }
 }
 
-:root[data-motion="reduced"] .assistant-face[data-animated="true"] .assistant-art {
+:root[data-motion="reduced"] .assistant-face[data-animated="true"] {
     animation: none;
 }
 </style>

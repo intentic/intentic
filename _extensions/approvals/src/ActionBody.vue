@@ -23,9 +23,7 @@ const showInstructions = ref(false);
 
         <template v-else>
             <p class="wrap-break-word text-base font-semibold leading-snug text-content">{{ action.summary }}</p>
-            <div v-if="action.details" class="mt-2">
-                <Markdown :source="action.details" style="--prose-measure: 72ch" />
-            </div>
+            <Markdown v-if="action.details" :source="action.details" class="mt-2" style="--prose-measure: 72ch" />
             <button
                 type="button"
                 :class="ui.textButton({ size: `xs`, tone: `quiet` }, `mt-2`)"

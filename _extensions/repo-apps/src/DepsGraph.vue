@@ -215,8 +215,8 @@ const selectedPackage = computed(() => (selected.value === undefined ? undefined
                     @update:model-value="selected = $event"
                 >
                     <template #node="{ node }">
-                        <span class="pointer-events-none absolute inset-y-0 left-0 w-1" :style="{ background: node.data.color }"></span>
-                        <span class="flex h-full min-w-0 flex-col justify-center gap-0.5 pl-3 pr-2">
+                        <!-- The area's colour as the card's left edge. -->
+                        <span class="flex h-full min-w-0 flex-col justify-center gap-0.5 border-l-4 pl-2 pr-2" :style="{ borderColor: node.data.color }">
                             <span class="truncate text-sm font-medium leading-tight text-content">{{ short(node.data.pkg.name) }}</span>
                             <span class="flex min-w-0 items-center gap-1">
                                 <span class="min-w-0 flex-1 truncate font-mono text-2xs leading-tight text-subtle">{{ node.data.pkg.dir }}</span>

@@ -199,198 +199,196 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col">
-        <div class="min-h-0 flex-1 overflow-auto">
-            <Page width="wide">
-                <PageHeader :title="headerTitle">
-                    <template #actions>
-                        <template v-if="monorepo">
-                            <PageAction
-                                v-if="stopped.length > 0"
-                                icon="play"
-                                :label="t(`appsView.startAll`)"
-                                primary
-                                :disabled="busy"
-                                @click="startAll"
-                            />
-                            <PageAction v-if="running.length > 0" icon="stop" :label="t(`appsView.stopAll`)" :disabled="busy" @click="stopAll" />
-                            <PageAction
-                                v-if="templates.length > 0"
-                                icon="plus"
-                                :label="t(`appsView.addApp`)"
-                                :disabled="busy || adding"
-                                @click="addOpen = true"
-                            />
-                        </template>
+    <div class="h-full min-h-0 overflow-auto">
+        <Page width="wide">
+            <PageHeader :title="headerTitle">
+                <template #actions>
+                    <template v-if="monorepo">
                         <PageAction
-                            v-else-if="projects.length > 1"
+                            v-if="stopped.length > 0"
                             icon="play"
-                            :label="t(`appsView.runAll`)"
+                            :label="t(`appsView.startAll`)"
                             primary
-                            @click="runTests('all-tests', projects)"
+                            :disabled="busy"
+                            @click="startAll"
+                        />
+                        <PageAction v-if="running.length > 0" icon="stop" :label="t(`appsView.stopAll`)" :disabled="busy" @click="stopAll" />
+                        <PageAction
+                            v-if="templates.length > 0"
+                            icon="plus"
+                            :label="t(`appsView.addApp`)"
+                            :disabled="busy || adding"
+                            @click="addOpen = true"
                         />
                     </template>
-                </PageHeader>
+                    <PageAction
+                        v-else-if="projects.length > 1"
+                        icon="play"
+                        :label="t(`appsView.runAll`)"
+                        primary
+                        @click="runTests('all-tests', projects)"
+                    />
+                </template>
+            </PageHeader>
 
-                <!-- A read that never answered says so in the section it fills; up here, only what no section on this page says. -->
-                <Notice v-if="error && appsLoaded.state !== `failed`" :of="noticeOf(error)" class="mb-4" />
-                <Notice v-if="testsError && (monorepo || testsLoaded.state !== `failed`)" :of="noticeOf(testsError)" class="mb-4" />
-                <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-4" />
+            <!-- A read that never answered says so in the section it fills; up here, only what no section on this page says. -->
+            <Notice v-if="error && appsLoaded.state !== `failed`" :of="noticeOf(error)" class="mb-4" />
+            <Notice v-if="testsError && (monorepo || testsLoaded.state !== `failed`)" :of="noticeOf(testsError)" class="mb-4" />
+            <Notice v-if="actionError" :of="noticeOf(actionError)" class="mb-4" />
 
-                <!-- Startable app instances expose tests for their owned projects. -->
-                <section v-if="monorepo">
-                    <!-- Skeleton rows stand in while scanning; without them, an empty section reads the same as a repo with no apps.
-                         Remembered per repo, since each has its own apps; the kit's skeleton rows until a repo has been seen once. -->
-                    <Await :of="appsLoaded" :imprint="`repo-apps.apps:${repo}`" :label="t(`appsView.readingRepositorysApps`)">
-                        <!-- The status is the group itself, as the answer's rows are one group with no wrapper. Rows carry a
-                             state badge and their buttons, so a control. -->
-                        <template #fallback>
-                            <RowGroup role="status" aria-busy="true" :aria-label="t(`appsView.readingRepositorysApps`)">
-                                <SkeletonRows :rows="3" control />
-                            </RowGroup>
-                        </template>
-                        <div v-if="appRows.length === 0" :class="ui.emptyState()">
-                            {{ t(`appsView.noAppsYetUse`) }}
-                        </div>
-                        <!-- The kit's rows, so an app stands at the same height as every other list in the shell. -->
-                        <RowGroup v-else>
-                            <Row v-for="app in appRows" :key="app.app">
-                                <template #lead="{ iconClass }">
-                                    <Icon :name="app.badge.icon" class="shrink-0" :class="[iconClass, app.badge.tint]" />
-                                </template>
-                                <template #title>
-                                    <span class="flex min-w-0 items-center gap-2">
-                                        <span class="min-w-0 truncate">{{ app.app }}</span>
-                                        <span v-if="app.badge.label" class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium" :class="app.badge.pill">{{
-                                            app.badge.label
-                                        }}</span>
-                                        <span
-                                            v-if="app.kind && app.kind !== app.app && app.badge.known"
-                                            class="min-w-0 truncate text-2xs font-normal text-subtle"
-                                            >{{ app.kind }}</span
-                                        >
-                                    </span>
-                                </template>
-                                <template #meta>
-                                    <StatusBadge
-                                        :variant="app.healthy ? 'success' : app.running ? 'info' : 'neutral'"
-                                        :label="app.healthy ? t(`appsView.healthy`) : app.running ? t(`appsView.starting`) : t(`appsView.stopped`)"
-                                        size="xs"
-                                        dot
-                                    />
-                                </template>
-                                <template #control>
-                                    <a
-                                        v-if="app.previewUrl && app.healthy"
-                                        :href="app.previewUrl"
-                                        target="_blank"
-                                        rel="noopener"
-                                        :class="ui.iconButton({ size: `lg` })"
-                                        :aria-label="t(`appsView.openPreviewInNew`, { app: app.app })"
-                                        v-tooltip.top="t(`appsView.openPreview`)"
-                                    >
-                                        <Icon name="external-link" />
-                                    </a>
-                                    <button
-                                        type="button"
-                                        :class="ui.iconButton({ size: `lg` })"
-                                        :aria-label="t(`appsView.openTerminal`, { app: app.app })"
-                                        v-tooltip.top="t(`appsView.terminal`)"
-                                        @click="openFocused(sessionOf(app.app))"
-                                    >
-                                        <Icon name="align-left" />
-                                    </button>
-                                    <Button
-                                        v-if="testsOf(app.app).length > 0"
-                                        :label="t(`appsView.runTests`)"
-                                        size="small"
-                                        tier="boring"
-                                        @click="runTests(`${app.app}__test`, testsOf(app.app))"
-                                    >
-                                        <template #icon><Icon name="bolt" /></template>
-                                    </Button>
-                                    <Button tier="boring" v-if="!app.running" :label="t(`appsView.start`)" size="small" :disabled="busy" @click="startOne(app.app)">
-                                        <template #icon><Icon name="play" /></template>
-                                    </Button>
-                                    <Button
-                                        v-else
-                                        :label="t(`appsView.stop`)"
-                                        size="small"
-                                        tier="boring"
-                                        :disabled="busy"
-                                        @click="act(() => stopApp(app.app))"
-                                    >
-                                        <template #icon><Icon name="stop" /></template>
-                                    </Button>
-                                </template>
-                            </Row>
+            <!-- Startable app instances expose tests for their owned projects. -->
+            <template v-if="monorepo">
+                <!-- Skeleton rows stand in while scanning; without them, an empty section reads the same as a repo with no apps.
+                     Remembered per repo, since each has its own apps; the kit's skeleton rows until a repo has been seen once. -->
+                <Await :of="appsLoaded" :imprint="`repo-apps.apps:${repo}`" :label="t(`appsView.readingRepositorysApps`)">
+                    <!-- The status is the group itself, as the answer's rows are one group with no wrapper. Rows carry a
+                         state badge and their buttons, so a control. -->
+                    <template #fallback>
+                        <RowGroup role="status" aria-busy="true" :aria-label="t(`appsView.readingRepositorysApps`)">
+                            <SkeletonRows :rows="3" control />
                         </RowGroup>
-                    </Await>
-                    <div v-if="adding" class="mt-2 flex items-center gap-2 text-xs text-muted">
-                        <Icon name="spinner" spin />
-                        <span>{{ t(`appsView.addingAppsFollowProgress`) }}</span>
+                    </template>
+                    <div v-if="appRows.length === 0" :class="ui.emptyState()">
+                        {{ t(`appsView.noAppsYetUse`) }}
                     </div>
-                </section>
-
-                <!-- _apps/<x> dirs with tests but not startable apps; below Apps and in mono, so this never competes with them. -->
-                <Section v-if="monorepo && packageEntries.length > 0" class="mt-6" :label="t(`appsView.packages`)" :heading="3">
-                    <RowGroup>
-                        <Row v-for="[name, dirs] in packageEntries" :key="name" icon="box">
-                            <template #title><span class="block truncate font-mono font-normal">{{ name }}</span></template>
+                    <!-- The kit's rows, so an app stands at the same height as every other list in the shell. -->
+                    <RowGroup v-else>
+                        <Row v-for="app in appRows" :key="app.app">
+                            <template #lead="{ iconClass }">
+                                <Icon :name="app.badge.icon" class="shrink-0" :class="[iconClass, app.badge.tint]" />
+                            </template>
+                            <template #title>
+                                <span class="flex min-w-0 items-center gap-2">
+                                    <span class="min-w-0 truncate">{{ app.app }}</span>
+                                    <span v-if="app.badge.label" class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium" :class="app.badge.pill">{{
+                                        app.badge.label
+                                    }}</span>
+                                    <span
+                                        v-if="app.kind && app.kind !== app.app && app.badge.known"
+                                        class="min-w-0 truncate text-2xs font-normal text-subtle"
+                                        >{{ app.kind }}</span
+                                    >
+                                </span>
+                            </template>
+                            <template #meta>
+                                <StatusBadge
+                                    :variant="app.healthy ? 'success' : app.running ? 'info' : 'neutral'"
+                                    :label="app.healthy ? t(`appsView.healthy`) : app.running ? t(`appsView.starting`) : t(`appsView.stopped`)"
+                                    size="xs"
+                                    dot
+                                />
+                            </template>
                             <template #control>
-                                <Button :label="t(`appsView.runTests`)" size="small" tier="boring" @click="runTests(`${name}__test`, dirs)">
+                                <a
+                                    v-if="app.previewUrl && app.healthy"
+                                    :href="app.previewUrl"
+                                    target="_blank"
+                                    rel="noopener"
+                                    :class="ui.iconButton({ size: `lg` })"
+                                    :aria-label="t(`appsView.openPreviewInNew`, { app: app.app })"
+                                    v-tooltip.top="t(`appsView.openPreview`)"
+                                >
+                                    <Icon name="external-link" />
+                                </a>
+                                <button
+                                    type="button"
+                                    :class="ui.iconButton({ size: `lg` })"
+                                    :aria-label="t(`appsView.openTerminal`, { app: app.app })"
+                                    v-tooltip.top="t(`appsView.terminal`)"
+                                    @click="openFocused(sessionOf(app.app))"
+                                >
+                                    <Icon name="align-left" />
+                                </button>
+                                <Button
+                                    v-if="testsOf(app.app).length > 0"
+                                    :label="t(`appsView.runTests`)"
+                                    size="small"
+                                    tier="boring"
+                                    @click="runTests(`${app.app}__test`, testsOf(app.app))"
+                                >
                                     <template #icon><Icon name="bolt" /></template>
+                                </Button>
+                                <Button tier="boring" v-if="!app.running" :label="t(`appsView.start`)" size="small" :disabled="busy" @click="startOne(app.app)">
+                                    <template #icon><Icon name="play" /></template>
+                                </Button>
+                                <Button
+                                    v-else
+                                    :label="t(`appsView.stop`)"
+                                    size="small"
+                                    tier="boring"
+                                    :disabled="busy"
+                                    @click="act(() => stopApp(app.app))"
+                                >
+                                    <template #icon><Icon name="stop" /></template>
                                 </Button>
                             </template>
                         </Row>
                     </RowGroup>
-                </Section>
+                </Await>
+                <div v-if="adding" class="mt-2 flex items-center gap-2 text-xs text-muted">
+                    <Icon name="spinner" spin />
+                    {{ t(`appsView.addingAppsFollowProgress`) }}
+                </div>
+            </template>
 
-                <!-- Library tests: _libs/* + the repo root (monorepo). Also secondary. -->
-                <Section v-if="monorepo && grouped.libraries.length > 0" class="mt-6" :label="t(`appsView.libraryTests`)" :heading="3">
-                    <template v-if="grouped.libraries.length > 1" #actions>
-                        <Button :label="t(`appsView.runAll`)" size="small" tier="boring" @click="runTests('all-tests', grouped.libraries)">
-                            <template #icon><Icon name="play" /></template>
-                        </Button>
+            <!-- _apps/<x> dirs with tests but not startable apps; below Apps and in mono, so this never competes with them. -->
+            <Section v-if="monorepo && packageEntries.length > 0" class="mt-6" :label="t(`appsView.packages`)" :heading="3">
+                <RowGroup>
+                    <Row v-for="[name, dirs] in packageEntries" :key="name" icon="box">
+                        <template #title><span class="block truncate font-mono font-normal">{{ name }}</span></template>
+                        <template #control>
+                            <Button :label="t(`appsView.runTests`)" size="small" tier="boring" @click="runTests(`${name}__test`, dirs)">
+                                <template #icon><Icon name="bolt" /></template>
+                            </Button>
+                        </template>
+                    </Row>
+                </RowGroup>
+            </Section>
+
+            <!-- Library tests: _libs/* + the repo root (monorepo). Also secondary. -->
+            <Section v-if="monorepo && grouped.libraries.length > 0" class="mt-6" :label="t(`appsView.libraryTests`)" :heading="3">
+                <template v-if="grouped.libraries.length > 1" #actions>
+                    <Button :label="t(`appsView.runAll`)" size="small" tier="boring" @click="runTests('all-tests', grouped.libraries)">
+                        <template #icon><Icon name="play" /></template>
+                    </Button>
+                </template>
+                <RowGroup>
+                    <Row v-for="dir in grouped.libraries" :key="dir" icon="bolt">
+                        <template #title><span class="block truncate font-mono font-normal">{{ label(dir) }}</span></template>
+                        <template #control>
+                            <Button :label="t(`appsView.run`)" size="small" tier="boring" @click="runTests(libSuffix(dir), [dir])">
+                                <template #icon><Icon name="play" /></template>
+                            </Button>
+                        </template>
+                    </Row>
+                </RowGroup>
+            </Section>
+
+            <!-- A tests-only (non-monorepo) repo: a single flat Tests list over every project (Run-all lives in the header). -->
+            <template v-if="!monorepo">
+                <!-- Remembered per repo like its apps; until then, the list's own rows: a glyph, a project's path, Run. -->
+                <Await :of="testsLoaded" :imprint="`repo-apps.tests:${repo}`">
+                    <template #fallback>
+                        <RowGroup role="status" aria-busy="true" :aria-label="t(`appsView.readingRepositorysTests`)">
+                            <SkeletonRows :rows="3" control />
+                        </RowGroup>
                     </template>
-                    <RowGroup>
-                        <Row v-for="dir in grouped.libraries" :key="dir" icon="bolt">
+                    <div v-if="projects.length === 0" :class="ui.emptyState()">
+                        {{ t(`appsView.noVitestProjectsFound`) }}
+                    </div>
+                    <RowGroup v-else>
+                        <Row v-for="dir in projects" :key="dir" icon="bolt">
                             <template #title><span class="block truncate font-mono font-normal">{{ label(dir) }}</span></template>
                             <template #control>
-                                <Button :label="t(`appsView.run`)" size="small" tier="boring" @click="runTests(libSuffix(dir), [dir])">
+                                <Button tier="boring" :label="t(`appsView.run`)" size="small" @click="runTests(libSuffix(dir), [dir])">
                                     <template #icon><Icon name="play" /></template>
                                 </Button>
                             </template>
                         </Row>
                     </RowGroup>
-                </Section>
-
-                <!-- A tests-only (non-monorepo) repo: a single flat Tests list over every project (Run-all lives in the header). -->
-                <section v-if="!monorepo">
-                    <!-- Remembered per repo like its apps; until then, the list's own rows: a glyph, a project's path, Run. -->
-                    <Await :of="testsLoaded" :imprint="`repo-apps.tests:${repo}`">
-                        <template #fallback>
-                            <RowGroup role="status" aria-busy="true" :aria-label="t(`appsView.readingRepositorysTests`)">
-                                <SkeletonRows :rows="3" control />
-                            </RowGroup>
-                        </template>
-                        <div v-if="projects.length === 0" :class="ui.emptyState()">
-                            {{ t(`appsView.noVitestProjectsFound`) }}
-                        </div>
-                        <RowGroup v-else>
-                            <Row v-for="dir in projects" :key="dir" icon="bolt">
-                                <template #title><span class="block truncate font-mono font-normal">{{ label(dir) }}</span></template>
-                                <template #control>
-                                    <Button tier="boring" :label="t(`appsView.run`)" size="small" @click="runTests(libSuffix(dir), [dir])">
-                                        <template #icon><Icon name="play" /></template>
-                                    </Button>
-                                </template>
-                            </Row>
-                        </RowGroup>
-                    </Await>
-                </section>
-            </Page>
-        </div>
+                </Await>
+            </template>
+        </Page>
         <AddAppDialog v-if="monorepo" v-model:visible="addOpen" :templates="templates" :apps="apps" @submit="add" />
     </div>
 </template>

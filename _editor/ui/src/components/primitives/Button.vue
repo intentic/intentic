@@ -75,8 +75,8 @@ const ownSpinner = (): boolean => slots[`loadingicon`] === undefined;
                  the children direct flex items. Only for that wait, so a button at rest holds its content and nothing else. -->
             <template v-if="shown">
                 <span class="contents invisible"><slot /></span>
-                <!-- Absolutely centred over the button so the hidden content keeps its width; `ui-press-spinner` is now only the press-lock tests' hook, not a style. -->
-                <span class="ui-press-spinner absolute inset-0 flex items-center justify-center"><Icon name="spinner" spin /></span>
+                <!-- Absolutely centred over the button (its 1em box, `m-auto` between `inset-0`) so the hidden content keeps its width; `ui-press-spinner` is now only the press-lock tests' hook, not a style. -->
+                <Icon name="spinner" spin class="ui-press-spinner absolute inset-0 m-auto" />
             </template>
             <slot v-else />
         </template>

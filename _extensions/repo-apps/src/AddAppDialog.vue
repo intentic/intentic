@@ -97,10 +97,9 @@ const submit = (): void => {
                             }
                         "
                     />
-                    <span class="min-w-0">
-                        <span class="block font-medium leading-tight">{{ template.label }}</span>
-                        <span class="block text-xs text-muted">{{ template.description }}</span>
-                    </span>
+                    <span class="min-w-0 font-medium leading-tight"
+                        >{{ template.label }}<span class="block text-xs font-normal text-muted">{{ template.description }}</span></span
+                    >
                 </label>
                 <!-- Name input shown when this template is checked. -->
                 <div v-if="selected.includes(template.key)" class="ml-8 flex items-center gap-2">

@@ -73,12 +73,19 @@ const voiceSpeakers = computed(() => {
         <Notice v-if="error" :of="noticeOf(error)" />
 
         <!-- The feed heading stays above the scrolling activity rows. -->
-        <div v-if="status?.voice" class="rounded-lg bg-card shadow-sm px-3 py-2">
-            <Row icon="microphone" tone="info" density="compact" :flush="true" :title="`#${status.voice.channelName}`">
-                <template #description>{{ t(`activityView.voiceMinutes`, { minutes: voiceMinutes, speakers: voiceSpeakers }) }}</template>
-                <template #control><StatusBadge variant="info" :label="t(`activityView.transcribing`)" size="xs" dot /></template>
-            </Row>
-        </div>
+        <!-- The card is the flush row's own box: a flush row sets no padding of its own, so the card's is the only inset. -->
+        <Row
+            v-if="status?.voice"
+            icon="microphone"
+            tone="info"
+            density="compact"
+            :flush="true"
+            :title="`#${status.voice.channelName}`"
+            class="rounded-lg bg-card shadow-sm px-3 py-2"
+        >
+            <template #description>{{ t(`activityView.voiceMinutes`, { minutes: voiceMinutes, speakers: voiceSpeakers }) }}</template>
+            <template #control><StatusBadge variant="info" :label="t(`activityView.transcribing`)" size="xs" dot /></template>
+        </Row>
 
         <!-- All three filters narrow the feed, so all three live in the instrument, ordered who, when, what. -->
         <FilterBar v-model="search" :placeholder="t(`filter`)" :busy="loaded.state === `waiting`">

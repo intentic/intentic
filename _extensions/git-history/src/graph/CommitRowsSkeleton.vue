@@ -22,9 +22,8 @@ const SUBJECTS = [`w-64`, `w-48`, `w-72`, `w-56`];
             <span class="flex shrink-0 justify-center" :style="{ width: `${laneWidth}px` }">
                 <span class="skeleton block h-2 w-2 rounded-full" />
             </span>
-            <span class="min-w-0 flex-1">
-                <span class="skeleton block h-2.5 max-w-full" :class="SUBJECTS[row % SUBJECTS.length]" />
-            </span>
+            <!-- Its own width up to the room left; the auto margin takes the rest, pushing the trailing bars right. -->
+            <span class="skeleton block h-2.5 min-w-0 mr-auto" :class="SUBJECTS[row % SUBJECTS.length]" />
             <span class="skeleton hidden h-2 w-20 shrink-0 @2xl:block" />
             <span class="skeleton hidden h-2 w-12 shrink-0 @md:block" />
             <span class="skeleton block h-2 w-11 shrink-0" />

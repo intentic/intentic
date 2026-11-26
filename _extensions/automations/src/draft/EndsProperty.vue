@@ -38,8 +38,8 @@ const cancel = (): void => {
 
 <template>
     <PropertyRow :label="t(`automationFields.endsOn`)">
-        <button ref="anchor" type="button" :class="EDITABLE_VALUE" :aria-label="t(`endsProperty.change`, { now: said })" @click="begin">
-            <span class="text-sm text-content">{{ said }}</span>
+        <button ref="anchor" type="button" :class="EDITABLE_VALUE" class="text-sm text-content" :aria-label="t(`endsProperty.change`, { now: said })" @click="begin">
+            {{ said }}
             <span v-if="shownError" class="text-xs text-danger">{{ shownError }}</span>
         </button>
 

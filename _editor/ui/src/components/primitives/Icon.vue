@@ -62,14 +62,14 @@ const INK = {
     <span v-if="turnsOnCompositor" class="ui-icon ui-icon-turning" role="img" :aria-hidden="silent()" :aria-label="label()">
         <svg v-bind="INK" aria-hidden="true" :shape-rendering="isSpinner ? `geometricPrecision` : undefined">
             <circle v-if="isSpinner" cx="12" cy="12" r="8.75" :stroke-width="SPINNER_STROKE" opacity="0.35" />
-            <g v-if="isSpinner" :stroke-width="SPINNER_STROKE" stroke-linecap="round">
-                <path v-if="drawing.outline" :d="drawing.outline" />
-                <path v-if="drawing.solid" :d="drawing.solid" fill="currentColor" stroke="none" />
-            </g>
-            <template v-else>
-                <path v-if="drawing.outline" :d="drawing.outline" />
-                <path v-if="drawing.solid" :d="drawing.solid" fill="currentColor" stroke="none" />
-            </template>
+            <!-- No group here: the whole box turns, so the spinner's heavier, round-ended stroke goes on its arc itself. -->
+            <path
+                v-if="drawing.outline"
+                :d="drawing.outline"
+                :stroke-width="isSpinner ? SPINNER_STROKE : undefined"
+                :stroke-linecap="isSpinner ? `round` : undefined"
+            />
+            <path v-if="drawing.solid" :d="drawing.solid" fill="currentColor" stroke="none" />
         </svg>
     </span>
     <svg

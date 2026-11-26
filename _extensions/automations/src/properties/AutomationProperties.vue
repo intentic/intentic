@@ -35,11 +35,11 @@ const answers = computed(() => answersPhrase(props.automation.senders));
             <ModelProperty :automation="automation" />
         </template>
         <PropertyRow v-else :label="t(`automationRow.then`)">
-            <span :class="FIXED_VALUE"><span class="text-sm text-content">{{ targetPhrase }}</span></span>
+            <span :class="FIXED_VALUE" class="text-sm text-content">{{ targetPhrase }}</span>
         </PropertyRow>
         <GateProperty :automation="automation" />
         <PropertyRow v-if="answers" :label="t(`automationRow.answers`)">
-            <span :class="FIXED_VALUE"><span class="text-sm text-content">{{ answers }}</span></span>
+            <span :class="FIXED_VALUE" class="text-sm text-content">{{ answers }}</span>
         </PropertyRow>
         <GroupProperty :automation="automation" />
     </dl>

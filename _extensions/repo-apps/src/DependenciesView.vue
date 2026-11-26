@@ -102,9 +102,9 @@ const lookInside = (name: string): void => {
                     </div>
                 </div>
             </template>
-            <div v-if="packages.length === 0" class="p-4">
-                <Card dashed class="text-center text-sm text-muted">{{ t(`dependenciesView.noWorkspacePackagesFound`) }}</Card>
-            </div>
+            <Card v-if="packages.length === 0" dashed class="m-4 text-center text-sm text-muted">{{
+                t(`dependenciesView.noWorkspacePackagesFound`)
+            }}</Card>
             <DepsOverview
                 v-else-if="tab === `overview`"
                 class="min-h-0 flex-1"
