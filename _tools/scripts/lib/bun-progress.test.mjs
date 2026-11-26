@@ -1,6 +1,5 @@
-// Pins the stall watch's three endings (bun-progress.mjs): a run that reported every file and sits idle is ended with
-// the verdict its output gave, a run that printed its summary and stayed is ended the same way, and a run silent past the
-// limit is ended as a failure naming what never reported. Anything short of those keeps waiting.
+// A run that printed its summary and stayed keeps its verdict. A run that stopped printing before its summary
+// fails at the silence limit, even if every file's heading appeared.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { Writable } from "node:stream";
@@ -41,15 +40,16 @@ test("a silence shorter than the per-test timeout is a test still running, whate
     assert.equal(decide(progress, { now: T0 + 2 * MIN, timeoutMs: 2 * MIN, idle: true }), undefined);
 });
 
-test("every file reported, silent past the timeout and idle: ended, keeping a pass", () => {
-    const progress = fed(["a.test.ts", "b.test.ts"], ["a.test.ts:", "(pass) x", "b.test.ts:", "(pass) y"]);
-    const decision = decide(progress, { now: T0 + 3 * MIN, timeoutMs: 2 * MIN, idle: true });
-    assert.equal(decision?.status, 0);
-    assert.match(decision?.why ?? "", /all 2 files/u);
+test("an idle last file can still be in setup, and silence without a summary fails at the limit", () => {
+    const progress = fed(["a.test.ts", "b.test.ts"], ["a.test.ts:", "(pass) x", "b.test.ts:"]);
+    assert.equal(decide(progress, { now: T0 + 3 * MIN, timeoutMs: 2 * MIN, idle: true }), undefined);
+    const decision = decide(progress, { now: T0 + 10 * MIN, timeoutMs: 2 * MIN, idle: true });
+    assert.equal(decision?.status, 1);
+    assert.match(decision?.why ?? "", /every file was named, but bun did not print a summary/u);
 });
 
-test("the same with a failure on record is ended as a failure", () => {
-    const progress = fed(["a.test.ts"], ["a.test.ts:", "(fail) x"]);
+test("a finished run with a failure on record is ended as a failure", () => {
+    const progress = fed(["a.test.ts"], ["a.test.ts:", "(fail) x", "Ran 1 tests across 1 file. [1s]"]);
     assert.equal(decide(progress, { now: T0 + 3 * MIN, timeoutMs: 2 * MIN, idle: true })?.status, 1);
 });
 
@@ -101,8 +101,8 @@ test("CPU ticks are zero for a process that no longer exists", () => {
 
 const sink = () => new Writable({ write: (_chunk, _encoding, done) => done() });
 
-// A stand-in for bun: prints its files, then sits on a timer forever, idle, the way the hung leg did.
-const STUCK = `console.log("##[group]a.test.ts:"); console.log("(pass) x"); console.error("b.test.ts:"); console.error("(pass) y"); setInterval(() => {}, 1000);`;
+// A stand-in for bun: prints its files and summary, then sits on a timer forever.
+const STUCK = `console.log("##[group]a.test.ts:"); console.log("(pass) x"); console.error("b.test.ts:"); console.error("(pass) y"); console.error("Ran 2 tests across 2 files. [1s]"); setInterval(() => {}, 1000);`;
 
 test("a real process that reported everything and hangs is killed, and the run keeps its pass", { skip: process.platform !== "linux" }, async () => {
     const child = spawn(process.execPath, ["-e", STUCK], { stdio: ["ignore", "pipe", "pipe"] });
@@ -122,7 +122,7 @@ test("a real process that reported everything and hangs is killed, and the run k
     const decision = stop();
     assert.equal(decision?.status, 0);
     assert.ok(Date.now() - started < 10_000);
-    assert.match(said.join(""), /stuck on its way out/u);
+    assert.match(said.join(""), /printed its summary/u);
 });
 
 test("a process that exits on its own is left alone and decides nothing", async () => {

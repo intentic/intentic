@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
@@ -38,6 +38,26 @@ import { cliHandler } from "./cli.handler.js";
 // Real first-party connectors/discord extensions: every provider's fields/env/skill/fragment come from here.
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
+// The status tests simulate a standard image. Keep the real manifests, skills and fragments, and supply the two
+// server bundles whose presence is checked. The CLI handler never loads those bundles.
+const packagedExtensions = mkdtempSync(join(tmpdir(), "cli-cap-extensions-"));
+beforeAll(() => {
+    for (const { name } of readdirSync(EXTENSIONS_DIR, { withFileTypes: true }).filter((entry) => entry.isDirectory())) {
+        const source = join(EXTENSIONS_DIR, name);
+        const dir = join(packagedExtensions, name);
+        const stubBundle = name === "connectors" || name === "discord";
+        mkdirSync(dir);
+        for (const entry of readdirSync(source).filter((path) => !stubBundle || path !== "dist")) {
+            symlinkSync(join(source, entry), join(dir, entry));
+        }
+        if (stubBundle) {
+            mkdirSync(join(dir, "dist"));
+            writeFileSync(join(dir, "dist", "server.js"), "export {};");
+        }
+    }
+});
+afterAll(() => rmSync(packagedExtensions, { recursive: true, force: true }));
+
 // Ctx exposing only what cliHandler touches, over a fresh temp workspace; HOME is a temp dir too, so the git-access
 // hook never touches the real home.
 // The daemon's key store, in its own temp dir: it is the auth root's, which a container recreate keeps.
@@ -50,7 +70,7 @@ const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: s
         workspace: { root },
         files: { write: writeWorkspaceFile, read: readWorkspaceFile, remove: removeWorkspacePath, mkdir: makeWorkspaceDir },
         capabilities: { list: async () => capabilities },
-        extensionsDir: EXTENSIONS_DIR,
+        extensionsDir: packagedExtensions,
         historyRoot: mkdtempSync(join(tmpdir(), "cap-history-")),
         terminalRun: createTerminalRunner(),
         sshKeys: keyStore(),

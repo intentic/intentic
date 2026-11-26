@@ -116,6 +116,8 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         dependencies: unstubbed<Services["dependencies"]>("dependencies", { status: async () => [], issueAt: async () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
         ...brokerSliceFake(),
+        // No extension in this fixture declares an outward action.
+        outwardActions: async () => ({ offered: [], commands: [] }),
         // Nothing gated by default; read on every turn regardless, since planTurn narrows the manifest once for every
         // runtime.
         credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),

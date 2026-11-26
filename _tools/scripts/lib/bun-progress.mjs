@@ -98,22 +98,15 @@ export const decide = (progress, { now = Date.now(), timeoutMs, idle, padMs = GR
     const status = progress.failures > 0 ? 1 : 0;
     const verdict = status === 0 ? "every test it reported passed" : `${String(progress.failures)} reported a failure`;
     const minutes = (ms) => `${(ms / 60_000).toFixed(1)} min`;
-    if (silent >= timeoutMs + padMs) {
-        if (progress.summary) {
-            return { status, why: `bun printed its summary ${minutes(silent)} ago and did not exit; ${verdict}` };
-        }
-        if (idle && progress.expected.size > 0 && unreported(progress).length === 0) {
-            return {
-                status,
-                why: `bun reported all ${String(progress.expected.size)} files, has printed nothing for ${minutes(silent)} and is idle, so it is stuck on its way out rather than in a test; ${verdict}`,
-            };
-        }
+    if (progress.summary && silent >= timeoutMs + padMs) {
+        return { status, why: `bun printed its summary ${minutes(silent)} ago and did not exit; ${verdict}` };
     }
+    // Bun prints a heading before setup and tests run. An idle process after the last heading may still be waiting on I/O.
     if (silent >= Math.max(floorMs, 3 * timeoutMs)) {
         const missing = unreported(progress);
         const named =
             missing.length === 0
-                ? ""
+                ? "; every file was named, but bun did not print a summary"
                 : `; never reported: ${missing.slice(0, 20).join(", ")}${missing.length > 20 ? `, and ${String(missing.length - 20)} more` : ""}`;
         return { status: 1, why: `bun printed nothing for ${minutes(silent)}${idle ? "" : " while still burning CPU"}${named}` };
     }
