@@ -7,7 +7,8 @@ import { type RouteLocationRaw, RouterLink } from "vue-router";
 // promise-returning handler locks it until settled; `to` renders the answer as a link instead of a decision.
 
 const { tone, icon, to } = defineProps<{
-    tone: "primary" | "secondary";
+    // `quiet` for a refusal that only dismisses, so the one answer the card asks for is the one that stands out.
+    tone: "primary" | "secondary" | "quiet";
     icon?: IconName;
     /** Renders this answer as a link to somewhere in the app, instead of as a button. */
     to?: RouteLocationRaw;
@@ -16,7 +17,7 @@ const { tone, icon, to } = defineProps<{
 
 <template>
     <!-- Icon rides in the default slot, not PrimeVue's `#icon` one: a default slot replaces the whole button body. -->
-    <Button :as="to === undefined ? undefined : RouterLink" :to="to" size="small" :tier="tone === `primary` ? `accent` : `boring`" thumb>
+    <Button :as="to === undefined ? undefined : RouterLink" :to="to" size="small" :tier="tone === `primary` ? `accent` : tone === `quiet` ? `quiet` : `boring`" thumb>
         <Icon v-if="icon" :name="icon" />
         <slot />
     </Button>

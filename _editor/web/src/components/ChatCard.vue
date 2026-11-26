@@ -46,6 +46,7 @@ const {
     title,
     status,
     prose = false,
+    kind,
 } = defineProps<{
     icon: IconName;
     // Icon's tone as a single Tailwind class; the set is small enough not to need an enum.
@@ -55,12 +56,17 @@ const {
     status?: CardStatus;
     // Whether the title is a sentence (wraps, body tier) rather than a name (truncates, one size up).
     prose?: boolean;
+    // What sort of ask it is, in a quiet line over a title that names the thing itself (a subagent's task under "Start a
+    // subagent"). It replaces the host's own word for the kind, which would only say it less exactly.
+    kind?: string | undefined;
 }>();
 
 const injected = inject(CARD_ANSWERS_WITHHELD, undefined);
 const tail = inject(CARD_HEADER_TAIL, undefined);
 const titlePress = inject(CARD_TITLE_PRESS, undefined);
 const opens = computed(() => (status === undefined ? titlePress?.value : undefined));
+// The host's word for the kind goes before the title on its line; a card's own goes over it, and wins.
+const inlineKind = computed(() => (kind === undefined ? opens.value?.kind : undefined));
 // Only a live card waits on anybody; a settled one keeps its record either way.
 const withheld = computed(() => (status === undefined ? injected?.value : undefined));
 </script>
@@ -79,21 +85,24 @@ const withheld = computed(() => (status === undefined ? injected?.value : undefi
                  which kind a title is was never something a reader could see, so it may not set how loud it is. -->
             <!-- Semibold, not medium: with no rim or ground left on a card, weight is what keeps the ask above the labels answering it. -->
             <!-- Dotted under at rest where it goes somewhere, as a dock line's title is (ChatDockRow). -->
-            <button
-                v-if="opens"
-                type="button"
-                class="chat-card-title min-w-0 justify-self-start rounded-sm text-left text-xs font-semibold text-content underline decoration-subtle decoration-dotted underline-offset-3 transition hover:decoration-current hover:decoration-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
-                :class="!prose && `truncate`"
-                v-tooltip.top="{ title: opens.label }"
-                @click="opens.press()"
-            >
-                <!-- `inline-block`: the dotted line under the title does not run on under the word before it. -->
-                <span v-if="opens.kind" class="mr-1.5 inline-block font-medium text-muted">{{ opens.kind }}</span>{{ title }}
-            </button>
-            <span v-else-if="prose" class="chat-card-title min-w-0 text-xs font-semibold text-content">{{ title }}</span>
-            <span v-else class="chat-card-title min-w-0 truncate text-xs font-semibold text-content" v-tooltip.left.overflow="title">{{
-                title
-            }}</span>
+            <div class="flex min-w-0 flex-col items-start gap-0.5">
+                <span v-if="kind" class="max-w-full truncate text-2xs leading-snug text-muted" data-card-kind>{{ kind }}</span>
+                <button
+                    v-if="opens"
+                    type="button"
+                    class="chat-card-title max-w-full min-w-0 rounded-sm text-left text-xs font-semibold text-content underline decoration-subtle decoration-dotted underline-offset-3 transition hover:decoration-current hover:decoration-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-link"
+                    :class="!prose && `truncate`"
+                    v-tooltip.top="{ title: opens.label }"
+                    @click="opens.press()"
+                >
+                    <!-- `inline-block`: the dotted line under the title does not run on under the word before it. -->
+                    <span v-if="inlineKind" class="mr-1.5 inline-block font-medium text-muted">{{ inlineKind }}</span>{{ title }}
+                </button>
+                <span v-else-if="prose" class="chat-card-title max-w-full min-w-0 text-xs font-semibold text-content">{{ title }}</span>
+                <span v-else class="chat-card-title max-w-full min-w-0 truncate text-xs font-semibold text-content" v-tooltip.left.overflow="title">{{
+                    title
+                }}</span>
+            </div>
             <!-- How it ended, as a note beside the title rather than a second heading: the label in the meta ink, and only
                  the glyph saying whether it went through. -->
             <span v-if="status" class="inline-flex shrink-0 items-center gap-1 text-2xs text-muted" :class="{ 'mt-0.5': prose }">

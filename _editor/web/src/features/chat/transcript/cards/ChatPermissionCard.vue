@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { AgentReply } from "@intentic/sandbox-contract/schemas/providers/plan-limits";
 import type { ChildMove, ChildRun } from "@intentic/sandbox-contract/events/requests";
-import { ContextMenu, ui } from "@intentic/ui";
+import { ContextMenu, toneFill, ui } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import { useT } from "@intentic/ui/i18n";
 import { computed, inject, ref } from "vue";
+import { RouterLink } from "vue-router";
+import { here, page } from "../../../../lib/routes/links";
 import { computerAgents } from "../../../../client/sandbox/useDaemonRoutes";
 import { type CardAnswer, SKIP_CALL } from "../../../../models/conversations/session/cardReplies";
 import ChatCommandBlock from "../../../../components/ChatCommandBlock.vue";
@@ -29,8 +31,19 @@ const answering = computed(() => withheld?.value === undefined);
 const staged = ref<ChildRun | undefined>(undefined);
 const livePick = computed(() => (pending.value ? staged.value : undefined));
 
-// A child-agent ask names its move in the header and on the allow. Not the provider, which the run's own logo and name
-// say one line below, and which the owner may still change there.
+// A child-agent ask is titled by the child's task, the line a reader tells one card from the next by, under its move in a
+// quiet line; one with no task says its move as the title. Not the provider, which the run's own logo and name say below,
+// and which the owner may still change there.
+const childKind = (move: ChildMove): string => {
+    switch (move) {
+        case `spawn`:
+            return t(`chat.chatChildAgentAsk.spawnKind`);
+        case `send`:
+            return t(`chat.chatChildAgentAsk.sendKind`);
+        case `answer`:
+            return t(`chat.chatChildAgentAsk.answerKind`);
+    }
+};
 const childTitle = (move: ChildMove): string => {
     switch (move) {
         case `spawn`:
@@ -53,23 +66,24 @@ const childVerb = (move: ChildMove): string => {
 };
 
 // Header: the bridge's rendered prompt sentence, else a short noun phrase, else the bare tool name. A child-agent ask is
-// titled here instead, by its move alone.
+// titled here instead, by its task under its move.
 const title = computed(() => {
     const about = child.value;
     if (about !== undefined) {
-        return childTitle(about.move);
+        return about.task ?? childTitle(about.move);
     }
     return card.value.title ?? card.value.displayName ?? card.value.toolName;
 });
-// Why a child-agent ask was raised, said while it waits and dropped once answered, when it no longer bears on anything.
-// The gate words it as a clause for the agent ("this turn has…"); on the card it stands as a sentence of its own, behind
-// the shield that says it is the gate's reason.
-const childReason = computed(() => {
-    const reason = card.value.reason;
-    return child.value === undefined || !pending.value || reason === undefined || reason === ``
+const kind = computed(() => (child.value?.task === undefined ? undefined : childKind(child.value.move)));
+// WHY A CHILD-AGENT ASK WAS RAISED, said while it waits and dropped once answered. Only outside content in the turn is
+// worth the owner's eye here, so only that is said, in their words with the way to decide it for good; the gate's own
+// `reason` is worded for the agent, and a hold the owner's own rule makes needs no explaining to them.
+// The source names a conversation in backticks (turn-taint.ts taintWords): those parts are set as code.
+const outside = computed(() =>
+    child.value === undefined || !pending.value || card.value.outside === undefined
         ? undefined
-        : `${reason.charAt(0).toUpperCase()}${reason.slice(1)}`;
-});
+        : card.value.outside.split(`\``).map((text, index) => ({ text, code: index % 2 === 1 })),
+);
 const allowLabel = computed(() => (child.value === undefined ? t(`chat.chatMessageView.allowOnce`) : childVerb(child.value.move)));
 
 // Command disclosure, closed by default, per-decision only: the card's title already states the safety judgment.
@@ -130,8 +144,28 @@ const allowItems = computed<MenuItem[]>(() => [
 <template>
     <!-- The safety judge's own verdict sentence on this program, never from the gated agent's own words; wraps in full. -->
     <!-- A child-agent ask wears the subagent's own mark, the one its row carries once it runs, so the two read as one thread. -->
-    <ChatCard :icon="child ? `users` : `shield`" prose :title="title" :status="permissionStatus(card)">
-        <div class="chat-card-body flex flex-col gap-2">
+    <ChatCard :icon="child ? `users` : `shield`" :prose="!child || pending" :title="title" :kind="kind" :status="permissionStatus(card)">
+        <div class="chat-card-body flex flex-col gap-2.5">
+            <!-- The reason to be careful, first and plain: a tinted strip on the card, not a box, with the rule that decides it. -->
+            <p
+                v-if="outside"
+                :class="toneFill(`warning`, `strong`, `flex min-w-0 items-start gap-2 rounded-md px-2.5 py-1.5 text-xs leading-snug text-content`)"
+                data-child-reason
+            >
+                <Icon name="exclamation-triangle" class="shrink-0 text-warning" aria-hidden="true" />
+                <span class="min-w-0">
+                    {{ t(`chat.chatChildAgentAsk.outside`) }}
+                    <template v-for="(part, index) in outside" :key="index"
+                        ><code v-if="part.code" class="font-mono text-2xs">{{ part.text }}</code
+                        ><template v-else>{{ part.text }}</template></template
+                    >.
+                    <RouterLink
+                        :to="here(page.sandboxSettings(`guardrails`))"
+                        class="ml-1 whitespace-nowrap text-warning underline decoration-dotted underline-offset-3 hover:decoration-solid"
+                        >{{ t(`chat.chatChildAgentAsk.setRule`) }}</RouterLink
+                    >
+                </span>
+            </p>
             <ChatChildAgentAsk
                 v-if="child"
                 :ask="child"
@@ -141,12 +175,6 @@ const allowItems = computed<MenuItem[]>(() => [
                 :settled="!pending"
                 @repoint="staged = $event"
             />
-            <span v-if="childReason" class="flex min-w-0 items-start gap-1.5 text-2xs leading-snug text-subtle" data-child-reason>
-                <Icon name="shield" class="shrink-0" aria-hidden="true" />
-                <span class="min-w-0"
-                    ><span class="sr-only">{{ t(`chat.chatChildAgentAsk.whyAsked`) }} </span>{{ childReason }}</span
-                >
-            </span>
 
             <!-- One line: the sentence (shown only when it adds to the title: a hard-rule consequence, a machine name) on the
                  left, the command's pill on the right. Click-to-reveal, not a hover, so the command stays reachable on touch
@@ -184,19 +212,22 @@ const allowItems = computed<MenuItem[]>(() => [
         </div>
 
         <template v-if="pending" #actions>
-            <!-- A refusal of this one call that lets the turn go on: the agent is told to carry on another way, or without it. Its
-                 label says so, so it carries no hover of its own. -->
-            <ChatDecisionButton tone="secondary" icon="forward" :disabled="settling" @click="reply(SKIP_CALL)">{{
-                t(`chat.chatMessageView.skipCall`)
-            }}</ChatDecisionButton>
-            <!-- Like the question card's Dismiss: a refusal with no redirect ends the turn. -->
+            <!-- The two refusals are quiet, so the yes is the one press that stands out. -->
+            <!-- A refusal of this one call that lets the turn go on: the agent is told to carry on another way, or without it. -->
             <ChatDecisionButton
-                tone="secondary"
-                icon="times"
+                tone="quiet"
+                :disabled="settling"
+                v-tooltip.bottom="t(`chat.words.keepsGoing`)"
+                @click="reply(SKIP_CALL)"
+                >{{ t(`ui.action.skip`) }}</ChatDecisionButton
+            >
+            <!-- Like the question card's Dismiss: a refusal with no redirect ends the turn, which is what its word says. -->
+            <ChatDecisionButton
+                tone="quiet"
                 :disabled="settling"
                 v-tooltip.bottom="t(`chat.words.stopsTurn`)"
                 @click="reply({ kind: 'permission', decision: 'deny' })"
-                >{{ t(`ui.action.no`) }}</ChatDecisionButton
+                >{{ t(`ui.action.stop`) }}</ChatDecisionButton
             >
             <!-- One split control: the press is Allow once, the caret opens every wider yes this card can take. -->
             <span class="inline-flex items-stretch gap-px">

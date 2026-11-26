@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, computed, createApp, h, nextTick, reactive, ref, shallowRef } from "vue";
+import { createMemoryHistory, createRouter } from "vue-router";
 import type { AgentActivity, AgentJob, AgentWatch } from "@intentic/sandbox-contract/schemas/agents";
 import type { ChildAgentAsk } from "@intentic/sandbox-contract/events/requests";
 import type { QueuePause } from "@intentic/sandbox-contract/schemas/agent";
@@ -159,6 +160,7 @@ jest.mock("@intentic/ui", async () => {
         toneWash: (tone: string, ...extra: string[]) => [`text-${tone}`, ...extra].join(` `),
         toneDot: (tone: string, ...extra: string[]) => [`bg-${tone}`, ...extra].join(` `),
         toneTint: (tone: string) => `tint-${tone}`,
+        toneFill: (tone: string, _weight?: string, ...extra: string[]) => [`fill-${tone}`, ...extra].join(` `),
         // What another agent said is drawn as Markdown; the words are what this suite reads.
         Markdown: vue.defineComponent({
             props: { source: { type: String, required: true } },
@@ -380,6 +382,8 @@ const mount = (
     document.body.append(element);
     app = createApp({ render: () => h(ChatMessageView, { message: subject, streaming: true, ...extra }) });
     app.use(VueQueryPlugin, { queryClient: new QueryClient() });
+    // A card may link into the app (the child-agent card's "Set a rule"); any path resolves, nothing navigates.
+    app.use(createRouter({ history: createMemoryHistory(), routes: [{ path: `/:rest(.*)*`, component: { render: () => null } }] }));
     app.component(`Icon`, IconStub);
     app.directive(`tooltip`, {});
     app.mount(element);
@@ -828,7 +832,13 @@ describe(`ChatMessageView child-agent card`, () => {
     });
     const button = (element: HTMLElement, text: string): HTMLButtonElement | undefined =>
         [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((candidate) => candidate.textContent?.trim() === text);
-    const chip = (element: HTMLElement): HTMLButtonElement | null => element.querySelector<HTMLButtonElement>(`button.ui-chip`);
+    // The Model value, a press while a start still waits; the owner's pick marks it.
+    const chip = (element: HTMLElement): HTMLButtonElement | null => element.querySelector<HTMLButtonElement>(`button[data-child-run-pick]`);
+    const picked = (element: HTMLElement): boolean => chip(element)?.hasAttribute(`data-picked`) === true;
+    const openWords = async (element: HTMLElement): Promise<void> => {
+        element.querySelector<HTMLButtonElement>(`[data-child-message-toggle]`)?.click();
+        await nextTick();
+    };
     // The card's own answers, in order: what the actions row offers, and nothing from its body.
     // The answers a press gives; the Allow caret opens the wider yeses rather than answering (ChatPermissionCard's suite).
     const answers = (element: HTMLElement): string[] =>
@@ -838,20 +848,43 @@ describe(`ChatMessageView child-agent card`, () => {
         settleModelPick(undefined);
     });
 
-    it(`names the child it would start and everything it runs on`, () => {
-        const element = mount(held({ message: `Port the parser to zig, keeping the tests green.` }));
-        // The move alone: the provider is the run's to say, one line below, where the owner may still change it.
-        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a subagent?`);
-        expect(element.querySelector(`[data-child-task]`)?.textContent?.trim()).toBe(`Port the parser to zig`);
-        expect(element.querySelector(`[data-child-message]`)?.textContent?.trim()).toBe(`Port the parser to zig, keeping the tests green.`);
+    it(`names the child by its task under its move, and everything it runs on`, async () => {
+        const element = mount(held({ message: `Port the parser to zig, keeping the tests green.` }, { outside: `a message from another conversation, \`link-vine-6f4e\`` }));
+        // The task is the title, the move the quiet line over it; the provider is the run's to say, where the owner may still change it.
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Port the parser to zig`);
+        expect(element.querySelector(`[data-card-kind]`)?.textContent).toBe(`Start a subagent`);
         expect(chip(element)?.textContent).toContain(`Opus 4.6`);
         expect(element.textContent).toContain(`Account: work`);
         expect(element.textContent).toContain(`On rog`);
-        // The gate's reason, as a sentence of its own behind the shield, rather than a clause after a label.
-        expect(element.querySelector(`[data-child-reason]`)?.textContent).toContain(`This turn has taken in content from outside (shell-fetch)`);
+        // The words fold to one line until opened, then read as the document they are.
+        expect(element.querySelector(`[data-child-gist]`)?.textContent).toBe(`Port the parser to zig, keeping the tests green.`);
+        expect(element.querySelector(`[data-child-message]`)).toBeNull();
+        await openWords(element);
+        expect(element.querySelector(`[data-child-message]`)?.textContent?.trim()).toBe(`Port the parser to zig, keeping the tests green.`);
+        // Outside content, said to the owner plainly with the conversation's name set as code, and the rule that decides it.
+        const reason = element.querySelector(`[data-child-reason]`);
+        expect(reason?.textContent?.replaceAll(/\s+/gu, ` `).trim()).toBe(
+            `Asked because outside content came into this turn: a message from another conversation, link-vine-6f4e. Set a rule`,
+        );
+        expect(reason?.querySelector(`code`)?.textContent).toBe(`link-vine-6f4e`);
+        // The gate's own reason is the agent's: never on the card.
+        expect(element.textContent).not.toContain(`shell-fetch`);
         expect(element.textContent).not.toContain(`Requested because`);
-        // Skipping refuses this child alone and lets the turn go on; No ends the turn, as on every permission card.
-        expect(answers(element)).toEqual([`Skip this, keep going`, `No`, `Start it`]);
+        // Skipping refuses this child alone and lets the turn go on; Stop ends the turn, as on every permission card.
+        expect(answers(element)).toEqual([`Skip`, `Stop`, `Start it`]);
+    });
+
+    // The owner's own rule asked: nothing to warn them of.
+    it(`says no reason where outside content is not why it asks`, () => {
+        const element = mount(held());
+        expect(element.querySelector(`[data-child-reason]`)).toBeNull();
+    });
+
+    it(`names the words by their sections where they have them, and titles a child with no task by its move`, () => {
+        const element = mount(held({ task: undefined, message: `## Background\nThe repo…`, headings: [`Background`, `Goal`, `Done when`] }));
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a subagent?`);
+        expect(element.querySelector(`[data-card-kind]`)).toBeNull();
+        expect(element.querySelector(`[data-child-gist]`)?.textContent).toBe(`Background · Goal · Done when`);
     });
 
     it(`says nothing of an account nobody chose`, () => {
@@ -874,11 +907,11 @@ describe(`ChatMessageView child-agent card`, () => {
         settleModelPick({ provider: `codex`, model: `gpt-5.5`, label: `GPT-5.5`, effort: `high` });
         await nextTick();
         await nextTick();
-        // The card now reads the owner's pick and says what it replaced; the title, naming the move alone, stands.
-        expect(chip(element)?.classList.contains(`ui-chip-on`)).toBe(true);
+        // The card now reads the owner's pick and says what it replaced; the title, naming the task, stands.
+        expect(picked(element)).toBe(true);
         expect(chip(element)?.textContent).toContain(`GPT 5.5`);
         expect(element.textContent).toContain(`Changed from the agent's pick: Opus 4.6`);
-        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Start a subagent?`);
+        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Port the parser to zig`);
 
         button(element, `Start it`)?.click();
         expect(reply).toHaveBeenCalledWith(`perm-child`, {
@@ -909,18 +942,19 @@ describe(`ChatMessageView child-agent card`, () => {
         await nextTick();
         await nextTick();
         expect(element.textContent).not.toContain(`Changed from`);
-        expect(chip(element)?.classList.contains(`ui-chip-on`)).toBe(false);
+        expect(picked(element)).toBe(false);
     });
 
     it(`a message to a running child shows the words and the child's run, which it cannot change`, () => {
         const element = mount(
             held({ move: `send`, child: `sub-1`, message: `Now the lexer too.` }, { title: `Send this to a subagent on Claude Code?` }),
         );
-        expect(element.querySelector(`.chat-card-title`)?.textContent).toBe(`Message a subagent?`);
+        expect(element.querySelector(`[data-card-kind]`)?.textContent).toBe(`Message a subagent`);
+        expect(element.textContent).toContain(`Message`);
         expect(element.textContent).toContain(`Now the lexer too.`);
-        expect(element.textContent).toContain(`Opus 4.6`);
+        expect(element.querySelector(`[data-child-run]`)?.textContent).toContain(`Opus 4.6`);
         expect(chip(element)).toBeNull();
-        expect(answers(element)).toEqual([`Skip this, keep going`, `No`, `Send it`]);
+        expect(answers(element)).toEqual([`Skip`, `Stop`, `Send it`]);
     });
 
     it(`once settled, reads what started and what the agent had asked for, and offers nothing`, () => {
@@ -944,19 +978,17 @@ describe(`ChatMessageView child-agent card`, () => {
     });
 
     // History under the subagent's own row: what identifies it stays, the words fold away, and why it asked is moot.
-    it(`once answered, folds to the task and the run, with the words one press away`, async () => {
-        const element = mount(held({ move: `send`, child: `sub-1`, message: `Now the lexer too.` }, { status: `allowed` }));
-        expect(element.querySelector(`[data-child-task]`)?.textContent?.trim()).toBe(`Port the parser to zig`);
+    it(`once answered, keeps the task and the run, with the words one press away`, async () => {
+        const element = mount(held({ move: `send`, child: `sub-1`, message: `Now the lexer too.` }, { status: `allowed`, outside: `shell-fetch` }));
+        expect(element.querySelector(`.chat-card-title`)?.textContent?.trim()).toBe(`Port the parser to zig`);
         expect(element.querySelector(`[data-child-run]`)?.textContent).toContain(`Opus 4.6`);
         expect(element.querySelector(`[data-child-message]`)).toBeNull();
         expect(element.querySelector(`[data-child-reason]`)).toBeNull();
         expect(element.textContent).not.toContain(`shell-fetch`);
 
-        button(element, `Show message`)?.click();
-        await nextTick();
+        await openWords(element);
         expect(element.querySelector(`[data-child-message]`)?.textContent?.trim()).toBe(`Now the lexer too.`);
-        button(element, `Hide`)?.click();
-        await nextTick();
+        await openWords(element);
         expect(element.querySelector(`[data-child-message]`)).toBeNull();
     });
 });

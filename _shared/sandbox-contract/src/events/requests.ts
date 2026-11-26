@@ -90,6 +90,10 @@ export const ChildAgentAskSchema = ChildRunSchema.extend({
         .describe(
             "What the parent would say to it: the prompt a described start opens on, the message it sends, or the answers it gives. Clipped for the request, with an ellipsis where it was cut.",
         ),
+    headings: z
+        .array(z.string())
+        .optional()
+        .describe("The section names of the parent's whole words, in order, when they are a document of two sections or more: what the clipped message leaves out still shows by name."),
     on: z.string().optional().describe('Which machine it runs on, when one is named: a runner, or "here" for this sandbox.'),
     proposed: ChildRunSchema.optional().describe(
         "What the agent asked to start it on, when the owner started it on something else instead. Present only once the request has settled that way.",
@@ -108,6 +112,12 @@ export const PermissionAskSchema = z.object({
     description: z.string().optional().describe("More about what it is asking for."),
     // Why the prompt fired ('rule' | 'mode' | 'classifier' | …), shown as the request's muted subline.
     reason: z.string().optional().describe("Why it is asking at all: a rule, the current mode, something that looked risky."),
+    // Set where outside content in the turn is the whole reason it asks (the child-agent gate's taint floor), so the card
+    // can say that plainly to the owner instead of the agent-facing `reason`.
+    outside: z
+        .string()
+        .optional()
+        .describe("What brought outside content into the turn, in the words a person reads, when that alone is why it asks."),
     // The file the request is about, when it is about one, workspace-root-relative.
     path: z.string().optional().describe("Which file it concerns, when it concerns one."),
     alwaysLabel: z

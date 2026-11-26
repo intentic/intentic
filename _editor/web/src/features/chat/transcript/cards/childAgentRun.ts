@@ -6,7 +6,7 @@ import { modelLabelFor } from "../../../../models/providers/providerCatalog";
 import { shortModelLabel } from "../../../../models/providers/shortModelLabel";
 import { accountsOf } from "../../../../models/conversations/accounts/useChat-accounts";
 import type { ModelChoice } from "../../../../models/conversations/accounts/hostModelPicker";
-import { effortLabelOf } from "../../../../models/providers/effortScale";
+import { effortLabelOf, effortRungFill, effortRungOf } from "../../../../models/providers/effortScale";
 import { offeredLoops, selectedLoop } from "../../../../models/providers/offeredLoops";
 import { defaultPinRunSettings } from "../../../../models/providers/pickerRunSettings";
 
@@ -22,6 +22,38 @@ export const childRunLine = (run: ChildRun): string =>
     ]
         .filter((part) => part !== undefined)
         .join(` · `);
+
+/** The run as the card's Model row draws it: the model by its catalog name, its tier on the composer's own ladder (each
+ *  rung's fill, lit up to the tier), or as a word where the model has no ladder, and Fast where it was asked for. */
+export interface ChildRunLook {
+    readonly model: string;
+    readonly rungs: readonly (string | undefined)[];
+    readonly tier: string | undefined;
+    readonly fast: boolean;
+}
+
+export const childRunLook = (run: ChildRun): ChildRunLook => {
+    const ladder = effortRungOf(run.effort, run.provider, run.model, run.thinking);
+    return {
+        model: shortModelLabel(modelLabelFor(run.provider, run.model)),
+        rungs: ladder === undefined ? [] : Array.from({ length: ladder.rungs }, (_, index) => (index <= ladder.rung ? effortRungFill(index, ladder.rungs) : undefined)),
+        tier: effortLabelOf(run.effort, run.provider, run.model, run.thinking),
+        fast: run.fast === true,
+    };
+};
+
+/** The parent's words in one line, for the row that opens them: their section names where they have sections, else their
+ *  first line with its markdown marks taken off. */
+export const childWordsGist = (ask: ChildAgentAsk): string | undefined => {
+    if (ask.headings !== undefined && ask.headings.length > 0) {
+        return ask.headings.join(` · `);
+    }
+    const first = ask.message?.split(`\n`).find((line) => line.trim() !== ``);
+    return first
+        ?.replace(/^\s*(#+|>|[-*+]|\d+\.)\s+/u, ``)
+        .replaceAll(/[`*_]/gu, ``)
+        .trim();
+};
 
 // Who pays, where someone chose: the account named, by its name here. Left unnamed, the daemon takes whichever account
 // has the most room when the child starts, which is the default and so nothing worth a line; the picker shows it.

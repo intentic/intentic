@@ -1430,6 +1430,30 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
         }
     });
 
+    // The card tells the owner what came in from outside in their own words, beside the agent-facing reason; a hold the
+    // owner's own rule makes carries no such line, since outside content is not why it asks.
+    it("a start held by the taint floor names what came in from outside on its card", async () => {
+        const live = liveParent();
+        const taint = createTurnTaint();
+        taint.mark("agent:link-vine-6f4e");
+        publishTurnTaint(parent.conversationId, taint);
+        try {
+            const held = await spawnChild(heldServices({}, fakeTurn([])), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            expect(held).toMatchObject({ ok: true, held: true });
+            const floor = await cardOn();
+            expect(cardOf(floor)).toMatchObject({ outside: "a message from another conversation, `link-vine-6f4e`" });
+            expect(cards.resolve({ kind: "permission", requestId: floor, decision: "deny" })).toBe("settled");
+            const ruled = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
+            expect(ruled).toMatchObject({ ok: true, held: true });
+            const asked = await cardOn();
+            expect(cardOf(asked)?.outside).toBeUndefined();
+            expect(cards.resolve({ kind: "permission", requestId: asked, decision: "deny" })).toBe("settled");
+        } finally {
+            clearTurnTaint(parent.conversationId);
+            live.release();
+        }
+    });
+
     // The turn the owner lets start is the one that opens the child's conversation, so it opens it as an unheld start
     // would: named by the parent's words, and answering a spent allowance itself under a sandbox that waits for a press.
     it("a start nobody answers before the parent's turn ends says why it was held, and that it may be asked again", async () => {
@@ -1578,8 +1602,27 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
             expect(message.endsWith("zig.…")).toBe(true);
             expect(prompt.startsWith(message.slice(0, -1))).toBe(true);
             expect(message.length).toBeLessThanOrEqual(601);
+            // Plain prose has no sections to name.
+            expect(cardOf(quotedCard)?.child?.headings).toBeUndefined();
             cards.resolve({ kind: "permission", requestId: quotedCard, decision: "deny" });
             await until(() => cardOf(quotedCard)?.status !== "pending");
+
+            // A document of sections names every one of them, read off the whole prompt rather than the quote, so what the cut
+            // left out still shows; a `#` line inside a fenced block is code, not a section.
+            const sectioned = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, {
+                prompt: `## Background\n${"The repo is a game. ".repeat(40)}\n\n## Goal\nFix the stair.\n\n\`\`\`sh\n# not a heading\n\`\`\`\n\n### Done when ###\nIt passes.`,
+                description: "Fix the stair",
+                provider: "claude",
+                model: "claude-opus-4-6",
+            });
+            const sectionedCard = await cardOn();
+            expect(cardOf(sectionedCard)?.child?.headings).toEqual(["Background", "Goal", "Done when"]);
+            expect(cardOf(sectionedCard)?.child?.message?.includes("Goal")).toBe(false);
+            cards.resolve({ kind: "permission", requestId: sectionedCard, decision: "deny" });
+            await until(() => cardOf(sectionedCard)?.status !== "pending");
+            if (sectioned.ok) {
+                await settled(sectioned.id);
+            }
 
             const bare = await spawnChild(heldServices(HOLD, fakeTurn([])), parent, {
                 prompt: "Port the lexer",

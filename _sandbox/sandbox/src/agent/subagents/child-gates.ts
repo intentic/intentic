@@ -1,9 +1,9 @@
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
 import { type Holding, type LiveRun, liveRunOf } from "../../conversations/actor/conversation-holdings.js";
 import type { Services } from "../../composition.js";
-import { childSpawn } from "../../guard/actions.js";
+import { childSpawn, spawnRuleOf } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
-import { conversationTaintSource } from "../../guard/turn-taint.js";
+import { conversationTaintSource, taintWords } from "../../guard/turn-taint.js";
 import { opt } from "../../opt.js";
 import { admitMove, type ChildGate, type ChildMoveKind, PASS } from "./child-admission.js";
 import { spentAsked } from "./child-listing.js";
@@ -245,10 +245,22 @@ const releaseHeldMoves = (
     }
 };
 
+// What brought outside content into the parent's turn, in a person's words, when that is what holds the move: the taint
+// floor, which applies only where the owner set no rule of their own. The card says it plainly; `reason` is the agent's.
+const outsideOf = async (services: Services, parent: string, provider: string): Promise<string | undefined> => {
+    const source = conversationTaintSource(parent);
+    if (source === undefined) {
+        return undefined;
+    }
+    const settings = await services.sandboxSettings.get();
+    return spawnRuleOf(provider, settings.actionRules) === undefined ? taintWords(source) : undefined;
+};
+
 // Raises the card on the parent's live turn and settles with the owner's answer, however long that takes; nobody's call
 // waits on it. The two refusals differ because the model's next move differs, and only one is the owner declining.
 export const askOwner = async (services: Services, parent: string, run: LiveRun, ask: ChildAgentAsk, reason: string, childId?: string): Promise<Admission> => {
     const { move, provider } = ask;
+    const outside = await outsideOf(services, parent, provider);
     const ended = new AbortController();
     void run.waitUntilFinished().then(() => ended.abort());
     let held: string | undefined;
@@ -274,6 +286,7 @@ export const askOwner = async (services: Services, parent: string, run: LiveRun,
                     title: `${MOVE_TITLE[move]} on ${labelOf(provider)}?`,
                     displayName: MOVE_BUTTON[move],
                     reason,
+                    ...opt("outside", outside),
                     alwaysLabel: ALWAYS_LABEL,
                     child: ask,
                 };

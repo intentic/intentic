@@ -717,10 +717,13 @@ const messages: TranscriptRow[] = [
             displayName: `Start it`,
             reason: `this turn has taken in content from outside (web), and a subagent would spend the owner's accounts on its say-so`,
             alwaysLabel: `Allow for the rest of this turn`,
+            // What the daemon says of outside content in the turn, in the owner's words, beside the agent-facing reason.
+            outside: `a message from another conversation, \`link-vine-6f4e\``,
             child: {
                 move: `spawn`,
                 task: `Fix the ps1 kit's -Force handling`,
-                message: `Reproduce the -Force bug in scripts/install.ps1 against an existing target directory, then fix the param block so -Force reaches Remove-Item.\n\nAdd a Pester test covering both paths (target exists, target missing) and re-run the whole ps1 kit on Windows PowerShell 5.1 and pwsh 7. Do not touch the sh kit: another agent owns it. Report what you changed, the test output, and anything in the kit that looked wrong but was out of scope.`,
+                message: `## Background\nThe install kit has two halves: \`scripts/install.ps1\` for Windows and \`scripts/install.sh\` for the rest. Another agent owns the sh kit.\n\n## Goal\nReproduce the -Force bug against an existing target directory, then fix the param block so -Force reaches Remove-Item.\n\n## Rules\n- Add a Pester test covering both paths (target exists, target missing).\n- Do not touch the sh kit.\n\n## Done when\nThe whole ps1 kit passes on Windows PowerShell 5.1 and pwsh 7. Report what you changed, the test output, and anything that looked wrong but was out of scope.`,
+                headings: [`Background`, `Goal`, `Rules`, `Done when`],
                 provider: `claude`,
                 model: `claude-opus-5-5`,
                 effort: `xhigh`,

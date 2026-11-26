@@ -54,7 +54,7 @@ import { childPlacementRefusal, placeStartingChild } from "./child-placement-liv
 import type { DelegateAsk } from "../../links/linked-children.js";
 import type { LinkListing } from "../../links/link-listing.js";
 import { type ChildRehome, canonicalRehome, canonicalSpawn, childOpening, childRecordOf, childRouting, failedOnCapacity, movesOn, onceOnly, pendingOf, providerRefusal, rehomeChild, rehomedSpec, repointedNote, taskLine, wearingParent, withRun } from "./child-spec.js";
-import { LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
+import { LINKED_MERGE, LINKED_REHOME, NOT_STARTED, START_SUMMARY, carryOnWords, heldAnswer, heldMessage, heldStart, movedWords, headingsOf, nowhereToAsk, questionWords, quoted, startedWhy } from "./child-words.js";
 import { childEnding, spentAsked, takeServedModel } from "./child-listing.js";
 import { type HeldChild, heldChildrenOf, mergeChild, noSuchChild, settleHeldChild } from "./child-held.js";
 import { type ResultSchema, type ResultValue, turnResult } from "./child-result.js";
@@ -831,16 +831,19 @@ const childAsk = (move: ChildMove, spec: ChildSpawnSpec): ChildAgentAsk => {
     return ask;
 };
 
+// The parent's words as the card carries them: the quote, and the section names of the whole, where it has sections.
+const wordsAsk = (words: string): Pick<ChildAgentAsk, "message" | "headings"> => ({ message: quoted(words), ...opt("headings", headingsOf(words)) });
+
 // A start, with the prompt it would open on: what the owner is really allowing. A start the parent did not describe is
 // already titled by that prompt's head, so it quotes nothing a second time.
 const startAsk = (spec: ChildSpawnSpec): ChildAgentAsk =>
-    spec.description === undefined ? childAsk("spawn", spec) : { ...childAsk("spawn", spec), message: quoted(spec.prompt) };
+    spec.description === undefined ? childAsk("spawn", spec) : { ...childAsk("spawn", spec), ...wordsAsk(spec.prompt) };
 
 // The same for a child that already exists, with the words the parent would say to it.
 const askAbout = (kid: ChildRecord, move: ChildMove, childId: string, message: string): ChildAgentAsk => ({
     ...childAsk(move, kid.spec),
     child: childId,
-    message: quoted(message),
+    ...wordsAsk(message),
 });
 
 // A started child's answer: where it runs first, then whatever else its start has to say.

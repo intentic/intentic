@@ -222,12 +222,16 @@ export interface ChildSpawnInput {
     readonly outsideSource?: string;
 }
 
+// The owner's own rule on starting subagents on a provider: the provider's own, else the general one, else none.
+export const spawnRuleOf = (provider: string, rules: Readonly<Record<string, AdmissionRule>>): AdmissionRule | undefined =>
+    rules[`agents.spawn.${provider}`] ?? rules["agents.spawn"];
+
 // Consulted on every supervisor mutation. A hold raises a card on the parent's turn since there's no held form of a
 // spawn; it refuses only when nobody can ask. The taint floor applies only when the owner set no explicit rule.
 export const childSpawn = defineGuardedAction<ChildSpawnInput>({
     action: "agents.spawn",
     decide: ({ provider, rules, outsideSource }) => {
-        const rule = rules[`agents.spawn.${provider}`] ?? rules["agents.spawn"];
+        const rule = spawnRuleOf(provider, rules);
         if (rule === "deny") {
             return DENY(`spawning subagents on ${provider} is refused by the action rules`);
         }

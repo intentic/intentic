@@ -75,11 +75,10 @@ const press = (element: HTMLElement, label: string): void => {
 const row = (element: HTMLElement) =>
     buttons(element).map((button) => ({ label: button.textContent?.trim() || button.getAttribute(`aria-label`), tip: button.dataset[`tip`] }));
 
-it(`offers declining this one call beside the No that stops the turn, which says so before the press`, () => {
+it(`offers skipping this one call beside the Stop that ends the turn, each saying what it does before the press`, () => {
     expect(row(mount())).toEqual([
-        // Its label already says the turn goes on.
-        { label: `Skip this, keep going`, tip: undefined },
-        { label: `No`, tip: `Stops turn` },
+        { label: `Skip`, tip: `Keeps going` },
+        { label: `Stop`, tip: `Stops turn` },
         // The bright answer last; the wider yeses (this tool, everything here) fold behind its caret rather than standing beside it.
         { label: `Allow once`, tip: undefined },
         { label: `More ways to allow`, tip: undefined },
@@ -95,15 +94,15 @@ it(`sends a plain allow-once from the press itself`, () => {
 // A hard rule's card has nothing wider to offer: no always, and no standing yes would answer it.
 it(`draws no caret on a card that always asks and can remember nothing`, () => {
     expect(row(mount({ alwaysLabel: undefined, alwaysAsks: true })).map((button) => button.label)).toEqual([
-        `Skip this, keep going`,
-        `No`,
+        `Skip`,
+        `Stop`,
         `Allow once`,
     ]);
 });
 
 // A denial with words is the one afterReply lets go on (cardReplies.test pins that half).
 it(`sends the skip as a denial with words for the agent to steer by`, () => {
-    press(mount(), `Skip this, keep going`);
+    press(mount(), `Skip`);
 
     expect(sent).toEqual([
         {
@@ -115,7 +114,7 @@ it(`sends the skip as a denial with words for the agent to steer by`, () => {
 });
 
 it(`still sends No as a bare denial, the one that stops the turn`, () => {
-    press(mount(), `No`);
+    press(mount(), `Stop`);
 
     expect(sent).toEqual([{ kind: `permission`, decision: `deny` }]);
 });

@@ -98,6 +98,28 @@ export const quoted = (words: string): string => {
     return `${(lastSpace > MESSAGE_SHOWN - 40 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 };
 
+// The most section names a card lists of the parent's words: a table of contents, not a second quote.
+const HEADINGS_SHOWN = 8;
+
+// The section names of the parent's words, in order, read off the whole text rather than the quote, so what the cut left
+// out still shows by name. Only for words that are a document of sections (two at least), and never a `#` line inside a
+// fenced block, which is code.
+export const headingsOf = (words: string): string[] | undefined => {
+    const headings: string[] = [];
+    let fenced = false;
+    for (const line of words.split("\n")) {
+        if (/^\s*(```|~~~)/u.test(line)) {
+            fenced = !fenced;
+            continue;
+        }
+        const heading = fenced ? null : /^#{1,3}\s+(.+?)\s*#*\s*$/u.exec(line);
+        if (heading?.[1] !== undefined) {
+            headings.push(heading[1]);
+        }
+    }
+    return headings.length < 2 ? undefined : headings.slice(0, HEADINGS_SHOWN);
+};
+
 // Why a hold refuses with nowhere to ask: a detached `agents` shell, or a turn that already ended.
 export const nowhereToAsk = (reason: string): string =>
     `Held for the owner: ${reason}. This call arrived outside a live turn, so there was nowhere to ask them. Ask in chat; they can also set the agents.spawn action rule.`;
