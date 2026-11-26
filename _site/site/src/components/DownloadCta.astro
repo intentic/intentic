@@ -1,10 +1,13 @@
 ---
 import { DESKTOP_DOWNLOADS_PAGE, DESKTOP_GENERIC_ICON, desktopPlatforms } from "../lib/desktop-downloads";
+import { downloadGroups, nextPickerId } from "./download/choices";
+import { glyph } from "./download/glyphs";
 
 /* THE THIRD DOOR: an installer, for the computer the visitor is reading this on. */
 
 interface Props {
-    /** Appended to the button's own classes: `btn-sm` for a compact row, or spacing at the call site. */
+    /** Appended to the button's own classes: `btn-sm` for a compact row, or spacing at the call site. With `menu`, both
+        halves take them, so a size class sizes the pair. */
     class?: string;
     /** The resting label, before the script narrows it to the reader's platform. */
     label?: string;
@@ -12,45 +15,139 @@ interface Props {
     icon?: boolean;
     /** The leading button of its row rather than the second: the developer edition, where the install is the door. */
     primary?: boolean;
+    /** A chevron beside the button that opens every other install: the big doors, where a guess about the reader's
+        system decides what one press downloads. Off in the bar, which has no room for a second target. */
+    menu?: boolean;
 }
 
-const { class: className, label = "Download the app", icon = true, primary = false } = Astro.props;
+const { class: className, label = "Download the app", icon = true, primary = false, menu = false } = Astro.props;
 
 // Name and link only: the glyph in the table is the download page's, and shipping it in an attribute here
 // would put a Windows logo in the hero's HTML for nobody to draw.
 const targets = Object.fromEntries(
     Object.entries(desktopPlatforms).map(([key, platform]) => [key, { name: platform.name, href: platform.href }]),
 );
+
+const tone = primary ? "btn-primary" : "btn-secondary";
+// The hero and the closing band can both carry a picker, so each sheet needs an id of its own.
+const pickerId = menu ? nextPickerId() : undefined;
 ---
 
-<a
-    class:list={["btn", primary ? "btn-primary" : "btn-secondary", className]}
-    href={DESKTOP_DOWNLOADS_PAGE}
-    data-download-cta
-    data-platforms={JSON.stringify(targets)}
->
-    {/* Keep the platform meaning in the button label; the small icon is only decorative. */}
-    {icon && (
-        <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true">
-            <path d={DESKTOP_GENERIC_ICON}></path>
-        </svg>
-    )}
-    <span data-download-label>{label}</span>
-</a>
+{
+    menu ? (
+        <div class="split" data-download-split>
+            <a class:list={["btn", tone, "split-main", className]} href={DESKTOP_DOWNLOADS_PAGE} data-download-cta data-platforms={JSON.stringify(targets)}>
+                {icon && (
+                    <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true">
+                        <path d={DESKTOP_GENERIC_ICON} />
+                    </svg>
+                )}
+                <span data-download-label>{label}</span>
+            </a>
+            <button
+                type="button"
+                class:list={["btn", tone, "split-toggle", className]}
+                popovertarget={pickerId}
+                aria-label="Other platforms"
+                title="Other platforms"
+                data-picker-toggle
+            >
+                <span class="split-seam" aria-hidden="true" />
+                <svg class="split-chev" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="m5 9 7 7 7-7" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" />
+                </svg>
+            </button>
 
-{/* Wrap the inline script so multiple download buttons do not redeclare its variables. */}
+            {/* THE PICKER: one row per file, its system's mark, what you get, and what it needs to run. The row the main
+                button hands over is lit "This computer" by the script below, so the guess is visible and easy to undo. */}
+            <div id={pickerId} popover class="picker" data-picker>
+                <div class="picker-sheet">
+                    <div class="picker-body">
+                        {downloadGroups.map((group, index) => (
+                            <div class="picker-group">
+                                {group.label && (
+                                    <p class="eyebrow eyebrow-bare picker-label" id={`${pickerId}-${index}`}>
+                                        {group.label}
+                                    </p>
+                                )}
+                                <ul
+                                    class="picker-list"
+                                    aria-label={group.label ? undefined : "Computers"}
+                                    aria-labelledby={group.label ? `${pickerId}-${index}` : undefined}
+                                >
+                                    {group.choices.map((choice) => (
+                                        <li>
+                                            <a class="picker-row" href={choice.href} data-picker-row data-system={choice.here}>
+                                                <span class="picker-mark" set:html={choice.icon} />
+                                                <span class="picker-name">
+                                                    <span class="picker-system">{choice.system}</span>
+                                                    <span class="picker-get">{choice.get}</span>
+                                                    {choice.here && <span class="picker-here">This computer</span>}
+                                                </span>
+                                                <span class="picker-needs">{choice.needs}</span>
+                                            </a>
+                                            {choice.also && (
+                                                <p class="picker-also">
+                                                    Or as{" "}
+                                                    {choice.also.map((item, at) => (
+                                                        <>
+                                                            {at > 0 && " · "}
+                                                            <a href={item.href} data-picker-row>
+                                                                {item.label}
+                                                            </a>{" "}
+                                                            <span>({item.on})</span>
+                                                        </>
+                                                    ))}
+                                                </p>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                        <a class="picker-all" href={DESKTOP_DOWNLOADS_PAGE} data-picker-row>
+                            All downloads and requirements
+                            <span class="picker-arrow" set:html={glyph("arrow", "")} />
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    ) : (
+        <a class:list={["btn", tone, className]} href={DESKTOP_DOWNLOADS_PAGE} data-download-cta data-platforms={JSON.stringify(targets)}>
+            {/* Keep the platform meaning in the button label; the small icon is only decorative. */}
+            {icon && (
+                <svg viewBox="0 0 24 24" class="btn-icon" fill="currentColor" aria-hidden="true">
+                    <path d={DESKTOP_GENERIC_ICON} />
+                </svg>
+            )}
+            <span data-download-label>{label}</span>
+        </a>
+    )
+}
+
+{/* Wrap the inline script so multiple download buttons do not redeclare its variables. Inline and right after the
+    markup, so the button never repaints with its new name. */}
 <script is:inline>
     (() => {
-        // userAgentData.platform where it exists ("Windows", "Linux", "macOS", "Android"), the user-agent
-        // string where it does not. Android and ChromeOS both say Linux and get neither build.
+        // userAgentData.platform where it exists ("Windows", "Linux", "macOS", "Android"), the user-agent string where it
+        // does not. Phones and ChromeOS get no build; an iPhone also says "Mac OS X", and an iPad asks for the desktop
+        // site as a Mac, which only its touch screen gives away.
         const hint = navigator.userAgentData?.platform || navigator.userAgent;
-        const key = /Win/i.test(hint)
-            ? "windows"
-            : /Linux|X11/i.test(hint) && !/Android|CrOS/i.test(hint)
-              ? "linux"
-              : null;
+        const key = /Android|CrOS|iPhone|iPad/i.test(hint)
+            ? null
+            : /Win/i.test(hint)
+              ? "windows"
+              : /Mac/i.test(hint) && navigator.maxTouchPoints < 2
+                ? "macos"
+                : /Linux|X11/i.test(hint)
+                  ? "linux"
+                  : null;
         if (!key) {return;}
 
+        for (const row of document.querySelectorAll(`[data-picker-row][data-system="${key}"]`)) {
+            row.setAttribute("data-here", "");
+        }
         for (const cta of document.querySelectorAll("[data-download-cta]")) {
             const platform = JSON.parse(cta.dataset.platforms || "{}")[key];
             if (!platform) {continue;}
@@ -59,3 +156,455 @@ const targets = Object.fromEntries(
         }
     })();
 </script>
+
+<script>
+    // THE PICKER'S BEHAVIOUR. The popover API does the opening and closing (the chevron is its popovertarget), closes it on
+    // Escape and on a press outside, and hands focus back to the chevron. This places the sheet on its button, keeps it
+    // there while the page moves, and adds the keys a list of choices answers to.
+    const GAP = 8;
+    const EDGE = 12;
+
+    for (const split of document.querySelectorAll<HTMLElement>("[data-download-split]")) {
+        const toggle = split.querySelector<HTMLButtonElement>("[data-picker-toggle]");
+        const picker = split.querySelector<HTMLElement>("[data-picker]");
+        if (toggle === null || picker === null) {
+            continue;
+        }
+        // A browser without popovers would never open it: the main button and the download page still answer.
+        if (!("showPopover" in picker)) {
+            toggle.hidden = true;
+            continue;
+        }
+        toggle.setAttribute("aria-expanded", "false");
+
+        const rows = (): HTMLElement[] => [...picker.querySelectorAll<HTMLElement>("[data-picker-row]")];
+        const isOpen = (): boolean => picker.matches(":popover-open");
+
+        // Under the button while it fits, over it when the room below is short and there is more above. Measured with
+        // the sheet drawn for a moment when it is not open yet, so the first frame it shows is already in place.
+        const place = (): void => {
+            const open = isOpen();
+            if (!open) {
+                picker.style.display = "block";
+            }
+            picker.style.removeProperty("--picker-room");
+            const sheet = picker.getBoundingClientRect();
+            if (!open) {
+                picker.style.removeProperty("display");
+            }
+            const box = split.getBoundingClientRect();
+            const width = document.documentElement.clientWidth;
+            const below = window.innerHeight - box.bottom - GAP - EDGE;
+            const above = box.top - GAP - EDGE;
+            const up = sheet.height > below && above > below;
+            const room = Math.max(up ? above : below, 160);
+            const height = Math.min(sheet.height, room);
+            picker.style.setProperty("--picker-room", `${room}px`);
+            picker.style.setProperty("--picker-min", `${box.width}px`);
+            picker.style.top = `${up ? box.top - GAP - height : box.bottom + GAP}px`;
+            picker.style.left = `${Math.max(EDGE, Math.min(box.left, width - EDGE - Math.max(sheet.width, box.width)))}px`;
+            picker.dataset.side = up ? "up" : "down";
+        };
+
+        let frame = 0;
+        const follow = (): void => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(place);
+        };
+
+        picker.addEventListener("beforetoggle", (event) => {
+            const open = event.newState === "open";
+            toggle.setAttribute("aria-expanded", String(open));
+            if (open) {
+                place();
+                window.addEventListener("scroll", follow, { passive: true, capture: true });
+                window.addEventListener("resize", follow, { passive: true });
+            } else {
+                window.removeEventListener("scroll", follow, { capture: true });
+                window.removeEventListener("resize", follow);
+            }
+        });
+
+        // Down or Up on the chevron opens the sheet on its first or last row. Pressing the chevron (rather than calling
+        // showPopover) keeps it the sheet's invoker, so a later press on it closes the sheet instead of reopening it.
+        toggle.addEventListener("keydown", (event) => {
+            if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+                return;
+            }
+            event.preventDefault();
+            if (!isOpen()) {
+                toggle.click();
+            }
+            const list = rows();
+            (event.key === "ArrowDown" ? list[0] : list.at(-1))?.focus();
+        });
+
+        picker.addEventListener("keydown", (event) => {
+            const list = rows();
+            const active = document.activeElement;
+            const at = active instanceof HTMLElement ? list.indexOf(active) : -1;
+            const last = list.length - 1;
+            const next =
+                event.key === "ArrowDown"
+                    ? at < 0 || at === last
+                        ? 0
+                        : at + 1
+                    : event.key === "ArrowUp"
+                      ? at <= 0
+                          ? last
+                          : at - 1
+                      : event.key === "Home"
+                        ? 0
+                        : event.key === "End"
+                          ? last
+                          : null;
+            if (next === null) {
+                return;
+            }
+            event.preventDefault();
+            list[next]?.focus();
+        });
+
+        // Tabbing out of the sheet closes it, as leaving a menu does. Focus to nowhere (the window losing focus) does not.
+        picker.addEventListener("focusout", (event) => {
+            const to = event.relatedTarget;
+            if (to instanceof Node && to !== toggle && !picker.contains(to)) {
+                picker.hidePopover();
+            }
+        });
+
+        // A file downloads without leaving the page, so the choice also puts the sheet away.
+        picker.addEventListener("click", (event) => {
+            if (event.target instanceof Element && event.target.closest("a") !== null) {
+                picker.hidePopover();
+            }
+        });
+    }
+</script>
+
+<style>
+    /* THE SPLIT: one cartouche cut in two. Each half keeps the cut corners on its outer side only and drops its frame on
+       the inner side, so the frame's top and bottom rules run straight across; a short engraved line is the seam. Each
+       half lights on its own, which is how a reader sees which of the two they are about to press. */
+    .split {
+        position: relative;
+        display: inline-flex;
+        align-items: stretch;
+        max-width: 100%;
+    }
+    .split-main {
+        flex: 1 1 auto;
+        min-width: 0;
+        clip-path: polygon(var(--cut) 0, 100% 0, 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+        border-image-width: 13px 0 13px 13px;
+    }
+    .split-main::before {
+        border-image-width: 13px 0 13px 13px;
+    }
+    .split-toggle {
+        flex: none;
+        padding-inline: 1.05rem;
+        cursor: pointer;
+        clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%);
+        border-image-width: 13px 13px 13px 0;
+    }
+    .split-toggle::before {
+        border-image-width: 13px 13px 13px 0;
+    }
+    .split-main.btn-sm,
+    .split-main.btn-sm::before {
+        border-image-width: 11px 0 11px 11px;
+    }
+    .split-toggle.btn-sm {
+        padding-inline: 0.7rem;
+    }
+    .split-toggle.btn-sm,
+    .split-toggle.btn-sm::before {
+        border-image-width: 11px 11px 11px 0;
+    }
+    .split-seam {
+        position: absolute;
+        top: 26%;
+        bottom: 26%;
+        left: 0;
+        width: 1px;
+        background: currentColor;
+        opacity: 0.3;
+    }
+    .split-chev {
+        width: 0.8rem;
+        height: 0.8rem;
+        transition: transform 0.22s ease;
+    }
+    .split-toggle[aria-expanded="true"] .split-chev {
+        transform: rotate(180deg);
+    }
+
+    /* THE SHEET, in the bar menus' material: black lacquer inside a gold-leaf edge, the edge being the element and the
+       lacquer its ::before a pixel inside, because a clipped shape has no border of its own. The shadow sits on the
+       unclipped outer box, since a clip would cut it off. Without the script it opens where the browser puts a popover. */
+    /* It lives in the top layer but inherits from where it is written: a centred hero must not centre its rows. */
+    .picker {
+        width: max(var(--picker-min, 0px), min(26rem, calc(100vw - 1.5rem)));
+        text-align: start;
+        letter-spacing: normal;
+        padding: 0;
+        border: 0;
+        overflow: visible;
+        color: var(--color-content);
+        background: transparent;
+        filter: var(--role-nav-shadow);
+    }
+    .picker[data-side] {
+        inset: auto;
+        margin: 0;
+    }
+    .picker:popover-open {
+        opacity: 1;
+        transform: none;
+        transition:
+            opacity 0.16s ease,
+            transform 0.16s ease;
+    }
+    @starting-style {
+        .picker:popover-open {
+            opacity: 0;
+            transform: translateY(-4px);
+        }
+        .picker[data-side="up"]:popover-open {
+            transform: translateY(4px);
+        }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .picker:popover-open,
+        .split-chev {
+            transition: none;
+        }
+    }
+
+    .picker-sheet {
+        --cut: 12px;
+        position: relative;
+        isolation: isolate;
+        padding: 1px;
+        background: var(--role-nav-gilt-edge);
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+    }
+    .picker-sheet::before {
+        --inner: calc(var(--cut) - 0.41px);
+        content: "";
+        position: absolute;
+        inset: 1px;
+        z-index: -1;
+        background: var(--role-nav-sheen), var(--role-nav-lacquer);
+        clip-path: polygon(
+            var(--inner) 0,
+            calc(100% - var(--inner)) 0,
+            100% var(--inner),
+            100% calc(100% - var(--inner)),
+            calc(100% - var(--inner)) 100%,
+            var(--inner) 100%,
+            0 calc(100% - var(--inner)),
+            0 var(--inner)
+        );
+    }
+    /* The body scrolls, not the sheet, so the lacquer stays put behind a list taller than the room it was given. */
+    .picker-body {
+        max-height: calc(var(--picker-room, 80vh) - 2px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 0.45rem;
+    }
+
+    .picker-group + .picker-group {
+        margin-top: 0.4rem;
+        padding-top: 0.15rem;
+        border-top: 1px solid var(--color-line);
+    }
+    .picker-label {
+        margin: 0.6rem 0.75rem 0.3rem;
+    }
+    .picker-list {
+        display: grid;
+        gap: 1px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    /* A ROW: the system's mark, its name and what you get, then what it needs, right-aligned so the column scans. */
+    .picker-row {
+        position: relative;
+        isolation: isolate;
+        display: grid;
+        grid-template-columns: 1.25rem minmax(0, 1fr) auto;
+        align-items: center;
+        column-gap: 0.8rem;
+        padding: 0.5rem 0.75rem;
+        color: var(--color-content);
+        text-decoration: none;
+    }
+    .picker-row::before,
+    .picker-all::before {
+        --cut: 8px;
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: var(--role-nav-row);
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+    .picker-row:hover::before,
+    .picker-row:focus-visible::before,
+    .picker-all:hover::before,
+    .picker-all:focus-visible::before {
+        opacity: 1;
+    }
+    .picker-row:focus-visible,
+    .picker-all:focus-visible {
+        outline-offset: -2px;
+    }
+    .picker-mark {
+        display: grid;
+        place-items: center;
+        color: var(--color-muted);
+        transition: color 0.15s ease;
+    }
+    .picker-mark :global(svg) {
+        display: block;
+        width: 1.1rem;
+        height: 1.1rem;
+    }
+    .picker-row:hover .picker-mark,
+    .picker-row:focus-visible .picker-mark {
+        color: var(--color-content);
+    }
+    .picker-name {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: 0.45rem;
+        min-width: 0;
+        font-size: 0.9375rem;
+        line-height: 1.35;
+    }
+    .picker-system {
+        font-weight: var(--font-weight-medium);
+    }
+    .picker-get {
+        color: var(--color-subtle);
+    }
+    .picker-needs {
+        font-size: 0.75rem;
+        line-height: 1.35;
+        color: var(--color-subtle);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* THE READER'S OWN SYSTEM, named the way its tile on /download/ names it: the ember wash and a lit diamond. */
+    /* Other packages of the row above, tucked under its words: links in the line, not rows of their own. */
+    .picker-also {
+        margin: -0.4rem 0 0;
+        padding: 0 0.75rem 0.45rem 2.8rem;
+        font-size: 0.75rem;
+        line-height: 1.35;
+        color: var(--color-subtle);
+    }
+    .picker-also a {
+        color: var(--color-link);
+        text-decoration: none;
+    }
+    .picker-also a:hover {
+        text-decoration: underline;
+    }
+
+    .picker-here {
+        display: none;
+        align-self: center;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: var(--text-2xs);
+        line-height: var(--text-2xs--line-height);
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: 0.04em;
+        color: var(--color-primary-300);
+    }
+    .picker-here::before {
+        content: "";
+        width: 0.35rem;
+        height: 0.35rem;
+        transform: rotate(45deg);
+        background: var(--color-primary-500);
+    }
+    .picker-row[data-here] .picker-here {
+        display: inline-flex;
+    }
+    .picker-row[data-here]::before {
+        opacity: 1;
+        background: var(--role-nav-wash);
+    }
+    .picker-row[data-here] .picker-mark {
+        color: var(--color-content);
+    }
+
+    .picker-all {
+        position: relative;
+        isolation: isolate;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-top: 0.4rem;
+        padding: 0.6rem 0.75rem;
+        font-size: 0.8125rem;
+        color: var(--color-link);
+        text-decoration: none;
+        box-shadow: 0 -1px 0 var(--color-line);
+    }
+    .picker-arrow {
+        display: grid;
+        transition: transform 0.18s ease;
+    }
+    .picker-arrow :global(svg) {
+        width: 1rem;
+        height: 1rem;
+    }
+    .picker-all:hover .picker-arrow,
+    .picker-all:focus-visible .picker-arrow {
+        transform: translateX(3px);
+    }
+
+    /* The narrowest phones: what it needs drops under the name rather than squeezing it. A wider phone keeps one
+       line a row, so the whole sheet still fits under the button without scrolling. */
+    @media (max-width: 22rem) {
+        .picker-row {
+            grid-template-columns: 1.25rem minmax(0, 1fr);
+        }
+        .picker-needs {
+            grid-column: 2;
+            margin-top: 0.1rem;
+            text-align: left;
+        }
+    }
+</style>

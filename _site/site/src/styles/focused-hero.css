@@ -237,6 +237,10 @@ html[data-variant="desk"] .home.home-focused .hero-chip-label {
     padding: 1rem 1.85rem;
     font-size: 1rem;
 }
+/* The download's chevron is a narrow half: the row's padding sizes the label, not the arrow. */
+.home.home-focused .hero-copy .hero-actions .split-toggle {
+    padding-inline: 1.15rem;
+}
 .home.home-focused .btn-quiet {
     background-color: rgb(14 10 7 / 0.55);
     backdrop-filter: blur(10px);
@@ -479,6 +483,9 @@ html.live-open {
     }
     .home.home-focused .hero-copy .hero-actions .btn {
         padding: 0.9rem 1.4rem;
+    }
+    .home.home-focused .hero-copy .hero-actions .split-toggle {
+        padding-inline: 1rem;
     }
     .home.home-focused .window-app {
         width: 100%;

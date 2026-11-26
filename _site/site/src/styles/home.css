@@ -762,7 +762,8 @@
         width: min(100%, 20rem);
         margin-inline: auto;
     }
-    .home .hero-actions > .btn {
+    .home .hero-actions > .btn,
+    .home .hero-actions > .split {
         width: 100%;
     }
     .home .hero-visual {

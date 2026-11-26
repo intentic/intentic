@@ -1,6 +1,6 @@
 ---
 import { latestRelease } from "@intentic/astro-integrations";
-import { APP_URL, DEMO_PATH, HOSTED_START_URL } from "@intentic/site-content/site";
+import { DEMO_PATH, HOSTED_START_URL } from "@intentic/site-content/site";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import Footer from "../components/Footer.astro";
 import Nav from "../components/Nav.astro";
@@ -10,6 +10,7 @@ import PlatformTiles from "../components/download/PlatformTiles.astro";
 import SameSandbox from "../components/download/SameSandbox.astro";
 import SetupPath from "../components/download/SetupPath.astro";
 import { glyph, type GlyphName } from "../components/download/glyphs";
+import { MACOS_SETUP_URL } from "../components/download/choices";
 import { desktopPlatforms } from "../lib/desktop-downloads";
 import { formatReleaseDate } from "../lib/release";
 
@@ -23,7 +24,7 @@ const release = await latestRelease();
 const heroTargets = {
     windows: { href: desktopPlatforms.windows.href, label: `Download for ${desktopPlatforms.windows.name}` },
     linux: { href: desktopPlatforms.linux.href, label: `Download for ${desktopPlatforms.linux.name}` },
-    macos: { href: `${APP_URL}/setup?machine=mine`, label: "Get the macOS command" },
+    macos: { href: MACOS_SETUP_URL, label: "Get the macOS command" },
 };
 
 // What the app does that a browser cannot. Each one is a place the browser has to hand out a command today.

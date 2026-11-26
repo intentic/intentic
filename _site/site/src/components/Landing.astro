@@ -150,7 +150,7 @@ const { steps: appSteps, alternatives } = content.connect;
 
                         {/* Hero shows two start actions; the bar hides its duplicate while they are visible. */}
                         <div class="hero-actions" data-hero-cta>
-                            <DownloadCta primary />
+                            <DownloadCta primary menu />
                             <a class="btn btn-secondary btn-quiet" href={HOSTED_START_URL}>{HOSTED_START_LABEL}</a>
                         </div>
 
@@ -313,7 +313,7 @@ const { steps: appSteps, alternatives } = content.connect;
             <!-- Closing cartouche returns the plate at the page end. -->
             <Final>
                 <Fragment slot="description">Contribute to our code, extend your workspace.</Fragment>
-                <DownloadCta primary />
+                <DownloadCta primary menu />
             </Final>
         </main>
 

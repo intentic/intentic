@@ -1,6 +1,6 @@
 ---
-import { APP_URL } from "@intentic/site-content/site";
 import { desktopPlatforms } from "../../lib/desktop-downloads";
+import { MACOS_SETUP_URL } from "./choices";
 import { BRAND, glyph, mark } from "./glyphs";
 
 /* ONE TILE PER SYSTEM, each answering "is this mine, will it run, which file". The reader's own system is lit by the
@@ -19,9 +19,6 @@ const packages = [
     { label: ".deb", href: "/desktop/deb", title: "Debian package: Ubuntu 24.04+, Debian 13+" },
     { label: ".rpm", href: "/desktop/rpm", title: "RPM package: Fedora 40+, RHEL, AlmaLinux and Rocky 10+, openSUSE Tumbleweed and Leap 16" },
 ];
-
-// The Mac path is the one-line install, and that line carries a setup code only the setup screen can hand out.
-const macSetup = `${APP_URL}/setup?machine=mine`;
 ---
 
 <div class="grid gap-5 lg:grid-cols-3">
@@ -107,7 +104,7 @@ const macSetup = `${APP_URL}/setup?machine=mine`;
                 <span set:html={glyph("check", "h-4 w-4 shrink-0 text-success")} />The same sandbox the app sets up
             </p>
         </div>
-        <a href={macSetup} class="btn btn-secondary w-full">
+        <a href={MACOS_SETUP_URL} class="btn btn-secondary w-full">
             <span set:html={glyph("terminal", "btn-icon")} />
             Get the command
         </a>
