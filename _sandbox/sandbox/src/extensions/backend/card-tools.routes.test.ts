@@ -73,3 +73,13 @@ test("only one JSON-RPC request with an id is taken", async () => {
     expect((await ask("office", "conv-a", undefined, { jsonrpc: "2.0", method: "notifications/initialized" })).status).toBe(400);
     expect(calls).toEqual([]);
 });
+
+test("an extension's own server is reached by the name the turn mounted it under, as a card's is", async () => {
+    const { mounts, calls, ask } = harness();
+    mounts.lease("conv-a").open({ name: "pipelines", target: { kind: "tools", extension: "intentic.pipelines" } });
+    expect((await ask("pipelines", "conv-a")).status).toBe(200);
+    expect(calls[0]?.target).toEqual({ kind: "tools", extension: "intentic.pipelines" });
+    // Only by its exact name: an extension's server has no card whose environment suffix could stand for it.
+    expect((await ask("PIPELINES", "conv-a")).status).toBe(403);
+    expect(calls).toHaveLength(1);
+});

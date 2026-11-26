@@ -4,8 +4,9 @@ import { trackedDefaultBranchOf } from "../git/ops/publish-file.js";
 import type { CiForge, CiStore } from "./ci-store.js";
 import type { CiProject } from "./projects.js";
 
-// The one answer to "which branch is this repository's main line", the branch main's fix agent owns (main-fixer.ts)
-// and the `ci` automations leave to it (events.ts). The forge's own word comes first, learned at the hook reconcile
+// The one answer to "which branch is this repository's main line", the branch main's fix agent owns (the pipelines
+// extension's, which reads it from GET /ci/main-lines) and the `ci` automations leave to it while an extension claims
+// main lines' failures (events.ts, main-line-claims.ts). The forge's own word comes first, learned at the hook reconcile
 // (hooks.ts) and from every delivery (webhook.routes.ts); then what the clone recorded as `origin/HEAD`; and only when
 // neither says, the two names a default branch usually has.
 
@@ -41,4 +42,10 @@ export const defaultBranchFor = async (
 export const isMainLine = async (services: MainLineServices, project: Pick<CiProject, "repo" | "project">, branch: string): Promise<boolean> => {
     const known = await defaultBranchFor(services, project);
     return known === undefined ? FALLBACK_MAIN_LINE.has(branch) : branch === known;
+};
+
+/** The branches that are the repository's main line: the one named, or both usual names while nothing names one. */
+export const mainLinesOf = async (services: MainLineServices, project: Pick<CiProject, "repo" | "project">): Promise<{ readonly branches: string[]; readonly named: boolean }> => {
+    const known = await defaultBranchFor(services, project);
+    return known === undefined ? { branches: [...FALLBACK_MAIN_LINE], named: false } : { branches: [known], named: true };
 };

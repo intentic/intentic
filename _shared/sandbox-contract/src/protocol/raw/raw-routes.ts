@@ -256,6 +256,8 @@ export const RAW_ROUTES = {
     "POST /extension/turn/owner-browser": { floor: "maintainer", panel: false, control: "never" },
     "POST /extension/jobs": { floor: "maintainer", panel: false, control: "never", stream: true },
     "POST /extension/jobs/{id}": { floor: "maintainer", panel: false, control: "never" },
+    // (2026-11-26) A row in the activity feed, written as the calling extension's own. Reached the same way, undeclared.
+    "POST /extension/activity": { floor: "maintainer", panel: false, control: "never" },
     // The CI webhook receiver, gated by the per-sandbox webhook secret.
     "POST /ci/webhook/{host}": { auth: "door" },
     // (2026-11-25) What the forges said, as it is heard, for a program (schemas/ci.ts CiFeedEventSchema): Server-Sent

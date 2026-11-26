@@ -1,7 +1,7 @@
 import { type Logger, pino } from "pino";
 import { createCiFailureLog } from "./ci-failure-log.js";
 import { refusedFetchError } from "@intentic/testing/real-failures";
-import { CiRateLimited, CiRefused } from "../forge-refusals.js";
+import { CiRateLimited, CiRefused } from "../../forge/refusals.js";
 
 const capturing = (): { logger: Logger; lines: Record<string, unknown>[] } => {
     const lines: Record<string, unknown>[] = [];

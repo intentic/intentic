@@ -7,7 +7,6 @@ import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import AgentChangelog from "../agent-settings/behaviour/AgentChangelog.vue";
 import AgentChatPages from "../agent-settings/behaviour/AgentChatPages.vue";
-import AgentChecks from "../agent-settings/behaviour/AgentChecks.vue";
 import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
 import AgentCodeSearch from "../agent-settings/behaviour/AgentCodeSearch.vue";
 import AgentDocumentSearch from "../agent-settings/behaviour/AgentDocumentSearch.vue";
@@ -171,9 +170,9 @@ const settingsOffline = computed<NoticeModel | undefined>(() =>
                 <AgentOffload />
             </template>
 
-            <!-- Whether main's failing CI gets a fix agent, then delivery, and last the recovery path for a turn that broke instead. -->
+            <!-- Delivery, and last the recovery path for a turn that broke instead. (2026-11-26) Whether main's failing CI gets a
+                 fix agent is the Pipelines extension's own setting, on its page. -->
             <template v-else>
-                <AgentChecks />
                 <AgentFinishedWork />
                 <!-- Under the archive row: archiving puts a card away, Retention is what deletes, and the two read as a pair. -->
                 <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="here(page.sandboxSettings(`retention`))" :label="t(`sandbox.sandboxNav.retention`)" />

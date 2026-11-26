@@ -38,8 +38,9 @@ test("conclusions prune oldest-touched past the cap so the file cannot grow fore
 
 // Until the push checks went (2026-09-28), main's failure was kept in the one shape it shared with a failed push's: a
 // finding with what a push check printed about it, decisions naming the findings they were about, and two kinds only a
-// failed push made. It was kept under `reds` then, and the newest passes under `greens`.
-test("a failure kept in the shape it shared with a failed push's reads back as main's failure", async () => {
+// failed push made. It was kept under `reds` then, and the newest passes under `greens`. (2026-11-26) Read now only by the
+// hand-over to the extension that took main's repair over, which answers it in today's shape.
+test("a failure kept in the shape it shared with a failed push's is handed over as main's failure", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "ci-failure-")), "ci.json");
     const finding = { id: "f", source: "CI", text: "verify-core" };
     await writeFile(
@@ -73,9 +74,9 @@ test("a failure kept in the shape it shared with a failed push's reads back as m
             greens: { "web\nmain": { CodeQL: 39 } },
         }),
     );
-    const store = fileCiStore(path);
-    expect(await store.passes("web", "main")).toEqual({ CodeQL: 39 });
-    expect(await store.failures()).toEqual({
+    const handed = await fileCiStore(path).handOverRepair("intentic.pipelines", 9);
+    expect(handed?.passes).toEqual({ "web\nmain": { CodeQL: 39 } });
+    expect(handed?.failures).toEqual({
         "web\nmain": {
             since: 1,
             findings: [finding],
@@ -96,50 +97,58 @@ test("a failure kept in the shape it shared with a failed push's reads back as m
     });
 });
 
-// Written under today's names, and read back by them: nothing of main's failure is kept under the names it had.
-test("a failure and a pass are kept as failures and passes", async () => {
-    const path = join(mkdtempSync(join(tmpdir(), "ci-names-")), "ci.json");
-    const store = fileCiStore(path);
-    await store.failure("web", "main", () => ({
+// (2026-11-26) Main's repair moved to the pipelines extension: what the daemon kept of it is answered once, to whichever
+// extension asks first, and leaves the file in the same write, so a second ask, or a later boot, finds nothing.
+test("main's repair state is handed over once, and leaves the file as it goes", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "ci-hand-over-")), "ci.json");
+    const failure = {
         since: 1,
         findings: [],
-        decisions: [{ kind: "spent", reason: "turn-failed", at: 2, detail: "Its fix agent's turn failed." }],
+        decisions: [{ kind: "fix-up" as const, conversationId: "ci-fix-web-40", at: 2 }],
         firstRunId: 40,
         runId: 40,
         count: 1,
         workflows: { CI: 40 },
         spans: {},
         heard: ["40/7"],
-        turns: 1,
-        changed: false,
-    }));
-    await store.recordPass("web", "main", "CodeQL", 41);
-    await store.recordPass("web", "main", "CodeQL", 39);
-
+        turns: 2,
+        changed: true,
+    };
+    await writeFile(
+        path,
+        JSON.stringify({
+            secret: "s",
+            conclusions: { "web\nmain": { status: "failed", at: 3 } },
+            failures: { "web\nmain": failure },
+            passes: { "web\nmain": { CodeQL: 41 } },
+            fleetReruns: { web: [39] },
+            ownerSteps: { "ci-fix-web-40": { step: "Fill the field.", at: 4 } },
+        }),
+    );
+    const store = fileCiStore(path);
+    expect(await store.handOverRepair("intentic.pipelines", 9)).toEqual({
+        failures: { "web\nmain": failure },
+        passes: { "web\nmain": { CodeQL: 41 } },
+        fleetReruns: { web: [39] },
+        ownerSteps: { "ci-fix-web-40": { step: "Fill the field.", at: 4 } },
+    });
     // SAFETY: the store has just written this file, and it writes one JSON object.
     const state = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-    expect(Object.keys(state)).toEqual(["secret", "conclusions", "failures", "passes"]);
-    expect(state["passes"]).toEqual({ "web\nmain": { CodeQL: 41 } });
-    expect((await store.failures())["web\nmain"]?.decisions).toEqual([
-        { kind: "spent", reason: "turn-failed", at: 2, detail: "Its fix agent's turn failed." },
-    ]);
+    expect(Object.keys(state).toSorted()).toEqual(["conclusions", "repairHandedOver", "secret"]);
+    expect(state["repairHandedOver"]).toEqual({ extension: "intentic.pipelines", at: 9 });
+    expect(await store.lastConclusion("web", "main")).toBe("failed");
+    expect(await fileCiStore(path).handOverRepair("intentic.other", 10)).toBeUndefined();
 });
 
-// A fix agent's step outside the repository (owner-steps.ts): kept per agent, replaced by its next turn's, forgotten by a
-// turn that names none, and bounded.
-test("owner steps are kept per fix agent, replaced, forgotten and bounded", async () => {
-    const store = storeIn("ci-owner-steps-");
-    expect(await store.ownerStep("fix-web-15", { step: "Fill the field.", at: 1 })).toBe(true);
-    expect(await store.ownerStep("fix-web-15", { step: "Fill the field.", at: 2 })).toBe(false);
-    expect(await store.ownerSteps()).toEqual({ "fix-web-15": { step: "Fill the field.", at: 1 } });
-    expect(await store.ownerStep("fix-web-15", undefined)).toBe(true);
-    expect(await store.ownerStep("fix-web-15", undefined)).toBe(false);
-    expect(await store.ownerSteps()).toEqual({});
-    for (let i = 0; i < 55; i += 1) {
-        await store.ownerStep(`fix-web-${i}`, { step: `step ${i}`, at: i });
-    }
-    const kept = await store.ownerSteps();
-    expect(Object.keys(kept)).toHaveLength(50);
-    expect(kept["fix-web-0"]).toBeUndefined();
-    expect(kept["fix-web-54"]).toEqual({ step: "step 54", at: 54 });
+// (2026-11-26) The extensions that take main lines' failures for their own fix agent (main-line-claims.ts): kept across
+// restarts, let go of by the same extension.
+test("an extension's claim on main lines is kept until it lets go", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "ci-claims-")), "ci.json");
+    const store = fileCiStore(path);
+    expect(await store.mainLineClaims()).toEqual([]);
+    await store.claimMainLines("intentic.pipelines", true, 1);
+    await store.claimMainLines("intentic.pipelines", true, 2);
+    expect(await fileCiStore(path).mainLineClaims()).toEqual(["intentic.pipelines"]);
+    await store.claimMainLines("intentic.pipelines", false, 3);
+    expect(await store.mainLineClaims()).toEqual([]);
 });

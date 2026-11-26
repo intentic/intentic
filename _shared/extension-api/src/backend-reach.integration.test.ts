@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitFor } from "@intentic/testing/bun";
 import { connectExtensionProcess } from "./runtime.js";
-import type { AutomationFire, RunSettled, SandboxActivity } from "./server.js";
+import type { AutomationFire } from "./server.js";
+import type { RunSettled, SandboxActivity } from "./server-reach.js";
 import { type FakeExtension, type FakeManifest, fakeExtensionApi } from "./testing.js";
 
 // What a backend hears, holds, runs and is woken by beyond its routes (backend-reach.ts, runtime.ts), each declared under

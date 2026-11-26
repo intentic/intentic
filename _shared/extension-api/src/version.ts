@@ -121,4 +121,14 @@
 // does not hold is refused. Additive: a manifest without `permissions.turn` and a tool that reads neither field are
 // unchanged, and `fakeExtensionApi` models the grants, the ticket, the three calls (`browser`, `ownerBrowser`) and the jobs
 // (`jobs`). The recorded surface grows `serverApi` and the manifest schema.
-export const extensionApiVersion = "2.55.0";
+// 2.56.0 (2026-11-26) lets a backend hear CI and write the activity feed, what main's fix agent needed to leave the daemon
+// for the pipelines extension. `permissions.events` takes `ci`, and `api.events.onCi(listener)` hears each frame of the
+// CI feed as the core's ingestion hears it from a forge (a run that finished, a job that ended, a failed job's frame
+// carrying what the forge said of it, `failed`), one frame a batch and an empty batch after a gap in the stream, as the
+// workspace's kinds are told. `api.activity.append(row)` writes a row in the sandbox's activity feed as the extension's
+// own, through a door every extension token reaches undeclared (`POST /extension/activity`). Additive: a manifest that
+// declares neither is unchanged, and `fakeExtensionApi` emits `ci` frames and keeps the rows (`activities`). The recorded
+// surface grows `serverApi`, the manifest schema and the wire's CI schemas (the feed's `failed` detail, the forge reads
+// a backend asks of the core, main's repair state as it is handed over), and drops the contract routes main's fix agent
+// answered from the daemon (`GET /ci/main`, `POST /ci/failures/forget`, `POST /ci/fix`), which its backend answers now.
+export const extensionApiVersion = "2.56.0";

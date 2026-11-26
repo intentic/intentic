@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { type DeclaredPermissions, declaredReachOf, type ExtensionReach, extensionRouteReach } from "@intentic/extension-manifest/permissions";
 import { type PublicRouteContribution, publicRouteAutomationOf, publicRouteFor } from "@intentic/extension-manifest";
 import {
+    type ExtensionActivity,
+    extensionActivityUrl,
+    ExtensionActivitySchema,
     EXTENSION_BROWSER_TOOLS,
     EXTENSION_CALLER_HEADER,
     EXTENSION_CALLER_TTL_MS,
@@ -158,6 +161,8 @@ export interface FakeExtension {
     readonly holds: readonly string[];
     // Every command it ran through `api.exec`, as the daemon was asked.
     readonly execs: readonly ExtensionExec[];
+    // (2026-11-26) Every row it wrote in the activity feed (`api.activity.append`), as the daemon took it.
+    readonly activities: readonly ExtensionActivity[];
     // (2026-11-26) Every call that reached the turn's browser and the owner's, and every job its tools started.
     readonly browserCalls: readonly FakeBrowserCall[];
     readonly ownerBrowserCalls: readonly FakeOwnerBrowserCall[];
@@ -196,8 +201,8 @@ export interface FakeExtension {
     check(kind: string, check?: Partial<Omit<WatchCheck, "kind">>, signal?: AbortSignal): Promise<WatchCheckAnswer>;
     // The owner changing its settings: stored, and told to the extension over its event stream as the daemon would.
     setSettings(values: ExtensionSettingValues): void;
-    // A frame on its event stream, as the daemon sends it (`files`, `refs`, `repos`, `settings`, and `run` and `activity`,
-    // which reach a stream only when the manifest declares them).
+    // A frame on its event stream, as the daemon sends it (`files`, `refs`, `repos`, `settings`, and `run`, `activity` and
+    // (2026-11-26) `ci`, which reach a stream only when the manifest declares them).
     emit(event: ExtensionEvent): void;
     // Its own account of itself, as the host reads it under the host's deadline and vocabulary.
     health(): Promise<ExtensionHealth>;
@@ -444,6 +449,7 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
     const logs: string[] = [];
     const holds = new Map<symbol, string>();
     const execs: ExtensionExec[] = [];
+    const activities: ExtensionActivity[] = [];
     const turn = fakeTurn(options, declared.turn);
     let settings: ExtensionSettingValues = { ...options.settings };
     // Every event stream the extension holds open, each written to by `emit`. A frame sent while none is open waits for
@@ -508,6 +514,14 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
             }
             execs.push(command);
             return json((await options.exec?.(command)) ?? { waitedMs: 0, exitCode: 0, stdout: "", stderr: "", truncated: false });
+        }
+        if (request.method === "POST" && url.pathname === extensionActivityUrl()) {
+            const row = ExtensionActivitySchema.safeParse(await request.json());
+            if (!row.success) {
+                return json({ error: `not an activity row: ${row.error.issues[0]?.message ?? "the body does not parse"}` }, 400);
+            }
+            activities.push(row.data);
+            return json({ ok: true });
         }
         return request.method === "POST" ? await turn.door(request, url) : undefined;
     };
@@ -594,6 +608,7 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
             return [...holds.values()];
         },
         execs,
+        activities,
         browserCalls: turn.browserCalls,
         ownerBrowserCalls: turn.ownerBrowserCalls,
         get jobs() {

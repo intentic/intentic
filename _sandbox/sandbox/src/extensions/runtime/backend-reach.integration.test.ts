@@ -13,6 +13,7 @@ import { createHoldingsIndex } from "../../conversations/actor/conversation-hold
 import { memorySecretVault } from "../../capabilities/capabilities-slice.testing.js";
 import type { Services } from "../../composition.js";
 import { testConfig } from "../../env.config.testing.js";
+import { publishCiFeed } from "../../seams/ci-feed-bus.js";
 import { createDomainEvents } from "../../seams/domain-events.js";
 import { readWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import { recordExtensionConversation } from "./extension-conversations.js";
@@ -36,9 +37,10 @@ const setup = (live: { now: boolean } = { now: false }) => {
         mkdirSync(join(extensionsDir, name), { recursive: true });
         writeFileSync(join(extensionsDir, name, "intentic-extension.json"), JSON.stringify({ publisher: "acme", name, ...MANIFEST, ...manifest }));
     };
-    write("maintenance", { permissions: { events: ["run", "activity"], work: true, exec: ["command"] } });
+    write("maintenance", { permissions: { events: ["run", "activity", "ci"], work: true, exec: ["command"] } });
     write("plain", {});
     const events = createDomainEvents(() => undefined);
+    const rows: Parameters<Services["activity"]["append"]>[0][] = [];
     const services = unstubbed<Services>("services", {
         config: { ...testConfig, extensionsDir, historyRoot: join(root, "history") },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -51,11 +53,20 @@ const setup = (live: { now: boolean } = { now: false }) => {
         conversations: unstubbed<Services["conversations"]>("conversations", { liveSessionIds: () => (live.now ? ["s-1"] : []) }),
         resources: unstubbed<Services["resources"]>("resources", { admit: async () => ({ verdict: "run", waitedMs: 0 }), changed: () => {} }),
         heavyCommands: unstubbed<Services["heavyCommands"]>("heavyCommands", { read: async () => ({ ...mergeHeavyRules(), queue: false }) }),
+        activity: unstubbed<Services["activity"]>("activity", {
+            append: async (row) => {
+                rows.push(row);
+            },
+        }),
     });
     const routes = createExtensionOwnRoutes(services);
     const doors = createExtensionDoors(services, (c) => ownCaller(services, c));
-    const app = new Hono().get("/extension/events", routes.events).post("/extension/work/hold", doors.hold).post("/extension/exec", doors.exec);
-    return { root, app, events, services };
+    const app = new Hono()
+        .get("/extension/events", routes.events)
+        .post("/extension/work/hold", doors.hold)
+        .post("/extension/exec", doors.exec)
+        .post("/extension/activity", doors.activity);
+    return { root, app, events, services, rows };
 };
 
 const as = (token: string, init: RequestInit = {}): RequestInit => ({ ...init, headers: { [EXTENSION_TOKEN_HEADER]: token, "content-type": "application/json" } });
@@ -87,7 +98,32 @@ describe("declared events", () => {
         const refused = await app.request("/extension/events?kinds=activity", as("plain-token"));
         expect(refused.status).toBe(403);
         expect(await refused.json()).toEqual({ error: `extension "acme.plain" did not declare the event kind "activity": add it to permissions.events in its manifest` });
-        expect((await app.request("/extension/events?kinds=ci", as("maintenance-token"))).status).toBe(400);
+        expect((await app.request("/extension/events?kinds=ci", as("plain-token"))).status).toBe(403);
+        expect((await app.request("/extension/events?kinds=deploys", as("maintenance-token"))).status).toBe(400);
+    });
+
+    // (2026-11-26) What the core's CI ingestion hears, as the feed publishes it, reaches an extension that declared `ci`.
+    test("a CI feed frame reaches the stream of an extension that declared ci", async () => {
+        const { app } = setup();
+        const controller = new AbortController();
+        const stream = framesOf(await app.request("/extension/events?kinds=ci", as("maintenance-token", { signal: controller.signal })));
+        await waitFor(() => expect(stream.frames).toContainEqual({ kind: "heartbeat" }));
+        const frame = {
+            kind: "job" as const,
+            repo: "web",
+            host: "github" as const,
+            project: "acme/web",
+            runId: 7,
+            job: "verify",
+            branch: "main",
+            sha: "abc",
+            status: "failed" as const,
+            url: "https://github.com/acme/web/actions/runs/7",
+            failed: { jobId: 70 },
+        };
+        publishCiFeed(frame);
+        await waitFor(() => expect(stream.frames).toContainEqual({ kind: "ci", event: frame }));
+        controller.abort();
     });
 
     test("a run ends in its own conversation and not in another's, and activity is told at once and as it flips", async () => {
@@ -193,4 +229,19 @@ describe("running a command", () => {
         });
         expect(await Bun.file(marker).exists()).toBe(false);
     });
+});
+
+// (2026-11-26) A row in the activity feed, as the extension's own: named on the row from its token, never from the body.
+test("an extension writes a row in the activity feed under its own name, and a row that is no row is refused", async () => {
+    const { app, rows } = setup();
+    const written = await app.request("/extension/activity", {
+        ...as("plain-token"),
+        method: "POST",
+        body: JSON.stringify({ type: "ci.repair_started", content: "main of web started failing.", outcome: "ok", conversationId: "fix-web-1" }),
+    });
+    expect(written.status).toBe(200);
+    expect(rows).toEqual([
+        { direction: "system", type: "ci.repair_started", content: "main of web started failing.", outcome: "ok", conversationId: "fix-web-1", extra: { extension: "acme.plain" } },
+    ]);
+    expect((await app.request("/extension/activity", { ...as("plain-token"), method: "POST", body: JSON.stringify({ type: "Not A Type", content: "x" }) })).status).toBe(400);
 });

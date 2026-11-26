@@ -92,10 +92,11 @@ LOOK UP — reach for these instead of searching /history by hand
   agents ci [--json]                   what main's CI is known to fail on now: ask it BEFORE re-running main to
                                        see whether a failure is yours. Each failing job with the run, commit and
                                        time it was read, and the failing tests and errors its log named. From
-                                       the runs the daemon already heard, asking no forge; it says when nothing
+                                       the runs the sandbox already heard, asking no forge; it says when nothing
                                        is known (no CI wired, no run of main heard yet). Then what this
                                        sandbox's own test runs on clean trees at main commits saw fail (suites
-                                       CI does not run too): the commit, the command, who ran it and when
+                                       CI does not run too): the commit, the command, who ran it and when. Main's
+                                       CI half comes from the Pipelines extension, from an agent's turn
   ... --on <link>                      ls, find, show and bundle read a LINKED sandbox's conversations
                                        instead, when its owner shares records on the link (\`agents links\`
                                        says which do); \`diagnostics … --on <link>\` reads its logs
@@ -956,12 +957,37 @@ const bundle = async (argv) => {
     process.stdout.write(`Wrote ${answer.conversation}'s bundle (${Math.round(text.length / 1024)} KB) to ${flags.out}.\n`);
 };
 
-// What main's CI is known to fail on (ci/known/main-known.ts), in the daemon's words. 2026-11-17, the shinobi-society audit:
-// agents re-derived it by stashing their work and re-running main; the daemon had already read every failed job's log.
+// What main's CI is known to fail on, in the words of the Pipelines extension that follows it (its main-known.ts), read
+// through the turn's own shell door onto the extension's `main_failures` tool, as a card's CLI reaches its card's tools
+// (extensions/backend/card-tools.routes.ts). 2026-11-17, the shinobi-society audit: agents re-derived it by stashing their
+// work and re-running main; the sandbox had already read every failed job's log. (2026-11-26) Main's fix agent left the
+// daemon for that extension; where its tools are not this turn's (the extension switched off, a shell no turn owns), the
+// sandbox's own test runs at main are said alone (GET /ci/main/local), with why main's CI is not.
+const CI_TOOLS = "pipelines";
+const CI_TOOL = "main_failures";
 const ci = async (argv) => {
     const { flags } = parseFlags(argv, ["json"], ["json"], {}, usageOf("ci"));
-    const answer = await read("/ci/main");
-    process.stdout.write(flags.json === true ? `${JSON.stringify(answer, undefined, 2)}\n` : `${answer.text}\n`);
+    const { status, text } = await call("POST", `/tools/${CI_TOOLS}`, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: CI_TOOL, arguments: {} } }));
+    let answered;
+    try {
+        answered = status === 200 ? JSON.parse(text) : undefined;
+    } catch {
+        answered = undefined;
+    }
+    const said = answered?.result?.content?.find?.((part) => part.type === "text")?.text;
+    if (said !== undefined && answered.result.isError !== true) {
+        // The tool answers the response itself as JSON: its words for a person, its rows for a program.
+        const answer = JSON.parse(said);
+        process.stdout.write(flags.json === true ? `${JSON.stringify(answer, undefined, 2)}\n` : `${answer.text}\n`);
+        return;
+    }
+    const why = said ?? answered?.error?.message ?? refusalOf(text);
+    const local = await read("/ci/main/local");
+    if (flags.json === true) {
+        process.stdout.write(`${JSON.stringify({ text: local.text, branches: [], local: local.local, unread: why }, undefined, 2)}\n`);
+        return;
+    }
+    process.stdout.write(`What main's CI is known to fail on is not known here: ${why}. The Pipelines extension follows main's CI, through an agent's turn that holds its tools.\n${local.text}\n`);
 };
 
 // What a child could be started on right now, and what still has allowance. The daemon renders the lines

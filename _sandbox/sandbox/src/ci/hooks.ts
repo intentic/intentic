@@ -3,8 +3,9 @@ import type { Logger } from "pino";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { CiStore } from "./ci-store.js";
 import { ciInputOf, createCiFailureLog, vendorStatusOf } from "./logs/ci-failure-log.js";
-import { CiRateLimited } from "./forge-refusals.js";
-import { ciClientFor, type FetchFn } from "./providers.js";
+import { CiRateLimited } from "../forge/refusals.js";
+import { forgeClientFor } from "../forge/client.js";
+import type { FetchFn } from "../forge/http.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
 // Reconciles each mapped repo's CI webhook against this sandbox's public receiver, on an interval and at boot since
@@ -41,7 +42,7 @@ const liftsAt = (until: number): string => `${new Date(until).toISOString().slic
 
 // Why the vendor refused, in words: its status, never its response body. A 404 or 403 on the hooks API is almost always
 // a token without admin rights on the repository (or a repository that is not yours), which the vendor will not say;
-// a spent rate limit is the one 403 that says so in its headers (providers.ts), and is nothing about rights.
+// a spent rate limit is the one 403 that says so in its headers (forge/refusals.ts), and is nothing about rights.
 const refusalOf = (error: unknown): string => {
     if (error instanceof CiRateLimited) {
         return `the connected token's API rate limit is spent until ${liftsAt(error.until)}`;
@@ -98,7 +99,7 @@ const forgeLearner = (services: HookServices, fetchFn: FetchFn): ((project: CiPr
             return;
         }
         try {
-            const repository = await ciClientFor(project.account.provider, fetchFn).repository(project);
+            const repository = await forgeClientFor(project.account.provider, fetchFn).repository(project);
             await services.ciStore.learnForge(project.repo, project.project, repository);
             unread.succeeded(project.repo);
             if (repository.path.toLowerCase() !== project.project.toLowerCase()) {
@@ -132,7 +133,7 @@ const hookRegistrar = (logger: Logger, fetchFn: FetchFn): ((project: CiProject, 
             return before.get(project.repo);
         }
         try {
-            await ciClientFor(project.account.provider, fetchFn).ensureHook(project, { url, secret });
+            await forgeClientFor(project.account.provider, fetchFn).ensureHook(project, { url, secret });
             unregistered.succeeded(project.repo);
             return undefined;
         } catch (error) {
@@ -179,7 +180,7 @@ export const createCiHookReconciler = (services: HookServices, fetchFn: FetchFn 
         // Removes the hook only if its account is still connected; otherwise there is no token to delete it with.
         for (const [key, project] of wired) {
             if (!next.has(key) && publicUrl !== "") {
-                await ciClientFor(project.account.provider, fetchFn)
+                await forgeClientFor(project.account.provider, fetchFn)
                     .removeHook(project, webhookUrlFor(publicUrl, project.account.provider))
                     .catch((error: unknown) => services.logger.warn({ err: error, repo: project.repo }, "ci: stale hook removal failed"));
             }

@@ -3,7 +3,7 @@ import type { DeviceFacts } from "@intentic/sandbox-contract/schemas/hosts";
 import { unstubbed } from "@intentic/testing";
 import { z } from "zod";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import type { FetchFn } from "../../ci/providers.js";
+import type { FetchFn } from "../../forge/http.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import type { CiFleetServices } from "../../ci/fleet/runner-registration.js";
 

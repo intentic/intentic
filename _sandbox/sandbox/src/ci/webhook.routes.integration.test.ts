@@ -1,12 +1,11 @@
 import { createHmac } from "node:crypto";
 import { mkdtempSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/base/git";
 import { Hono } from "hono";
-import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
@@ -18,7 +17,7 @@ import { fileSendersStore } from "../automations/senders-store.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
 import { fileCiStore } from "./ci-store.js";
-import type { FetchFn } from "./providers.js";
+import type { FetchFn } from "../forge/http.js";
 import { createRunsCache } from "./runs-cache.js";
 import { createCiHookReconciler } from "./hooks.js";
 import { CI_WEBHOOK_PAYLOAD_MAX, createCiWebhookRoute } from "./webhook.routes.js";
@@ -27,7 +26,8 @@ import { drivenBy } from "../seams/turn-starter.testing.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import type { CiFeedEvent } from "@intentic/sandbox-contract/schemas/ci";
-import { subscribeCiFeed } from "./feed/ci-feed.js";
+import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { subscribeCiFeed } from "../seams/ci-feed-bus.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact these tests state in one line.
@@ -38,27 +38,32 @@ jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains
 const heardFeed: CiFeedEvent[] = [];
 subscribeCiFeed((event) => void heardFeed.push(event));
 
-// What reaches main's fix agent, recorded at its door: what it does with a failure is main-fixer.integration.test.ts's.
-const heardJobs: unknown[] = [];
-jest.mock("./main-fixer.js", () => ({
-    jobFailed: async (_services: unknown, _project: unknown, job: unknown) => {
-        heardJobs.push(job);
-        return "code";
-    },
-    runFinished: async () => {},
-}));
+// What main's fix agent hears (the pipelines extension's, on its event stream): each failed job's frame, with what the forge
+// said of its failure. What it does with one is that extension's main-fixer.integration.test.ts's.
+const failedFrames = (): readonly CiFeedEvent[] => heardFeed.filter((event) => event.kind === "job" && event.failed !== undefined);
 
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
 // (automations/activity/logger); `unstubbed` keeps the fake that small: the listeners.integration.test.ts convention.
-// Repair off unless a test says otherwise: with it on, main's failures are its fix agent's and reach no automation (the
-// test that says so below), and these tests are about what an automation hears.
+// No extension claims main lines unless a test says otherwise: with one claiming them, main's failures are its fix
+// agent's and reach no automation (the test that says so below), and these tests are about what an automation hears.
 // The failed-jobs enrichment call is the only vendor fetch the receiver makes; `fetchFn` answers it, at once by default.
 const failedLint: FetchFn = (async () => new Response(JSON.stringify({ jobs: [{ id: 1, name: "lint", conclusion: "failure" }] }), { status: 200 })) as FetchFn;
+
+// The pipelines extension, built in under its own directory, as the image bakes it: what may claim main lines.
+const builtInPipelines = async (root: string): Promise<string> => {
+    const extensionsDir = join(root, "builtin");
+    await mkdir(join(extensionsDir, "pipelines"), { recursive: true });
+    await writeFile(
+        join(extensionsDir, "pipelines", "intentic-extension.json"),
+        JSON.stringify({ publisher: "intentic", name: "pipelines", version: "1.0.0", engines: { intentic: "^2.56.0" } }),
+    );
+    return extensionsDir;
+};
 
 const harness = async (
     automationId: string,
     narrow: { eventType?: string; branch?: string; channelId?: string } = {},
-    autoRepair = false,
+    claimed = false,
     fetchFn: FetchFn = failedLint,
 ) => {
     const root = mkdtempSync(join(tmpdir(), "ci-webhook-"));
@@ -73,14 +78,21 @@ const harness = async (
         join(root, `${STATE_DIR}`, "records", "automation-runs.json"),
     );
     await automations.upsert(automationConfig(automationId, { trigger: { kind: "listener", provider: "ci", ...narrow }, prompt: "handle ci" }));
+    const ciStore = fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json"));
+    if (claimed) {
+        await ciStore.claimMainLines("intentic.pipelines", true, 1);
+    }
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         automations,
-        // The automation inboxes (durable/inbox-store.ts) live beside the holds.
-        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
-        ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ autoRepair }) }),
+        // The automation inboxes (durable/inbox-store.ts) live beside the holds; a claim holds while its extension, built
+        // in here, is on.
+        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history"), extensionsDir: await builtInPipelines(root) }),
+        files: unstubbed<Services["files"]>("files", { read: (path: string) => readFile(path, "utf8").catch(() => undefined) }),
+        ciStore,
+        // What a wake reads of the sandbox's settings: its defaults.
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, `${STATE_DIR}`, "records", "senders.json")),
@@ -387,37 +399,40 @@ const workflowJob = (conclusion: string | null, action = "completed") => ({
     repository: { full_name: "acme/web" },
 });
 
-// The whole point of hearing jobs one by one: the fix agent starts at the first failure, not when the run ends.
-test("a failed job's own delivery reaches main's fix agent at once, with the step that failed it", async () => {
+// The whole point of hearing jobs one by one: main's fix agent starts at the first failure, not when the run ends.
+test("a failed job's own delivery is on the CI feed at once, with the step that failed it", async () => {
     const { app, services } = await harness("wh-job");
-    heardJobs.length = 0;
+    heardFeed.length = 0;
     const response = await deliver(app, await services.ciStore.secret(), workflowJob("failure"), { "x-github-event": "workflow_job" });
     expect(response.status).toBe(200);
-    await waitFor(() => expect(heardJobs).toHaveLength(1), SETTLES);
-    expect(heardJobs[0]).toEqual({
-        runId: 7,
-        jobId: 70,
-        name: "verify-core",
-        branch: "main",
-        workflow: "CI",
-        sha: "abc1234def",
-        url: "https://github.com/acme/web/actions/runs/7/job/70",
-        step: "Run tests",
-        steps: ["Run tests"],
-    });
+    expect(failedFrames()).toEqual([
+        {
+            kind: "job",
+            repo: "web",
+            host: "github",
+            project: "acme/web",
+            runId: 7,
+            workflow: "CI",
+            job: "verify-core",
+            branch: "main",
+            sha: "abc1234def",
+            status: "failed",
+            url: "https://github.com/acme/web/actions/runs/7/job/70",
+            failed: { jobId: 70, step: "Run tests", steps: ["Run tests"] },
+        },
+    ]);
     // A job is no run: nothing is announced to automations until the run itself ends.
     expect(await services.ciStore.lastConclusion("web", "main")).toBeUndefined();
 });
 
-test("a job still going reaches no fix agent and no feed, but announces ci", async () => {
+test("a job still going reaches no feed, but announces ci", async () => {
     const { app, services } = await harness("wh-job-ignored");
-    heardJobs.length = 0;
     heardFeed.length = 0;
     published.length = 0;
     const response = await deliver(app, await services.ciStore.secret(), workflowJob(null, "in_progress"), { "x-github-event": "workflow_job" });
     // SAFETY: the route answers its JSON acknowledgement, `{ ok, ignored? }`.
     expect(((await response.json()) as { ignored?: boolean }).ignored).toBe(true);
-    expect([heardJobs, heardFeed]).toEqual([[], []]);
+    expect(heardFeed).toEqual([]);
     // Its run's job graph is open somewhere, or a watch reads it: each phase is news to them.
     expect(published.filter((domain) => domain === "ci")).toEqual(["ci"]);
 });
@@ -426,7 +441,6 @@ test("a job still going reaches no fix agent and no feed, but announces ci", asy
 // publishing its images passes, not when the rest of the run does.
 test("every job that ended is a job frame on the CI feed at once, passed, failed or cancelled, as the forge named it", async () => {
     const { app, services } = await harness("wh-job-feed");
-    heardJobs.length = 0;
     heardFeed.length = 0;
     const secret = await services.ciStore.secret();
     for (const conclusion of ["success", "failure", "cancelled"]) {
@@ -436,13 +450,12 @@ test("every job that ended is a job frame on the CI feed at once, passed, failed
     }
     const url = "https://github.com/acme/web/actions/runs/7/job/70";
     const frame = { kind: "job" as const, repo: "web", host: "github" as const, project: "acme/web", runId: 7, workflow: "CI", job: "verify-core", branch: "main", sha: "abc1234def", url };
+    // Only the failure carries what the forge said of it, which main's fix agent reads.
     expect(heardFeed).toEqual([
         { ...frame, status: "success" },
-        { ...frame, status: "failed" },
+        { ...frame, status: "failed", failed: { jobId: 70, step: "Run tests", steps: ["Run tests"] } },
         { ...frame, status: "canceled" },
     ]);
-    // Only the failure is main's fix agent's.
-    await waitFor(() => expect(heardJobs).toHaveLength(1), SETTLES);
 });
 
 test("every run that ended is a run frame on the CI feed, passed or failed, in the order they arrived", async () => {
@@ -460,7 +473,7 @@ test("every run that ended is a run frame on the CI feed, passed or failed, in t
     ]);
 });
 
-test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason; a job allowed to fail is none", async () => {
+test("a gitlab Job Hook's failure is on the feed with gitlab's own reason; a job allowed to fail is none", async () => {
     const root = mkdtempSync(join(tmpdir(), "ci-webhook-gl-job-"));
     const dir = join(root, "app");
     await mkdir(dir, { recursive: true });
@@ -472,6 +485,8 @@ test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
+        // Where a failed job's frame looks up what set its run off: no run of it was delivered here.
+        ciRuns: createRunsCache(60_000),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
     const app = new Hono();
@@ -496,24 +511,30 @@ test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason
             headers: { "content-type": "application/json", "x-gitlab-event": "Job Hook", "x-gitlab-token": await services.ciStore.secret() },
             body: JSON.stringify(payload),
         });
-    heardJobs.length = 0;
+    heardFeed.length = 0;
 
     expect((await send(hook({}))).status).toBe(200);
-    await waitFor(() => expect(heardJobs).toHaveLength(1), SETTLES);
-    expect(heardJobs[0]).toEqual({
-        runId: 42,
-        jobId: 300,
-        name: "test",
-        branch: "main",
-        sha: "abc",
-        url: "https://gitlab.example.com/group/app/-/jobs/300",
-        reason: "script_failure",
-    });
-    // A job allowed to fail fails nothing main's fix agent would mend; the feed still hears GitLab's own verdict.
+    expect(failedFrames()).toEqual([
+        {
+            kind: "job",
+            repo: "app",
+            host: "gitlab",
+            project: "group/app",
+            runId: 42,
+            job: "test",
+            branch: "main",
+            sha: "abc",
+            status: "failed",
+            url: "https://gitlab.example.com/group/app/-/jobs/300",
+            failed: { jobId: 300, reason: "script_failure" },
+        },
+    ]);
+    // A job allowed to fail fails nothing main's fix agent would mend; the feed still hears GitLab's own verdict, with no
+    // failure of the code's on it.
     heardFeed.length = 0;
     expect((await send(hook({ build_allow_failure: true, build_id: 304 }))).status).toBe(200);
     expect(heardFeed).toMatchObject([{ kind: "job", job: "test", status: "failed", url: "https://gitlab.example.com/group/app/-/jobs/304" }]);
-    expect(heardJobs).toHaveLength(1);
+    expect(failedFrames()).toEqual([]);
     // Every job that ended is on the CI feed, the failure and a pass alike; a tag's names no branch a trigger could.
     heardFeed.length = 0;
     const passed = await send(hook({ build_status: "success", build_id: 301, build_name: "publish" }));
@@ -526,9 +547,8 @@ test("a gitlab Job Hook's failure reaches the fix agent with gitlab's own reason
     const frame = { kind: "job" as const, repo: "app", host: "gitlab" as const, project: "group/app", runId: 42, branch: "main", sha: "abc" };
     expect(heardFeed).toEqual([
         { ...frame, job: "publish", status: "success", url: "https://gitlab.example.com/group/app/-/jobs/301" },
-        { ...frame, job: "test", status: "failed", url: "https://gitlab.example.com/group/app/-/jobs/303" },
+        { ...frame, job: "test", status: "failed", url: "https://gitlab.example.com/group/app/-/jobs/303", failed: { jobId: 303, reason: "script_failure" } },
     ]);
-    await waitFor(() => expect(heardJobs).toHaveLength(2), SETTLES);
 });
 
 // Identity is the forge's id, and the name is display data: after a rename git and the API follow redirects, the hook
@@ -563,9 +583,10 @@ test("a delivery naming a renamed repository is matched on the repository's id, 
     expect(warned).toEqual(["ci: the repository's remote names it by an old path"]);
 });
 
-// One failed main run, one agent: with Repair on, the default branch's failure is its fix agent's (main-fixer.ts), and
-// an automation told to "push the fix to the branch that failed" would be a second agent pushing to main.
-test("while Repair is on, the default branch's failure events reach no automation; its pass, and other branches, still do", async () => {
+// One failed main run, one agent: while an extension claims main lines (the pipelines extension, with Repair on), the
+// default branch's failure is its fix agent's (main-line-claims.ts), and an automation told to "push the fix to the branch
+// that failed" would be a second agent pushing to main.
+test("while an extension claims main lines, the default branch's failure events reach no automation; its pass, and other branches, still do", async () => {
     const { app, services, prompts } = await harness("wh-repair", {}, true);
     const secret = await services.ciStore.secret();
     await services.ciStore.recordConclusion("web", "main", "success", 1);
@@ -582,7 +603,7 @@ test("while Repair is on, the default branch's failure events reach no automatio
     expect(prompts[1]).toContain("pipeline_failed");
 });
 
-test("while Repair is on, an automation that names the default branch still hears it fail", async () => {
+test("while an extension claims main lines, an automation that names the default branch still hears it fail", async () => {
     const { app, services, prompts } = await harness("wh-repair-main", { branch: "main" }, true);
     const secret = await services.ciStore.secret();
     await services.ciStore.recordConclusion("web", "main", "success", 1);

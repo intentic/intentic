@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
-import { type GitHost, gitHostOf } from "../capabilities/cli/git-access.js";
+import { forgeAccounts } from "../capabilities/cli/git-access.js";
+import type { ForgeProject } from "../forge/projects.js";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { parseRemote, remoteUrlsOf } from "../git/remote/remote-urls.js";
 import { discoverRepos, hasGitEntry } from "../workspace/layout/repo-discovery.js";
@@ -9,28 +10,7 @@ import { discoverRepos, hasGitEntry } from "../workspace/layout/repo-discovery.j
 // github/gitlab capability, which supplies the token and API base (gitHostOf). An unmatched repo (no remote,
 // unconnected host, local path) is a normal state, not an error.
 
-export interface CiProject {
-    // Workspace repo dir ("root" for the workspace repo itself); the id triggers and the view join on.
-    readonly repo: string;
-    // owner/name (github) or the full namespaced path (gitlab); what the provider API addresses.
-    readonly project: string;
-    // The connected account serving this repo's host: provider, hostname, REST base, token.
-    readonly account: GitHost;
-}
-
-/** Every connected github/gitlab account, as the REST calls address it: host, API base and token. */
-export const forgeAccounts = async (capabilities: CapabilitiesStore): Promise<GitHost[]> =>
-    (await capabilities.list()).flatMap((capability) => {
-        if (capability.kind !== "cli" || (capability.config.provider !== "github" && capability.config.provider !== "gitlab")) {
-            return [];
-        }
-        try {
-            return [gitHostOf(capability.config)];
-        } catch {
-            // A gitlab capability with an unparseable instance url maps nothing; it fails its own status probe.
-            return [];
-        }
-    });
+export type CiProject = ForgeProject;
 
 // Every workspace repo (root included) whose remote lands on a connected github/gitlab account.
 export const ciProjects = async (

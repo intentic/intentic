@@ -1,6 +1,8 @@
 import type { CiJobsResponse, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { useQueries } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
+import { backendCall, posting } from "./backendCall";
+import { JOBS_ROUTE } from "./backendRoutes";
 import { failedOf, type JobFailureRun, recurringFailures } from "./failureHistory";
 import { host } from "./host";
 
@@ -20,7 +22,7 @@ export function useFailureHistory(runs: Ref<readonly PipelineRun[]>) {
         queries: computed(() =>
             failedRuns.value.map((run) => ({
                 queryKey: api.sandbox.readKey(`ci.jobs`, { repo: run.repo, runId: run.runId }),
-                queryFn: (): Promise<CiJobsResponse> => api.sandbox.rpc.ci.jobs({ repo: run.repo, runId: run.runId }),
+                queryFn: (): Promise<CiJobsResponse> => backendCall<CiJobsResponse>(api, JOBS_ROUTE, () => api.sandbox.rpc.ci.jobs({ repo: run.repo, runId: run.runId }), posting({ repo: run.repo, runId: run.runId })),
                 enabled: api.sandbox.reachable(),
                 staleTime: 60_000,
             })),

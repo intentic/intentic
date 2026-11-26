@@ -1,0 +1,4 @@
+/* Spread helper for optional fields: `...opt("key", value)` puts the key on the object only when the value is present. */
+export const opt = <K extends PropertyKey, V>(key: K, value: V | undefined): { readonly [P in K]?: V } =>
+    // SAFETY: the one shape the two branches share, `{}` being the key left off.
+    (value === undefined ? {} : { [key]: value }) as { readonly [P in K]?: V };

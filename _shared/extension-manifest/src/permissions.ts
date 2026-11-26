@@ -107,6 +107,8 @@ export const EXTENSION_OWN_ROUTES: readonly string[] = [
     "POST /extension/turn/owner-browser",
     "POST /extension/jobs",
     "POST /extension/jobs/*",
+    // (2026-11-26) A row in the sandbox's activity feed, written as the extension's own.
+    "POST /extension/activity",
 ];
 
 // (2026-11-26) What an extension's own code may hear, hold and run beyond its routes, each a power its manifest declares
@@ -115,8 +117,9 @@ export const EXTENSION_OWN_ROUTES: readonly string[] = [
 
 // Events a backend hears only by declaring them (`permissions.events`): `run`, a run ending in a conversation the
 // extension itself started through POST /agent with its own token; `activity`, whether any agent turn runs in the
-// sandbox. Its settings and the workspace's file, ref and repository changes need no declaration.
-export const EXTENSION_DECLARED_EVENTS = ["run", "activity"] as const;
+// sandbox; (2026-11-26) `ci`, each frame of the CI feed, a run that finished or a job that ended as the forges report
+// them. Its settings and the workspace's file, ref and repository changes need no declaration.
+export const EXTENSION_DECLARED_EVENTS = ["run", "activity", "ci"] as const;
 export type ExtensionDeclaredEvent = (typeof EXTENSION_DECLARED_EVENTS)[number];
 
 // The workload classes `api.exec` runs a command under (`permissions.exec`): `command`, admitted and ranked as an agent's

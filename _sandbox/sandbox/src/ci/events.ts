@@ -3,18 +3,18 @@ import type { ListenerMessage } from "@intentic/sandbox-contract/protocol/doors/
 import { CI_PROVIDER } from "../automations/catalog.js";
 import { dispatchListenerMessage } from "../automations/listeners.js";
 import type { Services } from "../composition.js";
-import { publishCiFeed } from "./feed/ci-feed.js";
-import { runFinished } from "./main-fixer.js";
+import { publishCiFeed } from "../seams/ci-feed-bus.js";
+import { mainLinesClaimed } from "./main-line-claims.js";
 import { isMainLine } from "./main-line.js";
 import type { CiProject } from "./projects.js";
-import type { FetchFn } from "./providers.js";
 
 // Turns a finished PipelineRun into `ci` listener messages for the webhook (ci/webhook.routes.ts) and the poller
 // (ci/poller.ts), and into a `run` frame on the CI feed for programs (feed/ci-feed.ts), however it ended; the
-// previous-conclusion memory is written only here. Canceled and skipped runs produce no message, and
-// only a canceled one reaches main's fix agent. While Repair is on, a repository's main line failing is its one fix agent's (main-fixer.ts), so its failure events reach no
-// automation listening on every branch: one failed main run starts one agent, and none is told to push its own fix to
-// main beside it.
+// previous-conclusion memory is written only here. Canceled and skipped runs produce no message, but reach the feed,
+// where main's fix agent (the pipelines extension's) hears what passed in a cancelled run. While an extension claims main
+// lines' failures (main-line-claims.ts), a repository's main line failing is that extension's one fix agent's, so its
+// failure events reach no automation listening on every branch: one failed main run starts one agent, and none is told
+// to push its own fix to main beside it.
 
 // pipeline_broken/pipeline_fixed fire only when the previous conclusion is known; an unknown one is never guessed as
 // the opposite verdict, so a cold start reports no edges.
@@ -80,51 +80,29 @@ export const rememberCiRun = async (services: Services, run: PipelineRun): Promi
     return previous;
 };
 
-// Whether the run's failure belongs to main's fix agent rather than to the `ci` automations.
-const fixersFailure = async (services: Services, project: CiProject, run: PipelineRun): Promise<boolean> =>
-    run.status === "failed" && (await services.sandboxSettings.get()).autoRepair && (await isMainLine(services, project, run.branch));
+// Whether the run's failure belongs to an extension's fix agent rather than to the `ci` automations.
+const claimedFailure = async (services: Services, project: CiProject, run: PipelineRun): Promise<boolean> =>
+    run.status === "failed" && (await mainLinesClaimed(services)) && (await isMainLine(services, project, run.branch));
 
-export interface DispatchedRun {
-    // The event types the run produced, dispatched or not; empty if not a result.
-    readonly types: readonly string[];
-    // Main's fix agent done with the run: settles, never rejects, once whatever it keeps of it is on file.
-    readonly fixed: Promise<void>;
-}
-
-// Records the run's conclusion, dispatches the matching listener messages and hands the run to main's fix agent.
-// Conclusion is recorded before dispatch, so a wake cannot be replayed as the previous state by the next run. The fix
-// agent's reading is not awaited here: the webhook answers without it, and the poller awaits `fixed` before it records
-// the run as heard.
-export const dispatchCiRun = async (
-    services: Services,
-    project: CiProject,
-    run: PipelineRun,
-    author: { id: string; name: string },
-    fetchFn: FetchFn = fetch,
-): Promise<DispatchedRun> => {
-    // Main's fix agent reads the failed jobs and their logs (main-fixer.ts), which takes a while.
-    const fix = (): Promise<void> =>
-        runFinished(services, run, fetchFn).catch((error: unknown) =>
-            services.logger.warn({ err: error, runId: run.runId }, "ci repair: the finished run could not be read"),
-        );
+// Records the run's conclusion, puts it on the CI feed and dispatches the matching listener messages. Conclusion is
+// recorded before dispatch, so a wake cannot be replayed as the previous state by the next run. Answers the event types
+// the run produced, dispatched or not; empty if not a result.
+export const dispatchCiRun = async (services: Services, project: CiProject, run: PipelineRun, author: { id: string; name: string }): Promise<readonly string[]> => {
     if (!isPipelineInFlight(run.status)) {
-        // First, and whatever it ended as: a program reading the feed (the Deployments extension) decides what a run means.
+        // First, and whatever it ended as: a program reading the feed (the Deployments extension, main's fix agent)
+        // decides what a run means.
         publishCiFeed({ kind: "run", run });
     }
     const result = ciResultOf(run);
     if (result === undefined) {
-        // A cancelled run is no result an automation acts on, but main's fix agent still reads it: what passed in it, and
-        // a job that ran out of time, which GitHub reports as cancelled (forge/github-cancels.ts).
-        return { types: [], fixed: run.status === "canceled" ? fix() : Promise.resolve() };
+        return [];
     }
     const types = typesFor(result, await rememberCiRun(services, run));
     // An automation that names the branch asked for exactly these events (a notice when main fails), so it still hears
     // them; one listening on every branch, as the "Fix failing CI" template does, would be a second agent on main.
-    const hears = (await fixersFailure(services, project, run))
-        ? (trigger: { readonly branch?: string | undefined }) => trigger.branch !== undefined
-        : undefined;
+    const hears = (await claimedFailure(services, project, run)) ? (trigger: { readonly branch?: string | undefined }) => trigger.branch !== undefined : undefined;
     for (const type of types) {
         await dispatchListenerMessage(services, ciMessageOf(run, type, author), undefined, undefined, hears);
     }
-    return { types, fixed: fix() };
+    return types;
 };

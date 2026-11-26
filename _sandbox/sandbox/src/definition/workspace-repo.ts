@@ -8,9 +8,9 @@ import type { NeedsAction } from "@intentic/sandbox-contract/policy/needs-action
 import type { DefinitionWorkspace, WorkspacePublish, WorkspacePublishResult, WorkspaceRemote } from "@intentic/sandbox-contract/state/definition";
 import { defaultGit, type GitRunner } from "@intentic/base/git";
 import { isPublicPath } from "@intentic/workspace-ignore";
-import { z } from "zod";
-import { type GitHost, gitHostOf, githubHeaders } from "../capabilities/cli/git-access.js";
-import { createGitlabProject } from "./gitlab-project.js";
+import { forgeClientFor } from "../forge/client.js";
+import { forgeAccounts } from "../capabilities/cli/git-access.js";
+import { WorkspaceRemoteError } from "../forge/projects.js";
 import { parseExtensionManifest, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import { extensionEnablementDocument } from "../capabilities/extension-inventory/extension-enablement.js";
@@ -28,8 +28,6 @@ import { DEFINITION_SOURCES } from "./definition.js";
 // Publishes /work and adopts a published workspace into a fresh one. The exclude list tracks only owner-authored
 // content (notes, skills, roles, automations, approvals, extensions). A foreign tree is preflighted and rewritten
 // inert in a detached worktree before it ever touches /work; nothing unsafe is checked out live.
-
-export class WorkspaceRemoteError extends Error {}
 
 // The automations document lives a layer above this one (automations/), so the caller that may import it hands it in:
 // the staged file is then read the way the scheduler's own store reads it, its conversions and all.
@@ -51,20 +49,6 @@ const gitRefusal = (error: unknown, fallback: string): string => {
     return lines.length === 0 ? fallback : lines.join(" ");
 };
 
-// Connected github/gitlab accounts, in the order a publish would try them.
-const gitHosts = async (services: Services): Promise<GitHost[]> =>
-    (await services.capabilities.list()).flatMap((capability) => {
-        if (capability.kind !== "cli" || (capability.config.provider !== "github" && capability.config.provider !== "gitlab")) {
-            return [];
-        }
-        try {
-            return [gitHostOf(capability.config)];
-        } catch {
-            // An unparseable gitlab instance url publishes nowhere; it fails its own probe.
-            return [];
-        }
-    });
-
 // A repo's remote URL, or undefined; every failure here (no remote, unreadable URL) is an ordinary state, not an
 // exception.
 const remoteUrlOf = async (dir: string, git: GitRunner): Promise<{ remote?: string; branch?: string }> => {
@@ -84,7 +68,7 @@ export const workspaceRemoteUrl = async (root: string, git: GitRunner = defaultG
 // Where /work stands and could go: published or not, and which hosts could publish it. Read-only.
 export const workspaceRemote = async (services: Services, git: GitRunner = defaultGit): Promise<WorkspaceRemote> => ({
     ...(await remoteUrlOf(services.workspace.root, git)),
-    hosts: (await gitHosts(services)).map((host) => host.host),
+    hosts: (await forgeAccounts(services.capabilities)).map((host) => host.host),
 });
 
 // Whether a definition may materialize a workspace here: the exact baseline sha (in protected git config) must match
@@ -367,59 +351,6 @@ export const adoptWorkspaceRemote = async (
     }
 };
 
-// Publishing: the half a definition cannot do for itself, since naming a remote requires one to exist; its own
-// owner-gated route, since publishing is outward and deriving stays read-only. What travels is root's exclude list
-// already: nested repos, the reference shelf, .intentic/local and /secrets, .env*, junk dirs.
-
-// What a failed lookup logs: the status github answered with, or why nothing came back at all.
-export type LoginLookupWarn = (fields: { readonly status?: number; readonly err?: string }, message: string) => void;
-type Fetcher = (url: string, init: { readonly headers: Record<string, string> }) => Promise<Response>;
-const GithubUserSchema = z.object({ login: z.string() });
-
-// The login the token authenticates as, to tell the owner's own account from an organization. A lookup that fails (a
-// token that cannot read its user, a network error, an answer that is not JSON) is logged with its reason and read as
-// no login: the owner is then taken for an organization, whose endpoint answers for itself, and publishing goes on
-// rather than stopping at a question it did not need answered.
-export const githubLogin = async (host: Pick<GitHost, "apiBase" | "token">, warn: LoginLookupWarn, fetcher: Fetcher = fetch): Promise<string | undefined> => {
-    const unread = "publish: github would not say which account this token is, so the owner is taken for an organization";
-    try {
-        const user = await fetcher(`${host.apiBase}/user`, { headers: githubHeaders(host.token) });
-        if (!user.ok) {
-            warn({ status: user.status }, unread);
-            return undefined;
-        }
-        return GithubUserSchema.safeParse(await user.json()).data?.login;
-    } catch (error) {
-        warn({ err: errorMessage(error) }, unread);
-        return undefined;
-    }
-};
-
-export const created = async (host: GitHost, name: string, owner: string | undefined, warn: LoginLookupWarn, fetcher: typeof fetch = fetch): Promise<string> => {
-    if (host.provider === "gitlab") {
-        return createGitlabProject(host, name, owner, fetcher);
-    }
-    // github: an owner other than the authenticated user is an organization, with its own endpoint. No owner named is
-    // the token's own account, with nothing to look up.
-    const login = owner === undefined ? undefined : await githubLogin(host, warn, fetcher);
-    const path = owner === undefined || owner === login ? "/user/repos" : `/orgs/${encodeURIComponent(owner)}/repos`;
-    const response = await fetcher(`${host.apiBase}${path}`, {
-        method: "POST",
-        headers: { ...githubHeaders(host.token), "Content-Type": "application/json" },
-        body: JSON.stringify({ name, private: true, auto_init: false }),
-    });
-    if (!response.ok) {
-        throw new WorkspaceRemoteError(
-            `${host.host} refused to create "${name}": ${response.status} ${await response.text().catch(() => "")}`.trim(),
-        );
-    }
-    const body = (await response.json().catch(() => ({}))) as { clone_url?: string };
-    if (typeof body.clone_url !== "string" || body.clone_url === "") {
-        throw new WorkspaceRemoteError(`${host.host} created the repository but returned no clone URL`);
-    }
-    return body.clone_url;
-};
-
 // Repo name derived from the sandbox's name, recognizable in a repo list; empty or unusable falls back to a fixed name.
 const repoNameFrom = (name: string): string => {
     const cleaned = name
@@ -439,13 +370,18 @@ export const publishWorkspace = async (services: Services, input: WorkspacePubli
     const supplied = (input.remote ?? "").trim();
     let remote = supplied;
     if (remote === "") {
-        const host = (await gitHosts(services))[0];
+        const host = (await forgeAccounts(services.capabilities))[0];
         if (host === undefined) {
             throw new WorkspaceRemoteError(
                 "no github or gitlab account is connected, so there is nowhere to create the repository; connect one, or paste a URL you made yourself",
             );
         }
-        remote = await created(host, repoNameFrom(input.name ?? services.config.sandbox.name), input.owner, (fields, message) => services.logger.warn(fields, message));
+        remote = await forgeClientFor(host.provider).createRepository(
+            host,
+            repoNameFrom(input.name ?? services.config.sandbox.name),
+            input.owner,
+            (fields, message) => services.logger.warn(fields, message),
+        );
     }
     await git(root, ["remote", "add", "origin", remote]).catch((error: unknown) => {
         throw new WorkspaceRemoteError(gitRefusal(error, "could not add the workspace remote"));

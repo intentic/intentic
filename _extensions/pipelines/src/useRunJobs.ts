@@ -1,6 +1,8 @@
 import { type CiJobsResponse, isPipelineInFlight, type PipelineJob, type PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import { hashKey, useQueryClient } from "@tanstack/vue-query";
 import { computed, onScopeDispose, type Ref, toValue, watch } from "vue";
+import { backendCall, posting } from "./backendCall";
+import { JOBS_ROUTE } from "./backendRoutes";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
 
@@ -45,7 +47,7 @@ export function useRunJobs(run: Ref<PipelineRun | undefined>) {
         queryKey,
         queryFn: (): Promise<CiJobsResponse> => {
             const r = run.value!;
-            return api.sandbox.rpc.ci.jobs({ repo: r.repo, runId: r.runId });
+            return backendCall<CiJobsResponse>(api, JOBS_ROUTE, () => api.sandbox.rpc.ci.jobs({ repo: r.repo, runId: r.runId }), posting({ repo: r.repo, runId: r.runId }));
         },
         enabled,
         refetchInterval: computed(() => jobsPollMs(run.value)),

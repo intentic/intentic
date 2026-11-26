@@ -1,0 +1,162 @@
+import { errorMessage } from "@intentic/base/errors";
+import type { PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import { FIX_LOG_BYTES } from "./ci-fix.js";
+import { jobVerdict, machineOf } from "./fleet-verdict.js";
+import { type FailedJob, heardOf } from "./main-streak.js";
+import { opt } from "./opt.js";
+import { type CiProject, orElse, type Repair, tell } from "./repair.js";
+import { resetRunnerWhereabouts, type RunnerWhereabouts, runnerWhereabouts, whereaboutsWords } from "./runner-whereabouts.js";
+
+/* MAIN'S FAILED JOBS THE CI FLEET FAILED. main-fixer.ts asks here whether a failed job is the fleet's (fleet-verdict.ts)
+   before parking it for the fix agent: a runner that crashed, lost its connection or was shut down starts nobody. A run
+   only the fleet failed has its failed jobs re-run once, with a notice naming each job's runner, machine and what
+   happened; failing on the fleet again is said and left to the owner. A job that only might be the fleet's (a timeout
+   with no step of its own failing) is re-run once first, and is the agent's when the re-run fails it again. */
+
+// A failed job judged the fleet's (or only possibly: `ambiguous`), with what it says happened and where.
+interface FleetJob {
+    readonly job: FailedJob;
+    readonly says: string;
+    readonly ambiguous: boolean;
+    // The machine its runner ran on, as its log's first lines name it.
+    readonly machine?: string;
+    // The connected computer that has its runner, and the runner's unit and state there, where one says so.
+    readonly found?: RunnerWhereabouts;
+}
+
+// What only this process holds, as main-fixer.ts's own: the fleet jobs already judged, so a job's log is not read twice
+// for them, and the repositories whose token was refused a re-run, said to the log once each. A restart replays the runs
+// since main's failure began (resumeMainFixer), which judges them again.
+const fleetJobs = new Map<string, FleetJob>();
+const rerunRefused = new Set<string>();
+
+const keyOf = (repo: string, job: Pick<FailedJob, "runId" | "jobId">): string => `${repo}/${heardOf(job)}`;
+
+/** Whether the job was judged the fleet's already. */
+export const isFleetJob = (repo: string, job: Pick<FailedJob, "runId" | "jobId">): boolean => fleetJobs.has(keyOf(repo, job));
+
+/** The run's failed jobs judged the fleet's, in the order they were heard. */
+export const fleetOf = (repo: string, runId: number): readonly FleetJob[] =>
+    [...fleetJobs].filter(([key]) => key.startsWith(`${repo}/${runId}/`)).map(([, fleet]) => fleet);
+
+// Where a fleet job ran, in a notice's words: the computer that has its runner and the runner's unit and state there
+// when one of the owner's connected computers said so, else the runner and the hostname its log named.
+const whereWords = ({ job, machine, found }: FleetJob): string | undefined => {
+    if (found !== undefined) {
+        return `runner ${whereaboutsWords(found)}`;
+    }
+    const where = [job.runner === undefined ? undefined : `runner ${job.runner}`, machine === undefined ? undefined : `on ${machine}`].filter(
+        (part) => part !== undefined,
+    );
+    return where.length === 0 ? undefined : where.join(" ");
+};
+
+// Each fleet job in the words a notice or a prompt names it by: the job, the runner and machine it ran on, what happened.
+const fleetWords = (fleet: readonly FleetJob[]): string =>
+    fleet
+        .map((fleetJob) => {
+            const where = whereWords(fleetJob);
+            return `"${fleetJob.job.name}"${where === undefined ? "" : ` (${where})`}: ${fleetJob.says}`;
+        })
+        .join("; ");
+
+/** What the fix agent is told of the run's jobs left out of its list as the fleet's, when there are any. */
+export const leftOut = (fleet: readonly FleetJob[]): readonly string[] =>
+    fleet.length === 0
+        ? []
+        : [
+              `Left out of that list, as the CI runners' failures rather than the code's: ${fleetWords(fleet)}. They are not yours to fix or to diagnose; the next run measures them again.`,
+          ];
+
+/** Whether a failed job is the fleet's, judged from its annotations, steps, reason and log, and kept when it is. A job's
+ *  own webhook carries no annotations, so they are read here. One that only might be the fleet's is, until its run has
+ *  had its one re-run, unless `ambiguousIsCode` (its run is some code's failure, or could not be re-run). */
+export const judgedFleet = async (repair: Repair, project: CiProject, job: FailedJob, log: string, ambiguousIsCode: boolean): Promise<boolean> => {
+    const annotations =
+        job.annotations ??
+        (await orElse(repair, repair.daemon.annotations(project.repo, job.jobId), [], "ci repair: the failed job's annotations could not be read", {
+            repo: project.repo,
+            jobId: job.jobId,
+        }));
+    const verdict = jobVerdict({ ...job, annotations }, log.slice(-FIX_LOG_BYTES));
+    if (verdict.kind === "code") {
+        return false;
+    }
+    if (verdict.kind === "ambiguous" && (ambiguousIsCode || (await repair.store.fleetRerunDone(project.repo, job.runId)))) {
+        return false;
+    }
+    // Asked only once the job is the fleet's, and best-effort: a computer that does not answer leaves the log's hostname.
+    const found = job.runner === undefined ? undefined : await runnerWhereabouts(repair.daemon, job.runner);
+    fleetJobs.set(keyOf(project.repo, job), {
+        job: { ...job, annotations },
+        says: verdict.says,
+        ambiguous: verdict.kind === "ambiguous",
+        ...opt("machine", machineOf(log)),
+        ...opt("found", found),
+    });
+    return true;
+};
+
+/** A run's jobs that only might be the fleet's, of those it lists now (`jobIds`: a re-run made its jobs anew), forgotten as
+ *  the fleet's so they are judged again as the agent's. */
+export const releaseAmbiguous = (repo: string, runId: number, jobIds: readonly number[]): readonly FailedJob[] => {
+    const released = fleetOf(repo, runId).filter(({ ambiguous, job }) => ambiguous && jobIds.includes(job.jobId));
+    for (const { job } of released) {
+        fleetJobs.delete(keyOf(repo, job));
+    }
+    return released.map(({ job }) => job);
+};
+
+/** A run only the fleet failed: its failed jobs re-run once, kept on file so a restart that hears of it again does not
+ *  re-run it twice, and the owner told which runner did what; failing on the fleet again is said and left to them. When
+ *  the token may not re-run, the owner is told so, and the jobs that only might be the fleet's are answered back for the
+ *  agent, as before there was a re-run. */
+export const rerunFleet = async (repair: Repair, project: CiProject, run: PipelineRun): Promise<readonly FailedJob[]> => {
+    const fleet = fleetOf(run.repo, run.runId);
+    const words = fleetWords(fleet);
+    if (!(await repair.store.fleetRerun(run.repo, run.runId))) {
+        tell(
+            repair,
+            "ci.fleet_failed",
+            `Run ${run.runId} of ${run.repo} failed on the CI fleet again after a re-run, so nobody was sent: ${words}. The runners need a look, not the code.`,
+            "error",
+        );
+        return [];
+    }
+    try {
+        await repair.daemon.rerunFailed(project.repo, run.runId);
+    } catch (error) {
+        if (!rerunRefused.has(run.repo)) {
+            rerunRefused.add(run.repo);
+            repair.logger.warn(
+                { repo: run.repo, runId: run.runId, err: errorMessage(error) },
+                "ci repair: the fleet re-run was refused; runs the fleet failed are left to the owner",
+            );
+        }
+        tell(
+            repair,
+            "ci.fleet_failed",
+            `Run ${run.runId} of ${run.repo} failed on the CI fleet, not in the code, and could not be re-run from here: ${words}. Re-run its failed jobs once the runner is back.`,
+            "error",
+        );
+        return releaseAmbiguous(run.repo, run.runId, fleet.map(({ job }) => job.jobId));
+    }
+    // The re-run makes the run's jobs anew: what its first attempt's said is no word on its next.
+    for (const { job } of fleet) {
+        fleetJobs.delete(keyOf(run.repo, job));
+    }
+    tell(
+        repair,
+        "ci.fleet_rerun",
+        `Run ${run.runId} of ${run.repo} failed on the CI fleet, not in the code, so nobody was sent: ${words}. Its failed jobs were re-run once.`,
+        "ok",
+    );
+    return [];
+};
+
+/** Test seam: forget what only this process holds, as a restart does. */
+export const resetMainFleet = (): void => {
+    fleetJobs.clear();
+    rerunRefused.clear();
+    resetRunnerWhereabouts();
+};

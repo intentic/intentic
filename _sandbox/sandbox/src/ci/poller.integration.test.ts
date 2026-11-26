@@ -16,14 +16,14 @@ import { fileSendersStore } from "../automations/senders-store.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { fileCiStore } from "./ci-store.js";
 import { createCiPoller } from "./poller.js";
-import type { FetchFn } from "./providers.js";
+import type { FetchFn } from "../forge/http.js";
 import { createRunsCache } from "./runs-cache.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { drivenBy } from "../seams/turn-starter.testing.js";
 import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 import { createDomainEvents } from "../seams/domain-events.js";
 import type { CiFeedEvent } from "@intentic/sandbox-contract/schemas/ci";
-import { subscribeCiFeed } from "./feed/ci-feed.js";
+import { subscribeCiFeed } from "../seams/ci-feed-bus.js";
 
 // What a program reading GET /ci/feed hears (ci-feed.ts), every frame since the suite began.
 const heardFeed: CiFeedEvent[] = [];
@@ -35,18 +35,6 @@ subscribeCiFeed((event) => void heardFeed.push(event));
 // sampler (tmux, procfs) for a fact these tests state in one line.
 const { published } = { published: [] as string[] };
 jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
-
-// The runs still going that reach main's fix agent, recorded at its door: what it does with them is
-// main-fixer.integration.test.ts's.
-const inFlight: number[] = [];
-// What main's fix agent does with a finished run, swappable per test: nothing, unless a test says.
-const fixer = { finished: async (_services: Services, _run: { runId: number }): Promise<void> => {} };
-jest.mock("./main-fixer.js", () => ({
-    runInFlight: async (_services: unknown, _project: unknown, pipeline: { runId: number }) => {
-        inFlight.push(pipeline.runId);
-    },
-    runFinished: (services: Services, pipeline: { runId: number }) => fixer.finished(services, pipeline),
-}));
 
 const run = (id: number, conclusion: string | null, branch = "main", status = "completed") => ({
     id,
@@ -91,9 +79,9 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         // The automation inboxes (durable/inbox-store.ts) live beside the holds.
         config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
         ciStore: fileCiStore(join(root, `${STATE_DIR}`, "secrets", "ci.json")),
-        // Repair off: with it on, main's failures are its fix agent's and wake no automation (events.ts), and these tests
-        // are about what an automation hears.
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ autoRepair: false }) }),
+        // What a wake reads of the sandbox's settings: its defaults. No extension claims main lines here, so main's
+        // failures reach these automations (events.ts).
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         ciRuns: createRunsCache(60_000),
         ciHooks: unstubbed<Services["ciHooks"]>("ciHooks", {
             warnings: () => new Map(warned ? [["web", { reason: "Pipeline webhooks are off: this sandbox has no public URL." }]] : []),
@@ -192,38 +180,29 @@ test("the branch filter applies on the polled path exactly as on the webhook pat
     expect(prompts).toEqual([]);
 });
 
-// Where no job webhook is live, the poller is how a job that failed in a run still going is heard.
-test("a run still going is handed to main's fix agent, which reads the jobs it already failed; the first pass adopts it", async () => {
+// Where no job webhook is live, the poller is how a job that failed in a main line's run still going is heard: on the CI
+// feed, with what the forge said of it, as the job's webhook would have put it (main's fix agent hears it there).
+test("a main line's run still going puts each job it already failed on the CI feed; the first pass adopts it", async () => {
     const { poller, publish } = await harness(true);
-    inFlight.length = 0;
-    publish([run(3, null, "main", "in_progress"), run(1, "success")]);
+    publish([run(3, null, "main", "in_progress"), run(4, null, "agent/x", "in_progress"), run(1, "success")]);
     await poller.poll();
-    expect(inFlight).toEqual([]);
+    heardFeed.length = 0;
     await poller.poll();
-    expect(inFlight).toEqual([3]);
-});
-
-// A run recorded as announced is never announced again, so main's fix agent must have it on file first: a crash between
-// the two re-announces it rather than losing main's failure.
-test("a run is recorded as announced only after main's fix agent is done with it", async () => {
-    const { services, poller, publish } = await harness(true);
-    await poller.poll();
-    publish([run(2, "failure"), run(1, "success")]);
-    const announcedWhenDone: (number[] | undefined)[] = [];
-    fixer.finished = async (seen, pipeline) => {
-        // Its own reads and writes take a while; the poller must not run ahead of them.
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        if (pipeline.runId === 2) {
-            announcedWhenDone.push(await seen.ciStore.announcedRuns("web"));
-        }
-    };
-    try {
-        await poller.poll();
-    } finally {
-        fixer.finished = async () => {};
-    }
-    expect(announcedWhenDone).toEqual([[1]]);
-    expect(await services.ciStore.announcedRuns("web")).toEqual([2, 1]);
+    expect(heardFeed).toEqual([
+        {
+            kind: "job",
+            repo: "web",
+            host: "github",
+            project: "acme/web",
+            runId: 3,
+            job: "lint",
+            branch: "main",
+            sha: "sha3",
+            status: "failed",
+            url: "https://github.com/acme/web/actions/runs/3",
+            failed: { jobId: 1 },
+        },
+    ]);
 });
 
 // A revoked token used to be asked, and logged as refused, every pass for hours.

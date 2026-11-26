@@ -1,25 +1,24 @@
 import { createHmac } from "node:crypto";
 import { keyedLock } from "@intentic/base/async";
-import type { CiFeedEvent, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
+import type { CiFeedEvent, CiJobFailure, PipelineRun } from "@intentic/sandbox-contract/schemas/ci";
 import type { Context } from "hono";
 import { tokenEquals } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { dispatchCiRun } from "./events.js";
-import { jobFailed } from "./main-fixer.js";
-import type { FailedJob } from "./main-streak.js";
+import { forgeClientFor as ciClientFor } from "../forge/client.js";
+import type { FetchFn } from "../forge/http.js";
 import {
-    ciClientFor,
-    type FetchFn,
     type GithubRun,
     githubRun,
     githubStatus,
     type GitlabPipelineHook,
     gitlabHookRun,
     gitlabStatus,
-} from "./providers.js";
-import { ciFeedRoute, publishCiFeed } from "./feed/ci-feed.js";
+} from "../forge/runs.js";
+import { publishCiFeed } from "../seams/ci-feed-bus.js";
+import { ciFeedRoute } from "./feed/ci-feed.js";
 import { opt } from "../opt.js";
 import { forgeOf } from "./main-line.js";
 import { ciProjects, type CiProject } from "./projects.js";
@@ -28,10 +27,11 @@ import { readBoundedText } from "../http/bounded-body.js";
 
 // Public webhook receiver, gated by the per-sandbox secret (github HMACs the body, gitlab echoes it as a token); one
 // route for both vendors. An unmapped project's delivery is acknowledged and dropped, not an error. Verifies the sender
-// and normalizes into a PipelineRun, or a failed job; what a finished run means is ci/events.ts, shared with the poller,
-// and a failed job goes to main's fix agent (main-fixer.ts). Either is answered as soon as it is understood, and what
-// it sets going runs off the delivery's clock: GitHub calls a delivery failed that takes ten seconds to answer, and one
-// run's failed jobs read and dispatched inline took a minute.
+// and normalizes into a PipelineRun, or a job that ended; what a finished run means is ci/events.ts, shared with the
+// poller, and a job that ended goes on the CI feed, a failed one with what the forge said of its failure, which main's
+// fix agent hears there (the pipelines extension, since 2026-11-26). Either is answered as soon as it is understood, and
+// what it sets going runs off the delivery's clock: GitHub calls a delivery failed that takes ten seconds to answer, and
+// one run's failed jobs read and dispatched inline took a minute.
 
 interface GithubDelivery {
     readonly action?: string;
@@ -110,44 +110,26 @@ const projectOf = async (services: Services, host: "github" | "gitlab", sender: 
     return candidates.find((candidate) => candidate.project.toLowerCase() === wanted);
 };
 
-// A job that failed, as main's fix agent hears of it; undefined for any other phase or outcome, and for a GitLab job
-// allowed to fail, which fails nothing.
-const githubFailedJob = (job: GithubJob): FailedJob | undefined => {
+// What the forge said of a job that failed, for its frame on the CI feed; undefined for any other phase or outcome, and for
+// a GitLab job allowed to fail, which fails nothing. A job's own webhook carries no annotations, and says nothing of what
+// set its run off, which the run's own deliveries said (`trigger`, from the runs cache).
+const githubJobFailure = (job: GithubJob): CiJobFailure | undefined => {
     if (job.conclusion === undefined || job.conclusion === null || githubStatus("completed", job.conclusion) !== "failed") {
         return undefined;
     }
     const steps = (job.steps ?? []).filter((step) => step.conclusion === "failure").map((step) => step.name);
-    return {
-        runId: job.run_id,
-        jobId: job.id,
-        name: job.name,
-        branch: job.head_branch ?? "",
-        workflow: job.workflow_name ?? undefined,
-        sha: job.head_sha,
-        url: job.html_url ?? undefined,
-        step: steps[0],
-        steps,
-        runner: job.runner_name ?? undefined,
-    };
+    return { jobId: job.id, ...opt("step", steps[0]), steps, ...opt("runner", job.runner_name ?? undefined) };
 };
 
-const gitlabFailedJob = (hook: GitlabJobHook): FailedJob | undefined =>
+const gitlabJobFailure = (hook: GitlabJobHook): CiJobFailure | undefined =>
     hook.build_status !== "failed" || hook.build_allow_failure === true || hook.tag === true
         ? undefined
-        : {
-              runId: hook.pipeline_id,
-              jobId: hook.build_id,
-              name: hook.build_name,
-              branch: hook.ref,
-              sha: hook.sha,
-              url: hook.project.web_url === undefined ? undefined : `${hook.project.web_url}/-/jobs/${hook.build_id}`,
-              reason: hook.build_failure_reason,
-          };
+        : { jobId: hook.build_id, ...opt("reason", hook.build_failure_reason) };
 
 // A job that ended, passed or failed, as the CI feed tells a program of it (feed/ci-feed.ts): the Deployments extension
-// deploys the moment the job publishing its images passes, before the rest of its run ends. Only the forge's own
-// verdicts: a job still going is not one, and a GitLab tag's job names no branch.
-type CompletedJob = Omit<Extract<CiFeedEvent, { kind: "job" }>, "kind" | "repo" | "project">;
+// deploys the moment the job publishing its images passes, before the rest of its run ends, and main's fix agent hears a
+// failed one. Only the forge's own verdicts: a job still going is not one, and a GitLab tag's job names no branch.
+type CompletedJob = Omit<Extract<CiFeedEvent, { kind: "job" }>, "kind" | "repo" | "project" | "failed">;
 
 const githubCompletedJob = (job: GithubJob, webBase: string): CompletedJob | undefined =>
     job.conclusion === undefined || job.conclusion === null || job.head_sha === undefined || job.head_branch === undefined || job.head_branch === null
@@ -199,9 +181,8 @@ const announceRun = async (
     services.ciRuns.upsert(run);
     // Every delivery, in-flight or finished, is when the board and CI-shaped watches learn a run moved (2026-10-20).
     publishRuntimeChange("ci");
-    // Main's fix agent reads the run on its own clock: `fixed` is left to settle by itself. A run still in flight
-    // dispatches nothing: automations and the fix agent hear a result only (ciResultOf).
-    await dispatchCiRun(services, project, run, author, fetchFn);
+    // A run still in flight dispatches nothing: automations and the feed hear one that ended only (ciResultOf).
+    await dispatchCiRun(services, project, run, author);
 };
 
 // What a delivery says: who sent it, and a run normalizer or a job that moved (failed, perhaps); undefined for a ping or an
@@ -212,7 +193,8 @@ interface Understood {
     readonly author: { readonly id: string; readonly name: string };
     readonly toRun?: (project: { repo: string; project: string }) => PipelineRun;
     readonly jobMoved: boolean;
-    readonly failedJob?: FailedJob | undefined;
+    // What the forge said of a job that failed, which rides its frame (`failed`).
+    readonly failure?: CiJobFailure | undefined;
     // A job that ended, for the CI feed; its URL is the forge's, or built from the project's page once that is known.
     readonly completedJob?: ((webBase: string) => CompletedJob | undefined) | undefined;
 }
@@ -228,7 +210,7 @@ const githubDeliveryOf = (event: string | undefined, delivery: GithubDelivery): 
             sender,
             author: { id: "github", name: "github" },
             jobMoved: true,
-            failedJob: delivery.action === "completed" ? githubFailedJob(job) : undefined,
+            failure: delivery.action === "completed" ? githubJobFailure(job) : undefined,
             completedJob: delivery.action === "completed" ? (webBase) => githubCompletedJob(job, webBase) : undefined,
         };
     }
@@ -256,7 +238,7 @@ const gitlabDeliveryOf = (event: string | undefined, payload: Partial<GitlabJobH
             sender: gitlabSender(delivery.project),
             author: { id: "gitlab", name: "gitlab" },
             jobMoved: true,
-            failedJob: gitlabFailedJob(hook),
+            failure: gitlabJobFailure(hook),
             completedJob: (webBase) => gitlabCompletedJob(hook, webBase),
         };
     }
@@ -276,20 +258,23 @@ const gitlabDeliveryOf = (event: string | undefined, payload: Partial<GitlabJobH
     };
 };
 
-// A job that ended, handed on: to the CI feed, passed or failed, and a failure to main's fix agent off the delivery's
-// clock (reading its log and starting or telling the agent takes a while). Whether the delivery was one.
-const handedOffJob = (services: Services, project: CiProject, understood: Understood, fetchFn: FetchFn): boolean => {
-    const { failedJob } = understood;
+// A job that ended, handed on to the CI feed, passed or failed, a failure with what the forge said of it and what set its
+// run off where the runs cache knows. Whether the delivery was one.
+const handedOffJob = (services: Services, project: CiProject, understood: Understood): boolean => {
     const completed = understood.completedJob?.(`${project.account.scheme}://${project.account.host}/${project.project}`);
-    if (completed !== undefined) {
-        publishCiFeed({ kind: "job", ...completed, repo: project.repo, project: project.project });
+    if (completed === undefined) {
+        return false;
     }
-    if (failedJob !== undefined) {
-        void jobFailed(services, project, failedJob, fetchFn).catch((error: unknown) =>
-            services.logger.warn({ err: error, repo: project.repo, jobId: failedJob.jobId }, "ci repair: the failed job could not be handled"),
-        );
-    }
-    return completed !== undefined || failedJob !== undefined;
+    const { failure } = understood;
+    const trigger = failure === undefined ? undefined : services.ciRuns.known(project.repo, completed.runId)?.trigger;
+    publishCiFeed({
+        kind: "job",
+        ...completed,
+        repo: project.repo,
+        project: project.project,
+        ...opt("failed", failure === undefined ? undefined : { ...failure, ...opt("trigger", trigger) }),
+    });
+    return true;
 };
 
 // Ample room for a workflow run or job delivery, while bounding the memory an unauthenticated caller can make the
@@ -357,7 +342,7 @@ export const createCiWebhookRoute = (services: Services, fetchFn: FetchFn = fetc
             // A job's phase is not in the runs cache, but an open run's job graph and a watch on it read it fresh.
             publishRuntimeChange("ci");
         }
-        if (handedOffJob(services, project, understood, fetchFn)) {
+        if (handedOffJob(services, project, understood)) {
             return c.json({ ok: true });
         }
         if (toRun === undefined) {

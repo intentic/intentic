@@ -14,7 +14,7 @@ import { createExtensionToolsEndpoint } from "./extension-mcp.js";
 
 // A CARD'S TOOLS FROM THE TURN'S OWN SHELL (2026-11-26), `POST /tools/<card>`: the server the turn's MCP door already
 // mounted for a card (`contributes.tools.perCard`, answered by the extension's backend from `api.tools.serve`), reached by
-// that card's own command-line tool instead of the model. It is how `imap` and `m365` keep their commands while the
+// that card's own command-line tool instead of the model, or an extension's own server the turn mounted by its name. It is how `imap` and `m365` keep their commands while the
 // card's credential stays in the backend: the CLI sends what it read from the workspace, the backend uses the
 // credential, and the owner's rules are decided at the daemon's outward-action door (capabilities/broker/outward-door.ts).
 // The rule the devices door holds to (hosts/device-door.routes.ts): the conversation a shell names is believed only with
@@ -37,11 +37,13 @@ const RequestSchema = z.object({
 });
 
 // The card's tools under `name` among what the conversation's live turns hold: by the card's id, or by the id its
-// environment suffix spells, which is all a CLI knows of a card (`IMAP_HOST_OFFICE` for `office`).
+// environment suffix spells, which is all a CLI knows of a card (`IMAP_HOST_OFFICE` for `office`). (2026-11-26) Or an
+// extension's own server, by the name the turn mounted it under (the extension's `name`), served by its backend: how
+// `agents ci` reads what main's CI fails on from the pipelines extension, which keeps it.
 export const cardToolsIn = (mounted: ReadonlyMap<string, MountTarget>, name: string): ToolsTarget | undefined => {
     const exact = mounted.get(name);
     const found =
-        exact?.kind === "tools" && exact.card !== undefined
+        exact?.kind === "tools"
             ? exact
             : [...mounted.values()].find((target) => target.kind === "tools" && target.card !== undefined && envSuffix(target.card) === envSuffix(name));
     return found?.kind === "tools" ? found : undefined;

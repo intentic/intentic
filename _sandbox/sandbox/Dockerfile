@@ -329,7 +329,6 @@ COPY _extensions/activity/intentic-extension.json /opt/extensions/activity/
 COPY _extensions/approvals/intentic-extension.json /opt/extensions/approvals/
 COPY _extensions/automations/intentic-extension.json /opt/extensions/automations/
 COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history/
-COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
 COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
 # onlyoffice is both: its viewer is compiled into the web bundle like the rows above, and its dist is what the daemon's
@@ -343,6 +342,11 @@ COPY --from=trees extensions/onlyoffice/dist /opt/extensions/onlyoffice/dist
 # (`server.js`) that reads a monorepo's package graph and one package's layers for the Dependencies view.
 COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/
 COPY --from=trees extensions/repo-apps/dist /opt/extensions/repo-apps/dist
+# pipelines is both too (2026-11-26, the daemon's own ci/ repair until then): its views are compiled into the web bundle,
+# and its dist is the backend (`server.js`: main's one fix agent, the board's runs, jobs graph, forget and Fix, and the
+# `main_failures` tool `agents ci` reads).
+COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
+COPY --from=trees extensions/pipelines/dist /opt/extensions/pipelines/dist
 # connectors' dist is its backend (`server.js`): the npm and GitHub release watch kinds' checks. Its cards, skills and
 # image fragments come with the COPY of the whole directory above, which .dockerignore leaves the dist out of.
 COPY --from=trees extensions/connectors/dist /opt/extensions/connectors/dist

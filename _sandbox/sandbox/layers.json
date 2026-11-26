@@ -49,6 +49,7 @@
             "about": "what the owner connected: capabilities, browsers, devices, extensions, channels and published files",
             "units": [
                 "capabilities",
+                "forge",
                 "browser",
                 "desktop",
                 "webext",
@@ -73,7 +74,7 @@
         },
         {
             "name": "orchestration",
-            "about": "what starts and steers turns on its own: automations, loops, workflows, CI repair, needs, settings, and what reconciles the connections hub",
+            "about": "what starts and steers turns on its own: automations, loops, workflows, CI ingestion, needs, settings, and what reconciles the connections hub",
             "units": [
                 "automations",
                 "compliance",

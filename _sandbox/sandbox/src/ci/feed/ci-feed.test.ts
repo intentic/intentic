@@ -2,7 +2,8 @@ import type { CiFeedEvent } from "@intentic/sandbox-contract/schemas/ci";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
-import { ciFeedRoute, publishCiFeed } from "./ci-feed.js";
+import { publishCiFeed } from "../../seams/ci-feed-bus.js";
+import { ciFeedRoute } from "./ci-feed.js";
 
 // The CI feed as a program reads it (ci-feed.ts): Server-Sent Events, a comment as it opens, one `data:` line of JSON per
 // frame in the order published, a comment on a beat while nothing is said, and nothing kept for a reader once it lets go.

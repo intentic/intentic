@@ -5,8 +5,8 @@ import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { createDefinitions } from "./apply-definition.js";
 import { DefinitionFormatError } from "./definition.js";
-import { publishWorkspace, workspaceRemote, WorkspaceRemoteError } from "./workspace-repo.js";
-import { GitlabProjectError } from "./gitlab-project.js";
+import { publishWorkspace, workspaceRemote } from "./workspace-repo.js";
+import { GitlabProjectError, WorkspaceRemoteError } from "../forge/projects.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 
 // Outbound definition (sandbox.toml); definition.ts covers the bundle half. Owner-gated: derive and diff only read;

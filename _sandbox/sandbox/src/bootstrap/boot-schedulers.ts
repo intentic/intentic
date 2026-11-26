@@ -34,8 +34,6 @@ import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
 import { startAccountOutbox } from "../account-routing/account-outbox.js";
 import { startPoolSignalsFor } from "../agent/providers/accounts/pool-signals.js";
-import { fixerSettled, resumeMainFixer } from "../ci/main-fixer.js";
-import { ownerStepSettled } from "../ci/owner-steps.js";
 import { createCiPoller } from "../ci/poller.js";
 import { createOriginFollow, type OriginFollowDeps } from "../git/remote/follow-origin.js";
 import { autoKeepWarm, stopKeepWarm } from "../agent/run/turn/cache-keepwarm.js";
@@ -243,25 +241,12 @@ const wireChildReports = (services: BootPhase["services"], logger: BootPhase["lo
     return childReports;
 };
 
-// Main's CI: the hooks its runs report through, and its one fix agent (ci/main-fixer.ts), each of whose settled turns may
-// hand main's failure to the owner, told now what main did while the daemon was down. The poller covers repos whose CI
-// hook could not be registered; its first pass is a silent seed.
-const startCi = ({ role, services, logger, shutdown }: Pick<BootPhase, "role" | "services" | "logger" | "shutdown">): void => {
+// Main's CI: the hooks its runs report through, and the poller for repos whose CI hook could not be registered; its
+// first pass is a silent seed. (2026-11-26) Main's one fix agent is the pipelines extension's, which hears CI on its own
+// event stream and resumes itself when its backend starts.
+const startCi = ({ role, services, shutdown }: Pick<BootPhase, "role" | "services" | "shutdown">): void => {
     if (role.container) {
         inBackground("ci-hooks", () => services.ciHooks.start());
-        shutdown.push(
-            services.events.subscribe("run.settled", (settled) => {
-                void fixerSettled(services, settled).catch((error: unknown) =>
-                    logger.warn({ err: error }, "ci repair: a settled turn could not be read"),
-                );
-                void ownerStepSettled(services, settled).catch((error: unknown) =>
-                    logger.warn({ err: error }, "ci fix: a settled turn's owner step could not be kept"),
-                );
-            }),
-        );
-        void inBackground("ci-repair", () => resumeMainFixer(services)).catch((error: unknown) =>
-            logger.warn({ err: error }, "ci repair: main's failures could not be resumed"),
-        );
     }
     const ciPoller = createCiPoller(services);
     shutdown.push(() => ciPoller.stop());
@@ -347,7 +332,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
         void inBackground("approvals", () => approvalsExecutor.arm()).catch((error: unknown) => logger.warn({ err: error }, "approvals executor not armed"));
     }
 
-    startCi({ role, services, logger, shutdown });
+    startCi({ role, services, shutdown });
 
     // Each workspace repo keeps up with the remote branch it tracks, so another writer's push reaches main within
     // minutes rather than at the owner's next pull; `followOrigin` off, nothing is fetched.

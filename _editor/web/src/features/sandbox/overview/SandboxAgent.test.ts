@@ -37,7 +37,6 @@ jest.mock(`../agent-settings/behaviour/AgentCommandOutput.vue`, () => stub(`Comm
 jest.mock(`../agent-settings/behaviour/AgentSubagents.vue`, () => stub(`Subagents`));
 jest.mock(`../agent-settings/behaviour/offload/AgentOffload.vue`, () => stub(`Where heavy work runs`));
 jest.mock(`../agent-settings/behaviour/AgentRecovery.vue`, () => stub(`When a turn breaks`));
-jest.mock(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`After work lands`));
 jest.mock(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finished work`));
 jest.mock(`../agent-settings/commits/AgentCommitAuthor.vue`, () => stub(`Commit author`));
 jest.mock(`../agent-settings/behaviour/AgentChangelog.vue`, () => stub(`Changelog`));
@@ -61,7 +60,6 @@ const EVERY_GROUP = [
     `Subagents`,
     `Where heavy work runs`,
     `When a turn breaks`,
-    `After work lands`,
     `Finished work`,
     `Commit author`,
     `Changelog`,
@@ -199,7 +197,6 @@ it(`writes the picked category to the address, and the default writes no param`,
     pill(el, `Finishing`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
     expect(shown(el)).toEqual([
-        `After work lands`,
         `Finished work`,
         `Commit author`,
         `Changelog`,

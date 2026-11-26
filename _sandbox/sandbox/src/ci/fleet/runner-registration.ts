@@ -9,12 +9,13 @@ import type { Services } from "../../composition.js";
 import { deviceCiFleet, RUNNERS } from "../../hosts/ci-fleet/device-ci-fleet.js";
 import { deviceClientFor, relayTool } from "../../hosts/devices/device-tool-relay.js";
 import { DEVICE_CALL_CEILING_MS } from "../../peers/device-call-deadline.js";
-import { mintRunnerToken, registrationScope, removalScope } from "../forge/runner-tokens.js";
-import type { FetchFn } from "../providers.js";
+import { mintRunnerToken } from "../../forge/github.js";
+import { registrationScope, removalScope } from "./runner-scope.js";
+import type { FetchFn } from "../../forge/http.js";
 
 // ADDING AND REMOVING A SELF-HOSTED RUNNER ON ONE OF THE OWNER'S COMPUTERS, for the Pipelines view's Runners section:
 // GitHub's side and the computer's together. The token GitHub mints for the repository is minted here through the
-// workspace's GitHub connection for that one call (../forge/runner-tokens.ts) and handed to the machine's
+// workspace's GitHub connection for that one call (forge/github.ts) and handed to the machine's
 // `ci_runner_register` or `ci_runner_remove`, relayed as every runner tool is (hosts/ci-fleet/device-ci-fleet.ts).
 
 export type CiFleetServices = Pick<Services, "hostHub" | "workspace" | "capabilities">;

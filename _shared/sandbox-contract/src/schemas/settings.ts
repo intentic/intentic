@@ -573,14 +573,14 @@ export const SandboxSettingsSchema = z.object({
     ),
     // Worth it since the container is recreated on every update or environment approval — otherwise approving a
     // Dockerfile change costs the run that asked for it.
-    // What happens when main's CI fails (ci/main-fixer.ts): its first failed job starts one fix agent, which is sent
-    // every later failure on main until main passes, within a few turns, and a failure on the CI fleet itself is re-run
-    // once instead. Off, it is only reported.
+    // Deprecated (2026-11-26): main's fix agent moved to the pipelines extension, whose own `autoRepair` setting decides.
+    // Kept so an owner's choice is read once more, by the hand-over that writes it into that setting
+    // (ci/repair-hand-over.ts); nothing else reads it. Leaves with settings.json's next major conversion.
     autoRepair: z
         .boolean()
         .default(true)
         .describe(
-            "Whether main's CI failing is repaired without asking. The first job that fails on main starts one fix agent, without waiting for the rest of the run, and every later failure on main goes to that same agent until a run passes. It gets a few turns; when they are spent, or it finishes without changing anything (a failure that is not in the code), the failure waits for you. A failure on the CI fleet itself is re-run once instead. Off, all of it is only reported.",
+            "Deprecated: whether main's CI failing is repaired without asking is the Pipelines extension's own setting now. Read only to carry a choice made here into it.",
         ),
     // What another writer pushes reaches the main tree within minutes instead of at the owner's next pull
     // (git/remote/follow-origin.ts), so an agent whose work clashes with it meets the clash at its own land.

@@ -68,9 +68,10 @@ test("the agent grant reaches the fleet reads and never the board's presses", as
 });
 
 // 2026-11-17, the shinobi-society audit: `agents ci` reads what main's CI is known to fail on, so an agent stops
-// re-running main to tell whose a failure is. One GET of what the daemon already heard; the board's runs list (which asks
-// the forge when stale) and every press that acts on a run stay out.
-test("the agent grant reads main's known failures and none of the board's CI routes", async () => {
+// re-running main to tell whose a failure is. (2026-11-26) Main's CI half is the pipelines extension's, read through the
+// turn's own shell door; the daemon's half is one GET of what the sandbox's own test runs saw at main. The board's runs
+// list (which asks the forge when stale), the forge reads and every press that acts on a run stay out.
+test("the agent grant reads what main's own test runs saw and none of the board's CI routes", async () => {
     const grants = grantsOf({
         panelToken: "panel",
         agentToken: "agent",
@@ -82,12 +83,12 @@ test("the agent grant reads main's known failures and none of the board's CI rou
     if (agent === undefined) {
         throw new Error("no agent grant in the table");
     }
-    expect(await verdict(agent, "agent", "GET", "/ci/main")).toBe("ok");
-    expect(await verdict(agent, "agent", "POST", "/ci/main")).toBe("out-of-scope");
+    expect(await verdict(agent, "agent", "GET", "/ci/main/local")).toBe("ok");
+    expect(await verdict(agent, "agent", "POST", "/ci/main/local")).toBe("out-of-scope");
     expect(await verdict(agent, "agent", "GET", "/ci/runs")).toBe("out-of-scope");
     expect(await verdict(agent, "agent", "POST", "/ci/runs/rerun")).toBe("out-of-scope");
-    expect(await verdict(agent, "agent", "POST", "/ci/fix")).toBe("out-of-scope");
-    expect(await verdict(agent, "agent", "POST", "/ci/failures/forget")).toBe("out-of-scope");
+    expect(await verdict(agent, "agent", "POST", "/ci/jobs/log")).toBe("out-of-scope");
+    expect(await verdict(agent, "agent", "POST", "/ci/repair/hand-over")).toBe("out-of-scope");
 });
 
 // The sync grant is the narrowest in the table and has to stay that way: it belongs to a token that lives on a laptop,

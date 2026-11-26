@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { errorMessage, isFetchNetworkFailure, networkCodeOf } from "@intentic/base/errors";
 import type { Logger } from "pino";
 import { createFailureTracker } from "../../retry/failure-backoff.js";
-import { CiRateLimited, CiRefused } from "../forge-refusals.js";
+import { CiRateLimited, CiRefused } from "../../forge/refusals.js";
 
 // The CI loops (the runs backfill, the poll, the webhook reconcile) call the forge for every mapped repo every few
 // minutes, so one revoked token wrote the same `401 Bad credentials` warn, stack and all, about a thousand times in five
@@ -12,7 +12,7 @@ import { CiRateLimited, CiRefused } from "../forge-refusals.js";
 // each failure in a row doubles the wait up to an hour, and a refusal no retry can change (a 401 token, a 404 project) is
 // not asked again until the token or the mapping does.
 
-// The forge's HTTP status, off the refusal providers.ts throws for it.
+// The forge's HTTP status, off the refusal the forge client throws for it.
 export const vendorStatusOf = (error: unknown): number | undefined => (error instanceof CiRefused ? error.status : undefined);
 
 // What a line says of the failure. A forge's answer or a network that did not carry the request is fully said by its

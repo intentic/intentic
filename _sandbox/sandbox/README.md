@@ -59,9 +59,9 @@ value import closing a cycle between two of them fails too (standing ones: `_too
 | --- | --- | --- |
 | foundation | storage, ports and primitives every other layer stands on; they know no subsystem | `store/` `seams/` `http/` `offload/` `netd/` `fences/` `speech/` `areas/` `workload/` `safety/` `tunnel/` `image/` `retry/` |
 | host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `access/` `roles/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `activity/` `audit/` `org/` |
-| connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `account-routing/` `definition/` |
+| connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `forge/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `account-routing/` `definition/` |
 | agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
-| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
+| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI ingestion, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
 | composition | boot wiring and whole-daemon self-checks, which import every layer and are imported by none | `bootstrap/` `invariants/` `harness/` |
 | (none) | in no layer: the boundary check places no module here | `e2e/` `evals/` |
 <!-- <<< end of generated layers.json -->
@@ -297,7 +297,7 @@ flowchart LR
   forges said as Server-Sent Events (`ci/feed/ci-feed.ts`): every run that ended (`ci/events.ts` `dispatchCiRun`, the
   poller's too) and every job that ended (`ci/webhook.routes.ts`), so a stack deploys the moment the job publishing its
   images passes. `POST /ci/deployments` tells the repository's forge of a deploy with the token CI already uses
-  (`ci/forge/forge-deployments.ts`: a GitHub Deployment and its statuses, a GitLab `deploy/<environment>` commit status), and
+  (`forge/forge-deployments.ts`: a GitHub Deployment and its statuses, a GitLab `deploy/<environment>` commit status), and
   `GET /system/devices/{id}/host-stats` relays the machine's `host_stats`. `secrets import NAME --stdin` moves a value in
   from where it lives now without it passing through the chat, under a new name only. (The engine was first built here,
   in `deploys/`, and moved out the same day: deploy policy is an installable extension's,
@@ -307,7 +307,7 @@ flowchart LR
   `device-ci-runners.contract.ts`): list, start, stop, drain, restart, logs, register and remove, relayed to the
   machine's `ci_runner*` tools as the stack routes are (`hosts/devices/device-tool-relay.ts` is both relays' one way to
   a machine), gated the same way. Registering and removing take a token GitHub mints for the repository; the daemon mints
-  it through the workspace's GitHub connection for that one call and never keeps or logs it (`ci/fleet/runner-registration.ts`, `ci/forge/runner-tokens.ts`),
+  it through the workspace's GitHub connection for that one call and never keeps or logs it (`ci/fleet/runner-registration.ts`, `forge/github.ts`),
   so a connection without admin on the repository is refused saying so. When main's CI fails on the fleet, the notice
   names the computer that has the runner and its unit's state there (`hosts/ci-fleet/runner-whereabouts.ts`), asked of the
   connected computers that read their runners, a few seconds at most and remembered for three minutes; one that does
@@ -383,26 +383,17 @@ flowchart LR
   that the reference is replaced by its value before the command runs, and for each named secret whether it exists,
   its host guard and hosts, and whether it needs a named approver, never the value or who approves. A verdict is
   reused within a turn only while those facts are unchanged (`safety/command-judge-cache.ts`).
-  When main's CI fails, `ci/main-fixer.ts` gives the failing streak one fix agent and sends it every later failure.
-  Each failed job is judged first (`ci/fleet/fleet-verdict.ts`, from its steps, the forge's reason, its log end and, on GitHub,
-  its check run annotations, where a self-hosted runner that lost its connection or was shut down is said): a job the
-  CI fleet failed is no agent's (`ci/fleet/main-fleet.ts`). A run only the fleet failed has its failed jobs re-run once
-  (`rerun-failed-jobs`, kept in the CI store's `fleetReruns` so a restart does not re-run it twice) with an activity
-  notice naming each job's runner, its machine (the job log's `Machine name:` line) and what happened; failing on the
-  fleet again is a notice and nobody is sent. A timeout with no step of its own failing is re-run once the same way and
-  is the agent's when the re-run fails it again; in a run some code failed it goes to the agent at once, and the
-  agent's prompt names the fleet's jobs it left out. A token that may not re-run is logged once per repository and
-  told in the notice.
-  A manual Fix can start before the run finishes. Its start shares the automatic handover's branch lock and records
-  the job IDs in its evidence, so completion and restart replay deliver only additional failures; a refused or busy
-  start leaves the pending failures untouched. Continued attempts and retries that were turned away before running
-  receive the current evidence too, rather than replaying an older prompt.
-  What the fixer read of each failed job (the run, its commit, when, and the error lines of its log excerpt) stays on
-  the job's finding, and `GET /ci/main` (`ci/known/main-known.ts`, printed by `agents ci`) serves it to agents from the CI
-  store alone, so an agent tells whether a failing test is main's without re-running main or asking the forge. A main
-  line nothing is known of reads `unread`, and a workspace wired to no CI says so. Beside CI's it lists what the
-  sandbox's own test runs on clean trees at main commits saw fail (`local`, read from the output filter's record under
-  `logs/test-outcomes/`, output-cleaners' README), which covers suites CI does not run.
+  When main's CI fails, one fix agent takes the failing streak and is sent every later failure: the pipelines
+  extension's (`_extensions/pipelines/src/server/main-fixer.ts`, since 2026-11-26; the daemon's `ci/` until then). The
+  daemon keeps CI ingestion, which the fixer builds on: the webhook door and the poller, the forge clients
+  (`forge/`: runs, jobs, logs, annotations, re-runs, hooks, deployment reports, repository creation), the runs cache,
+  edge detection (`ci/events.ts`) and the CI feed, which reaches the extension's event stream with each failed job's
+  detail (`seams/ci-feed-bus.ts`). The extension reads the forges through `ci/ci.routes.ts`'s forge routes, claims
+  main lines' failures while its `autoRepair` is on (`ci/main-line-claims.ts`, so `ci` automations listening on every
+  branch stay off main), and took over what the daemon kept of main's repair once (`ci/repair-hand-over.ts`). `agents
+  ci` reads what main is known to fail on from the extension's `main_failures` tool, and what the sandbox's own test runs
+  on clean trees at main commits saw fail (`local`, read from the output filter's record under `logs/test-outcomes/`,
+  output-cleaners' README) from `GET /ci/main/local` (`ci/local-main.ts`), which covers suites CI does not run.
 - The Pi capability uses its own RPC probe (`runtimes/pi/pi-probe.ts`), shared by the card's status and runtime
   health. A missing CLI stays pending so adding the card can save its image fragment before the install rebuild;
   an installed Pi with no configured models asks for sign-in. The probe sends no model prompt and creates no session.

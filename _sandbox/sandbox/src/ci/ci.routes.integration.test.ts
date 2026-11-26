@@ -1,76 +1,39 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/base/git";
-import type { AgentTurn, ModelPin } from "@intentic/sandbox-contract/schemas/agent";
-import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
-import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
+import type { CiFailure } from "@intentic/sandbox-contract/schemas/ci";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
-import { setupsFromRoleLists } from "@intentic/sandbox-contract/models/model-setups";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
-import { SETTLES, waitFor } from "@intentic/testing/bun";
-import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
-import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
+import { waitFor } from "@intentic/testing/bun";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
+import { writeExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
-import { type CiFailure, fileCiStore } from "./ci-store.js";
+import { extensionThatStarted } from "../extensions/runtime/extension-conversations.js";
+import { readAllExtensionSettings } from "../extensions/extension-settings.js";
+import { fileCiStore } from "./ci-store.js";
 import { createCiRoutes } from "./ci.routes.js";
-import type { FetchFn } from "./providers.js";
+import { mainLinesClaimed } from "./main-line-claims.js";
+import type { FetchFn } from "../forge/http.js";
+import { handOverRepair } from "./repair-hand-over.js";
 import { createRunsCache } from "./runs-cache.js";
-import type { TurnStarter } from "../seams/turn-starter.js";
-import { createDomainEvents } from "../seams/domain-events.js";
-import { drivenBy } from "../seams/turn-starter.testing.js";
-import { memoryFleet } from "../conversations/registry/agents-registry.testing.js";
 
-/* What Fix on a failed pipeline actually starts: a session nobody has limited, carrying a prepared prompt. */
+/* CI ingestion's routes: what the forges report, and the forge reads the pipelines extension's backend asks of the
+   core's clients. (2026-11-26) What a Fix press starts, and main's failures on the runs list, are that backend's own
+   (_extensions/pipelines/src/server), and tested there. */
 
-const context: OrpcContext = { headers: new Headers(), method: "POST", url: "/ci/fix" };
+const context: OrpcContext = { headers: new Headers(), method: "GET", url: "/ci/runs" };
 
 const RUN_ID = 41;
 
-// One failed job with a failed step of its own, so the run reads as this repository's code failing rather than a
-// runner dying in its own setup (which `fix` refuses before starting anybody).
-const JOBS = { jobs: [{ id: 7, name: "onboarding", conclusion: "failure", steps: [{ name: "Run onboarding tier", conclusion: "failure" }] }] };
+const JOBS = { jobs: [{ id: 7, name: "onboarding", conclusion: "failure", status: "completed", html_url: null, steps: [{ name: "Run onboarding tier", conclusion: "failure" }] }] };
 
-// Main failing since run 40, its fix agent's turns spent, as the CI store keeps it.
-const SPENT: CiFailure = {
-    since: 1,
-    findings: [{ id: "f", source: "CI", text: "onboarding" }],
-    decisions: [
-        {
-            kind: "fix-up",
-            conversationId: "fix-web-14",
-            at: 1,
-            detail: "Its first failed job, onboarding, put a fix agent on it; every later failure goes to the same one.",
-        },
-        { kind: "spent", reason: "turns", conversationId: "fix-web-14", at: 2, detail: "Its fix agent had its 3 turns and main still fails." },
-    ],
-    firstRunId: 40,
-    runId: RUN_ID,
-    count: 2,
-    workflows: { CI: RUN_ID },
-    spans: {},
-    heard: ["40/6", "41/7"],
-    turns: 3,
-    changed: false,
-};
-
-// Which providers this sandbox can serve, and what Models pins for fixing pipelines; Claude alone and nothing, unless
-// a test says otherwise.
-interface Setup {
-    readonly ready?: readonly string[];
-    readonly pinned?: readonly ModelPin[];
-    readonly previous?: AgentSummary["status"];
-    // What the forge answers, where a test needs more than one run's jobs.
-    readonly forge?: FetchFn;
-}
-
-const harness = async ({ ready = ["claude"], pinned = [], previous, forge }: Setup = {}) => {
-    const root = mkdtempSync(join(tmpdir(), "ci-fix-"));
+const harness = async () => {
+    const root = mkdtempSync(join(tmpdir(), "ci-routes-"));
     const dir = join(root, "web");
     await mkdir(dir, { recursive: true });
     await defaultGit(dir, ["init", "--quiet"]);
@@ -96,200 +59,130 @@ const harness = async ({ ready = ["claude"], pinned = [], previous, forge }: Set
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,
         ciRuns,
-        // Where main's failures live: a press on a run of a failing main is its streak's.
         ciStore: fileCiStore(join(root, STATE_DIR, "secrets", "ci.json")),
         ciHooks: unstubbed<Services["ciHooks"]>("ciHooks", { warnings: () => new Map() }),
         // Loopback: no identities, so the caller is the owner.
         auth: undefined,
-        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
-            get: async () => SandboxSettingsSchema.parse(setupsFromRoleLists({ "pipeline-fix": pinned })),
-        }),
-        // SAFETY: one entry per native provider, which is the whole of the record's keys.
-        providerReadiness: async () =>
-            Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, ready.includes(provider)])) as Awaited<ReturnType<Services["providerReadiness"]>>,
-        // A pin's rung is asked whether it has been dying; none has.
-        usage: unstubbed<Services["usage"]>("usage", { turns: async () => [] }),
-        agents: unstubbed<Services["agents"]>("agents", {
-            list: (): AgentSummary[] => previous === undefined ? [] : [{
-                id: "fix-web-14",
-                status: previous,
-                provider: "claude",
-                harness: "native",
-                attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
-                updatedAt: 0,
-            }],
-            listArchived: () => [],
-            clearArchived: async () => {},
-        }),
-        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
-        transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
-        pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
-        // Real actors, which hold the run a Fix starts; what reacts to it is composition's to subscribe.
-        conversations: memoryFleet().conversations,
-        events: createDomainEvents(() => {}),
     });
-    const started: AgentTurn[] = [];
-    const wake: TurnStarter["stream"] = async function* (input) {
-        started.push(input);
-        yield { kind: "done" } as never;
-    };
-    const fetchFn: FetchFn =
-        forge ??
-        ((async (url: string) =>
-            String(url).includes("/logs")
-                ? new Response("Error: P1001: Can't reach database server at `postgres:5432`")
-                : new Response(JSON.stringify(JOBS))) as unknown as FetchFn);
-    return { routes: createCiRoutes(drivenBy(services, wake), fetchFn), started, services };
+    const fetchFn: FetchFn = (async (url: string) =>
+        String(url).includes("/logs") ? new Response("Error: P1001: Can't reach database server") : new Response(JSON.stringify(JOBS))) as unknown as FetchFn;
+    return { routes: createCiRoutes(services, fetchFn), services, root };
 };
 
-// The complaint this exists for: the turn carried `unattended`, so its own briefing told it nobody had started it, and
-// it reported the failure half-diagnosed rather than asking, planning or reaching an account.
-test("a pressed Fix starts an ordinary session: a run role, and nothing marking it unwatched", async () => {
-    const { routes, started } = await harness();
-    const outcome = await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
-    expect(outcome.conversationId).toContain("web");
-    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    const turn = started[0]!;
-    expect(turn).toMatchObject({ isolated: true, runRole: "pipeline-fix" });
-    expect(turn.unattended).toBeUndefined();
-});
-
-// C4: the Fix button names the model a new chat would open on, and the press sends it; the sandbox used to open an
-// unpinned fix on Claude, which a Z.ai-only owner never connected.
-test("a plain Fix with nothing pinned opens on the chat default the pressing browser sent", async () => {
-    const { routes, started } = await harness({ ready: ["claude", "zai"] });
-    await call(routes.fix, { repo: "web", runId: RUN_ID, fallback: { agent: "zai", model: "glm-4.6" } }, { context });
-    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    expect(started[0]).toMatchObject({ agent: "zai", model: "glm-4.6", runRole: "pipeline-fix" });
-});
-
-test("a model pinned for fixing pipelines wins over the chat default the browser sent", async () => {
-    const { routes, started } = await harness({ ready: ["claude", "zai"], pinned: [{ provider: "claude", model: "claude-sonnet-4-6" }] });
-    await call(routes.fix, { repo: "web", runId: RUN_ID, fallback: { agent: "zai", model: "glm-4.6" } }, { context });
-    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    expect(started[0]).toMatchObject({ agent: "claude", model: "claude-sonnet-4-6" });
-});
-
-// A chat default on a provider this sandbox cannot serve is no better than Claude was: the sandbox's own fallback runs.
-test("a chat default this sandbox cannot serve gives way to a provider it can", async () => {
-    const { routes, started } = await harness({ ready: ["zai"] });
-    await call(routes.fix, { repo: "web", runId: RUN_ID, fallback: { agent: "codex", model: "gpt-5" } }, { context });
-    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    expect(started[0]?.agent).toBe("zai");
-    expect(started[0]?.model).toBeUndefined();
-});
-
-// `gh` is not in the sandbox image, so a prompt naming it sends the fix agent at a wall and it gives up on verifying.
-test("the prompt points at the host's API for a job this sandbox cannot run, never at a CLI it lacks", async () => {
-    const { routes, started } = await harness();
-    await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
-    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    const prompt = started[0]!.prompt;
-    expect(prompt).toContain("github REST API");
-    expect(prompt).toContain("`github` skill");
-    expect(prompt).not.toContain("gh workflow run");
-    expect(prompt).not.toContain("gh run watch");
-    // The evidence still rides with it, which is what makes the log tail worth fetching more of.
-    expect(prompt).toContain("P1001");
-});
-
-// A failing main has one fix agent: a press on any of its runs continues that one, with its turns back, rather than
-// opening a second conversation on the same failure.
-test("a pressed Fix on a run of a failing main continues the streak's one fix agent, with its turns back", async () => {
-    const { routes, started, services } = await harness();
-    await services.ciStore.failure("web", "main", () => SPENT);
-
-    const outcome = await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
-
-    expect(outcome.conversationId).toBe("fix-web-14");
-    await waitFor(() => expect(started.map(({ conversationId }) => conversationId)).toEqual(["fix-web-14"]), SETTLES);
-    const failure = (await services.ciStore.failures())["web\nmain"];
-    expect(failure?.turns).toBe(0);
-    expect(failure?.decisions.at(-1)).toMatchObject({ kind: "fix-up", conversationId: "fix-web-14" });
-});
-
-test("a pressed Fix on an unfinished run acknowledges exactly the failed jobs it handed to the agent", async () => {
-    const { routes, started, services } = await harness();
-    await services.ciStore.failure("web", "main", () => ({ ...SPENT, heard: ["40/6"] }));
-    services.ciRuns.replace(services.ciRuns.sweep()!.map((run) => ({ ...run, status: "running" })));
-    await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
-    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    expect(started[0]?.prompt).toContain("P1001");
-    expect((await services.ciStore.failures())["web\nmain"]?.heard).toEqual(["40/6", "41/7"]);
-});
-
-test.each(["landed", "stopped"] as const)("Fix now after a %s attempt delivers the current evidence on the incident's attempt", async (previous) => {
-    const { routes, started, services } = await harness({ previous });
-    await services.ciStore.failure("web", "main", () => ({ ...SPENT, heard: ["40/6"] }));
-    const outcome = await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
-    expect(outcome.conversationId).toBe(previous === "landed" ? "fix-web-14_2" : "fix-web-14");
-    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    expect(started[0]?.prompt).toContain("Failed jobs: onboarding.");
-    expect(started[0]?.prompt).toContain("P1001");
-    expect((await services.ciStore.failures())["web\nmain"]?.heard).toEqual(["40/6", "41/7"]);
-});
-
-// The banner names every workflow failing on main, and its press is the fix for main: a press that read only the run it
-// sat on sent the agent at the Nightly's jobs while CI went on failing beside it.
-test("a pressed Fix on a failing main hands the agent every failing workflow's jobs, and acknowledges each by its own run", async () => {
-    const NIGHTLY_RUN = 39;
-    const forge: FetchFn = async (input) => {
-        const url = input instanceof Request ? input.url : String(input);
-        if (url.includes("/logs")) {
-            return new Response(url.includes("/jobs/5/") ? "Error: tidy found a retired word" : "Error: P1001: Can't reach database server");
-        }
-        return new Response(
-            JSON.stringify(
-                url.includes(`/runs/${NIGHTLY_RUN}/`)
-                    ? { jobs: [{ id: 5, name: "tidy", conclusion: "failure", steps: [{ name: "Run tidy", conclusion: "failure" }] }] }
-                    : JOBS,
-            ),
-        );
-    };
-    const { routes, started, services } = await harness({ forge });
-    await services.ciStore.failure("web", "main", () => ({ ...SPENT, heard: ["40/6"], workflows: { Nightly: NIGHTLY_RUN, CI: RUN_ID } }));
-    services.ciRuns.replace(services.ciRuns.sweep()!.map((run) => ({ ...run, workflow: "CI" })));
-
-    await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
-
-    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
-    const prompt = started[0]?.prompt ?? "";
-    expect(prompt).toContain("Failed jobs: onboarding in CI, tidy in Nightly.");
-    expect(prompt).toContain("P1001");
-    expect(prompt).toContain("retired word");
-    expect(prompt).toContain(`=== Nightly (run ${NIGHTLY_RUN}) ===`);
-    expect((await services.ciStore.failures())["web\nmain"]?.heard).toEqual(["40/6", "41/7", `${NIGHTLY_RUN}/5`]);
-});
-
-// The Pipelines rail reads each failing main-line branch off the runs list, under the name the contract gives it.
-test("the runs list answers each failing main-line branch as a failure, with its fix agent and its latest decision", async () => {
-    const { routes, services } = await harness();
-    await services.ciStore.failure("web", "main", () => SPENT);
-
+test("the runs list answers what the forges report, and leaves main's failures to the extension that keeps them", async () => {
+    const { routes } = await harness();
     const answer = await call(routes.runs, undefined, { context });
-
     expect(answer.runs.map(({ runId }) => runId)).toEqual([RUN_ID]);
-    expect(answer.failures).toEqual([
-        {
-            repo: "web",
-            branch: "main",
-            since: 1,
-            runId: RUN_ID,
-            jobs: ["onboarding"],
-            workflows: [{ name: "CI", runId: RUN_ID, jobs: ["onboarding"] }],
-            fixer: "fix-web-14",
-            decision: {
-                kind: "spent",
-                reason: "turns",
-                conversationId: "fix-web-14",
-                at: 2,
-                detail: "Its fix agent had its 3 turns and main still fails.",
-            },
-            attempts: 1,
-        },
-    ]);
-    expect(Object.keys(answer)).toEqual(["repos", "runs", "failures", "ownerSteps"]);
+    expect(answer.repos.map(({ repo }) => repo)).toEqual(["web"]);
+    expect(Object.keys(answer)).toEqual(["repos", "runs"]);
+});
+
+// What main's fix agent reads of a failure, asked of the forge through the core's client: its failed jobs with the steps
+// that failed them, a job's whole log, and which branch is the repository's main line.
+test("the forge reads answer a run's failed jobs, a job's log and each repository's main line", async () => {
+    const { routes } = await harness();
+    expect(await call(routes.failedSteps, { repo: "web", runId: RUN_ID }, { context })).toEqual({
+        steps: [{ job: "onboarding", id: 7, step: "Run onboarding tier", steps: ["Run onboarding tier"] }],
+    });
+    expect((await call(routes.jobLog, { repo: "web", jobId: 7 }, { context })).log).toContain("P1001");
+    // Nothing has said which branch is the default yet: both usual names stand in.
+    expect(await call(routes.mainLines, undefined, { context })).toEqual({
+        lines: [{ repo: "web", host: "github", project: "acme/web", branches: ["main", "master"], named: false, concluded: [] }],
+    });
+    await expect(call(routes.failedSteps, { repo: "nowhere", runId: RUN_ID }, { context })).rejects.toThrow("no CI project mapped");
+});
+
+// The claim and the hand-over are an extension's alone: a person's or a program's request carries no extension token.
+test("claiming main lines and taking main's repair over refuse a caller that is no extension", async () => {
+    const { routes } = await harness();
+    await expect(call(routes.claimMainLines, { claimed: true }, { context })).rejects.toThrow("only an extension's own token");
+    await expect(call(routes.handOverRepair, undefined, { context })).rejects.toThrow("only an extension's own token");
+});
+
+// An extension switched on, built in under `extensionsDir`, declaring the setting the hand-over carries the owner's
+// choice into.
+const PIPELINES_MANIFEST = {
+    publisher: "intentic",
+    name: "pipelines",
+    version: "1.0.0",
+    engines: { intentic: "^2.56.0" },
+    contributes: { settings: [{ key: "autoRepair", title: "Repair main's CI", type: "boolean", default: true }] },
+};
+
+const extensionHost = async (root: string, enabled: boolean) => {
+    const extensionsDir = join(root, "builtin");
+    await mkdir(join(extensionsDir, "pipelines"), { recursive: true });
+    await writeFile(join(extensionsDir, "pipelines", "intentic-extension.json"), JSON.stringify(PIPELINES_MANIFEST));
+    const capabilities = fileCapabilitiesStore(join(root, STATE_DIR, "config", "capabilities.json"));
+    await writeExtensionEnablement(root, "intentic.pipelines", enabled);
+    return {
+        workspace: { root },
+        files: { read: (path: string) => readFile(path, "utf8").catch(() => undefined) },
+        capabilities,
+        config: { extensionsDir, historyRoot: join(root, "history") },
+    };
+};
+
+// (2026-11-26) While a switched-on extension claims main lines, a main line's failure is its fix agent's alone; a claim
+// whose extension is off holds nothing.
+test("a claim on main lines holds only while its extension is switched on", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ci-claims-"));
+    const ciStore = fileCiStore(join(root, "ci.json"));
+    const on = await extensionHost(root, true);
+    expect(await mainLinesClaimed({ ...on, ciStore })).toBe(false);
+    await ciStore.claimMainLines("intentic.pipelines", true, 1);
+    expect(await mainLinesClaimed({ ...on, ciStore })).toBe(true);
+    // Switched off, its claim stands in the store and holds nothing.
+    const off = await extensionHost(root, false);
+    expect(await mainLinesClaimed({ ...off, ciStore })).toBe(false);
+    await ciStore.claimMainLines("intentic.pipelines", false, 2);
+    expect(await mainLinesClaimed({ ...on, ciStore })).toBe(false);
+});
+
+const FAILURE: CiFailure = {
+    since: 1,
+    findings: [{ id: "f", source: "CI", text: "onboarding" }],
+    decisions: [{ kind: "fix-up", conversationId: "ci-fix-web-40", at: 1 }],
+    firstRunId: 40,
+    runId: RUN_ID,
+    count: 2,
+    workflows: { CI: RUN_ID },
+    spans: {},
+    heard: ["40/6", "41/7"],
+    turns: 2,
+    changed: false,
+};
+
+// The update that moved main's fix agent out: its streak, with the turns its agent was given, reaches the extension, the
+// agent's runs become the extension's to hear, and an owner who had switched repairs off has them off there too.
+test("the hand-over gives the extension main's streak, its fix agents' runs and the owner's switch, once", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ci-hand-over-"));
+    const ciPath = join(root, "ci.json");
+    await writeFile(ciPath, JSON.stringify({ secret: "s", conclusions: {}, failures: { "web\nmain": FAILURE }, ownerSteps: { "ci-fix-web-39": { step: "Fill it.", at: 3 } } }));
+    const host = await extensionHost(root, true);
+    const services = unstubbed<Services>("services", {
+        ...host,
+        // SAFETY: the inventory reads files only through `read`, which is all an extension host is handed here.
+        files: host.files as Services["files"],
+        config: unstubbed<Services["config"]>("config", host.config),
+        ciStore: fileCiStore(ciPath),
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({ autoRepair: false }) }),
+        extensionSecretVault: unstubbed<Services["extensionSecretVault"]>("extensionSecretVault", {
+            all: async () => ({}),
+            get: async () => ({}),
+            set: async () => {},
+        }),
+        logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {} }),
+    });
+    const handed = await handOverRepair(services, "intentic.pipelines", 5);
+    expect(handed).toEqual({ failures: { "web\nmain": FAILURE }, passes: {}, fleetReruns: {}, ownerSteps: { "ci-fix-web-39": { step: "Fill it.", at: 3 } }, autoRepair: false });
+    expect(await extensionThatStarted(host.config.historyRoot, "ci-fix-web-40")).toBe("intentic.pipelines");
+    expect(await extensionThatStarted(host.config.historyRoot, "ci-fix-web-39")).toBe("intentic.pipelines");
+    expect((await readAllExtensionSettings(root, services.extensionSecretVault))["intentic.pipelines"]).toEqual({ autoRepair: false });
+    // Handed over: a second ask, a later boot's, finds nothing to give.
+    expect(await handOverRepair(services, "intentic.pipelines", 6)).toEqual({ failures: {}, passes: {}, fleetReruns: {}, ownerSteps: {} });
+    await waitFor(async () => expect(JSON.parse(await readFile(ciPath, "utf8")).failures).toBeUndefined());
 });
 
 // Every open Pipelines board re-lists a stale picture; boards asking at once used to ask the vendor once each. They share

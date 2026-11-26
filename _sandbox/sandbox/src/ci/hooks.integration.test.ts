@@ -7,7 +7,7 @@ import { defaultGit } from "@intentic/base/git";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { fileCiStore } from "./ci-store.js";
 import { createCiHookReconciler, webhookUrlFor } from "./hooks.js";
-import type { FetchFn } from "./providers.js";
+import type { FetchFn } from "../forge/http.js";
 
 const logger = { info: () => {}, warn: () => {}, error: () => {} } as never;
 

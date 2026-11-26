@@ -1,6 +1,11 @@
 // ci: pipeline runs on the workspace repos' github/gitlab remotes
+import { isInfraStep } from "@intentic/constants/ci-infra-steps";
 import { z } from "zod";
 import { AgentRunPickSchema } from "./agent.js";
+
+// Split out to keep this module one reading (2026-11-26), served from this subpath as before.
+export * from "./ci-deployments.js";
+export * from "./command-run.js";
 // The daemon maps each workspace repo to its CI project via a connected github/gitlab capability, registers a webhook
 // to fire `ci` listener automations instantly, and serves the Pipelines rail from a webhook-freshened, poll-backfilled
 // cache. `host` names which provider API serves a repo; the listener provider is always `ci`, since a trigger narrows
@@ -253,16 +258,16 @@ export const CiRunsResponseSchema = z.object({
     repos: z.array(CiRepoSchema).describe("Which workspace repositories are wired to a forge, and how each one's notifications are set up."),
     // Newest first, across all mapped repos.
     runs: z.array(PipelineRunSchema).describe("Runs across all of them, newest first."),
+    // (2026-11-26) Filled by the pipelines extension's backend, whose board read answers this same shape; the daemon's own
+    // GET /ci/runs leaves both out since main's fix agent moved there, and an older daemon fills them itself.
     failures: z
         .array(CiMainFailureSchema)
         .optional()
-        .describe("Every main-line branch failing right now, with the fix agent on it. Absent from a daemon that keeps none."),
+        .describe("Every main-line branch failing right now, with the fix agent on it. Absent where nothing keeps them."),
     ownerSteps: z
         .array(CiOwnerStepSchema)
         .optional()
-        .describe(
-            "Steps outside the repository that CI fix agents ended their latest turn on, one per agent. Absent from a daemon that keeps none.",
-        ),
+        .describe("Steps outside the repository that CI fix agents ended their latest turn on, one per agent. Absent where nothing keeps them."),
 });
 export type CiRunsResponse = z.infer<typeof CiRunsResponseSchema>;
 // 2026-11-17, the shinobi-society audit: conversation after conversation spent calls finding out whether a test that
@@ -398,48 +403,6 @@ export const CiFixResponseSchema = z.object({
     conversationId: z.string().describe("The conversation that was opened, already holding the failure. Open it to watch, or attach to its turn."),
 });
 export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
-// One shape for any command the daemon runs on a click with a verdict and a quotable tail (the push via PushRunSchema in
-// schemas/git/git.ts, which runs the repository's own pre-push hook), so the fields the browser reads (terminal, tail,
-// kill vs timeout) have one definition.
-// idle: nothing has run yet, or the last run was cleared
-// running: live; its output is the terminal's, not this object's
-// passed: exited 0
-// failed: exited non-zero, or killed by its ceiling (`timedOut`)
-// error: not spawnable at all; not fixable, since nothing is wrong with the code
-// cancelled: the user stopped it
-export const CommandRunStatusSchema = z.enum(["idle", "running", "passed", "failed", "error", "cancelled"]);
-export type CommandRunStatus = z.infer<typeof CommandRunStatusSchema>;
-export const CommandRunSchema = z.object({
-    status: CommandRunStatusSchema.describe(
-        "Where the run is. Failed and error are deliberately different: failed means the code is wrong, error means the command could not be run at all, and calling the second one a test failure would send an agent hunting a bug that is not there.",
-    ),
-    // Echoed rather than read from settings, so a result seen after the setting changed still says what produced it.
-    command: z
-        .string()
-        .describe(
-            "What actually ran, echoed here rather than read back from the settings, so a result looked at after the setting changed still says what produced it.",
-        ),
-    startedAt: z.number().optional().describe("When it began, in milliseconds."),
-    finishedAt: z.number().optional().describe("When it ended, in milliseconds."),
-    exitCode: z.number().optional().describe("How the command exited."),
-    timedOut: z.boolean().optional().describe("It was killed for taking too long rather than finishing."),
-    // The tmux session to open, since watching a run is the terminal panel's job, not this object's; absent where the
-    // sandbox has no tmux wrapper.
-    session: z
-        .string()
-        .optional()
-        .describe(
-            "The terminal it runs in, which is where to watch it. Absent where the sandbox has no terminals, in which case there is nothing to attach to.",
-        ),
-    // Tail-capped plain text, colour codes and redrawn progress lines stripped, so a fix prompt quotes a verdict, not
-    // terminal litter; empty while running or for a killed run.
-    output: z
-        .string()
-        .describe(
-            "The end of what it printed, as plain text with the colour codes and redrawn progress lines resolved away. The end rather than the beginning, because a suite's verdict is at the end. Empty while it runs, and for one that was killed.",
-        ),
-});
-export type CommandRun = z.infer<typeof CommandRunSchema>;
 
 // ---- (2026-11-25) CI events for code: GET /ci/feed ------------------------------------------------------------------
 // What the forges' webhooks (and the poller, for repositories without one) said, as it is heard, for a program rather
@@ -448,6 +411,21 @@ export type CommandRun = z.infer<typeof CommandRunSchema>;
 // was away reads `/ci/runs` to catch up on runs (jobs it missed are gone, so a trigger should also accept the run).
 // Reached by an extension that declares `GET /ci/feed` in its `permissions.daemon`; listener automations are not fed
 // job frames, which are many.
+// (2026-11-26) What the forge said of one failed job (`failed` on its `job` frame), for main's fix agent in the pipelines
+// extension: the forge's id for it, which its log is read by (POST /ci/jobs/log), the step it failed in first and every
+// step it failed in where the forge names steps, the forge's reason (GitLab's `failure_reason`; on GitHub, why a job it
+// reports as cancelled failed after all: `timed_out` or `runner_unavailable`), what set its run off where the core knows,
+// its check run annotations where they were read, and the runner that ran it.
+export const CiJobFailureSchema = z.object({
+    jobId: z.number(),
+    step: z.string().optional(),
+    steps: z.array(z.string()).optional(),
+    reason: z.string().optional(),
+    trigger: z.string().optional(),
+    annotations: z.array(z.string()).optional(),
+    runner: z.string().optional(),
+});
+export type CiJobFailure = z.infer<typeof CiJobFailureSchema>;
 export const CiFeedEventSchema = z.discriminatedUnion("kind", [
     z.object({
         kind: z.literal("run"),
@@ -465,31 +443,140 @@ export const CiFeedEventSchema = z.discriminatedUnion("kind", [
         sha: z.string(),
         status: PipelineStatusSchema,
         url: z.string(),
+        // (2026-11-26) Present on a job that failed, a job allowed to fail excepted: what the forge said of it.
+        failed: CiJobFailureSchema.optional(),
     }),
 ]);
 export type CiFeedEvent = z.infer<typeof CiFeedEventSchema>;
 
-// ---- (2026-11-25) a deployment told to the forge: POST /ci/deployments ------------------------------------------------
-// The repository's forge shows that a commit went to an environment, through the token of the github/gitlab
-// connection the CI board already uses: on GitHub a Deployment (`environment`) and its statuses, on GitLab a commit
-// status named `deploy/<environment>`. The first report for a deployment answers its `deploymentId`; the later states
-// pass it back. A token without the scope is refused in the forge's words, never retried.
-export const CiDeploymentStateSchema = z.enum(["in_progress", "success", "failure", "inactive"]);
-export const CiDeploymentReportSchema = z.object({
-    repo: z.string().min(1).max(500),
-    sha: z.string().regex(/^[0-9a-f]{40,64}$/),
-    environment: z.string().min(1).max(100),
-    state: CiDeploymentStateSchema,
-    production: z.boolean().optional(),
-    description: z.string().max(140).optional(),
-    environmentUrl: z.string().url().max(2000).optional(),
-    logUrl: z.string().url().max(2000).optional(),
-    deploymentId: z.number().optional(),
+
+// (2026-11-26) Whether a CI job's step is one the runner owns rather than the repository (Set up job, Complete job, a Post
+// step): a job that died in one never ran a line of the checkout, so an agent on the code can do nothing for it. The one
+// list `_tools/constants` keeps for the CI audit script, read here for the pipelines extension's fix agent and board.
+export const isCiInfraStep = (step: string): boolean => isInfraStep(step);
+
+// ---- (2026-11-26) the forge's word for a program: what main's fix agent and the Pipelines board read ---------------------
+// The forge clients and their credentials are the core's (CI ingestion); main's fix agent and the Pipelines board's
+// backend are the pipelines extension's, which reads the forges through these, each declared in its
+// `permissions.daemon`. Each resolves repo -> project and token per call, as every CI route does.
+
+// One failed job of a run, as the forge lists it (POST /ci/runs/failed-steps): every job that failed, and every one the
+// forge reports as cancelled whose cancel was a failure after all, in the run's order; a job allowed to fail is none.
+export const CiFailedStepSchema = z.object({
+    job: z.string().describe("The job, by name."),
+    id: z.number().describe("The forge's id for it, which its log is read by."),
+    step: z.string().optional().describe("The first step that failed it, where the forge names steps."),
+    steps: z.array(z.string()).optional().describe("Every step that failed it, in order, where the forge names steps."),
+    reason: z.string().optional().describe("The forge's own word for why it failed, where it gives one."),
+    annotations: z.array(z.string()).optional().describe("What its check run annotations say, where the forge has them."),
+    runner: z.string().optional().describe("The runner that ran it, by the name its forge knows it by."),
 });
-export type CiDeploymentReport = z.infer<typeof CiDeploymentReportSchema>;
-export const CiDeploymentAnswerSchema = z.object({
-    deploymentId: z.number().optional(),
-    // The forge's page for it, when it has one.
-    url: z.string().optional(),
+export type CiFailedStep = z.infer<typeof CiFailedStepSchema>;
+export const CiFailedStepsResponseSchema = z.object({ steps: z.array(CiFailedStepSchema).describe("The run's failed jobs, in its order.") });
+export const CiPassedJobsResponseSchema = z.object({ jobs: z.array(z.string()).describe("The names of the run's jobs that passed.") });
+export const CiRunListParamSchema = z.object({
+    repo: z.string().describe("Which workspace repository."),
+    limit: z.number().int().min(1).max(100).describe("How many of its newest runs."),
 });
-export type CiDeploymentAnswer = z.infer<typeof CiDeploymentAnswerSchema>;
+export const CiRunListResponseSchema = z.object({ runs: z.array(PipelineRunSchema).describe("Its newest runs, newest first, asked of the forge now.") });
+export const CiRunResponseSchema = z.object({ run: PipelineRunSchema.describe("The run, asked of the forge now.") });
+// The workflow file a GitHub run ran, at its commit, and every reusable workflow it calls that could be read, by the key
+// its call names it with: what the board's backend draws the run's job graph from. Absent where the forge has no such
+// file (GitLab) or it could not be read.
+export const CiRunWorkflowResponseSchema = z.object({
+    root: z.string().optional().describe("The run's workflow file, at the run's commit."),
+    called: z.record(z.string(), z.string()).describe("Each reusable workflow it calls that could be read, by the key its call names it with."),
+});
+export const CiJobParamSchema = z.object({
+    repo: z.string().describe("Which workspace repository."),
+    jobId: z.number().describe("Which job, by the forge's own id."),
+});
+export const CiJobLogResponseSchema = z.object({
+    log: z.string().describe("The job's whole log, as plain text; a log the forge would not serve says so in place of it."),
+});
+export const CiJobAnnotationsResponseSchema = z.object({ annotations: z.array(z.string()).describe("What the job's check run annotations say.") });
+// Each repository wired to CI, and which branches are its main line: the forge's default branch, learned at the hook
+// reconcile and from every delivery, else the clone's `origin/HEAD`, else `main` and `master` both (ci/main-line.ts).
+export const CiMainLineSchema = z.object({
+    repo: z.string().describe("Which workspace repository."),
+    host: CiHostSchema.describe("Which forge it lives on."),
+    project: z.string().describe("The project there."),
+    branches: z.array(z.string()).describe("Its main line: the default branch, or `main` and `master` when nothing has said which."),
+    named: z.boolean().describe("Whether the forge or the clone named the default branch, rather than the two usual names standing in."),
+    concluded: z
+        .array(z.object({ branch: z.string(), status: z.enum(["success", "failed"]), at: z.number() }))
+        .describe("The newest finished run heard on each of those branches, any workflow: how it ended and when it was heard. Empty when none was."),
+});
+export type CiMainLine = z.infer<typeof CiMainLineSchema>;
+export const CiMainLinesResponseSchema = z.object({ lines: z.array(CiMainLineSchema) });
+// An extension taking main lines' failures for itself (POST /ci/main-lines/claim): while a claim of an enabled extension
+// stands, a main line's failure reaches no `ci` automation listening on every branch (ci/events.ts), so the extension's
+// one fix agent is the only agent on it. Kept across restarts; an extension switched off holds none.
+export const CiMainLineClaimSchema = z.object({ claimed: z.boolean().describe("Take main lines' failures (true), or let them go (false).") });
+// What the sandbox's own test runs saw fail on clean trees at main commits (GET /ci/main/local), in rows and in words.
+export const CiLocalMainResponseSchema = z.object({
+    local: z.array(CiLocalMainSchema),
+    text: z.string().describe("The same in words, as `agents ci` prints it below CI's own; empty when nothing is recorded."),
+});
+
+// ---- (2026-11-26) main's repair, as the daemon kept it until it moved to the pipelines extension ---------------------
+// The shapes `.intentic/secrets/ci.json` held for main's one fix agent (`failures`, `passes`, `fleetReruns`,
+// `ownerSteps`), handed once to the extension that takes main's repair over (POST /ci/repair/hand-over), so a sandbox's
+// streaks, their turn counts and its fix agents carry across the update.
+
+// One job failing on a main-line branch: its name, under the workflow it is a job of as its `source`, and an id derived
+// from both, so the same job failing again in a later run is the same finding.
+export const CiFindingSchema = z.object({
+    id: z.string(),
+    source: z.string(),
+    text: z.string(),
+    // Whether it failed by running out of time, the last time it failed.
+    timedOut: z.boolean().optional(),
+    // What the fixer read of the job when it last failed: the run and its commit, when it was read, and the error lines
+    // its log named. Absent on a finding kept before 2026-11-17.
+    runId: z.number().optional(),
+    sha: z.string().optional(),
+    readAt: z.number().optional(),
+    errors: z.array(z.string()).optional(),
+});
+export type CiFinding = z.infer<typeof CiFindingSchema>;
+// Main's CI failing on one branch, as its one fix agent's streak keeps it.
+export const CiFailureSchema = z.object({
+    // When its first job failed, which began the streak.
+    since: z.number(),
+    findings: z.array(CiFindingSchema).default([]),
+    // Oldest first.
+    decisions: z.array(MainFailureDecisionSchema).default([]),
+    // The run the streak began in, which names its fix agent, and the newest run failing on it.
+    firstRunId: z.number(),
+    runId: z.number(),
+    // How many runs have failed on it.
+    count: z.number(),
+    // Each workflow failing on it, with the newest run of it that failed. Empty for a failure kept before 2026-09-27.
+    workflows: z.record(z.string(), z.number()).default({}),
+    // Each workflow in `workflows`, timed apart (2026-11-03): when it began failing, when it last failed, and what set its
+    // newest failed run off.
+    spans: z.record(z.string(), z.object({ since: z.number(), failedAt: z.number(), trigger: z.string().optional() })).default({}),
+    // Every failed job the streak has heard of, as `<runId>/<jobId>`, oldest first. Bounded.
+    heard: z.array(z.string()).default([]),
+    // Turns the sandbox started for its fix agent this streak; a person's Fix press gives them back.
+    turns: z.number().default(0),
+    // Whether its fix agent has left a change this streak.
+    changed: z.boolean().default(false),
+});
+export type CiFailure = z.infer<typeof CiFailureSchema>;
+export const CiOwnerStepKeptSchema = z.object({ step: z.string(), at: z.number() });
+export const CiRepairHandOverSchema = z.object({
+    // Keyed "<repo>\n<branch>": only branches failing when it was handed over.
+    failures: z.record(z.string(), CiFailureSchema),
+    // Keyed like `failures`: the newest run of each workflow that passed on a main-line branch.
+    passes: z.record(z.string(), z.record(z.string(), z.number())),
+    // Keyed by workspace repo: the runs re-run because the CI fleet, not the code, failed them, newest first.
+    fleetReruns: z.record(z.string(), z.array(z.number())),
+    // Keyed by fix conversation id: the step outside the repository its latest turn ended on.
+    ownerSteps: z.record(z.string(), CiOwnerStepKeptSchema),
+    // Whether the owner had switched repairs off in the sandbox's own setting, which the taking extension's own setting
+    // of the same name now holds. Absent: they had not.
+    autoRepair: z.literal(false).optional(),
+});
+export type CiRepairHandOver = z.infer<typeof CiRepairHandOverSchema>;

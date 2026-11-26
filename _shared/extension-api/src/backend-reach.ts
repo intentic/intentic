@@ -6,18 +6,22 @@ import {
     EXTENSION_EVENT_KINDS,
     EXTENSION_EVENTS_HEARTBEAT_MS,
     EXTENSION_EVENTS_KINDS_PARAM,
+    type ExtensionActivity,
+    extensionActivityUrl,
     ExtensionEventSchema,
     extensionEventsUrl,
     ExtensionExecResultSchema,
     extensionExecUrl,
     extensionWorkHoldUrl,
 } from "@intentic/sandbox-contract/extension-protocol";
+import type { CiFeedEvent } from "@intentic/sandbox-contract/schemas/ci";
 import type { Disposable } from "./disposable.js";
-import type { ExecOptions, ExecResult, ExtensionServerApi, RunSettled, SandboxActivity } from "./server.js";
+import type { ExtensionServerApi } from "./server.js";
+import type { ExecOptions, ExecResult, RunSettled, SandboxActivity } from "./server-reach.js";
 
 // What an extension's Node code hears and asks of the daemon besides its typed calls: the event stream (its settings, the
-// workspace's changes and the kinds its manifest declares), work it holds in flight, and commands it runs under a
-// workload class. One implementation for the backend host and every declared process (runtime.ts); each declared reach
+// workspace's changes and the kinds its manifest declares), work it holds in flight, commands it runs under a workload
+// class, and (2026-11-26) rows it writes in the sandbox's activity feed. One implementation for the backend host and every declared process (runtime.ts); each declared reach
 // is refused here before anything is sent, naming the manifest field, and the daemon refuses it again when asked.
 
 type DaemonRequest = ExtensionServerApi["daemon"]["request"];
@@ -31,6 +35,8 @@ interface Heard {
     readonly settings: readonly string[];
     readonly run: RunSettled;
     readonly activity: SandboxActivity;
+    // (2026-11-26) A batch of CI feed frames, one per frame as it is heard; empty after a gap, as the workspace's kinds are.
+    readonly ci: readonly CiFeedEvent[];
 }
 type HeardKind = keyof Heard;
 type Listener<K extends HeardKind> = (heard: Heard[K]) => void;
@@ -72,6 +78,9 @@ const deliverLine = (line: string, deliver: Deliver): void => {
         }
         case "activity":
             deliver("activity", { live: event.live });
+            return;
+        case "ci":
+            deliver("ci", [event.event]);
             return;
     }
 };
@@ -139,11 +148,11 @@ const keepStreaming = async ({ open, line, gap, dropped }: Streaming, signal: Ab
 };
 
 // The extension's event stream: opened by the first listener, closed with the last, reconnected with backoff while
-// anything listens. A drop means frames were missed, so a reconnect tells every listener of a workspace or settings kind
-// "anything may have changed" with an empty list, which is what a reader of an empty batch already does; `activity` is
-// told afresh by the new stream itself, and a `run` missed in the gap is the reader's to catch up on.
+// anything listens. A drop means frames were missed, so a reconnect tells every listener of a workspace, settings or CI
+// kind "anything may have changed" with an empty list, which is what a reader of an empty batch already does; `activity`
+// is told afresh by the new stream itself, and a `run` missed in the gap is the reader's to catch up on.
 const createEventHub = (open: (signal: AbortSignal) => Promise<Response>, log: (message: string) => void) => {
-    const listeners: Listeners = { files: new Set(), refs: new Set(), repos: new Set(), settings: new Set(), run: new Set(), activity: new Set() };
+    const listeners: Listeners = { files: new Set(), refs: new Set(), repos: new Set(), settings: new Set(), run: new Set(), activity: new Set(), ci: new Set() };
     let running: AbortController | undefined;
     const count = (): number => Object.values(listeners).reduce((sum, set) => sum + set.size, 0);
     // SAFETY: `listeners[kind]` holds listeners of this very kind; the mapped type cannot say so through an index.
@@ -167,6 +176,7 @@ const createEventHub = (open: (signal: AbortSignal) => Promise<Response>, log: (
             for (const kind of EXTENSION_EVENT_KINDS) {
                 deliver(kind, []);
             }
+            deliver("ci", []);
         },
         dropped: (why) => log(`the event stream dropped (${why}); reconnecting`),
     };
@@ -254,6 +264,7 @@ export interface BackendReach {
     readonly events: ExtensionServerApi["events"];
     readonly work: ExtensionServerApi["work"];
     readonly exec: ExtensionServerApi["exec"];
+    readonly activity: ExtensionServerApi["activity"];
     // Ends the event stream; holds belong to their holders.
     readonly close: () => void;
 }
@@ -285,6 +296,12 @@ export const createBackendReach = (id: string, request: DaemonRequest, declared:
                 }
                 return hub.subscribe("activity", listener);
             },
+            onCi: (listener) => {
+                if (!declared.events.includes("ci")) {
+                    throw undeclared(id, "listened for the CI feed (`ci`) without declaring it", "permissions.events");
+                }
+                return hub.subscribe("ci", listener);
+            },
         },
         work: {
             hold: (label) => {
@@ -300,6 +317,18 @@ export const createBackendReach = (id: string, request: DaemonRequest, declared:
                 throw undeclared(id, `ran a command in the ${workload} class without declaring it`, "permissions.exec");
             }
             return execThrough(request, argv, options);
+        },
+        activity: {
+            append: async (row) => {
+                const answered = await request(extensionActivityUrl(), {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify(row satisfies ExtensionActivity),
+                });
+                if (!answered.ok) {
+                    throw new Error(`daemon answered ${answered.status} for POST ${extensionActivityUrl()}: ${(await answered.text()).slice(0, 300)}`);
+                }
+            },
         },
         close: hub.close,
     };

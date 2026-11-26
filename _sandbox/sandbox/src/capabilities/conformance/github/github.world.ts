@@ -15,7 +15,7 @@ import { redirectedFetch, redirectedNodeRequest, startGateway } from "../kit/gat
 import { httpsProxy } from "../kit/https-proxy.js";
 import type { WorldKind } from "../kit/scenario.js";
 import { type GithubFake, startGithubFake } from "./github.fake.js";
-import type { created } from "../../../definition/workspace-repo.js";
+import type { forgeClientFor } from "../../../forge/client.js";
 
 const repositoryName = z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u);
 
@@ -93,7 +93,7 @@ const upstream = async (kind: WorldKind, root: string, cleanup: CleanupStack) =>
     return { fake, ownerEnv: proxy.env, transport: redirectedFetch(origins), probeRequest: redirectedNodeRequest(origins) };
 };
 
-export const githubWorld = async (kind: WorldKind, createRepository: typeof created) => {
+export const githubWorld = async (kind: WorldKind, clientFor: typeof forgeClientFor) => {
     const root = await mkdtemp(join(tmpdir(), "github-conformance-"));
     const cleanup = cleanupStack("GitHub world");
     cleanup.add(async () => rm(root, { recursive: true, force: true }));
@@ -148,7 +148,7 @@ export const githubWorld = async (kind: WorldKind, createRepository: typeof crea
             gitHost: gitHostOf(config),
             branches,
             deleteBranch,
-            createRepository,
+            createRepository: clientFor("github", transport).createRepository,
             close: cleanup.close,
         };
     } catch (error) {

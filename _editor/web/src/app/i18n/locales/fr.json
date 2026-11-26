@@ -6831,11 +6831,6 @@
             "releaseNoteWithEachCommit": "Note de version à chaque commit",
             "workspaceRepository": "Dépôt de l'espace de travail"
         },
-        "agentChecks": {
-            "repairMainCi": "Réparer main quand sa CI échoue",
-            "repairMainCiNote": "Un agent de correction sur main : premier échec (tous les jobs) ; échecs suivants jusqu'à main vert ; relais sans tours ou bloqué ; échecs runner relancés une fois.",
-            "mainCi": "CI de main"
-        },
         "agentClock": {
             "clock": "Horloge",
             "scheduleTimesAreIn": "Les planifications suivent",
@@ -11747,7 +11742,6 @@
             "agentSpeechProvider": "elevenlabs, openai, fournisseur tts, api vocale, clé api, api key",
             "agentSubagents": "agents en parallèle, déléguer, concurrence, simultanés, assistants, workers",
             "agentOffload": "runner, machine distante, autre ordinateur, délester, builds, occupé",
-            "agentMainCi": "github actions, ci, pipeline, build en échec, main cassé, réparation automatique",
             "agentFinishedWork": "intégrer automatiquement, auto merge, commit, git, pull, synchroniser, archiver, version",
             "agentCommitAuthor": "auteur, committer, coauteur, co-authored-by, identité git, user.name, user.email, e-mail, noreply, attribution",
             "agentChangelog": "notes de version, journal des modifications, historique",

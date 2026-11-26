@@ -1,6 +1,7 @@
 import { declaredReachOf, extensionIdOf } from "@intentic/extension-manifest";
 import {
     EXTENSION_EVENTS_HEARTBEAT_MS,
+    ExtensionActivitySchema,
     type ExtensionEvent,
     ExtensionExecSchema,
     type ExtensionExecResult,
@@ -12,13 +13,15 @@ import type { z } from "zod";
 import type { AppEnv } from "../../app-env.js";
 import type { InstalledExtension } from "../../capabilities/extension-inventory/installed-extensions.js";
 import type { Services } from "../../composition.js";
+import { opt } from "../../opt.js";
 import { runExtensionExec } from "./extension-exec.js";
 import { holdExtensionWork } from "./extension-holds.js";
 
 // (2026-11-26) The two doors an extension's declared `permissions` open beside its own settings and events
 // (own.routes.ts): holding work in flight (`work`) and running a command under a workload class (`exec`). Reached by
 // every extension token undeclared in `permissions.daemon` (extension-manifest's EXTENSION_OWN_ROUTES); each resolves
-// the caller from its token again and checks the declaration its manifest makes now.
+// the caller from its token again and checks the declaration its manifest makes now. And (2026-11-26) a row in the
+// activity feed written as the extension's own (`activity`), which needs no declaration.
 
 // The calling extension, or the refusal to answer with (own.routes.ts ownCaller).
 type OwnCaller = (c: Context<AppEnv>) => Promise<InstalledExtension | Response>;
@@ -86,5 +89,29 @@ export const createExtensionDoors = (services: Services, ownCaller: OwnCaller) =
             );
         }
         return c.json(await runExtensionExec(services, extensionIdOf(extension.manifest), asked.data, c.req.raw.signal) satisfies ExtensionExecResult);
+    },
+
+    // A row in the sandbox's activity feed, as the extension's own: the system's direction, and the extension named on it
+    // from its token. What main's fix agent did (the pipelines extension's `ci.repair_*` rows) is the first, read by the
+    // SDLC scoreboard as it read the daemon's own.
+    activity: async (c: Context<AppEnv>): Promise<Response> => {
+        const extension = await ownCaller(c);
+        if (extension instanceof Response) {
+            return extension;
+        }
+        const asked = await bodyOf(c, ExtensionActivitySchema);
+        if (!asked.success) {
+            return c.json({ error: `not an activity row: ${asked.error.issues[0]?.message ?? "the body does not parse"}` }, 400);
+        }
+        const { type, content, outcome, conversationId } = asked.data;
+        await services.activity.append({
+            direction: "system",
+            type,
+            content,
+            ...opt("outcome", outcome),
+            ...opt("conversationId", conversationId),
+            extra: { extension: extensionIdOf(extension.manifest) },
+        });
+        return c.json({ ok: true });
     },
 });

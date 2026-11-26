@@ -66,9 +66,6 @@ export type {
     BackendRouteHandler,
     BrowserCall,
     DaemonDoors,
-    ExecClass,
-    ExecOptions,
-    ExecResult,
     ExtensionCaller,
     ExtensionCallerWho,
     ExtensionHealth,
@@ -84,8 +81,6 @@ export type {
     PublicRouteHandler,
     PublicRouteVerification,
     RunningJob,
-    RunSettled,
-    SandboxActivity,
     ServerActivation,
     ServerDocument,
     ServerDocumentOptions,
@@ -105,6 +100,7 @@ export type {
     WatchCheckHandler,
     ToolResult,
 } from "./server.js";
+export type { ActivityRow, CiFeedEvent, ExecClass, ExecOptions, ExecResult, RunSettled, SandboxActivity } from "./server-reach.js";
 
 // The backend api, built once for every place an extension's Node code runs: the daemon's backend host, which runs every
 // `server` bundle in one process, and each declared process (`contributes.processes`), which connects itself from the
@@ -320,6 +316,7 @@ export const createExtensionRuntime = (options: ExtensionRuntimeOptions): Extens
             events: reach.events,
             work: reach.work,
             exec: reach.exec,
+            activity: reach.activity,
         },
         close: reach.close,
     };

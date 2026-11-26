@@ -2,42 +2,106 @@
     "$schema": "https://intentic.dev/intentic-extension.schema.json",
     "publisher": "intentic",
     "name": "pipelines",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "category": "work",
     "icon": "bolt",
-    "engines": { "intentic": "^2.41.0" },
+    "engines": {
+        "intentic": "^2.56.0"
+    },
+    "server": "dist/server.js",
     "permissions": {
         "sandbox": [
             "GET /settings",
             "GET /agents",
-            "GET /ci/runs",
             "POST /ci/runs/rerun",
             "POST /ci/runs/cancel",
             "POST /ci/runs/dispatch",
-            "POST /ci/failures/forget",
-            "POST /ci/runs/jobs",
-            "POST /ci/fix",
             "GET /system/devices",
             "GET /system/devices/*/ci-runners",
             "POST /system/devices/*/ci-runners/*/ops/*",
             "GET /system/devices/*/ci-runners/*/logs",
             "POST /system/devices/*/ci-runners",
             "DELETE /system/devices/*/ci-runners/*"
-        ]
+        ],
+        "daemon": [
+            "GET /ci/runs",
+            "GET /ci/main-lines",
+            "GET /ci/main/local",
+            "POST /ci/main-lines/claim",
+            "POST /ci/repair/hand-over",
+            "POST /ci/runs/list",
+            "POST /ci/runs/run",
+            "POST /ci/runs/jobs",
+            "POST /ci/runs/workflow",
+            "POST /ci/runs/failed-steps",
+            "POST /ci/runs/passed-jobs",
+            "POST /ci/runs/rerun-failed",
+            "POST /ci/jobs/log",
+            "POST /ci/jobs/annotations",
+            "POST /agent",
+            "POST /agent/stop",
+            "GET /agents",
+            "GET /agents/archived",
+            "GET /agents/*",
+            "POST /agents/archive",
+            "GET /system/devices",
+            "GET /system/devices/*/ci-runners"
+        ],
+        "events": [
+            "ci",
+            "run"
+        ],
+        "work": true
     },
     "contributes": {
-        "modelRoles": [
-            { "id": "pipeline-fix", "label": "Pipeline fixes", "explanation": "The agent started by Fix on a failed pipeline.", "icon": "wave-pulse", "setup": "high" }
+        "settings": [
+            {
+                "key": "autoRepair",
+                "type": "boolean",
+                "title": "Repair main's CI",
+                "default": true,
+                "description": "Whether main's CI failing is repaired without asking. The first job that fails on main starts one fix agent, without waiting for the rest of the run, and every later failure on main goes to that same agent until a run passes. It gets a few turns; when they are spent, or it finishes without changing anything (a failure that is not in the code), the failure waits for you. A failure on the CI fleet itself is re-run once instead. Off, all of it is only reported."
+            }
         ],
-        "views": [{ "id": "pipelines", "label": "Pipelines", "surface": "rail", "badge": true }],
-        "sideViews": [{ "id": "run", "label": "CI run", "links": true }],
+        "tools": {},
+        "modelRoles": [
+            {
+                "id": "pipeline-fix",
+                "label": "Pipeline fixes",
+                "explanation": "The agent started by Fix on a failed pipeline.",
+                "icon": "wave-pulse",
+                "setup": "high"
+            }
+        ],
+        "views": [
+            {
+                "id": "pipelines",
+                "label": "Pipelines",
+                "surface": "rail",
+                "badge": true
+            }
+        ],
+        "sideViews": [
+            {
+                "id": "run",
+                "label": "CI run",
+                "links": true
+            }
+        ],
         "automationTemplates": [
             {
                 "id": "fix-failing-ci",
                 "title": "Fix failing CI",
                 "icon": "bolt",
-                "requires": ["github", "gitlab"],
-                "trigger": { "kind": "listener", "provider": "ci", "eventType": "pipeline_broken" },
+                "requires": [
+                    "github",
+                    "gitlab"
+                ],
+                "trigger": {
+                    "kind": "listener",
+                    "provider": "ci",
+                    "eventType": "pipeline_broken"
+                },
                 "prompt": "A CI pipeline that was passing just failed: each payload line is one JSON event with the workspace repo, branch, sha, run url and the failed job names. Fetch the failing jobs' logs with your GitHub/GitLab capability, reproduce the failure locally in that repo, fix the cause, verify the failing checks pass, and push the fix to the branch that failed.",
                 "note": "the moment a branch starts failing"
             }

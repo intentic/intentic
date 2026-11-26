@@ -4,11 +4,12 @@ import { LANDING_CHECKS_NOTE_HEADER, LANDING_CHECKS_NOTE_TITLE } from "../../ses
 // What a turn is told about checks: nothing holds its work back, a repository's own end-of-turn checks may say back once
 // what its change added (agent/run/turn-checks.ts) and nothing else checks it when it finishes or after it lands, the
 // checks worth running are the ones scoped to what it changed, and CI checks what the owner pushes, with one fix agent on
-// whatever fails on main (ci/main-fixer.ts). Said with "may" to every runtime, since only an isolated turn of the Claude
-// Code loop meets those checks. Sent on the opening message and after a compaction, like every standing note
-// (turn-premise.ts); it names no failures, so nothing it says goes stale between turns: it points at `agents ci`, which
-// reads main's failures when asked (ci/known/main-known.ts; 2026-11-17, the shinobi-society audit, where agents stashed their
-// work and re-ran main to tell whose a failure was).
+// whatever fails on main (the pipelines extension's main-fixer.ts). Said with "may" to every runtime, since only an
+// isolated turn of the Claude Code loop meets those checks. Sent on the opening message and after a compaction, like every
+// standing note (turn-premise.ts); it names no failures, so nothing it says goes stale between turns: it points at
+// `agents ci`, which reads main's failures when asked (the pipelines extension's main-known.ts, with this sandbox's own
+// test runs at main from ci/local-main.ts; 2026-11-17, the shinobi-society audit, where agents stashed their work and
+// re-ran main to tell whose a failure was).
 
 export const LANDING_CHECKS_NOTE: TurnNote = {
     title: LANDING_CHECKS_NOTE_TITLE,

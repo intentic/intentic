@@ -17,6 +17,13 @@ const fakeHost = (reachable = true) => {
     const views: ViewRegistration[] = [];
     const fetched: HostQuery[] = [];
     const api = {
+        // (2026-11-26) The board's runs are this extension's backend's (backendCall.ts).
+        backend: {
+            json: async () => {
+                procedures.push(`ci.runs`);
+                return answer;
+            },
+        },
         sandbox: {
             readKey: (procedure: string, input?: unknown) => [procedure, ...(input === undefined ? [] : [input]), `box`],
             reachable: () => reachable,

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { MainFailureDecisionSchema } from "@intentic/sandbox-contract/schemas/ci";
+import { CiFailureSchema, CiOwnerStepKeptSchema, type CiRepairHandOver } from "@intentic/sandbox-contract/schemas/ci";
 import { z } from "zod";
 import { at, drop, mapValue, rename } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
@@ -7,10 +7,12 @@ import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
 
 // Daemon-recorded CI state in .intentic/secrets/ci.json: the webhook secret, each repo+branch's last terminal
-// conclusion (drives pipeline_fixed/pipeline_broken), the poller's already-announced run ids, each main-line branch
-// failing now with the newest run of each workflow that passed on it, what the forge says of each repository (its id,
-// path and default branch), the runs re-run for the fleet, and the steps outside the repository fix agents ended on. Carries a secret, so it's a
-// LOCKED_STATE_ENTRIES file like capabilities.json. No 'seen' flag: only a passing commit clears the rail badge.
+// conclusion (drives pipeline_fixed/pipeline_broken), the poller's already-announced run ids, what the forge says of
+// each repository (its id, path and default branch), and which extensions claim main lines' failures (main-line-claims.ts).
+// Carries a secret, so it's a LOCKED_STATE_ENTRIES file like capabilities.json. No 'seen' flag: only a passing commit
+// clears the rail badge. (2026-11-26) Until main's fix agent moved to the pipelines extension this file also kept its
+// streaks (`failures`, `passes`, `fleetReruns`, `ownerSteps`): read now only to hand them over once (repair-hand-over.ts),
+// then dropped from the file.
 
 // Caps stored conclusions; oldest-touched entries drop past this so the file doesn't grow forever.
 const CONCLUSIONS_KEPT = 200;
@@ -18,67 +20,7 @@ const CONCLUSIONS_KEPT = 200;
 // Announced run ids kept per repo; only needs to outlast RUNS_PER_POLL by a margin.
 const ANNOUNCED_KEPT = 60;
 
-// Fleet re-runs kept per repo; a run older than these is long past being heard of again.
-const FLEET_RERUNS_KEPT = 50;
-
-// Owner steps kept (owner-steps.ts), newest by when they were said; a fix agent older than these has scrolled off the board.
-const OWNER_STEPS_KEPT = 50;
-
 const ConclusionSchema = z.object({ status: z.enum(["success", "failed"]), at: z.number() });
-
-// One job failing on a main-line branch: its name, under the workflow it is a job of as its `source`, and an id derived
-// from both (main-fixer.ts, findingOf), so the same job failing again in a later run is the same finding.
-const CiFindingSchema = z.object({
-    id: z.string(),
-    source: z.string(),
-    text: z.string(),
-    // Whether it failed by running out of time, the last time it failed: GitHub reports that as a cancel
-    // (forge/github-cancels.ts), GitLab as `job_execution_timeout`.
-    timedOut: z.boolean().optional(),
-    // 2026-11-17, the shinobi-society audit: what the fixer read of the job when it last failed, kept so an agent asking
-    // whether a failure is main's (`agents ci`, main-known.ts) is answered without a forge call: the run and its commit,
-    // when it was read, and the error lines its log named (main-streak.ts keptErrors). Absent on a finding kept before.
-    runId: z.number().optional(),
-    sha: z.string().optional(),
-    readAt: z.number().optional(),
-    errors: z.array(z.string()).optional(),
-});
-export type CiFinding = z.infer<typeof CiFindingSchema>;
-
-// Main's CI failing on one branch, as its one fix agent's streak keeps it (main-fixer.ts): the jobs failing now are its
-// findings, and the fix agent put on it and every hand-over are its decisions (contract, MainFailureDecisionSchema), with
-// what the streak counts besides. Kept here rather than in memory, so a restart neither forgets a streak nor starts a
-// second fix agent on it.
-const CiFailureSchema = z.object({
-    // When its first job failed, which began the streak.
-    since: z.number(),
-    findings: z.array(CiFindingSchema).default([]),
-    // Oldest first.
-    decisions: z.array(MainFailureDecisionSchema).default([]),
-    // The run the streak began in, which names its fix agent (ciFixConversationId), and the newest run failing on it.
-    firstRunId: z.number(),
-    runId: z.number(),
-    // How many runs have failed on it.
-    count: z.number(),
-    // Each workflow failing on it, with the newest run of it that failed: a later run of that workflow passing takes it
-    // off, and the streak ends with the last one. Empty for a failure kept before 2026-09-27, which any passing run ends.
-    workflows: z.record(z.string(), z.number()).default({}),
-    // Each workflow in `workflows`, timed apart (2026-11-03): when it began failing, when it last failed, and what set its
-    // newest failed run off (the forge's word: `push`, `schedule`). One workflow failing for weeks then no longer makes
-    // another's breakage read as old, and one that has not failed for MAIN_FAILURE_STALE_MS, nor passed, comes off.
-    // Absent for a workflow kept before, which the boot fills in from the forge (main-ends.ts, timedApart).
-    spans: z.record(z.string(), z.object({ since: z.number(), failedAt: z.number(), trigger: z.string().optional() })).default({}),
-    // Every failed job the streak has heard of, as `<runId>/<jobId>`, oldest first: each is handled once, however many
-    // ways it arrives (its own webhook, its run's, the poller). Bounded.
-    heard: z.array(z.string()).default([]),
-    // Turns the sandbox started for its fix agent this streak; words said into a live turn are none. A person's Fix press
-    // gives them back.
-    turns: z.number().default(0),
-    // Whether its fix agent has left a change this streak (held on its branch or landed), so a later turn that finds
-    // nothing left to change is not read as a failure it cannot fix.
-    changed: z.boolean().default(false),
-});
-export type CiFailure = z.infer<typeof CiFailureSchema>;
 
 // What the forge itself says of a repository (main-line.ts), learned at the hook reconcile and from every delivery. The
 // id is its identity: a rename or a transfer keeps it, and changes only the path, which git and the API keep reaching
@@ -99,18 +41,22 @@ const CiStateSchema = z.object({
     conclusions: z.record(z.string(), ConclusionSchema),
     // Absent means never polled (suppresses the backlog storm); empty means polled with none found, not re-seeded.
     announced: z.record(z.string(), z.array(z.number())).optional(),
-    // Keyed like `conclusions`; only branches failing right now.
-    failures: z.record(z.string(), CiFailureSchema).optional(),
-    // Keyed like `conclusions`: the newest run of each workflow that passed on a main-line branch, so a failure an older
-    // run reports afterwards is not taken for main's word.
-    passes: z.record(z.string(), z.record(z.string(), z.number())).optional(),
     // Keyed by workspace repo.
     forges: z.record(z.string(), CiForgeSchema).optional(),
-    // Keyed by workspace repo: the runs re-run because the CI fleet, not the code, failed them, newest first, so a run is
-    // re-run once however many restarts hear of it. Bounded.
+    // (2026-11-26) Keyed by the extension's identity (publisher.name): the extensions that took main lines' failures for
+    // their own fix agent (main-line-claims.ts), and when.
+    mainLineClaims: z.record(z.string(), z.object({ at: z.number() })).optional(),
+    // Until 2026-11-26, main's fix agent's own state, as the contract's hand-over carries it (schemas/ci.ts): read once by
+    // the hand-over (repair-hand-over.ts), which drops them. Keyed like `conclusions`; only branches failing then.
+    failures: z.record(z.string(), CiFailureSchema).optional(),
+    // Keyed like `conclusions`: the newest run of each workflow that passed on a main-line branch.
+    passes: z.record(z.string(), z.record(z.string(), z.number())).optional(),
+    // Keyed by workspace repo: the runs re-run because the CI fleet, not the code, failed them, newest first.
     fleetReruns: z.record(z.string(), z.array(z.number())).optional(),
-    // Keyed by fix conversation id: the step outside the repository its latest turn ended on (owner-steps.ts). Bounded.
-    ownerSteps: z.record(z.string(), z.object({ step: z.string(), at: z.number() })).optional(),
+    // Keyed by fix conversation id: the step outside the repository its latest turn ended on.
+    ownerSteps: z.record(z.string(), CiOwnerStepKeptSchema).optional(),
+    // (2026-11-26) Who main's repair was handed over to, and when: a later hand-over answers nothing.
+    repairHandedOver: z.object({ extension: z.string(), at: z.number() }).optional(),
 });
 type CiState = z.infer<typeof CiStateSchema>;
 
@@ -154,38 +100,25 @@ export interface CiStore {
     // Minted on first read, stable after; hook registrations and signature checks must agree across boots.
     readonly secret: () => Promise<string>;
     readonly lastConclusion: (repo: string, branch: string) => Promise<"success" | "failed" | undefined>;
-    // The same, with when it was heard: how fresh what `agents ci` says of a main line is (main-known.ts).
+    // The same, with when it was heard.
     readonly conclusion: (repo: string, branch: string) => Promise<{ readonly status: "success" | "failed"; readonly at: number } | undefined>;
     readonly recordConclusion: (repo: string, branch: string, status: "success" | "failed", at: number) => Promise<void>;
     // Ids already announced for this repo, or undefined if never polled: "nothing new" vs "nothing known yet".
     readonly announcedRuns: (repo: string) => Promise<number[] | undefined>;
     // Newest-first; ids past ANNOUNCED_KEPT are forgotten.
     readonly recordAnnounced: (repo: string, runIds: readonly number[]) => Promise<void>;
-    // The main-line branches whose CI fails now, keyed "<repo>\n<branch>".
-    readonly failures: () => Promise<Readonly<Record<string, CiFailure>>>;
-    // Changes one branch's failure; undefined forgets it. Answers the failure as it now stands.
-    readonly failure: (
-        repo: string,
-        branch: string,
-        change: (current: CiFailure | undefined) => CiFailure | undefined,
-    ) => Promise<CiFailure | undefined>;
-    // The newest run of each workflow that passed on the branch.
-    readonly passes: (repo: string, branch: string) => Promise<Readonly<Record<string, number>>>;
-    // Records a pass, keeping the newest per workflow.
-    readonly recordPass: (repo: string, branch: string, workflow: string, runId: number) => Promise<void>;
     // What the forge said of each repository, keyed by workspace repo.
     readonly forges: () => Promise<Readonly<Record<string, CiForge>>>;
     // Merges what the forge said of a repository its remote names `remote`; a fact learned for another remote is
     // replaced, not merged. Writes nothing when it says nothing new, since every delivery says it again.
     readonly learnForge: (repo: string, remote: string, fact: Omit<CiForge, "remote">) => Promise<void>;
-    // Records a fleet re-run of the run, answering whether it is the first: false means it was re-run before.
-    readonly fleetRerun: (repo: string, runId: number) => Promise<boolean>;
-    // Whether the run was re-run for the fleet already, without recording anything.
-    readonly fleetRerunDone: (repo: string, runId: number) => Promise<boolean>;
-    // The step outside the repository each CI fix agent's latest turn ended on, keyed by its conversation id.
-    readonly ownerSteps: () => Promise<Readonly<Record<string, { readonly step: string; readonly at: number }>>>;
-    // Keeps one agent's step, or forgets it with undefined, answering whether anything changed.
-    readonly ownerStep: (conversationId: string, kept: { readonly step: string; readonly at: number } | undefined) => Promise<boolean>;
+    // The identities of the extensions claiming main lines' failures.
+    readonly mainLineClaims: () => Promise<readonly string[]>;
+    // Records or lets go of one extension's claim.
+    readonly claimMainLines: (extension: string, claimed: boolean, at: number) => Promise<void>;
+    // Main's repair state as the daemon kept it before 2026-11-26, answered once to `extension` and dropped from the
+    // file in the same write; undefined once it was handed over.
+    readonly handOverRepair: (extension: string, at: number) => Promise<Omit<CiRepairHandOver, "autoRepair"> | undefined>;
 }
 
 const keyOf = (repo: string, branch: string): string => `${repo}\n${branch}`;
@@ -217,27 +150,6 @@ export const fileCiStore = (path: string): CiStore => {
             });
         },
         announcedRuns: async (repo) => (await file.read()).announced?.[repo],
-        failures: async () => (await file.read()).failures ?? {},
-        failure: async (repo, branch, change) => {
-            const key = keyOf(repo, branch);
-            const state = await file.update((current) => {
-                const next = change(current.failures?.[key]);
-                const { [key]: _previous, ...others } = current.failures ?? {};
-                return { ...minted(current), failures: next === undefined ? others : { ...others, [key]: next } };
-            });
-            return state.failures?.[key];
-        },
-        passes: async (repo, branch) => (await file.read()).passes?.[keyOf(repo, branch)] ?? {},
-        recordPass: async (repo, branch, workflow, runId) => {
-            await file.update((state) => {
-                const key = keyOf(repo, branch);
-                const known = state.passes?.[key] ?? {};
-                if ((known[workflow] ?? 0) >= runId) {
-                    return state;
-                }
-                return { ...minted(state), passes: { ...state.passes, [key]: { ...known, [workflow]: runId } } };
-            });
-        },
         forges: async () => (await file.read()).forges ?? {},
         learnForge: async (repo, remote, fact) => {
             const merged = (current: CiForge | undefined): CiForge => {
@@ -252,35 +164,27 @@ export const fileCiStore = (path: string): CiStore => {
                 same(state.forges?.[repo]) ? state : { ...minted(state), forges: { ...state.forges, [repo]: merged(state.forges?.[repo]) } },
             );
         },
-        fleetRerunDone: async (repo, runId) => ((await file.read()).fleetReruns?.[repo] ?? []).includes(runId),
-        fleetRerun: async (repo, runId) => {
-            let first = false;
+        mainLineClaims: async () => Object.keys((await file.read()).mainLineClaims ?? {}),
+        claimMainLines: async (extension, claimed, now) => {
             await file.update((state) => {
-                const known = state.fleetReruns?.[repo] ?? [];
-                if (known.includes(runId)) {
+                const { [extension]: held, ...others } = state.mainLineClaims ?? {};
+                if (claimed === (held !== undefined)) {
                     return state;
                 }
-                first = true;
-                return { ...minted(state), fleetReruns: { ...state.fleetReruns, [repo]: [runId, ...known].slice(0, FLEET_RERUNS_KEPT) } };
+                return { ...minted(state), mainLineClaims: claimed ? { ...others, [extension]: { at: now } } : others };
             });
-            return first;
         },
-        ownerSteps: async () => (await file.read()).ownerSteps ?? {},
-        ownerStep: async (conversationId, kept) => {
-            let changed = false;
+        handOverRepair: async (extension, now) => {
+            let handed: Omit<CiRepairHandOver, "autoRepair"> | undefined;
             await file.update((state) => {
-                const { [conversationId]: previous, ...others } = state.ownerSteps ?? {};
-                if (kept === undefined ? previous === undefined : previous?.step === kept.step) {
+                const { failures, passes, fleetReruns, ownerSteps, ...rest } = state;
+                if (state.repairHandedOver !== undefined) {
                     return state;
                 }
-                changed = true;
-                const steps = kept === undefined ? others : { ...others, [conversationId]: kept };
-                const newest = Object.entries(steps)
-                    .toSorted(([, a], [, b]) => b.at - a.at)
-                    .slice(0, OWNER_STEPS_KEPT);
-                return { ...minted(state), ownerSteps: Object.fromEntries(newest) };
+                handed = { failures: failures ?? {}, passes: passes ?? {}, fleetReruns: fleetReruns ?? {}, ownerSteps: ownerSteps ?? {} };
+                return { ...minted(rest), repairHandedOver: { extension, at: now } };
             });
-            return changed;
+            return handed;
         },
         recordAnnounced: async (repo, runIds) => {
             await file.update((state) => ({

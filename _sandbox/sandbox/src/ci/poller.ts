@@ -3,15 +3,19 @@ import { CI_POLL_INTERVAL_MS, isPipelineInFlight, type PipelineRun } from "@inte
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { ciResultOf, dispatchCiRun, rememberCiRun } from "./events.js";
+import { publishCiFeed } from "../seams/ci-feed-bus.js";
+import { opt } from "../opt.js";
 import { createCiFailureLog, vendorStatusOf } from "./logs/ci-failure-log.js";
-import { runInFlight } from "./main-fixer.js";
-import { ciClientFor, type FetchFn } from "./providers.js";
-import { ciProjects } from "./projects.js";
+import { isMainLine } from "./main-line.js";
+import { forgeClientFor as ciClientFor, type ForgeClient as CiClient, type FailedStep } from "../forge/client.js";
+import type { FetchFn } from "../forge/http.js";
+import { ciProjects, type CiProject } from "./projects.js";
 
 // REST fallback for the `ci` trigger: polls only the repos in ciHooks.warnings() (no live webhook), never one that has
 // it. Not a general-purpose poller or a freshness mechanism for the Pipelines view; it exists only to fire the events a
-// webhook would have delivered: a finished run, and a job of a run still going that failed, which main's fix agent
-// starts on (main-fixer.ts).
+// webhook would have delivered: a finished run, and a job of a main line's run still going that failed, which main's fix
+// agent starts on (the pipelines extension hears it on the CI feed). In-flight runs are read on main lines only, since a
+// job webhook would have said it at once there and every other branch's failure is heard with its run.
 
 // Deep enough per pass that a push burst between polls can't push a finished run out of the window.
 const RUNS_PER_POLL = 20;
@@ -34,9 +38,47 @@ export interface CiPoller {
     readonly poll: () => Promise<void>;
 }
 
-// Whether a listed run is over and heard of: a result, or a cancel, which is no result but main's fix agent reads
-// (events.ts dispatchCiRun).
+// Whether a listed run is over and heard of: a result, or a cancel, which is no result but goes on the CI feed, where
+// main's fix agent reads what passed in it (events.ts dispatchCiRun).
 const isOver = (run: PipelineRun): boolean => ciResultOf(run) !== undefined || run.status === "canceled";
+
+// A main line's run still going: each job that already failed, on the CI feed as its job webhook would have put it.
+const failedInFlight = async (services: Services, client: CiClient, project: CiProject, run: PipelineRun): Promise<void> => {
+    if (!(await isMainLine(services, project, run.branch))) {
+        return;
+    }
+    // Best-effort, as the job webhook it stands in for: a forge that will not list them now is asked on the next pass.
+    let steps: readonly FailedStep[] = [];
+    try {
+        steps = await client.failedSteps(project, run.runId);
+    } catch (error) {
+        services.logger.warn({ err: error, repo: project.repo, runId: run.runId }, "ci: a running run's failed jobs could not be read");
+    }
+    for (const step of steps) {
+        publishCiFeed({
+            kind: "job",
+            repo: project.repo,
+            host: project.account.provider,
+            project: project.project,
+            runId: run.runId,
+            ...opt("workflow", run.workflow),
+            job: step.job,
+            branch: run.branch,
+            sha: run.sha,
+            status: "failed",
+            url: run.url,
+            failed: {
+                jobId: step.id,
+                ...opt("step", step.step),
+                ...opt("steps", step.steps === undefined ? undefined : [...step.steps]),
+                ...opt("reason", step.reason),
+                ...opt("trigger", run.trigger),
+                ...opt("annotations", step.annotations === undefined ? undefined : [...step.annotations]),
+                ...opt("runner", step.runner),
+            },
+        });
+    }
+};
 
 export const createCiPoller = (
     services: Services,
@@ -78,17 +120,17 @@ export const createCiPoller = (
                 announced.authorName !== undefined
                     ? { id: announced.authorName, name: announced.authorName }
                     : { id: project.account.provider, name: project.account.provider };
-            // Awaited, unlike the webhook: the run is recorded as heard below, and main's fix agent must have it on file
-            // first.
-            await (await dispatchCiRun(services, project, announced, author, fetchFn)).fixed;
+            await dispatchCiRun(services, project, announced, author);
         }
-        // Written after main's fix agent has each run on file, so a crash mid-pass re-announces instead of silently
-        // dropping a failure of main's. An automation's wake rides the listener batcher, which only this process holds.
+        // Written after each run is dispatched, so a crash mid-pass re-announces instead of silently dropping one. An
+        // automation's wake rides the listener batcher, which only this process holds; the feed's reader catches up on
+        // a run it missed from the forge (the pipelines extension does on every gap in its stream).
         await services.ciStore.recordAnnounced(project.repo, [...ids, ...known]);
-        // What a job webhook would have said: a job of a run still going failed. Each is heard once, however often a
-        // pass lists it.
+        // What a job webhook would have said: a job of a main line's run still going failed. Said again on every pass
+        // while the run goes on; a reader hears each job once however often it is said (the pipelines extension's
+        // streak keeps what it heard).
         for (const run of listed.filter((candidate) => isPipelineInFlight(candidate.status)).toReversed()) {
-            await runInFlight(services, project, run, fetchFn);
+            await failedInFlight(services, client, project, run);
         }
     };
 

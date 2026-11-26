@@ -108,19 +108,20 @@ quoting and the rest, each with its reason) fails the job; every other finding, 
 an annotation and a step-summary block, and main's `autofix` job commits the mechanical fixes (rustfmt, `oxlint --fix`)
 as `style: apply formatters (CI)` and dispatches a CI run for that commit.
 
-When main's CI fails, one fix agent takes it (`_sandbox/sandbox/src/ci/main-fixer.ts`). The sandbox watches the default
-branch of every workspace repository mapped to a connected GitHub or GitLab account. A failure streak begins at the
-first job that fails and ends once a later run of every workflow that failed on it passes, or every job that failed
-has passed since. No verification job in
-`ci.yml` waits on another's success, so one run reports everything wrong with a commit, and the sandbox hands a run's
-failed jobs over together: when the run finishes, or 45 minutes after its first failure if it is still going (what fails
-after that follows at its end). The agent, `ci-fix-<repo>-<runId>`, starts with the first failed run's digest
-(`_sandbox/sandbox/src/ci/logs/failure-digest.ts`, with a `whole log:` path to each failed job's full log under
-`/tmp/intentic-ci-logs`), and each later run's failures go to the same conversation as one message. It gets at most three turns the sandbox starts per
-streak. Once they are spent, or it finished without changing anything, failed or was stopped, the
-failure waits for the owner. A failure in the runners rather than the code never reaches it, and a run whose every
-failure is the fleet's is re-run once. With the Agent tab's Repair switch (`autoRepair`) off, main's failure is only
-reported. `docs/architecture/sandbox.md` has the rest.
+When main's CI fails, one fix agent takes it: the Pipelines extension's
+(`_extensions/pipelines/src/server/main-fixer.ts`), which hears CI from the daemon's ingestion on its event stream. The
+sandbox watches the default branch of every workspace repository mapped to a connected GitHub or GitLab account. A
+failure streak begins at the first job that fails and ends once a later run of every workflow that failed on it passes,
+or every job that failed has passed since. No verification job in `ci.yml` waits on another's success, so one run reports
+everything wrong with a commit, and the fix agent is handed a run's failed jobs together: 90 seconds after its first
+failure, or when the run finishes if that is sooner (what fails later in it follows into the same conversation). The
+agent, `ci-fix-<repo>-<runId>`, starts with the first failed run's digest
+(`_extensions/pipelines/src/server/failure-digest.ts`, with a `whole log:` path to each failed job's full log under
+`/tmp/intentic-ci-logs`), and each later run's failures go to the same conversation as one message. It gets at most
+three turns the sandbox starts per streak. Once they are spent, or it finished without changing anything, failed or was
+stopped, the failure waits for the owner. A failure in the runners rather than the code never reaches it, and a run
+whose every failure is the fleet's is re-run once. With the Pipelines extension's Repair setting (`autoRepair`) off,
+main's failure is only reported. `docs/architecture/sandbox.md` has the rest.
 
 ## Stored data
 

@@ -5,6 +5,7 @@ import type { WebhookSignatureScheme } from "@intentic/sandbox-contract/schemas/
 import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Disposable } from "./disposable.js";
+import type { ActivityRow, CiFeedEvent, ExecOptions, ExecResult, RunSettled, SandboxActivity } from "./server-reach.js";
 
 // The effect vocabulary the daemon's own tools and every device's tools declare, re-exported so a tool here says what it
 // does in the same words.
@@ -272,62 +273,6 @@ export interface ApprovedPost {
 // What publishing it came to, in the queue's three states; a `done` result is the row's link (the message's URL) or line.
 export type ApprovedPostHandler = (post: ApprovedPost, context: { readonly signal: AbortSignal }) => Promise<ApprovedActionOutcome>;
 
-// (2026-11-26) A run ending in a conversation this extension started (POST /agent with its own token), as
-// `api.events.onRunSettled` hears it. `stopped`: a person's stop or a parent's cancel ended it, not the turn itself.
-export interface RunSettled {
-    readonly conversationId: string;
-    // Which run of the conversation it was.
-    readonly run: string;
-    readonly outcome: "done" | "failed" | "stopped";
-    readonly error?: string | undefined;
-    // Its last top-level prose, empty when it said nothing (cut at 20 000 characters).
-    readonly closing: string;
-}
-
-// Whether any agent turn is running in the sandbox, as `api.events.onActivity` hears it.
-export interface SandboxActivity {
-    readonly live: boolean;
-}
-
-// The workload classes `api.exec` runs under, each declared in `permissions.exec`: `command`, admitted and ranked as an
-// agent's shell command; `toolchain`, a heavy tool, which also takes turns in the sandbox's heavy-command queue.
-export type ExecClass = "command" | "toolchain";
-
-export interface ExecOptions {
-    // `command` when absent.
-    readonly class?: ExecClass;
-    // Absolute, or relative to the workspace root; the workspace root when absent.
-    readonly cwd?: string;
-    // Laid over the daemon's environment.
-    readonly env?: Readonly<Record<string, string>>;
-    readonly stdin?: string;
-    // How long it may take, waiting for room or a queue slot included: 10 minutes when absent, at most 2 hours.
-    readonly timeoutMs?: number;
-    // Bytes kept per stream, 1 MiB when absent, at most 64 MiB; past it the stream is still read and `truncated` says so.
-    readonly outputBytes?: number;
-    // Which end of an overflowing stream is kept: the head when absent.
-    readonly keep?: "head" | "tail";
-    // What the queue and the process list call it, after the extension's name.
-    readonly label?: string;
-    // Ends it, as its deadline does.
-    readonly signal?: AbortSignal;
-}
-
-export interface ExecResult {
-    // Set when the sandbox did not start it: no room came free within its deadline. Nothing ran.
-    readonly refused?: string | undefined;
-    // How long it waited for room before it started; a queued `toolchain` run waits inside its own run instead.
-    readonly waitedMs: number;
-    // Absent when it did not exit by itself: ended (`ended`), never started (`spawnError`), or killed by a signal.
-    readonly exitCode?: number | undefined;
-    readonly signal?: string | undefined;
-    readonly stdout: string;
-    readonly stderr: string;
-    readonly truncated: boolean;
-    readonly ended?: "timeout" | "aborted" | undefined;
-    readonly spawnError?: string | undefined;
-}
-
 // (2026-11-26) One automation's fire, handed to the handler its target names: an automation saved with
 // `target: { kind: "extension", extension: "<publisher.name>", handler }` by this extension itself fires it on its trigger,
 // under the scheduler's admission, held wakes and fire journal, with no agent. `id` is the same on every try: a handler
@@ -475,6 +420,10 @@ export interface ExtensionServerApi {
         onRunSettled(listener: (run: RunSettled) => void): Disposable;
         // Whether any agent turn is running in the sandbox (`activity`): told as the stream opens, then each time it flips.
         onActivity(listener: (activity: SandboxActivity) => void): Disposable;
+        // (2026-11-26) Each run that finished and each job that ended on the workspace's forges, as the core heard it from
+        // a webhook or its poller (`ci`): one frame a batch. An empty batch follows a gap in the stream, when frames may
+        // have been missed: a reader catches up from the forge's own word (GET /ci/runs) then.
+        onCi(listener: (events: readonly CiFeedEvent[]) => void): Disposable;
     };
     // (2026-11-26) Work in flight (`permissions.work`): while a hold stands the sandbox stays awake and an update or a
     // restart waits for it, as for an agent's turn, named by its label. Disposing lets it go, and so does this backend
@@ -487,6 +436,11 @@ export interface ExtensionServerApi {
     // of competing with them. Never a shell: `argv` runs as given. Rejects when the class is not declared or the daemon
     // refuses the request; a command that fails answers with its exit code.
     readonly exec: (argv: readonly string[], options?: ExecOptions) => Promise<ExecResult>;
+    // (2026-11-26) Rows in the sandbox's activity feed, as this extension's own: the daemon names the extension on each
+    // from its token. Reached without declaring anything; rejects with the daemon's words when refused.
+    readonly activity: {
+        append(row: ActivityRow): Promise<void>;
+    };
     readonly routes: {
         // Serves this extension's route namespace; the daemon proxies /x/<id>/* here through its ordinary auth. A
         // second mount replaces the first.

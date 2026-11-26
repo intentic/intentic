@@ -1,36 +1,18 @@
-import type { CiFeedEvent } from "@intentic/sandbox-contract/schemas/ci";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { AppEnv } from "../../app-env.js";
+import { subscribeCiFeed } from "../../seams/ci-feed-bus.js";
 
 // WHAT THE FORGES SAID, AS IT IS HEARD, FOR A PROGRAM (schemas/ci.ts CiFeedEventSchema, `GET /ci/feed`): a `run` frame
 // for every finished run, from ../events.ts `dispatchCiRun` (the webhook's and the poller's alike), and a `job` frame for
-// every job that ended, passed or failed, from the webhook (../webhook.routes.ts; the poller reads runs, not jobs). The
-// Deployments extension's engine reads it to deploy the moment the job publishing its images passes. Nothing is kept:
+// every job that ended, passed or failed, from the webhook (../webhook.routes.ts), and (2026-11-26) for every failed job
+// of a main line's run still going that the poller lists where no webhook is live (../poller.ts). A failed job's frame
+// carries what the forge said of its failure (`failed`). The Deployments extension's engine reads it to deploy the moment
+// the job publishing its images passes; the pipelines extension hears the same frames on its event stream
+// (`permissions.events: ["ci"]`, seams/ci-feed-bus.ts) for main's fix agent. Nothing is kept:
 // a reader that was away catches up on runs from `/ci/runs`, and the jobs it missed are gone. Listener automations are
 // never fed job frames, which are many; this stream is the only place they go. (2026-11-25) Replaced the daemon's own
 // deploy triggers, which this fed directly.
-
-type Listener = (event: CiFeedEvent) => void;
-
-const listeners = new Set<Listener>();
-
-// Tells every open stream; a reader whose stream broke is the stream's to drop, never the publisher's to fail on.
-export const publishCiFeed = (event: CiFeedEvent): void => {
-    for (const listener of listeners) {
-        try {
-            listener(event);
-        } catch {
-            // allow(silent-catch): a reader that went away is dropped by its own stream's abort; the publisher carries on
-        }
-    }
-};
-
-// Hears every frame from now on; answers the unsubscribe.
-export const subscribeCiFeed = (listener: Listener): (() => void) => {
-    listeners.add(listener);
-    return () => void listeners.delete(listener);
-};
 
 // A comment line on a beat while nothing is said, so a proxy between (Cloudflare cuts an idle response at 100 s) keeps
 // an idle stream open; a reader skips it, as SSE says comments are skipped.

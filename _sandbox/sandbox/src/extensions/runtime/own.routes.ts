@@ -20,13 +20,14 @@ import { extensionSettingsDocument, type ExtensionSettings, onExtensionSettingsW
 import { type InstalledExtension, installedExtensions } from "../../capabilities/extension-inventory/installed-extensions.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { opt } from "../../opt.js";
+import { subscribeCiFeed } from "../../seams/ci-feed-bus.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import { extensionThatStarted } from "./extension-conversations.js";
 import { createExtensionDoors } from "./own-doors.js";
 
 // What an extension's own code asks the daemon about itself (the contract's extension-protocol): its settings with
 // their secret values, and one stream of what moved, its settings and the workspace, and (2026-11-26) the kinds its
-// manifest declares in `permissions.events`: its own conversations' runs ending, and whether any turn runs. Every
+// manifest declares in `permissions.events`: its own conversations' runs ending, whether any turn runs, and the CI feed. Every
 // extension token reaches both without declaring them (extension-manifest's EXTENSION_OWN_ROUTES), and each answers only
 // about the extension the token was minted for, resolved here again so the check holds on a loopback daemon where no
 // grant middleware runs.
@@ -190,6 +191,10 @@ export const createExtensionOwnRoutes = (services: Services) => ({
                       ]
                     : []),
             ];
+            // (2026-11-26) Every CI feed frame as it is heard (seams/ci-feed-bus.ts), the same the feed's own stream sends.
+            if (kinds.has("ci")) {
+                stops.push(subscribeCiFeed((event) => send({ kind: "ci", event })));
+            }
             send({ kind: "heartbeat" });
             if (kinds.has("activity")) {
                 stops.push(watchActivity(services, (live) => send({ kind: "activity", live })));
@@ -219,5 +224,6 @@ export const extensionOwnRawRoutes = defineRawRoutes((services: Services) => {
         "GET /extension/events": extensionOwnRoutes.events,
         "POST /extension/work/hold": doors.hold,
         "POST /extension/exec": doors.exec,
+        "POST /extension/activity": doors.activity,
     };
 });

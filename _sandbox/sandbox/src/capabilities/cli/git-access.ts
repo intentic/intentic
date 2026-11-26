@@ -3,6 +3,8 @@ import type { Capability, CliConfig } from "@intentic/sandbox-contract/schemas/c
 import { createHash } from "node:crypto";
 import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { githubHeaders, gitlabHeaders } from "../../forge/http.js";
+import type { CapabilitiesStore } from "../capabilities-store.js";
 import { directExec, type ExecInTerminal } from "../../terminal/terminal-run.js";
 import { generateSshKey, publicLineOf } from "../credentials/ssh-keys.js";
 import type { SshKeyStore } from "../ssh-key-store.js";
@@ -48,6 +50,20 @@ export const gitHostOf = (config: CliConfig): GitHost => {
     const scheme = parsed.protocol === "http:" ? "http" : "https";
     return { provider: "gitlab", host: parsed.host, scheme, apiBase: `${url.replace(/\/+$/, "")}/api/v4`, token, httpsUser: "oauth2" };
 };
+
+/** Every connected github/gitlab account, as the REST calls address it: host, API base and token. */
+export const forgeAccounts = async (capabilities: CapabilitiesStore): Promise<GitHost[]> =>
+    (await capabilities.list()).flatMap((capability) => {
+        if (capability.kind !== "cli" || (capability.config.provider !== "github" && capability.config.provider !== "gitlab")) {
+            return [];
+        }
+        try {
+            return [gitHostOf(capability.config)];
+        } catch {
+            // allow(silent-catch): a gitlab capability with an unparseable instance url maps nothing; it fails its own status probe
+            return [];
+        }
+    });
 
 // Account calls are the only un-testable seam (network plus a live token), so they're injectable; keygen and git-config
 // run for real.
@@ -226,8 +242,6 @@ const sshRegistrationWarning = (host: GitHost, publicKey: string, err: unknown):
     ].join("\n");
 };
 
-export const githubHeaders = (token: string): Record<string, string> => ({ Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" });
-
 const uploadKeyReal = async (host: GitHost, publicKey: string, title: string): Promise<void> => {
     if (host.provider === "github") {
         const response = await fetch(`${host.apiBase}/user/keys`, {
@@ -244,7 +258,7 @@ const uploadKeyReal = async (host: GitHost, publicKey: string, title: string): P
     }
     const response = await fetch(`${host.apiBase}/user/keys`, {
         method: "POST",
-        headers: { "PRIVATE-TOKEN": host.token, "Content-Type": "application/json" },
+        headers: { ...gitlabHeaders(host.token), "Content-Type": "application/json" },
         body: JSON.stringify({ title, key: publicKey }),
     });
     // 400 means the fingerprint's already taken; GitLab's idempotent-success equivalent.
@@ -258,7 +272,7 @@ const uploadKeyReal = async (host: GitHost, publicKey: string, title: string): P
 // Matches keys by the fixed title; a user who renamed the key on the account keeps it, which is acceptable.
 const deleteKeyReal = async (host: GitHost, title: string): Promise<void> => {
     try {
-        const listHeaders = host.provider === "github" ? githubHeaders(host.token) : { "PRIVATE-TOKEN": host.token };
+        const listHeaders = host.provider === "github" ? githubHeaders(host.token) : gitlabHeaders(host.token);
         const response = await fetch(`${host.apiBase}/user/keys`, { headers: listHeaders });
         if (!response.ok) {
             return;
@@ -299,7 +313,7 @@ const text = (value: unknown): string | undefined => (typeof value === "string" 
 // Who the token belongs to, as a commit should name them: the account's display name (its login when it has none) and
 // its own commit address, or the provider's noreply address when the account keeps its email private.
 const accountIdentityReal = async (host: GitHost): Promise<GitIdentity | undefined> => {
-    const headers = host.provider === "github" ? githubHeaders(host.token) : { "PRIVATE-TOKEN": host.token };
+    const headers = host.provider === "github" ? githubHeaders(host.token) : gitlabHeaders(host.token);
     const response = await fetch(`${host.apiBase}/user`, { headers, signal: AbortSignal.timeout(15_000) });
     if (!response.ok) {
         return undefined;
@@ -317,7 +331,7 @@ const accountIdentityReal = async (host: GitHost): Promise<GitIdentity | undefin
 
 // GitHub answers a classic token's scopes on every API call (X-OAuth-Scopes); a fine-grained token and GitLab publish none.
 const tokenStatusReal = async (host: GitHost): Promise<TokenStatus> => {
-    const headers = host.provider === "github" ? githubHeaders(host.token) : { "PRIVATE-TOKEN": host.token };
+    const headers = host.provider === "github" ? githubHeaders(host.token) : gitlabHeaders(host.token);
     const response = await fetch(`${host.apiBase}/user`, { headers, signal: AbortSignal.timeout(15_000) });
     await response.body?.cancel();
     return { status: response.status, scopes: response.headers.get("x-oauth-scopes") ?? undefined };

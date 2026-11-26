@@ -2,6 +2,7 @@ import { EXTENSION_DECLARED_EVENTS, EXTENSION_EXEC_CLASSES, EXTENSION_FIRE_HANDL
 import { z } from "zod";
 import { MemberTierSchema } from "../../schemas/shared.js";
 import type { WebhookSignatureScheme } from "../../schemas/automations.js";
+import { CiFeedEventSchema } from "../../schemas/ci.js";
 import { rawRouteUrl } from "./raw-routes.js";
 
 // The wire between the daemon and an extension's own code, its backend in the shared host and its declared processes
@@ -31,11 +32,19 @@ export const ExtensionRunSettledSchema = z.object({
 export type ExtensionRunSettled = z.infer<typeof ExtensionRunSettledSchema>;
 export const EXTENSION_RUN_CLOSING_MAX = 20_000;
 
+// (2026-11-26) One frame of the CI feed (schemas/ci.ts CiFeedEventSchema: a run that finished, a job that ended), as the
+// daemon publishes it on GET /ci/feed, sent only to an extension that declared `ci` and asked for it.
+export const ExtensionCiHeardSchema = z.object({
+    kind: z.literal("ci"),
+    event: CiFeedEventSchema,
+});
+export type ExtensionCiHeard = z.infer<typeof ExtensionCiHeardSchema>;
+
 // GET /extension/events: one ndjson frame per line, for as long as the caller holds the stream. A heartbeat every
 // EXTENSION_EVENTS_HEARTBEAT_MS says the daemon is still there; the rest name what moved. `settings` carries only the
-// calling extension's own keys whose value changed. `run` and `activity` come only when asked for by name
+// calling extension's own keys whose value changed. `run`, `activity` and `ci` come only when asked for by name
 // (EXTENSION_EVENTS_KINDS_PARAM) and declared: `activity` says whether any agent turn runs, once as the stream opens and
-// again each time that flips.
+// again each time that flips; `ci` is each CI feed frame as it is heard.
 export const ExtensionEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("heartbeat") }),
     z.object({ kind: z.literal("files"), paths: z.array(z.string()) }),
@@ -44,6 +53,7 @@ export const ExtensionEventSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("settings"), keys: z.array(z.string()) }),
     ExtensionRunSettledSchema,
     z.object({ kind: z.literal("activity"), live: z.boolean() }),
+    ExtensionCiHeardSchema,
 ]);
 export type ExtensionEvent = z.infer<typeof ExtensionEventSchema>;
 
@@ -74,6 +84,22 @@ export const ExtensionWorkHoldSchema = z.object({
     label: z.string().trim().min(1).max(120).describe("What the work is, as the sandbox names it to whoever waits on it."),
 });
 export type ExtensionWorkHold = z.infer<typeof ExtensionWorkHoldSchema>;
+
+// POST /extension/activity (2026-11-26): one row in the sandbox's activity feed, written as the calling extension's own
+// (`extra.extension` names it, from its token, never from the body): what its own work did that a person reading the
+// feed, or a measurement of it, should see. Every extension token reaches it undeclared, as it reaches its settings.
+export const ExtensionActivitySchema = z.object({
+    type: z
+        .string()
+        .trim()
+        .regex(/^[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)+$/u)
+        .max(80)
+        .describe("What happened, dotted like the sandbox's own rows: `ci.repair_started`."),
+    content: z.string().max(4_000).describe("What happened, in a sentence a person reads."),
+    outcome: z.enum(["ok", "error"]).optional(),
+    conversationId: z.string().min(1).optional().describe("The conversation it is about, when there is one."),
+});
+export type ExtensionActivity = z.infer<typeof ExtensionActivitySchema>;
 
 // POST /extension/exec: one command run to its end under a workload class the manifest declares (`permissions.exec`),
 // admitted by the sandbox's memory budget first and, for `toolchain`, queued with the heavy commands. Never a shell: the
@@ -404,6 +430,7 @@ export const extensionBrowserUrl = (): string => rawRouteUrl("POST /extension/tu
 export const extensionOwnerBrowserUrl = (): string => rawRouteUrl("POST /extension/turn/owner-browser");
 export const extensionJobsUrl = (): string => rawRouteUrl("POST /extension/jobs");
 export const extensionJobUrl = (id: string): string => rawRouteUrl("POST /extension/jobs/{id}", { id });
+export const extensionActivityUrl = (): string => rawRouteUrl("POST /extension/activity");
 
 // What the daemon starts an extension's process with, and what `connectExtensionProcess` reads. The token is the same
 // minted per-extension token its backend carries; the directories are the ones the backend api names.

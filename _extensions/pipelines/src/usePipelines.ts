@@ -11,11 +11,15 @@ import { runPickOf } from "@intentic/sandbox-contract/schemas/agent";
 import type { AgentRunBooking, AgentRunChoice } from "@intentic/extension-ui";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
+import { backendCall, posting } from "./backendCall";
+import { FIX_ROUTE, FORGET_ROUTE, LEGACY } from "./backendRoutes";
 import { ciRunsQuery } from "./ciRunsQuery";
 import { host } from "./host";
 
-// CI runs across the workspace's github/gitlab remotes, via the daemon's /ci routes (webhook-freshened, backfilled from
-// vendors when stale). Runs are addressed by repo + vendor id; the daemon re-resolves the project and token per call.
+// CI runs across the workspace's github/gitlab remotes: what the forges report through the daemon's /ci routes
+// (webhook-freshened, backfilled from vendors when stale), with main's failures, set aside and fixed through this
+// extension's backend (backendCall.ts, an older daemon's own routes otherwise). Runs are addressed by repo + vendor id; the
+// daemon re-resolves the project and token per call.
 
 const POLL_MS = 60_000;
 // In-flight runs push on every webhook phase (`runtime-state`'s `ci`); this interval is only the fallback when hooks are
@@ -98,7 +102,7 @@ export function usePipelines() {
     });
     // Takes a workflow off a failing main line by hand, or the whole failure when none is named.
     const forget = useMutation({
-        mutationFn: (param: CiForgetParam) => api.sandbox.rpc.ci.forget(param),
+        mutationFn: (param: CiForgetParam) => backendCall<{ readonly ok: true }>(api, FORGET_ROUTE, () => api.sandbox.json(LEGACY.forget, posting(param)), posting(param)),
         onSuccess: invalidate,
     });
     // Resolves to the fix conversation id (the fleet's card id) the view focuses. `pick` absent uses the run button's
@@ -107,8 +111,10 @@ export function usePipelines() {
     // press, which the daemon reads by the contract's own rule (planFixAttempt).
     // `booking` holds it for a spent allowance's reopen, as the button that was pressed said it would.
     const fix = useMutation({
-        mutationFn: ({ run, pick, mode, booking }: FixPress): Promise<CiFixResponse> =>
-            api.sandbox.rpc.ci.fix(fixParams({ run, pick, mode, booking, standing: api.models.agentRun(`pipeline-fix`) })),
+        mutationFn: ({ run, pick, mode, booking }: FixPress): Promise<CiFixResponse> => {
+            const init = posting(fixParams({ run, pick, mode, booking, standing: api.models.agentRun(`pipeline-fix`) }));
+            return backendCall<CiFixResponse>(api, FIX_ROUTE, () => api.sandbox.json(LEGACY.fix, init), init);
+        },
     });
 
     return {

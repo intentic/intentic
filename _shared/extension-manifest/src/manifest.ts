@@ -83,11 +83,15 @@ const ManifestShape = z.object({
                         z
                             .literal("activity")
                             .meta({ power: { key: "events:activity", sentence: "its backend hears whether any agent turn is running in the sandbox" } }),
+                        // (2026-11-26) The CI feed's frames, as the core hears them from the forges.
+                        z
+                            .literal("ci")
+                            .meta({ power: { key: "events:ci", sentence: "its backend hears every CI run and job the workspace's forges report" } }),
                     ]),
                 )
                 .optional()
                 .describe(
-                    "Events your backend hears through `api.events` beyond its settings and the workspace's changes: `run`, a turn ending in a conversation it started through POST /agent with its own token; `activity`, whether any agent turn is running in the sandbox.",
+                    "Events your backend hears through `api.events` beyond its settings and the workspace's changes: `run`, a turn ending in a conversation it started through POST /agent with its own token; `activity`, whether any agent turn is running in the sandbox; `ci`, each run and job the workspace's GitHub and GitLab forges report as it is heard (the CI feed).",
                 ),
             work: z
                 .boolean()

@@ -237,16 +237,8 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         title: () => t(`sandbox.agentOffload.title`),
         terms: () => [t(`sandbox.agentOffload.sessionsTitle`), t(`sandbox.search.agentOffload`)],
     },
-    // Finishing: what happens once a job is done (main's CI, delivery, the changelog), then what happens when one breaks,
+    // Finishing: what happens once a job is done (delivery, the changelog), then what happens when one breaks,
     // then the two settings about time: idle chats and the clock schedules run by.
-    {
-        id: `agent-main-ci`,
-        slug: `agent`,
-        part: `finishing`,
-        partLabel: () => t(`sandbox.sandboxAgent.finishing`),
-        title: () => t(`sandbox.agentChecks.mainCi`),
-        terms: () => [t(`sandbox.agentChecks.repairMainCi`), t(`sandbox.search.agentMainCi`)],
-    },
     {
         id: `agent-finished-work`,
         slug: `agent`,

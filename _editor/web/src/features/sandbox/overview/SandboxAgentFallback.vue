@@ -89,7 +89,6 @@ const SETUP_JOBS = [`w-32`, `w-28`, `w-36`];
         </template>
 
         <template v-else>
-            <RowGroup :label="t(`sandbox.agentChecks.mainCi`)"><SkeletonRows :rows="1" description control /></RowGroup>
             <RowGroup :label="t(`sandbox.agentFinishedWork.finishedWork`)"><SkeletonRows :rows="6" description control /></RowGroup>
             <SectionLink :text="t(`sandbox.sandboxAgent.deletingIsRetention`)" :to="here(page.sandboxSettings(`retention`))" :label="t(`sandbox.sandboxNav.retention`)" />
             <RowGroup :label="t(`sandbox.agentCommitAuthor.group`)"><SkeletonRows :rows="2" description control /></RowGroup>

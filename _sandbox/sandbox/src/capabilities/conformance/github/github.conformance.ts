@@ -221,11 +221,11 @@ git -C ${shellQuote(clone)} -c user.name=Conformance -c user.email=conformance@e
             const warn = () => {};
             const before = fake.requests.length;
             for (const owner of [undefined, fake.login, "conformance-org"]) {
-                expect(await world.createRepository(world.gitHost, "workspace", owner, warn, world.transport)).toBe(
+                expect(await world.createRepository(world.gitHost, "workspace", owner, warn)).toBe(
                     `https://github.com/${owner ?? fake.login}/workspace.git`,
                 );
             }
-            await expect(world.createRepository(world.gitHost, "refused", undefined, warn, world.transport)).rejects.toThrow(
+            await expect(world.createRepository(world.gitHost, "refused", undefined, warn)).rejects.toThrow(
                 'github.com refused to create "refused": 403 {"message":"Resource not accessible by personal access token"',
             );
             expect(

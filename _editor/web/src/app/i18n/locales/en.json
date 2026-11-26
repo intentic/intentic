@@ -6831,11 +6831,6 @@
             "releaseNoteWithEachCommit": "Release note with each commit",
             "workspaceRepository": "Workspace repository"
         },
-        "agentChecks": {
-            "repairMainCi": "Repair main when its CI fails",
-            "repairMainCiNote": "One fix agent on main: first failed run (all jobs); later failures until main passes; hand off when out of turns or stuck; runner failures re-run once.",
-            "mainCi": "Main's CI"
-        },
         "agentClock": {
             "clock": "Clock",
             "scheduleTimesAreIn": "Schedules are set by",
@@ -11747,7 +11742,6 @@
             "agentSpeechProvider": "elevenlabs, openai, tts provider, voice api, speech api key",
             "agentSubagents": "parallel agents, delegate, concurrency, fan out, helpers, workers",
             "agentOffload": "runner, remote machine, another computer, offload, builds, busy",
-            "agentMainCi": "github actions, ci, pipeline, failing build, broken main, auto fix",
             "agentFinishedWork": "auto land, auto merge, commit, git, pull, sync, archive, version",
             "agentCommitAuthor": "author, committer, co-author, co-authored-by, git identity, user.name, user.email, email, noreply, attribution",
             "agentChangelog": "release notes, changes file, history",
