@@ -108,6 +108,31 @@ export type MachineStanding = z.infer<typeof MachineStandingSchema>;
 export const MachineStrainSchema = z.enum(["memory", "memory-stall", "cpu", "agents", "disk"]);
 export type MachineStrain = z.infer<typeof MachineStrainSchema>;
 
+/* THE COMPUTER UNDER A MACHINE, IN FIGURES ITS OWNER CAN CHECK (2026-11-26). A machine's free memory is the tighter of its
+   own budget and its host's room above the line under which the host counts as short (machine-facts.ts), so "1.9 GB
+   free" on rog was Windows' Available less a 3.1 GB line nobody could see, while the sandbox itself had 10.5 GB and the
+   WSL VM held 16.6 GB of Windows' memory. Said beside the verdict so the composer can name what is short: Windows' own
+   figures as Task Manager shows them, and the VM's share and its unused part where that computer's agent reads them.
+   Absent where the host says nothing of its memory (a Linux host, an agent older than the reading). */
+export const MachineHostSchema = z.object({
+    // The computer, by the word the owner knows it by (its device card).
+    name: z.string().min(1),
+    // What Windows could hand out now (its Available memory, standby cache included), and how much it has.
+    availableMb: z.number().int().nonnegative(),
+    totalMb: z.number().int().positive(),
+    // The line under which it counts as short (hosts.ts hostMemoryLowBytes): never counted as room for new work.
+    reserveMb: z.number().int().nonnegative(),
+    // The WSL VM's footprint in Windows' memory, and the part of it free inside the VM but too fragmented to hand back
+    // (hosts.ts GuestFreeMemorySchema `strandedBytes`); each absent where that computer's agent did not read it.
+    vmMb: z.number().int().nonnegative().optional(),
+    vmUnusedMb: z.number().int().nonnegative().optional(),
+    // What the machine's own budget has free, before its host's room is folded in; absent where nothing measures it.
+    ownFreeMb: z.number().int().nonnegative().optional(),
+    // Whether the host's room, not the machine's own budget, is what its free memory came to: the host is what is short.
+    binding: z.boolean(),
+});
+export type MachineHost = z.infer<typeof MachineHostSchema>;
+
 export const MachineLoadSchema = z.object({
     standing: MachineStandingSchema,
     // Why it is not calm, strongest first; empty when it is.
@@ -126,6 +151,9 @@ export const MachineLoadSchema = z.object({
     // The share of the machine still free by its tightest measure (slots, memory, CPU), so two machines of different
     // sizes compare: 0 is none, 1 is idle.
     headroom: z.number().min(0).max(1),
+    // (2026-11-26) The computer it runs on, as that computer's agent last said (MachineHostSchema); absent where it says
+    // nothing of its memory.
+    host: MachineHostSchema.optional(),
 });
 export type MachineLoad = z.infer<typeof MachineLoadSchema>;
 
@@ -163,6 +191,9 @@ export const FleetAdviceSchema = z.object({
     machines: z.array(FleetMachineSchema),
     // Where a new session should start instead of here: absent while here is calm, or when no machine is better off.
     suggestion: z.object({ runner: z.string().min(1), name: z.string().min(1) }).optional(),
+    // (2026-11-26) Whether this sandbox could give memory back to the computer it runs on now (POST /system/memory/reclaim):
+    // that computer says what memory it has, and the kernel here takes a reclaim. Absent from a daemon older than it.
+    reclaim: z.boolean().optional(),
 });
 export type FleetAdvice = z.infer<typeof FleetAdviceSchema>;
 

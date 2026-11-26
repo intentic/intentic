@@ -438,3 +438,38 @@ export const StorageCleanResultSchema = z.object({
     failed: z.number().describe("How many removals the filesystem refused."),
 });
 export type StorageCleanResult = z.infer<typeof StorageCleanResultSchema>;
+
+/* GIVING MEMORY BACK TO THE COMPUTER THIS SANDBOX RUNS ON, ON A PERSON'S PRESS (2026-11-26). The composer says when that
+   computer is what is short of memory (offload.ts MachineHostSchema), and offers to free some: this sandbox reclaims
+   from its own cgroup now, as it does by itself while the computer is under its low line (hosts/reclaim/host-reclaim.ts
+   in the daemon), and Windows' Available memory is read just before and a settle after, so the answer says what Windows
+   actually got rather than what the sandbox let go. Inside the WSL VM most of a reclaim lands in blocks too small to
+   hand back, so "Windows got none of it" is an answer it can give. */
+export const MemoryReclaimRefusalSchema = z.enum([
+    // The computer this sandbox runs on says nothing of its memory (not a Windows PC, or an agent older than the reading).
+    "no-host",
+    // The kernel here takes no reclaim (no memory.reclaim, or a read-only cgroup).
+    "unsupported",
+    // This sandbox is short of memory itself right now: reclaiming would stall its own work.
+    "stalling",
+    // This sandbox holds too little to give any back.
+    "small",
+]);
+export type MemoryReclaimRefusal = z.infer<typeof MemoryReclaimRefusalSchema>;
+
+export const MemoryReclaimResultSchema = z.discriminatedUnion("outcome", [
+    z.object({
+        outcome: z.literal("reclaimed"),
+        // What this sandbox let go inside the VM, in bytes.
+        givenBytes: z.number().int().nonnegative(),
+        // The computer, and Windows' Available memory just before and a few seconds after; `afterBytes` is absent when
+        // the computer stopped answering in between.
+        host: z.object({
+            name: z.string().min(1),
+            beforeBytes: z.number().int().nonnegative(),
+            afterBytes: z.number().int().nonnegative().optional(),
+        }),
+    }),
+    z.object({ outcome: z.literal("refused"), why: MemoryReclaimRefusalSchema }),
+]);
+export type MemoryReclaimResult = z.infer<typeof MemoryReclaimResultSchema>;

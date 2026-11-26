@@ -1,11 +1,62 @@
 import type { HostMemory } from "@intentic/sandbox-contract/schemas/hosts";
 import { DROP_COOLDOWN_MS, RECLAIM_GRACE_MS } from "./windows-memory.js";
 import { DROP_SCRIPT, startCacheDrop } from "./wsl-cache-drop.js";
+import { LOW_PROBE_EVERY_MS, RESTORE_AFTER_MS } from "./wsl-page-reporting.js";
 
 const GIB = 1024 ** 3;
 
+// rog's guest on 2026-11-26 (wsl-page-reporting.test.ts): 1.76 GiB of its free memory in blocks under 128 KiB.
+const ROG_BUDDYINFO = `Node 0, zone    DMA32   8839   4046   2538   1990   1371    849    522    232      1      0      0
+Node 0, zone   Normal  40264  26270  17466  13207   8012   3806   1243    164     35      0      0`;
+// A guest whose free memory is almost all in large blocks: nothing stranded worth lowering the order for.
+const WHOLE_BUDDYINFO = "Node 0, zone   Normal  100  100  100  100  100  100  100  100  100  100  2000";
+
+interface FakeGuest {
+    order: number;
+    probes: number;
+    readonly written: string[];
+    // Why root's writes fail, while they do.
+    refuse: string | undefined;
+    readonly probe: () => Promise<string>;
+    readonly asRoot: (distro: string, script: string) => Promise<void>;
+}
+
+// A WSL VM's page_reporting_order as the fakes read and write it: `order` now, `bootOrder` on its command line.
+const fakeGuest = (order: number, buddyinfo = ROG_BUDDYINFO, bootOrder = 5): FakeGuest => {
+    const guest: FakeGuest = {
+        order,
+        probes: 0,
+        written: [],
+        refuse: undefined,
+        probe: async () => {
+            guest.probes += 1;
+            return `${buddyinfo}\n--\n${guest.order}\n--\nconsole=hvc0 page_reporting.page_reporting_order=${bootOrder} debug\n--\n4096\n`;
+        },
+        asRoot: async (_distro: string, script: string) => {
+            if (guest.refuse !== undefined) {
+                throw new Error(guest.refuse);
+            }
+            const [, expected, next] = /^grep -qx (\d+) \S+ \|\| exit 3; echo (\d+) > /.exec(script) ?? [];
+            if (Number(expected) !== guest.order) {
+                throw new Error("exit 3");
+            }
+            guest.order = Number(next);
+            guest.written.push(script);
+        },
+    };
+    return guest;
+};
+
+// No page reporting to read: the fakes the tests about drops alone run with.
+const noGuest = () => ({ probe: async () => "", asRoot: async () => undefined });
+
 // One drop under a fake clock and fake WSL: what it asked, what it dropped through, and what it said.
-const harness = (readings: HostMemory[], running: string[] | undefined, drop: (distro: string) => Promise<void> = async () => undefined) => {
+const harness = (
+    readings: HostMemory[],
+    running: string[] | undefined,
+    drop: (distro: string) => Promise<void> = async () => undefined,
+    guest: Pick<FakeGuest, "probe" | "asRoot"> = noGuest(),
+) => {
     const lines: string[] = [];
     const dropped: string[] = [];
     let listed = 0;
@@ -21,6 +72,8 @@ const harness = (readings: HostMemory[], running: string[] | undefined, drop: (d
             dropped.push(distro);
             await drop(distro);
         },
+        probe: guest.probe,
+        asRoot: guest.asRoot,
         now: () => clock,
         settleMs: 0,
     });
@@ -156,4 +209,126 @@ test("under the 1.5 GiB floor, the blanket drop runs immediately without grace p
     await run.cache.pass();
     // Under the floor: drops on the first tick, no grace period.
     expect(run.dropped).toHaveLength(1);
+});
+
+// (2026-11-26) Free memory stranded in blocks under the reporting order (wsl-page-reporting.ts).
+const lowWindows = { availableBytes: 2.9 * GIB, totalBytes: 31.4 * GIB };
+const tightWindows = { availableBytes: 4.5 * GIB, totalBytes: 31.4 * GIB };
+const easyWindows = { availableBytes: 8 * GIB, totalBytes: 31.4 * GIB };
+
+test("a low spell with a gigabyte stranded lowers the order and compacts at once, and the drop waits its cooldown from there", async () => {
+    const guest = fakeGuest(5);
+    const run = harness([lowWindows], ["archlinux"], undefined, guest);
+    await run.cache.pass();
+    // The spell's first tick, inside the sandboxes' grace: lowered and compacted, nothing dropped.
+    expect(guest.order).toBe(2);
+    expect(guest.written).toEqual([expect.stringContaining("compact_memory")]);
+    expect(run.dropped).toEqual([]);
+    expect(run.lines).toEqual([
+        "Windows was low on memory (2.9 GiB of 31.4 GiB available) while the WSL VM had 1.8 GiB free in blocks too small to give back (page_reporting_order 5): lowered it to 2 and compacted through archlinux; 0.4 GiB stranded and 2.9 GiB available 0s later.",
+    ]);
+    expect(run.cache.guestFree()).toMatchObject({ reportingOrder: 2, loweredFrom: 5 });
+    // Past the grace but inside the cooldown the lowering started: the sandboxes' reclaim, which reaches Windows now, goes first.
+    run.advance(RECLAIM_GRACE_MS);
+    await run.cache.pass();
+    expect(run.dropped).toEqual([]);
+    run.advance(DROP_COOLDOWN_MS - RECLAIM_GRACE_MS);
+    await run.cache.pass();
+    expect(run.dropped).toEqual(["archlinux"]);
+    // Held: never lowered twice, and read only every five minutes for the heartbeat.
+    expect(guest.written).toHaveLength(1);
+});
+
+test("the kernel's own order comes back once Windows has held a fifth of its memory for ten minutes, and when the agent stops", async () => {
+    // Someone set 4 by hand: 4 is what goes back, not WSL's 5.
+    const guest = fakeGuest(4);
+    const run = harness([lowWindows, lowWindows, easyWindows], ["archlinux"], undefined, guest);
+    await run.cache.pass();
+    expect(guest.order).toBe(2);
+    run.advance(LOW_PROBE_EVERY_MS);
+    await run.cache.pass();
+    run.advance(RESTORE_AFTER_MS - 1);
+    await run.cache.pass();
+    expect(guest.order).toBe(2);
+    run.advance(RESTORE_AFTER_MS);
+    await run.cache.pass();
+    expect(guest.order).toBe(4);
+    expect(run.lines.at(-1)).toMatch(/^Windows has had more than a fifth of its memory for 10 min \(8\.0 GiB of 31\.4 GiB available\): put the WSL VM's page_reporting_order back from 2 to 4 through archlinux/);
+    expect(run.cache.guestFree()).toMatchObject({ reportingOrder: 4 });
+    expect(run.cache.guestFree()?.loweredFrom).toBeUndefined();
+
+    const stopping = fakeGuest(5);
+    const stopped = harness([lowWindows], ["archlinux"], undefined, stopping);
+    await stopped.cache.pass();
+    expect(stopping.order).toBe(2);
+    await stopped.cache.restore();
+    expect(stopping.order).toBe(5);
+    expect(stopped.lines.at(-1)).toBe("the agent is stopping: put the WSL VM's page_reporting_order back from 2 to 5 through archlinux (0.4 GiB stranded before).");
+    // Nothing held: stopping writes nothing.
+    await stopped.cache.restore();
+    expect(stopping.written).toHaveLength(2);
+});
+
+test("a VM that restarted with its own order is not the agent's to put back, and an earlier agent's lowered order is", async () => {
+    const guest = fakeGuest(5);
+    const run = harness([lowWindows, tightWindows], ["archlinux"], undefined, guest);
+    await run.cache.pass();
+    expect(guest.order).toBe(2);
+    // WSL restarted: the order reads 5 again, so the hold is dropped and nothing is written when the agent stops.
+    guest.order = 5;
+    run.advance(5 * 60_000);
+    await run.cache.pass();
+    expect(run.cache.guestFree()).toMatchObject({ reportingOrder: 5 });
+    expect(run.cache.guestFree()?.loweredFrom).toBeUndefined();
+    await run.cache.restore();
+    expect(guest.written).toHaveLength(1);
+
+    // An agent that was killed while holding it: the next one adopts the boot order and puts it back as it stops.
+    const left = fakeGuest(2);
+    const next = harness([lowWindows], ["archlinux"], undefined, left);
+    await next.cache.pass();
+    expect(next.cache.guestFree()).toMatchObject({ reportingOrder: 2, loweredFrom: 5 });
+    await next.cache.restore();
+    expect(left.order).toBe(5);
+});
+
+test("an order root cannot write leaves the drop to run as before, and is tried again only half an hour later", async () => {
+    const guest = fakeGuest(5);
+    guest.refuse = "Permission denied";
+    const run = harness([lowWindows], ["archlinux"], undefined, guest);
+    await run.cache.pass();
+    expect(run.lines).toEqual(["Windows was low on memory, but lowering the WSL VM's page_reporting_order through archlinux failed: Permission denied"]);
+    run.advance(RECLAIM_GRACE_MS);
+    await run.cache.pass();
+    expect(run.dropped).toEqual(["archlinux"]);
+    expect(run.lines).toHaveLength(2);
+});
+
+test("little stranded, or Windows with room, leaves the order alone", async () => {
+    const whole = fakeGuest(5, WHOLE_BUDDYINFO);
+    const run = harness([lowWindows], ["archlinux"], undefined, whole);
+    await run.cache.pass();
+    run.advance(RECLAIM_GRACE_MS);
+    await run.cache.pass();
+    expect(whole.written).toEqual([]);
+    expect(run.dropped).toEqual(["archlinux"]);
+    expect(run.cache.guestFree()).toMatchObject({ reportingOrder: 5 });
+
+    const roomy = fakeGuest(5);
+    const easy = harness([easyWindows], ["archlinux"], undefined, roomy);
+    await easy.cache.pass();
+    expect(easy.listed()).toBe(0);
+    expect(roomy.probes).toBe(0);
+    expect(easy.cache.guestFree()).toBeUndefined();
+});
+
+test("under the 1.5 GiB floor the order is lowered and the cache dropped in the same pass", async () => {
+    const guest = fakeGuest(5);
+    const underFloor = { availableBytes: 1.2 * GIB, totalBytes: 31.4 * GIB };
+    const run = harness([underFloor], ["archlinux"], undefined, guest);
+    await run.cache.pass();
+    expect(guest.order).toBe(2);
+    expect(run.dropped).toEqual(["archlinux"]);
+    // WSL listed once for the whole pass.
+    expect(run.listed()).toBe(1);
 });

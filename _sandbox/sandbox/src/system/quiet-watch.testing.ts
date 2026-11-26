@@ -5,6 +5,7 @@ export const quietProbesOf = (over: Partial<QuietProbes> = {}): QuietProbes => (
     working: () => 0,
     terminalActivityAt: async () => 0,
     appsInUse: async () => false,
+    editorActiveAt: () => 0,
     nextWakeAt: async () => 0,
     keepAwake: async () => false,
     ...over,

@@ -120,6 +120,36 @@ export const DeviceFactsSchema = z.object({
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
+/* WHAT THE WSL2 VM HOLDS OF IT, AND WHAT IT HAS FREE BUT CANNOT GIVE BACK (2026-11-26). The VM hands free memory back to
+   Windows through free page reporting, which reports only free blocks of at least 2^page_reporting_order pages (WSL's
+   kernel line sets 5: 128 KiB). Free memory in smaller blocks stays charged to Windows as the VM's. On rog that day it
+   was 2.0-2.6 GB most of the time, and 5.3 of the 8.4 GB a cache drop had just freed. So beside Windows' own figures the
+   Windows side says the VM's footprint (`vm`) and, when a distro is already running to read it through (WSL is never
+   booted for this), the guest's free memory split at the reporting order (`guestFree`, from /proc/buddyinfo). Both are
+   read on their own pace, not per heartbeat, so each carries when; both are absent from an agent older than them, from a
+   PC whose VM is not running, and from every side but Windows'. */
+const HostVmMemorySchema = z.object({
+    // vmmemWSL's working set: the VM's footprint in Windows' RAM, in bytes. 0: the VM was not running.
+    workingSetBytes: z.number().nonnegative(),
+    // When it was read, in epoch ms.
+    at: z.number(),
+});
+export type HostVmMemory = z.infer<typeof HostVmMemorySchema>;
+
+const GuestFreeMemorySchema = z.object({
+    // Free inside the VM in blocks free page reporting hands back to Windows (2^reportingOrder pages or larger), in bytes.
+    reportableBytes: z.number().nonnegative(),
+    // Free inside the VM in smaller blocks: memory the VM does not use, still charged to Windows. In bytes.
+    strandedBytes: z.number().nonnegative(),
+    // The kernel's page_reporting_order as read.
+    reportingOrder: z.number().int().nonnegative(),
+    // The order the agent lowered it from, while it holds it lowered (machine `environments/wsl-page-reporting.ts`).
+    loweredFrom: z.number().int().nonnegative().optional(),
+    // When it was read, in epoch ms.
+    at: z.number(),
+});
+export type GuestFreeMemory = z.infer<typeof GuestFreeMemorySchema>;
+
 /* THE HOST'S OWN MEMORY, ON EVERY HEARTBEAT (2026-11-02). A sandbox on a Windows PC runs inside Docker Desktop's WSL2
    VM, so everything it reads about memory (its cgroup, the VM's /proc/meminfo) is the VM's. On 2026-11-02 rog's Windows
    was down to 1.1 GB available while the VM held 20 GB, half of it file cache, and the sandbox's heavy-command queue
@@ -132,6 +162,9 @@ const HostMemorySchema = z.object({
     // Physical memory the OS could hand out now (Windows' ullAvailPhys, standby cache included), in bytes.
     availableBytes: z.number().nonnegative(),
     totalBytes: z.number().positive(),
+    // A malformed one reads as missing rather than costing the sandbox Windows' own figures above.
+    vm: HostVmMemorySchema.optional().catch(undefined),
+    guestFree: GuestFreeMemorySchema.optional().catch(undefined),
 });
 export type HostMemory = z.infer<typeof HostMemorySchema>;
 

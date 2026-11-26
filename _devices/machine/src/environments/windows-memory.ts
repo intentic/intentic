@@ -1,5 +1,13 @@
 import { freemem, totalmem } from "node:os";
-import { HOST_LOW_FLOOR_BYTES, type HostMemory, hostMemoryLowBytes, WSL_ENGINE_DISTRO, WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract/schemas/hosts";
+import {
+    type GuestFreeMemory,
+    HOST_LOW_FLOOR_BYTES,
+    type HostMemory,
+    hostMemoryLowBytes,
+    type HostVmMemory,
+    WSL_ENGINE_DISTRO,
+    WSL_SYSTEM_DISTROS,
+} from "@intentic/sandbox-contract/schemas/hosts";
 import { WINDOWS_SIDE } from "./wsl.js";
 
 /* WINDOWS' MEMORY, AND WHEN TO GIVE IT BACK FROM WSL (2026-11-02). The WSL2 VM keeps the file cache it builds (a build,
@@ -46,7 +54,14 @@ export const EARLY_DROP_COOLDOWN_MS = 30 * 60_000;
    that much inside the VM but in blocks too small for free page reporting, and Windows' Available memory did not move
    beyond its noise in the 30 s after: the drop, which compacts, is still what hands memory back. The grace costs at
    most RECLAIM_GRACE_MS once per low spell, since the spell (lowSpellSince) lasts until Windows is over a fifth of its
-   memory again. */
+   memory again.
+
+   STRANDED MEMORY BEFORE THE DROP (2026-11-26, later). What a reclaim or a drop frees lands mostly in blocks smaller
+   than free page reporting hands back (wsl-page-reporting.ts), so where more than a gigabyte of the VM's free memory is
+   stranded, the agent lowers the reporting order and compacts instead of dropping, and the drop waits its cooldown
+   from there (wsl-cache-drop.ts). With the order lowered on rog, 42% of what a sandbox's reclaim freed was in blocks
+   the VM could report, against 7% at the kernel's order, so the grace still has something to wait for, though Windows'
+   own noise (±0.6 GB over 16 s) hid any single reclaim's effect. */
 export const WORTHWHILE_DROP_BYTES = 0.5 * 1024 ** 3;
 export const MAX_DROP_COOLDOWN_MS = 60 * 60_000;
 
@@ -140,3 +155,22 @@ export const dropLine = (distro: string, before: HostMemory, after: HostMemory, 
     `Windows was low on memory (${gib(before.availableBytes)} of ${gib(before.totalBytes)} available): dropped the WSL VM's file cache through ${distro}; ${gib(after.availableBytes)} available ${Math.round(afterMs / 1000)}s later.${
         backedOffMs === undefined ? "" : ` It gave back little, so the next drop waits ${Math.round(backedOffMs / 60_000)} min unless Windows falls under ${gib(HOST_LOW_FLOOR_BYTES)}.`
     }`;
+
+// A reading of the VM older than this is left off the heartbeat: both are taken every five minutes, so two missed are a
+// VM, or a watch, that stopped.
+export const VM_FIGURES_FRESH_MS = 10 * 60_000;
+
+/** The heartbeat's `memory`: Windows' own figures, with the VM's footprint and the guest's free memory while fresh. Pure. */
+export const withVmFigures = (memory: HostMemory | undefined, vm: HostVmMemory | undefined, guestFree: GuestFreeMemory | undefined, now: number): HostMemory | undefined => {
+    if (memory === undefined) {
+        return undefined;
+    }
+    const reading: HostMemory = { availableBytes: memory.availableBytes, totalBytes: memory.totalBytes };
+    if (vm !== undefined && now - vm.at <= VM_FIGURES_FRESH_MS) {
+        reading.vm = vm;
+    }
+    if (guestFree !== undefined && now - guestFree.at <= VM_FIGURES_FRESH_MS) {
+        reading.guestFree = guestFree;
+    }
+    return reading;
+};

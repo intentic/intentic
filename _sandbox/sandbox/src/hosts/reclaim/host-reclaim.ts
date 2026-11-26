@@ -1,10 +1,13 @@
 import { writeFile } from "node:fs/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 import { errnoCode, errorMessage } from "@intentic/base/errors";
-import type { HostRoom } from "@intentic/constants/memory-room";
+import { COST_BYTES, type HostRoom, PERSON_RESERVE_BYTES } from "@intentic/constants/memory-room";
 import { HOST_HEARTBEAT_MS } from "@intentic/sandbox-contract/protocol/doors/host-protocol";
 import { hostMemoryLowBytes } from "@intentic/sandbox-contract/schemas/hosts";
+import type { MemoryReclaimRefusal, MemoryReclaimResult } from "@intentic/sandbox-contract/schemas/metrics";
 import type { Logger } from "pino";
 import type { PressureSnapshot } from "../../system/resources/cgroup.js";
+import { opt } from "../../opt.js";
 import type { HostSource } from "../../workload/resource-budget.js";
 
 /* TARGETED CGROUP RECLAIM UNDER HOST PRESSURE (2026-11-26). When the host (the Windows PC this sandbox runs on) is
@@ -102,6 +105,35 @@ export const reclaimTarget = (
 export const nextReclaimCooldown = (cooldownMs: number, givenBytes: number, gainedBytes: number): number =>
     givenBytes > 0 && gainedBytes >= givenBytes / 2 ? RECLAIM_COOLDOWN_MS : Math.min(MAX_RECLAIM_COOLDOWN_MS, cooldownMs * 2);
 
+/* A PERSON'S PRESS (2026-11-26, POST /system/memory/reclaim). The composer offers "Free memory" while the computer under
+   this sandbox is what is short. A press is asked for, so it is not split across tenants nor scaled by idleness as the
+   background pass is: it asks for what would take the host back to calm by the fleet advice's own measure (its reserve,
+   a person's turn and two agents above it; runners/fleet-advice.ts), at least PRESS_MIN_BYTES so a press near the line
+   still does something, at most MAX_RECLAIM_BYTES and never more than half of what this sandbox holds. It keeps the
+   background pass's two refusals: a sandbox too small to give anything, and one stalling on memory itself. */
+const PRESS_MIN_BYTES = 512 * MIB;
+const CALM_ABOVE_RESERVE_BYTES = PERSON_RESERVE_BYTES + 2 * COST_BYTES.agentRuntime;
+
+// Pure: why a press cannot reclaim from this cgroup now, or undefined when it can.
+export const pressRefusal = (cgroup: ReclaimReading): MemoryReclaimRefusal | undefined => {
+    if (cgroup.memoryBytes === undefined || cgroup.memoryBytes < MIN_RECLAIM_SANDBOX_BYTES) {
+        return "small";
+    }
+    const memoryPressure = cgroup.pressure.memory;
+    return memoryPressure !== undefined && memoryPressure.full >= PRESSURE_CEILING_PERCENT ? "stalling" : undefined;
+};
+
+// Pure: how many bytes a press asks this cgroup for (above). `cgroup.memoryBytes` is read, so call it past pressRefusal.
+export const pressTarget = (host: HostRoom, cgroup: ReclaimReading): number => {
+    const wanted = host.reserveBytes + CALM_ABOVE_RESERVE_BYTES - host.availableBytes;
+    const bounded = Math.min(MAX_RECLAIM_BYTES, Math.max(PRESS_MIN_BYTES, wanted));
+    return Math.round(Math.min(bounded, (cgroup.memoryBytes ?? 0) / 2));
+};
+
+// How long after a press the host is read again: free page reporting hands freed blocks to Windows after a delay of about
+// two seconds, and the machine agent waits as long after a drop (wsl-cache-drop.ts SETTLE_MS).
+const PRESS_SETTLE_MS = 5_000;
+
 // Whether the kernel's memory.reclaim accepts a `swappiness=` key. Tested once; cached.
 let swappinessSupported: boolean | undefined;
 const probeSwappiness = async (
@@ -175,6 +207,8 @@ export interface HostReclaimDeps {
     readonly activeTurns: () => number;
     readonly now?: () => number;
     readonly write?: (path: string, data: string) => Promise<void>;
+    // How long a press waits before reading the host again; PRESS_SETTLE_MS unless a test says otherwise.
+    readonly settleMs?: number;
 }
 
 export interface HostReclaim {
@@ -182,6 +216,11 @@ export interface HostReclaim {
     readonly tick: () => void;
     // For tests: one pass, awaitable.
     readonly pass: () => Promise<void>;
+    // A person's press: one reclaim now, whatever the pace, answering what this sandbox let go and what the host had just
+    // before and PRESS_SETTLE_MS after. Joins a press already underway; waits out a background pass first.
+    readonly press: () => Promise<MemoryReclaimResult>;
+    // Whether a press could reclaim at all here: false once memory.reclaim proved unwritable.
+    readonly available: () => boolean;
 }
 
 // A reclaim whose effect on the host is still to be read back.
@@ -255,6 +294,48 @@ const reclaimOnce = async (
     return { outcome, bytes: outcome === "full" ? Math.max(freed, target) : freed };
 };
 
+const refused = (why: MemoryReclaimRefusal): MemoryReclaimResult => ({ outcome: "refused", why });
+
+// One press, from the host read now to the host read a settle after (HostReclaim.press); `unwritable` when it found that
+// memory.reclaim cannot be written here, which turns reclaim off as a background pass finding it would.
+const pressOnce = async (
+    logger: Pick<Logger, "info" | "warn">,
+    deps: HostReclaimDeps,
+    write: (path: string, data: string) => Promise<void>,
+): Promise<{ readonly result: MemoryReclaimResult; readonly unwritable: boolean }> => {
+    const host = await deps.hostSource({ fresh: true });
+    if (host === undefined) {
+        return { result: refused("no-host"), unwritable: false };
+    }
+    const cgroup = await deps.readCgroup();
+    const why = pressRefusal(cgroup);
+    if (why !== undefined) {
+        return { result: refused(why), unwritable: false };
+    }
+    const target = pressTarget(host, cgroup);
+    const { outcome, bytes } = await reclaimOnce(logger, { host, cgroup, turns: deps.activeTurns(), target }, deps.readCgroup, write);
+    if (outcome === "unwritable") {
+        return { result: refused("unsupported"), unwritable: true };
+    }
+    if (outcome === "failed") {
+        throw new Error("the kernel refused this sandbox's reclaim; the daemon's log says why");
+    }
+    await sleep(deps.settleMs ?? PRESS_SETTLE_MS);
+    const after = await deps.hostSource({ fresh: true });
+    logger.info(
+        { given: mib(bytes), hostBefore: gib(host.availableBytes), hostAfter: after === undefined ? undefined : gib(after.availableBytes) },
+        `host-reclaim: a person asked; this sandbox gave back ${mib(bytes)}, and ${host.name} had ${gib(host.availableBytes)} available before and ${after === undefined ? "did not answer" : gib(after.availableBytes)} after`,
+    );
+    return {
+        result: {
+            outcome: "reclaimed",
+            givenBytes: Math.round(bytes),
+            host: { name: host.name, beforeBytes: Math.round(host.availableBytes), ...opt("afterBytes", after === undefined ? undefined : Math.round(after.availableBytes)) },
+        },
+        unwritable: false,
+    };
+};
+
 export const startHostReclaim = (
     logger: Pick<Logger, "info" | "warn">,
     deps: HostReclaimDeps,
@@ -312,15 +393,38 @@ export const startHostReclaim = (
         }
     };
 
+    // A press joins one underway, and starts after a background pass underway; the pass waits its cooldown from it.
+    let pressing: Promise<MemoryReclaimResult> | undefined;
+    const pressed = async (): Promise<MemoryReclaimResult> => {
+        if (underway !== undefined) {
+            await underway;
+        }
+        if (off) {
+            return refused("unsupported");
+        }
+        lastReclaimAt = now();
+        given = undefined;
+        const { result, unwritable } = await pressOnce(logger, deps, writeFn);
+        off ||= unwritable;
+        return result;
+    };
+
     return {
         pass,
         tick: () => {
-            if (underway !== undefined) {
+            if (underway !== undefined || pressing !== undefined) {
                 return;
             }
             underway = pass().finally(() => {
                 underway = undefined;
             });
         },
+        press: () => {
+            pressing ??= pressed().finally(() => {
+                pressing = undefined;
+            });
+            return pressing;
+        },
+        available: () => !off,
     };
 };

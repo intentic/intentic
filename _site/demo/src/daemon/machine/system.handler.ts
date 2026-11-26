@@ -38,6 +38,9 @@ export const systemDoors = {
     cleanStorage: ({ category }) => demoStorageClean(category),
     // The demo's report lists no conversation checkouts, so no row offers a press; one that comes anyway frees nothing.
     pressCheckout: ({ id }) => ({ id, removed: [] }),
+    // The composer's "Free memory": the demo's computer says nothing of its memory (its placement carries no host), so the
+    // strip never offers it, and a press that comes anyway is refused as the daemon would refuse it.
+    reclaimMemory: () => ({ outcome: `refused` as const, why: `no-host` as const }),
     // The sessions the sandbox holds, with whatever other stores' work started (daemon/terminals.ts).
     terminals: terminalsList,
     killTerminal,

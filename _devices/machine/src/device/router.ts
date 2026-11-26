@@ -20,7 +20,7 @@ import { stageArtifact } from "./tools/programs/artifacts.js";
 import { copyFile } from "./tools/copy/file-copy.js";
 import { dialLoopback } from "./tools/programs/device-tunnel.js";
 import { hostFacts } from "./tools/describe.js";
-import { windowsMemory } from "../environments/windows-memory.js";
+import { hostMemoryReading } from "../environments/host-memory-reading.js";
 import { windowsCrashEvents } from "../environments/windows-crash-events.js";
 import { DeliveryRefused, deliverProject } from "../sync/project/project-delivery.js";
 import {
@@ -373,8 +373,10 @@ export const createHostRouter = (runtime: HostRuntime) => {
         // holds heavy work back on (schemas/hosts.ts, HostMemorySchema); every other side answers as before.
         // (2026-11-03) It also says which GPU resets and crashes Windows logged in the last day
         // (environments/windows-crash-events.ts), which the sandbox explains its restarts with and pauses GPU work on.
+        // (2026-11-26) And beside Windows' figures, the WSL VM's footprint and the free memory it cannot give back
+        // (environments/host-memory-reading.ts).
         ping: os.ping.handler(() => {
-            const memory = windowsMemory();
+            const memory = hostMemoryReading();
             const crashes = windowsCrashEvents(runtime.log);
             const answer: HeartbeatAnswer = { ok: true };
             if (memory !== undefined) {

@@ -2,7 +2,9 @@ import type { FleetMachine, MachineLoad } from "@intentic/sandbox-contract/schem
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
 import { unstubbed } from "@intentic/testing";
 import {
+    type FleetAdviceDeps,
     type FleetReadDeps,
+    fleetAdvice,
     fleetMachine,
     fleetPressure,
     machineLoad,
@@ -242,6 +244,33 @@ describe("the fleet as one reading", () => {
         expect(await fleetPressure(fleet)).toBeUndefined();
         const readings = await readRunners(fleet, { refresh: false });
         expect(suggestionFor("auto", machineLoad(idle({ load: 0.95 }), 1), readings.map((entry) => fleetMachine(entry, FITS)))).toBeUndefined();
+    });
+
+    // (2026-11-26) On rog the composer said "only 1.9 GB of memory free" while the sandbox had 10.5 GB: Windows was what
+    // was short. The verdict carries the computer under this sandbox, so the line can say so, and the advice offers a
+    // press only where that computer says what memory it has.
+    test("this sandbox's verdict carries the computer under it, and a press is offered only where that computer says what it has", async () => {
+        const rog = { name: "rog", availableMb: 4_301, totalMb: 32_154, reserveMb: 3_174, vmMb: 16_998, vmUnusedMb: 3_584, ownFreeMb: 10_752, binding: true };
+        const adviceDeps = (available: boolean): FleetAdviceDeps =>
+            unstubbed<FleetAdviceDeps>("advice", {
+                ...deps({ omen: idle() }),
+                // SAFETY: the reading touches only `online` and `facts` of a runner's state; no runner is connected to ask again.
+                runnerHub: unstubbed<FleetReadDeps["runnerHub"]>("runnerHub", { client: () => undefined, state: () => ({ online: true, facts: idle() }) as never }),
+                // SAFETY: the advice reads only the placement mode of the settings.
+                sandboxSettings: unstubbed<FleetAdviceDeps["sandboxSettings"]>("sandboxSettings", { get: async () => ({ offload: { sessions: "suggest" } }) as never }),
+                privacyShield: unstubbed<FleetAdviceDeps["privacyShield"]>("privacyShield", { refusal: async () => undefined }),
+                hostReclaim: unstubbed<FleetAdviceDeps["hostReclaim"]>("hostReclaim", { available: () => available }),
+            });
+        measureHereForTest(async () => ({ ...idle({ memoryFreeMb: 1_126 }), host: rog }));
+        expect(await readHere(deps({}))).toMatchObject({ standing: "busy", strain: ["memory"], memoryFreeMb: 1_126, host: rog });
+        expect(await fleetAdvice(adviceDeps(true), {}, undefined)).toMatchObject({ suggestion: { runner: "omen" }, reclaim: true });
+        // memory.reclaim found unwritable here: nothing to press.
+        expect((await fleetAdvice(adviceDeps(false), {}, undefined)).reclaim).toBe(false);
+        // A host that says nothing of its memory: the verdict as it always was, and no press.
+        measureHereForTest(async () => idle({ memoryFreeMb: 1_126 }));
+        const plain = await fleetAdvice(adviceDeps(true), {}, undefined);
+        expect(plain.here).not.toHaveProperty("host");
+        expect(plain.reclaim).toBe(false);
     });
 
     // A machine that stopped answering, or one whose agent predates the field, says nothing about now: no room is taken.

@@ -75,7 +75,7 @@ const files = {
                 bootsInWindow: 2,
                 storm: false,
                 restartAskedAt: AT - 90_000,
-            }, { quietSince: AT - 30_000, nextWakeAt: AT + 7_200_000 }),
+            }, { quietSince: AT - 30_000, unattendedSince: AT - 2_400_000, nextWakeAt: AT + 7_200_000, personAt: AT - 20_000, activeAt: AT - 2_400_000 }),
         ) as unknown,
     },
     // The host asks for a fresh work signal here immediately before sleep; failure means leave it awake.

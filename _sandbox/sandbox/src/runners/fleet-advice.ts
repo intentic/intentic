@@ -10,6 +10,7 @@ import type {
     MachineStrain,
     SessionsPlacement,
     FleetPressure,
+    MachineHost,
     OffloadNeeds,
 } from "@intentic/sandbox-contract/schemas/offload";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
@@ -17,7 +18,7 @@ import type { Services } from "../composition.js";
 import { hostRoomFrom } from "../hosts/host-room.js";
 import { opt } from "../opt.js";
 import { refreshRunnerFacts } from "./fleet-facts.js";
-import { budgetFigures, machineFacts, onHost } from "./machine-facts.js";
+import { budgetFigures, type HereFacts, hereFacts, onHost } from "./machine-facts.js";
 import { credentialsTravel, runnerSlots } from "./runner-scheduler.js";
 
 // WHICH MACHINE A NEW SESSION SHOULD START ON (settings `offload.sessions`, GET /offload/placement). Every machine, this
@@ -122,8 +123,9 @@ const strainsOf = (facts: RunnerFacts, agents: number, slots: number): Strains =
 };
 
 // One machine's verdict from its facts and the conversations running there. Slots are sized by the memory its budget
-// is limited to where it says, else the machine's, the same ceiling the fan-out scheduler places by.
-export const machineLoad = (facts: RunnerFacts, agents: number): MachineLoad => {
+// is limited to where it says, else the machine's, the same ceiling the fan-out scheduler places by. `host` is the
+// computer under it where that computer said what memory it has (machine-facts.ts hostOf), said beside the verdict.
+export const machineLoad = (facts: RunnerFacts, agents: number, host?: MachineHost): MachineLoad => {
     const slots = runnerSlots({ ...facts, memoryMb: facts.memoryLimitMb ?? facts.memoryMb });
     const { full, busy } = strainsOf(facts, agents, slots);
     const standing: MachineStanding = full.length > 0 ? "full" : busy.length > 0 ? "busy" : "calm";
@@ -142,6 +144,7 @@ export const machineLoad = (facts: RunnerFacts, agents: number): MachineLoad => 
         agents,
         slots,
         headroom: round2(clamp01(Math.min(slotRoom, memoryRoom, cpuRoom))),
+        ...opt("host", host),
     };
 };
 
@@ -218,7 +221,7 @@ export const suggestionFor = (
 
 export type FleetAdviceDeps = Pick<
     Services,
-    "runners" | "runnerHub" | "hostHub" | "conversations" | "resources" | "privacyShield" | "sandboxSettings" | "workspace"
+    "runners" | "runnerHub" | "hostHub" | "conversations" | "resources" | "hostReclaim" | "privacyShield" | "sandboxSettings" | "workspace"
 >;
 
 // Whether the shield keeps a session with this provider here: it would refuse it on a runner, as stream-agent.ts does.
@@ -258,10 +261,10 @@ export type FleetReadDeps = Pick<Services, "runners" | "runnerHub" | "hostHub" |
 
 // This machine, by the ruler every runner is measured with. Swapped in tests: the load of the box a suite happens to run
 // on says nothing about the case under test.
-const realHere = async (deps: Pick<Services, "workspace" | "resources">): Promise<RunnerFacts> =>
-    await machineFacts(deps.workspace.root, { budget: deps.resources });
+const realHere = async (deps: Pick<Services, "workspace" | "resources">): Promise<HereFacts> =>
+    await hereFacts(deps.workspace.root, { budget: deps.resources });
 let measureHere = realHere;
-export const measureHereForTest = (fake: ((deps: Pick<Services, "workspace" | "resources">) => Promise<RunnerFacts>) | undefined): void => {
+export const measureHereForTest = (fake: ((deps: Pick<Services, "workspace" | "resources">) => Promise<HereFacts>) | undefined): void => {
     measureHere = fake ?? realHere;
 };
 
@@ -269,7 +272,7 @@ export const measureHereForTest = (fake: ((deps: Pick<Services, "workspace" | "r
 export const readHere = async (deps: FleetReadDeps, pending: PendingWork = NOTHING_PENDING): Promise<MachineLoad> => {
     const elsewhere = [...deps.conversations.inFlightByRunner().values()].reduce((sum, count) => sum + count, 0);
     const facts = await measureHere(deps);
-    return machineLoad(lessPending(facts, pending.here), Math.max(0, deps.conversations.activeTurnCount() - elsewhere) + pending.here);
+    return machineLoad(lessPending(facts, pending.here), Math.max(0, deps.conversations.activeTurnCount() - elsewhere) + pending.here, facts.host);
 };
 
 /**
@@ -409,5 +412,8 @@ export const fleetAdvice = async (deps: FleetAdviceDeps, input: FleetAdviceInput
     ]);
     const mode = settings.offload.sessions;
     const machines = runners.map((runner) => fleetMachine(runner, fit));
-    return { mode, here, machines, ...opt("suggestion", suggestionFor(mode, here, machines)) };
+    // A press is offered only where the computer under this sandbox says what memory it has, so its answer can say what
+    // that computer got back (hosts/reclaim/host-reclaim.ts).
+    const reclaim = here.host !== undefined && deps.hostReclaim.available();
+    return { mode, here, machines, ...opt("suggestion", suggestionFor(mode, here, machines)), reclaim };
 };

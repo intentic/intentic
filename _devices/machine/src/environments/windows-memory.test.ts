@@ -11,6 +11,8 @@ import {
     recoveredFromTight,
     runningDistrosFrom,
     shouldDropCache,
+    VM_FIGURES_FRESH_MS,
+    withVmFigures,
     WORTHWHILE_DROP_BYTES,
 } from "./windows-memory.js";
 
@@ -143,4 +145,16 @@ test("a low spell begins the first time Windows is under its line, holds while i
     expect(lowSpellSince(at(2), 500, 1_000)).toBe(500);
     // Over a fifth of the machine: the spell is over.
     expect(lowSpellSince(at(7), 500, 1_000)).toBeUndefined();
+});
+
+// (2026-11-26) The VM's footprint and the guest's stranded memory, read every five minutes, ride beside Windows' own figures.
+test("the heartbeat carries the VM's figures while fresh, and Windows' own whatever they are", () => {
+    const windows = { availableBytes: 3.2 * GIB, totalBytes: 31.4 * GIB };
+    const vm = { workingSetBytes: 18.4 * GIB, at: NOW - 60_000 };
+    const guestFree = { reportableBytes: 1.2 * GIB, strandedBytes: 1.8 * GIB, reportingOrder: 5, at: NOW - 30_000 };
+    expect(withVmFigures(windows, vm, guestFree, NOW)).toEqual({ ...windows, vm, guestFree });
+    expect(withVmFigures(windows, undefined, undefined, NOW)).toEqual(windows);
+    // Two readings missed: a VM, or a watch, that stopped says nothing now.
+    expect(withVmFigures(windows, { ...vm, at: NOW - VM_FIGURES_FRESH_MS - 1 }, guestFree, NOW)).toEqual({ ...windows, guestFree });
+    expect(withVmFigures(undefined, vm, guestFree, NOW)).toBeUndefined();
 });

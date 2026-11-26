@@ -76,7 +76,10 @@
       "restartStorm": false,
       "lastRestartAt": 1791240240000,
       "quietSince": 1791240300000,
-      "nextWakeAt": 1791247530000
+      "unattendedSince": 1791237930000,
+      "nextWakeAt": 1791247530000,
+      "personAt": 1791240310000,
+      "activeAt": 1791237930000
     }
   },
   "sleepProbe": {

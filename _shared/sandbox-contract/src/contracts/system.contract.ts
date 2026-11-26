@@ -19,6 +19,7 @@ import {
     CheckoutPressInputSchema,
     CheckoutPressResultSchema,
     DiskPressureSchema,
+    MemoryReclaimResultSchema,
     SandboxMetricsSchema,
     StorageCleanInputSchema,
     StorageCleanResultSchema,
@@ -285,6 +286,18 @@ export const systemContract = {
         })
         .input(CheckoutPressInputSchema)
         .output(CheckoutPressResultSchema),
+    // (2026-11-26) The composer's "Free memory" press while the computer under this sandbox is short (offload.placement
+    // `reclaim`). The owner's alone: it empties caches every conversation here was reading from.
+    reclaimMemory: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/memory/reclaim",
+            summary: "Give memory back to the computer this sandbox runs on",
+            description:
+                "Has this sandbox let go of memory it can do without (cached files first) now, and says how much it let go and what the computer it runs on had available just before and a few seconds after. On a Windows PC much of what a sandbox lets go stays inside the WSL VM, so the answer can be that Windows got none of it. Refused, with why, where that computer says nothing of its memory, where the kernel takes no reclaim, or while this sandbox is short of memory itself.",
+        })
+        .meta({ floor: "owner", panel: false })
+        .output(MemoryReclaimResultSchema),
     // Control plane only; live I/O is /system/terminal WebSocket, exempt from the Bearer auth these routes take.
     terminals: systemRoute
         .route({

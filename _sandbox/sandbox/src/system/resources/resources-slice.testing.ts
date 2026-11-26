@@ -16,6 +16,9 @@ export const resourcesSliceFake = () =>
         answerToHost: () => undefined,
         // Nor any agent measured, so no lease is handed over and agent turns are judged by the box alone.
         answerToLeases: () => undefined,
+        // Nor a host to give memory back to: a press is refused as such, and the advice offers none.
+        hostReclaim: { press: async () => ({ outcome: "refused", why: "no-host" }), available: () => false },
+        answerToReclaim: () => undefined,
         // Real tracker: in-memory, unref'd summary timer, and request middleware records through it on every route.
         perf: createPerfTracker(createLogger(testConfig)),
     }) satisfies Partial<ResourcesSlice>;

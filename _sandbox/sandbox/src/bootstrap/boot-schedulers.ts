@@ -225,7 +225,7 @@ const startAutomations = ({ role, services, shutdown }: Pick<BootPhase, "role" |
 // at its next interval: measured before, a held heavy command waited ~2.5 s past the room being there (2026-10-20).
 // Wired here, above both the workload budget and the agent layer, which the budget may not import.
 const wireRoomWakes = (services: BootPhase["services"], logger: BootPhase["logger"], shutdown: BootPhase["shutdown"]): void => {
-    const { events, resources, answerToHost } = services;
+    const { events, resources, answerToHost, answerToReclaim } = services;
     const roomFreed = (): void => resources.changed();
     for (const stop of [events.subscribe("run.settled", roomFreed), onJobEnded(roomFreed), onChildSettled(roomFreed)]) {
         shutdown.push(stop);
@@ -241,6 +241,8 @@ const wireRoomWakes = (services: BootPhase["services"], logger: BootPhase["logge
         readCgroup: async () => readCgroup(),
         activeTurns: () => liveTurnConversations(services.conversations).length,
     });
+    // A person's "Free memory" (POST /system/memory/reclaim) presses the same reclaim, so the two never run at once.
+    answerToReclaim(reclaim);
     const reclaimTimer = setInterval(() => reclaim.tick(), 10_000);
     reclaimTimer.unref();
     shutdown.push(() => clearInterval(reclaimTimer));

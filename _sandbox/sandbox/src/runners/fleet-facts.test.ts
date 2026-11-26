@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { BudgetSnapshot } from "../workload/resource-budget.js";
 import { FACTS_FRESH_MS, type FactsHub, refreshRunnerFacts } from "./fleet-facts.js";
-import { machineFacts, parseGpuQuery } from "./machine-facts.js";
+import { hereFacts, machineFacts, parseGpuQuery } from "./machine-facts.js";
 
 // A runner's facts are its hello's until someone asks again. What compares machines asks here: only the online ones,
 // at most once per freshness window, and one ask per runner however many callers want it at once.
@@ -105,6 +105,48 @@ test("a machine's free memory never exceeds what its host has above its reserve"
     expect((await measured({ ...windows, availableBytes: 7.2 * GIB }, GIB)).memoryFreeMb).toBe(3_072);
     // A host with more room than the budget leaves the budget's own figure.
     expect((await measured({ ...windows, availableBytes: 30 * GIB })).memoryFreeMb).toBe(12_288);
+});
+
+// (2026-11-26) The computer under this sandbox in figures its owner can check, and which side its free memory came to: on
+// rog Windows had 4.2 GB, kept 3.1 GB of it back and the WSL VM held 16.6 GB, while the sandbox itself had 10.5 GB.
+test("this sandbox's facts carry the computer under it, and say whether its room is what is short", async () => {
+    const measuredHere = (host: Record<string, number>) =>
+        hereFacts(WORKSPACE_ROOT, {
+            budget: {
+                snapshot: async () => {
+                    const base = snapshot(10.5 * GIB, 22 * GIB);
+                    return { ...base, reading: { ...base.reading, host: { name: "rog", totalBytes: 31.4 * GIB, reserveBytes: 3.1 * GIB, availableBytes: 0, ...host } } };
+                },
+            },
+            pressure: async () => ({ cpu: undefined, memory: undefined, io: undefined }),
+            os: () => ({ cores: 16, totalMemoryBytes: 24 * GIB, loadOne: 1 }),
+            disk: async () => ({ freeBytes: 100 * GIB }),
+            gpus: async () => [],
+        });
+    const rog = await measuredHere({ availableBytes: 4.2 * GIB, vmBytes: 16.6 * GIB, vmUnusedBytes: 3.5 * GIB });
+    expect(rog.memoryFreeMb).toBe(1_126);
+    expect(rog.host).toEqual({
+        name: "rog",
+        availableMb: 4_301,
+        totalMb: 32_154,
+        reserveMb: 3_174,
+        vmMb: 16_998,
+        vmUnusedMb: 3_584,
+        ownFreeMb: 10_752,
+        binding: true,
+    });
+    // Windows with room to spare: the sandbox's own budget is what its free memory came to, and nothing of the VM read.
+    expect((await measuredHere({ availableBytes: 20 * GIB })).host).toEqual({ name: "rog", availableMb: 20_480, totalMb: 32_154, reserveMb: 3_174, ownFreeMb: 10_752, binding: false });
+    // A runner's answer to its parent leaves the computer out: the parent reads it from its own heartbeat.
+    expect(
+        await machineFacts(WORKSPACE_ROOT, {
+            budget: { snapshot: async () => ({ ...snapshot(GIB, 2 * GIB), reading: { ...snapshot(GIB, 2 * GIB).reading, host: { name: "omen", availableBytes: GIB, totalBytes: 32 * GIB, reserveBytes: 3.2 * GIB } } }) },
+            pressure: async () => ({ cpu: undefined, memory: undefined, io: undefined }),
+            os: () => ({ cores: 4, totalMemoryBytes: 8 * GIB, loadOne: 1 }),
+            disk: async () => undefined,
+            gpus: async () => [],
+        }),
+    ).not.toHaveProperty("host");
 });
 
 test("what a machine cannot measure is left out, never reported as zero", async () => {

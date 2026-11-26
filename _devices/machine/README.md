@@ -493,6 +493,26 @@ flowchart LR
   sandbox's heartbeat (`ping`) with Windows' available and total memory, which the sandbox's heavy-command gate holds
   work back on while this PC is the one running it ([sandbox README](../../_sandbox/sandbox/README.md)); a distro's agent
   and other platforms answer `{ ok: true }` as before.
+- (2026-11-26) **Free memory the VM cannot give back.** The VM returns free memory to Windows through free page
+  reporting, which reports only free blocks of 2^`page_reporting_order` pages or more; WSL boots its kernel with 5
+  (128 KiB), and smaller free blocks stay charged to Windows. On rog, 1.1-1.7 GB of the VM's free memory sat stranded
+  on average, 7.5 of the 9.1 GB a drop had just freed, and 93% of what a sandbox's `memory.reclaim` freed (58% still
+  under 16 KiB). So while Windows is tight (under a fifth of its memory) the Windows side reads the guest's
+  `/proc/buddyinfo`, its order and its kernel command line through a distro already running (`wsl.exe -d <distro>`, as
+  its own user; every five minutes, every minute in a low spell until the order is lowered), and the heartbeat carries
+  it beside Windows' figures with vmmemWSL's working set from the watch below (`HostMemory.vm`, `guestFree`; dropped
+  after ten minutes without a reading). When Windows is under its low line with more than 1 GiB stranded, or a drop is
+  due and that much is stranded, it lowers the order to 2 and compacts once as root instead of dropping, and the drop
+  then waits its cooldown from there (under 1.5 GiB the drop runs as well). The order it found goes back once Windows
+  has had more than a fifth of its memory for ten minutes, and when the agent stops; one log line each, with stranded
+  memory and Windows' available before and after ([`environments/wsl-page-reporting.ts`](src/environments/wsl-page-reporting.ts)
+  decides, [`environments/wsl-guest.ts`](src/environments/wsl-guest.ts) acts). An order that no longer reads 2 was
+  someone else's or a restarted VM's and is left alone; one at 2 the agent holds no record of (it was killed holding
+  it) is adopted and put back to the kernel's boot value. A root that cannot write it leaves the drops as before for
+  half an hour. Measured on rog: lowering with 2.7 GB stranded took vmmemWSL's private bytes down 1.6 GB and raised
+  Windows' available by 0.8 GB within 16 s (0.9 GB after the compaction), and the stranded mean over minutes fell from
+  1.1-1.7 GB to 0.3 GB. What reporting 16 KiB blocks costs the hypervisor and the host's page tables is not measured,
+  which is why the order is lowered only while Windows is short.
 - (2026-11-26) **A WSL VM too big for its PC.** Dropping cache could not help rog: its `.wslconfig` gives the VM 22 GB
   of 31.4 GiB and the VM keeps it. So the same side reads Windows' available memory and vmmemWSL's working set every
   five minutes (`tasklist`, about 150 ms; `Get-Process` would add private bytes for a PowerShell's 0.35 s of CPU) and
@@ -1141,14 +1161,20 @@ computer stays short of memory (below).
   VM's). Of the sandboxes this side keeps, it reads each one's work signal (`docker exec … cat /run/intentic/work.json`,
   the daemon's answer to idle-stop's questions) and asks ic to sleep the one quiet longest, at least an hour, with
   nothing it promised due within a quarter of an hour: `ic sandbox sleep <slug> --idle 60 --json --source agent
-  --reason "<why>"`. ic decides as for every sleep and asks the daemon again just before the stop. It never sleeps the
+  --unattended --reason "<why>"`. ic decides as for every sleep and asks the daemon again just before the stop. Here,
+  and only here (the owner's call, 2026-11-26), an editor tab or desktop app left connected that nobody has been at
+  for half an hour counts as nobody: the daemon says so as `unattendedSince`, from the editor's own `idle`/`away`
+  reports, and `--unattended` has ic read it instead of the strict `quietSince`. Somebody back at the editor withdraws it
+  in the daemon's last answer, so the sleep is refused; the line then says `(an editor is still open on it, untouched)`
+  for a sandbox slept with one open. It never sleeps the
   only sandbox awake on the engine (the other side's count), a runner, one another flow is touching, or one kept awake
   by its own "Sleep when unused". One it leaves awake is skipped for the next. After a sleep the next look waits ten
   minutes and reads memory again first, so another sandbox sleeps only while the computer is still short. A look that
   slept nothing waits five minutes and says why once. The log says
   `keeper <slug>: put to sleep to give memory back: …`, with the figures, how long it had been unused and that opening
   it wakes it. `--reason` puts the same cause into the sandbox's own record of the stop, which it reads at its next
-  boot. An ic from before the flag is asked without it, and for an hour after. Waking is the same as for any sleeping
+  boot. An ic from before the two flags is asked without both, and for an hour after; it then keeps an open editor as
+  somebody there. Waking is the same as for any sleeping
   sandbox, above. The switch is the PC's `memorySleep` (`intentic-machine updates --memory on|off`, absent means on);
   `sleep-after off` does not turn it off, and a sandbox's "Sleep when unused" keeps that one up.
 

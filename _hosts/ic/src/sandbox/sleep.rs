@@ -30,6 +30,8 @@ pub struct Args {
     /// Why, from whoever asked (the machine agent's keeper names the computer's memory), for the sandbox's own record
     /// of the stop; None leaves ic's own sentence.
     pub reason: Option<String>,
+    /// With `idle`: an editor nobody has been at for half an hour counts as nobody (the keeper's sleep for memory).
+    pub unattended: bool,
 }
 
 /// Whether the daemon's work signal lets a sandbox sleep.
@@ -278,6 +280,26 @@ fn dev_checkout_holds_awake(slug: &str, container: &str) -> Option<String> {
     held_by_checkout(ran.code, &ran.stdout)
 }
 
+/// Who asked for an idle sleep and how: for the page's report, the why for the sandbox's record, and whether an editor left
+/// alone counts as nobody.
+#[derive(Clone, Copy)]
+struct Ask<'a> {
+    source: Source,
+    reason: Option<&'a str>,
+    unattended: bool,
+}
+
+/// The signal as the keeper's sleep for memory reads it (`--unattended`): the daemon's unattended streak, which lets an
+/// editor nobody has been at for half an hour go, stands in for its strict one. A daemon from before it says only the
+/// strict one, read as it is, so an editor left open still holds that sandbox awake. Every other fact stands: work in
+/// flight, the owner's keep-awake, a wake due. Pure.
+pub fn for_unattended(signal: WorkSignal) -> WorkSignal {
+    WorkSignal {
+        quiet_since: signal.unattended_since.or(signal.quiet_since),
+        ..signal
+    }
+}
+
 /// The sentence the sandbox's record of an idle sleep carries: the asker's why first, when it gave one, then the quiet
 /// that let it. Pure.
 fn idle_reason(reason: Option<&str>, quiet: &str, idle_ms: u64) -> String {
@@ -347,7 +369,16 @@ pub fn run(args: Args) -> Result<()> {
         .filter(|why| !why.is_empty());
     match args.idle {
         None => sleep_now(args.slug, args.json, args.source, reason),
-        Some(minutes) => sleep_idle(args.slug, minutes, args.json, args.source, reason),
+        Some(minutes) => sleep_idle(
+            args.slug,
+            minutes,
+            args.json,
+            Ask {
+                source: args.source,
+                reason,
+                unattended: args.unattended,
+            },
+        ),
     }
 }
 
@@ -393,13 +424,7 @@ fn sleep_now(slug: Option<String>, json: bool, source: Source, reason: Option<&s
 
 /// The keeper's form: every sandbox this side keeps (or the one named), each slept only if it has been quiet long
 /// enough. A sandbox that stays awake is an answer, not a failure.
-fn sleep_idle(
-    slug: Option<String>,
-    minutes: u64,
-    json: bool,
-    source: Source,
-    reason: Option<&str>,
-) -> Result<()> {
+fn sleep_idle(slug: Option<String>, minutes: u64, json: bool, ask: Ask) -> Result<()> {
     let idle_ms = minutes.saturating_mul(60_000);
     let slugs = match slug {
         Some(slug) => vec![resolve_slug(Some(slug), "ic sandbox sleep")?],
@@ -416,7 +441,7 @@ fn sleep_idle(
         },
     };
     for slug in slugs {
-        let (slept, why, alarm) = consider(&slug, idle_ms, source, reason);
+        let (slept, why, alarm) = consider(&slug, idle_ms, ask);
         say(&slug, slept, &why, alarm, json);
     }
     Ok(())
@@ -437,22 +462,24 @@ fn swept_awake(slug: &str) -> Option<&'static str> {
 
 /// One sandbox through every reason to leave it awake, put to sleep when none holds: whether it slept, why, and the
 /// alarm its sleep set.
-fn consider(
-    slug: &str,
-    idle_ms: u64,
-    source: Source,
-    reason: Option<&str>,
-) -> (bool, String, Option<u64>) {
-    let (slept, why, alarm) = considered(slug, idle_ms, source, reason);
+fn consider(slug: &str, idle_ms: u64, ask: Ask) -> (bool, String, Option<u64>) {
+    let (slept, why, alarm) = considered(slug, idle_ms, ask);
     (slept, why, alarm.filter(|_| slept))
 }
 
-fn considered(
-    slug: &str,
-    idle_ms: u64,
-    source: Source,
-    reason: Option<&str>,
-) -> (bool, String, Option<u64>) {
+fn considered(slug: &str, idle_ms: u64, ask: Ask) -> (bool, String, Option<u64>) {
+    let Ask {
+        source,
+        reason,
+        unattended,
+    } = ask;
+    let read = |signal: Option<WorkSignal>| {
+        if unattended {
+            signal.map(for_unattended)
+        } else {
+            signal
+        }
+    };
     if let Some(why) = swept_awake(slug) {
         return (false, why.to_string(), None);
     }
@@ -486,7 +513,7 @@ fn considered(
         return (false, why.to_string(), None);
     }
     // The heartbeat screens: most rounds most sandboxes are in use, and saying so needs no node inside them.
-    let heartbeat = chain::read_work_signal(&container);
+    let heartbeat = read(chain::read_work_signal(&container));
     let screened = idle_limit(&record, heartbeat, idle_ms);
     match sleep_verdict(heartbeat, now_ms(), screened, wake_lead(&record)) {
         Verdict::Awake(why) => (false, why.to_string(), None),
@@ -496,9 +523,9 @@ fn considered(
             }
             // Asked after the checkout's pre-sleep hook, which can take a minute, so a booking made in the meantime is in
             // the alarm and work that began in it keeps the container up.
-            let signal = keeper_signal(confirmation(&container), || {
+            let signal = read(keeper_signal(confirmation(&container), || {
                 chain::read_work_signal(&container)
-            });
+            }));
             let now = now_ms();
             let idle_ms = idle_limit(&record, signal, idle_ms);
             if let Verdict::Awake(why) = sleep_verdict(signal, now, idle_ms, wake_lead(&record)) {
@@ -1000,6 +1027,7 @@ mod tests {
             at: NOW - 20_000,
             live_turns: 0,
             quiet_since: Some(NOW - minutes * MIN),
+            unattended_since: None,
             next_wake_at: None,
             person_at: None,
             keep_awake: false,
@@ -1113,6 +1141,62 @@ mod tests {
     }
 
     #[test]
+    fn an_editor_left_alone_lets_only_the_sleep_for_memory_through() {
+        // Connected with nobody at it for an hour: no strict streak, an unattended one.
+        let left_open = WorkSignal {
+            quiet_since: None,
+            unattended_since: Some(NOW - 70 * MIN),
+            person_at: Some(NOW - 20_000),
+            ..quiet(0)
+        };
+        assert_eq!(
+            sleep_verdict(Some(left_open), NOW, 60 * MIN, LEAD),
+            Verdict::Awake(NOT_QUIET),
+            "the keeper's own sleep keeps an open editor as somebody there"
+        );
+        assert_eq!(
+            sleep_verdict(Some(for_unattended(left_open)), NOW, 60 * MIN, LEAD),
+            Verdict::Sleep
+        );
+        // Somebody back at it, or work, withdraws the unattended streak too: the daemon then says neither.
+        let back = WorkSignal {
+            unattended_since: None,
+            ..left_open
+        };
+        assert_eq!(
+            sleep_verdict(Some(for_unattended(back)), NOW, 60 * MIN, LEAD),
+            Verdict::Awake(NOT_QUIET)
+        );
+        // Everything else still holds it: the owner's keep-awake and a wake due.
+        assert_eq!(
+            sleep_verdict(
+                Some(for_unattended(WorkSignal {
+                    keep_awake: true,
+                    ..left_open
+                })),
+                NOW,
+                60 * MIN,
+                LEAD
+            ),
+            Verdict::Awake(KEPT_AWAKE)
+        );
+        assert_eq!(
+            sleep_verdict(
+                Some(for_unattended(WorkSignal {
+                    next_wake_at: Some(NOW + 3 * MIN),
+                    ..left_open
+                })),
+                NOW,
+                60 * MIN,
+                LEAD
+            ),
+            Verdict::Awake("a wake is due")
+        );
+        // A daemon from before the unattended streak: its strict word is read as it is.
+        assert_eq!(for_unattended(quiet(45)), quiet(45));
+    }
+
+    #[test]
     fn a_sandbox_quiet_long_enough_with_nothing_due_sleeps() {
         assert_eq!(
             sleep_verdict(Some(quiet(45)), NOW, 30 * MIN, LEAD),
@@ -1214,6 +1298,7 @@ mod tests {
                 Some(WorkSignal {
                     quiet_since: None,
                     keep_awake: true,
+                    unattended_since: None,
                     ..quiet(45)
                 }),
                 NOW,

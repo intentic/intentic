@@ -59,6 +59,10 @@ export interface HostRoom {
     readonly availableBytes: number;
     readonly totalBytes: number;
     readonly reserveBytes: number;
+    // (2026-11-26) The WSL VM's footprint in the machine's memory and the part of it free but too fragmented to hand
+    // back, where that machine's agent read them: what a person is told is holding the memory. The formula reads neither.
+    readonly vmBytes?: number | undefined;
+    readonly vmUnusedBytes?: number | undefined;
 }
 
 export interface ShortMemory {

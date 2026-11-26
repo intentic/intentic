@@ -76,6 +76,7 @@ import { isWarmLayer } from "./conversations/worktrees/cargo-warm.js";
 import { overlaysRoot } from "./conversations/worktrees/isolation.js";
 import { createSystemRoutes } from "./system/system.routes.js";
 import { createReachRoutes } from "./secrets/reach/reach.routes.js";
+import { createReclaimRoutes } from "./hosts/reclaim/reclaim.routes.js";
 import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createExitRoutes } from "./exit/exit.routes.js";
 import { createVpnRoutes } from "./vpn/vpn.routes.js";
@@ -165,6 +166,7 @@ const systemRoutes = (services: Services) => ({
     ...createDeviceSystemRoutes(services),
     ...createBrowsingSystemRoutes(services),
     ...storageRoutes(services),
+    ...createReclaimRoutes(services),
 });
 
 export const createRouter = (services: Services): SandboxRouter => ({

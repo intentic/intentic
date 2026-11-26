@@ -777,6 +777,14 @@ or is meant to outlive it and is adopted; nothing is left to whoever happens to 
   ic stores it as the sleep's alarm and starts the sandbox a few minutes ahead of it, and the scheduler sets a timer
   for the soonest moment within a poll, so a woken sandbox fires on the minute rather than at its next 30-second poll.
   `personAt` (when a person was last there since boot) lets a sandbox the alarm woke sleep again soon after.
+  (2026-11-26) Connected is not used: an editor left open in a background tab holds its connection as long as the
+  browser runs. The editor already reports, as they change, whether its window is off screen (`idle`) or on screen and
+  untouched for ten minutes (`away`); the daemon keeps when a person was last at a connected editor from those
+  ([`presence.ts`](../../_sandbox/sandbox/src/system/presence.ts) `editorActiveAt`) and the signal adds `activeAt` (the
+  last real activity: an editor with somebody at it, typing, an app in use) and `unattendedSince` (the `quietSince`
+  streak with an editor nobody has been at for 30 minutes counted as nobody, from when somebody was last at it). Only the
+  keeper's sleep for memory reads the latter (`ic sandbox sleep --unattended`); the keeper's own sleep and hosted
+  idle-stop keep an open editor as somebody there. The socket's fresh answer withdraws it the moment somebody is back.
   ic screens on that heartbeat and, for a sandbox it would sleep, asks the daemon again through the private
   `/run/intentic/sleep.sock` just before stopping; a failed answer leaves it awake, and a daemon from before the socket
   sleeps on its heartbeat as it did. Hosted idle-stop saves its distant deadline on the platform and rechecks it before

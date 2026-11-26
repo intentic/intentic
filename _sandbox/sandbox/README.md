@@ -1018,7 +1018,19 @@ flowchart LR
   is a partial reclaim; one that cannot be written at all turns this off until the daemon restarts. Measured on rog
   that day, a 1 GiB reclaim took under 1.1 s and freed that much in the VM, in blocks too small for free page reporting
   to hand to Windows, whose available memory did not move beyond its noise: the machine agent's drop stays the
-  fallback (its README).
+  fallback (its README). That agent now also lowers the VM's `page_reporting_order` while Windows is short and more
+  than a gigabyte of the VM's free memory is stranded, which lets about two fifths of a reclaim reach Windows instead
+  of a fifteenth, and the heartbeat's `memory` carries the VM's footprint (`vm`) and its free memory split into
+  reportable and stranded (`guestFree`) beside Windows' figures, each with when it was read; the fleet advice reads
+  both (next note).
+- (2026-11-26) The composer's "this machine is busy: only 1.9 GB of memory free" was Windows' Available less the 3.1 GB
+  line the host keeps, while the sandbox had 10.5 GB and the WSL VM held 16.6 GB: it matched nothing the owner could
+  find. The fleet advice (`GET /offload/placement`) now carries the computer under this sandbox beside its verdict
+  (`here.host`: Windows' own Available, that line, the VM's footprint and unused part where read, the sandbox's own
+  free, and which of the two its free memory came to), so the line names what is short in figures Task Manager shows.
+  While the computer is what is short the strip offers "Free memory", `POST /system/memory/reclaim` (the owner's): the
+  reclaim above, pressed now (`hosts/reclaim/host-reclaim.ts` `press`), answering what Windows had just before and five
+  seconds after, so "Windows got nothing back" is an answer it can give.
 - (2026-11-25) Every agent turn running here holds a lease on what it is expected to grow into, so how many agents run
   at once across the sandbox is set by what agents here measure, not by a count. `system/resources/agent-envelope.ts`
   learns the envelope from the minute's process scan: each conversation's processes the heavy-command queue does not

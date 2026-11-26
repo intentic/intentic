@@ -4,6 +4,8 @@ import {
     MAX_RECLAIM_COOLDOWN_MS,
     nextReclaimCooldown,
     PRESSURE_CEILING_PERCENT,
+    pressRefusal,
+    pressTarget,
     RECLAIM_COOLDOWN_MS,
     type ReclaimReading,
     reclaimTarget,
@@ -102,10 +104,14 @@ const harness = (opts: {
     swappinessProbeSucceeds?: boolean;
     // The reclaim write (not the probe) fails with this errno code.
     writeFails?: string;
+    // What the host reads once the reclaim was written: what it got back.
+    hostAfterWrite?: HostRoom;
 }) => {
     let clock = 1_800_000_000_000;
     let hostRoom = opts.hostRoom;
     const writes: { path: string; data: string }[] = [];
+    // Whether each read of the host asked it now (a press) or took its last heartbeat (a background pass).
+    const hostAsks: boolean[] = [];
     const { logger, lines } = recordingLogger();
 
     const writeFn = async (path: string, data: string): Promise<void> => {
@@ -120,6 +126,7 @@ const harness = (opts: {
         if (opts.writeFails !== undefined) {
             throw errno(opts.writeFails);
         }
+        hostRoom = opts.hostAfterWrite ?? hostRoom;
     };
 
     // The cgroup reading returned after reclaim has less memory (simulate the reclaim effect).
@@ -131,7 +138,10 @@ const harness = (opts: {
     };
 
     const reclaim = startHostReclaim(logger, {
-        hostSource: async () => hostRoom,
+        hostSource: async (options) => {
+            hostAsks.push(options?.fresh === true);
+            return hostRoom;
+        },
         readCgroup: async () => {
             readCount += 1;
             return readCount <= 1 ? reading : afterReading;
@@ -139,11 +149,13 @@ const harness = (opts: {
         activeTurns: () => opts.activeTurns ?? 0,
         now: () => clock,
         write: writeFn,
+        settleMs: 0,
     });
 
     return {
         reclaim,
         writes,
+        hostAsks,
         lines,
         advance: (ms: number) => void (clock += ms),
         setHost: (room: HostRoom) => void (hostRoom = room),
@@ -292,4 +304,74 @@ test("tick does not overlap with a pass already underway", async () => {
     release?.();
     await written;
     expect(writes).toHaveLength(1);
+});
+
+// --- a person's press (POST /system/memory/reclaim) ---
+
+test("a press asks for what would take the host back to calm, within its bounds and half of what the sandbox holds", () => {
+    // 3.2 GiB line + 3 GiB for a person's turn and two agents - 3.5 GiB available: 2.7 GiB, capped at 2 GiB.
+    expect(pressTarget(host(3.5), cgroup(5))).toBe(2 * GIB);
+    // A host already past calm still gets the floor, so a press does something.
+    expect(pressTarget(host(10), cgroup(5))).toBe(512 * MIB);
+    // Never more than half of what this sandbox holds.
+    expect(pressTarget(host(2), cgroup(2))).toBe(GIB);
+});
+
+test("a press is refused for a sandbox too small to give anything, or one stalling on memory itself", () => {
+    expect(pressRefusal(cgroup(0.3))).toBe("small");
+    expect(pressRefusal({ memoryBytes: undefined, pressure: { memory: undefined } })).toBe("small");
+    expect(pressRefusal(cgroup(5, PRESSURE_CEILING_PERCENT))).toBe("stalling");
+    expect(pressRefusal(cgroup(5, PRESSURE_CEILING_PERCENT - 1))).toBeUndefined();
+});
+
+test("a press reclaims now, above the line a background pass waits for, and says what the host had before and after", async () => {
+    const run = harness({ hostRoom: host(3.5), cgroupReading: cgroup(5), swappinessProbeSucceeds: true, hostAfterWrite: host(4.7) });
+    // The background pass leaves a host above its line alone...
+    await run.reclaim.pass();
+    expect(run.writes).toEqual([]);
+    // ...a person's press does not.
+    expect(await run.reclaim.press()).toEqual({
+        outcome: "reclaimed",
+        givenBytes: pressTarget(host(3.5), cgroup(5)),
+        host: { name: "rog", beforeBytes: 3.5 * GIB, afterBytes: Math.round(4.7 * GIB) },
+    });
+    expect(run.writes).toHaveLength(1);
+    // Both reads of the press asked the host now, not its last heartbeat.
+    expect(run.hostAsks).toEqual([false, true, true]);
+    expect(run.lines.at(-1)).toEqual(expect.objectContaining({ level: "info", message: expect.stringContaining("a person asked; this sandbox gave back") }));
+});
+
+test("a press says why it did nothing: no host to give to, too little to give, or stalling", async () => {
+    expect(await harness({ hostRoom: undefined }).reclaim.press()).toEqual({ outcome: "refused", why: "no-host" });
+    expect(await harness({ hostRoom: host(2), cgroupReading: cgroup(0.3) }).reclaim.press()).toEqual({ outcome: "refused", why: "small" });
+    const stalling = harness({ hostRoom: host(2), cgroupReading: cgroup(5, PRESSURE_CEILING_PERCENT) });
+    expect(await stalling.reclaim.press()).toEqual({ outcome: "refused", why: "stalling" });
+    expect(stalling.writes).toEqual([]);
+});
+
+test("a press that finds memory.reclaim unwritable says so, and turns reclaim off for good", async () => {
+    const run = harness({ hostRoom: host(2), cgroupReading: cgroup(5), writeFails: "EACCES" });
+    expect(run.reclaim.available()).toBe(true);
+    expect(await run.reclaim.press()).toEqual({ outcome: "refused", why: "unsupported" });
+    expect(run.reclaim.available()).toBe(false);
+    expect(await run.reclaim.press()).toEqual({ outcome: "refused", why: "unsupported" });
+    expect(run.writes).toHaveLength(1);
+});
+
+test("a press that fails for a passing reason throws, so the person hears it failed", async () => {
+    const run = harness({ hostRoom: host(2), cgroupReading: cgroup(5), writeFails: "EIO" });
+    await expect(run.reclaim.press()).rejects.toThrow("the kernel refused this sandbox's reclaim");
+    expect(run.reclaim.available()).toBe(true);
+});
+
+test("two presses at once are one reclaim, and the background pass waits its cooldown from it", async () => {
+    const run = harness({ hostRoom: host(2), cgroupReading: cgroup(5), swappinessProbeSucceeds: true });
+    const [first, second] = await Promise.all([run.reclaim.press(), run.reclaim.press()]);
+    expect(second).toEqual(first);
+    expect(run.writes).toHaveLength(1);
+    await run.reclaim.pass();
+    expect(run.writes).toHaveLength(1);
+    run.advance(RECLAIM_COOLDOWN_MS);
+    await run.reclaim.pass();
+    expect(run.writes).toHaveLength(2);
 });

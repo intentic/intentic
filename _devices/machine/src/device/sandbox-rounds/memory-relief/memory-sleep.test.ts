@@ -16,7 +16,7 @@ import {
     noteReading,
     nothingSaid,
     QUIET_MINUTES,
-    REASON_REFUSED_MS,
+    FLAGS_REFUSED_MS,
     runMemorySleep,
     SETTLE_MS,
     SHORT_FOR_MS,
@@ -90,7 +90,7 @@ describe("what keeps a sandbox up whatever memory is left", () => {
         expect(stayUp(quiet(90, { liveTurns: 1 }), NOW)).toBe("something is running in it");
         expect(stayUp(quiet(90, { keepAwake: true }), NOW)).toContain("kept awake");
         // No quietSince is how the daemon says somebody is connected or its own work is still going.
-        expect(stayUp({ liveTurns: 0, at: NOW, personAt: NOW }, NOW)).toBe("it is in use (somebody connected, or work of its own still going)");
+        expect(stayUp({ liveTurns: 0, at: NOW, personAt: NOW }, NOW)).toBe("it is in use (somebody at an editor within the last half hour, or work of its own still going)");
         expect(stayUp(quiet(QUIET_MINUTES - 1), NOW)).toBe(`it was used within the last ${QUIET_MINUTES} min`);
         expect(stayUp(quiet(90, { nextWakeAt: NOW + WAKE_SOON_MS }), NOW)).toBe("something it scheduled is due soon");
         // A promise further out does not hold it: the sleep sets an alarm for it.
@@ -131,12 +131,38 @@ describe("who sleeps first", () => {
         expect(choice.only).toBe(false);
     });
 
+    // The owner's rule (2026-11-26): an editor nobody has been at for half an hour is nobody, for this sleep only.
+    test("an editor left open counts as nobody once the daemon says so; its quiet runs from when somebody was last at it", () => {
+        const leftAlone = (sinceMin: number): WorkSignal => ({ liveTurns: 0, at: NOW - 30_000, unattendedSince: NOW - sinceMin * MIN, personAt: NOW - 30_000, activeAt: NOW - sinceMin * MIN });
+        const listed = [row("open"), row("recent"), row("closed")];
+        const choice = choose(listed, signals({ open: leftAlone(900), recent: leftAlone(40), closed: quiet(70) }), new Set(), NOW);
+        expect(choice.order).toEqual([
+            { slug: "open", quietSince: NOW - 900 * MIN, activeAt: NOW - 900 * MIN, leftOpen: true },
+            { slug: "closed", quietSince: NOW - 70 * MIN, activeAt: 0, leftOpen: false },
+        ]);
+        expect(choice.kept).toEqual([{ slug: "recent", why: `it was used within the last ${QUIET_MINUTES} min` }]);
+        // Connected, and the daemon says no unattended streak: somebody was at an editor within the half hour.
+        expect(stayUp({ liveTurns: 0, at: NOW, personAt: NOW, activeAt: NOW - 10 * MIN }, NOW)).toBe(
+            "it is in use (somebody at an editor within the last half hour, or work of its own still going)",
+        );
+        // Everything else still holds it whatever the editor: work, its own keep-awake, a wake due.
+        expect(stayUp({ ...leftAlone(900), liveTurns: 1 }, NOW)).toBe("something is running in it");
+        expect(stayUp({ ...leftAlone(900), keepAwake: true }, NOW)).toContain("kept awake");
+        expect(stayUp({ ...leftAlone(900), nextWakeAt: NOW + 5 * MIN }, NOW)).toBe("something it scheduled is due soon");
+    });
+
+    test("least recently used goes by the last real activity where the daemon says it, before the last presence", () => {
+        const listed = [row("a"), row("b")];
+        const choice = choose(listed, signals({ a: quiet(90, { personAt: NOW - 100 * MIN, activeAt: NOW - 300 * MIN }), b: quiet(90, { personAt: NOW - 200 * MIN }) }), new Set(), NOW);
+        expect(choice.order.map((candidate) => candidate.slug)).toEqual(["a", "b"]);
+    });
+
     test("one in use, one another flow is touching, and one with no signal stay up, each with its reason", () => {
         const listed = [row("used"), row("touched"), row("silent"), row("idle")];
         const choice = choose(listed, signals({ used: { liveTurns: 0, at: NOW }, touched: quiet(900), silent: undefined, idle: quiet(61) }), new Set(["touched"]), NOW);
         expect(choice.order.map((candidate) => candidate.slug)).toEqual(["idle"]);
         expect(choice.kept).toEqual([
-            { slug: "used", why: "it is in use (somebody connected, or work of its own still going)" },
+            { slug: "used", why: "it is in use (somebody at an editor within the last half hour, or work of its own still going)" },
             { slug: "touched", why: "another ic run is working on it" },
             { slug: "silent", why: "its daemon says nothing of its work" },
         ]);
@@ -145,18 +171,24 @@ describe("who sleeps first", () => {
 
 describe("what is said", () => {
     test("which sandbox slept, why, and that opening it wakes it", () => {
-        expect(sleptLine("sandbox-a4ba63bf2aa5", SHORT, 14 * MIN, 900 * MIN)).toBe(
+        const candidate = { slug: "sandbox-a4ba63bf2aa5", quietSince: NOW - 900 * MIN, activeAt: NOW - 900 * MIN, leftOpen: false };
+        expect(sleptLine(candidate, SHORT, 14 * MIN, NOW)).toBe(
             "keeper sandbox-a4ba63bf2aa5: put to sleep to give memory back: this computer has had less than 3.1 GB of memory available for 14 min (2.1 GB of 31.4 GB now), and nobody had used sandbox-a4ba63bf2aa5 for 900 min, longer than any other sandbox here. It starts again when somebody opens it.",
         );
-        expect(sleptLine("a", SHORT, 14 * MIN, 61 * MIN, Date.parse("2026-11-26T18:00:00.000Z"))).toContain(
+        expect(sleptLine(candidate, SHORT, 14 * MIN, NOW, Date.parse("2026-11-26T18:00:00.000Z"))).toContain(
             "It starts again when somebody opens it, or ahead of what it has scheduled at 2026-11-26T18:00:00.000Z.",
+        );
+        // An editor still open on it, which counted as nobody: said, so its owner knows why their tab found it asleep.
+        expect(sleptLine({ ...candidate, leftOpen: true }, SHORT, 14 * MIN, NOW)).toContain(
+            "nobody had used sandbox-a4ba63bf2aa5 for 900 min (an editor is still open on it, untouched), longer than any other sandbox here.",
         );
     });
 
     test("the reason ic records in the sandbox names the memory, its line and that opening it wakes it", () => {
-        expect(sleepReason(SHORT, 14 * MIN)).toBe(
+        expect(sleepReason(SHORT, 14 * MIN, { leftOpen: false })).toBe(
             "this computer was short of memory (2.1 GB of 31.4 GB available, under its 3.1 GB low line, for 14 min) and nobody had used this sandbox longer than any other there; opening it wakes it",
         );
+        expect(sleepReason(SHORT, 14 * MIN, { leftOpen: true })).toContain("longer than any other there (an editor is still open on it, untouched); opening it wakes it");
     });
 
     test("a look that slept nothing says why, keyed without the figures so a standing reason is said once", () => {
@@ -169,8 +201,8 @@ describe("what is said", () => {
         expect(nothingSaid(SHORT, 14 * MIN, { only: true, kept: [] }).line).toContain("only one sandbox runs on it, and that one is never put to sleep");
     });
 
-    test("ic is asked for that one sandbox, quiet for the hour, as the agent, with the reason when there is one", () => {
-        expect(memorySleepArgs("a", "why")).toEqual(["sandbox", "sleep", "a", "--idle", String(QUIET_MINUTES), "--json", "--source", "agent", "--reason", "why"]);
+    test("ic is asked for that one sandbox, quiet for the hour, as the agent, an editor left alone counting as nobody, with the reason", () => {
+        expect(memorySleepArgs("a", "why")).toEqual(["sandbox", "sleep", "a", "--idle", String(QUIET_MINUTES), "--json", "--source", "agent", "--unattended", "--reason", "why"]);
         expect(memorySleepArgs("a", undefined)).toEqual(["sandbox", "sleep", "a", "--idle", "60", "--json", "--source", "agent"]);
     });
 });
@@ -263,10 +295,9 @@ describe("one look", () => {
         expect(fake.asked).toEqual([]);
         expect(fake.listed).toEqual([]);
         expect(await pass(fake)).toEqual({ slug: "b", alarmAt: undefined });
-        expect(fake.asked).toEqual([{ slug: "b", reason: sleepReason(SHORT, SHORT_FOR_MS), held: true }]);
+        expect(fake.asked).toEqual([{ slug: "b", reason: sleepReason(SHORT, SHORT_FOR_MS, { leftOpen: false }), held: true }]);
         expect(held.size).toBe(0);
-        // b went quiet 900 minutes before the streak began, which has held ten minutes since.
-        expect(fake.said).toEqual([sleptLine("b", SHORT, SHORT_FOR_MS, 900 * MIN + SHORT_FOR_MS, undefined)]);
+        expect(fake.said).toEqual([sleptLine({ slug: "b", quietSince: NOW - 900 * MIN, activeAt: 0, leftOpen: false }, SHORT, SHORT_FOR_MS, NOW + SHORT_FOR_MS, undefined)]);
     });
 
     test("at most one: the next look waits to settle, reads memory again, and goes on only while it is still short", async () => {
@@ -315,7 +346,7 @@ describe("one look", () => {
         expect(fake.listed).toHaveLength(2);
         expect(fake.asked).toEqual([]);
         expect(fake.said).toHaveLength(1);
-        expect(fake.said[0]).toContain(`(a: it is in use (somebody connected, or work of its own still going); b: it was used within the last ${QUIET_MINUTES} min).`);
+        expect(fake.said[0]).toContain(`(a: it is in use (somebody at an editor within the last half hour, or work of its own still going); b: it was used within the last ${QUIET_MINUTES} min).`);
     });
 
     test("ic has the last word: one it leaves awake is said, and the next quiet one is asked in the same look", async () => {
@@ -345,7 +376,7 @@ describe("one look", () => {
             ["b", "plain"],
             ["c", "plain"],
         ]);
-        expect(state.reasonRefusedUntil).toBe(NOW + SHORT_FOR_MS + REASON_REFUSED_MS);
+        expect(state.flagsRefusedUntil).toBe(NOW + SHORT_FOR_MS + FLAGS_REFUSED_MS);
     });
 
     test("an ic that cannot sleep at all is said once, and nothing is taken for asleep", async () => {
@@ -380,6 +411,15 @@ describe("one look", () => {
         expect(await pass(down)).toBeUndefined();
         expect(down.asked).toEqual([]);
         expect(state.nextLookAt).toBe(NOW + SHORT_FOR_MS + LOOK_AGAIN_MS);
+    });
+
+    test("a sandbox with an editor left open is asked about with the unattended reading, and the line says so", async () => {
+        const fake = fakeLook();
+        fake.signals = { a: quiet(70), b: { liveTurns: 0, at: NOW, unattendedSince: NOW - 900 * MIN, personAt: NOW, activeAt: NOW - 900 * MIN } };
+        await holdShort(fake);
+        expect((await pass(fake))?.slug).toBe("b");
+        expect(fake.asked).toEqual([{ slug: "b", reason: sleepReason(SHORT, SHORT_FOR_MS, { leftOpen: true }), held: true }]);
+        expect(fake.said[0]).toContain("(an editor is still open on it, untouched)");
     });
 
     test("a sandbox another flow of this agent is touching is not even read, and stays up", async () => {

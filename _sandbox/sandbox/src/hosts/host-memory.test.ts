@@ -46,3 +46,19 @@ test("a heartbeat older than the stale line, none at all, or no machine named is
     expect(hostAnswering("omen", beats({}), NOW)).toBe(false);
     expect(hostAnswering(undefined, beats({ omen: { at: NOW, answer: { ok: true } } }), NOW)).toBe(false);
 });
+
+// (2026-11-26) What the composer names as holding the memory: the WSL VM's footprint and its unused, stranded part, as
+// the Windows side read them. A VM that is not running reads 0, which says nothing about the one this sandbox is in.
+test("the WSL VM's share and its unused part ride along where the agent read them", () => {
+    const vm = { workingSetBytes: 16.6 * GIB, at: NOW - 60_000 };
+    const guestFree = { reportableBytes: 0.4 * GIB, strandedBytes: 3.5 * GIB, reportingOrder: 5, at: NOW - 60_000 };
+    expect(hostRoomFrom("rog", beats({ rog: { at: NOW, answer: { ok: true, memory: { ...memory, vm, guestFree } } } }), NOW)).toEqual({
+        name: "rog",
+        ...memory,
+        reserveBytes: 3.2 * GIB,
+        vmBytes: 16.6 * GIB,
+        vmUnusedBytes: 3.5 * GIB,
+    });
+    const stopped = hostRoomFrom("rog", beats({ rog: { at: NOW, answer: { ok: true, memory: { ...memory, vm: { workingSetBytes: 0, at: NOW } } } } }), NOW);
+    expect(stopped).toEqual({ name: "rog", ...memory, reserveBytes: 3.2 * GIB });
+});

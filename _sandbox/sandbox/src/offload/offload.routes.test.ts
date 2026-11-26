@@ -81,6 +81,7 @@ const world = (runners: Record<string, FakeRunner | "offline">, facts: Record<st
         // What the fleet reading counts: no turn running anywhere, so only the facts decide.
         conversations: unstubbed<OffloadDeps["conversations"]>("conversations", { inFlightByRunner: () => new Map(), activeTurnCount: () => 0 }),
         resources: unstubbed<OffloadDeps["resources"]>("resources", {}),
+        hostReclaim: unstubbed<OffloadDeps["hostReclaim"]>("hostReclaim", {}),
         privacyShield: unstubbed<OffloadDeps["privacyShield"]>("privacyShield", {}),
         sandboxSettings: unstubbed<OffloadDeps["sandboxSettings"]>("sandboxSettings", {}),
         workspace: unstubbed<OffloadDeps["workspace"]>("workspace", {}),

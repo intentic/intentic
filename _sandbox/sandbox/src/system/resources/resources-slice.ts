@@ -1,7 +1,17 @@
+import type { MemoryReclaimResult } from "@intentic/sandbox-contract/schemas/metrics";
 import { type LeaseSource, leaseSlot } from "../../workload/leases/agent-leases.js";
 import { createResourceBudget, hostAwareReading, type HostSource, type ResourceBudget } from "../../workload/resource-budget.js";
 import { createLiveMetrics, type LiveMetrics } from "./live-metrics.js";
 import type { PerfTracker } from "./perf.js";
+
+// What a person's "Free memory" reaches (hosts/reclaim/host-reclaim.ts HostReclaim): a reclaim now, and whether one could.
+export interface HostReclaimDoor {
+    readonly press: () => Promise<MemoryReclaimResult>;
+    readonly available: () => boolean;
+}
+
+// Before boot hands the reclaim over there is nothing to give memory back to.
+const NO_RECLAIM: HostReclaimDoor = { press: async () => ({ outcome: "refused", why: "no-host" }), available: () => false };
 
 // This container's resources: operation timing, live metrics and the budget that judges room.
 export interface ResourcesSlice {
@@ -21,6 +31,10 @@ export interface ResourcesSlice {
     // (2026-11-25) Where the agent turns running here and their leases are handed over at boot, once the conversations
     // and the minute's process scan exist (agent-leases.ts, bootstrap/daemon-metrics.ts).
     readonly answerToLeases: (leases: LeaseSource) => void;
+    // (2026-11-26) This sandbox's reclaim toward the computer it runs on (POST /system/memory/reclaim, the fleet advice's
+    // `reclaim`), handed over at boot with the host source (`answerToReclaim`); until then a press has no host to give to.
+    readonly hostReclaim: HostReclaimDoor;
+    readonly answerToReclaim: (reclaim: HostReclaimDoor) => void;
 }
 
 export interface ResourcesDeps {
@@ -37,6 +51,7 @@ export const createResourcesSlice = ({ workspaceRoot, perf, owners }: ResourcesD
     const reading = hostAwareReading();
     const leases = leaseSlot();
     const resources = createResourceBudget({ read: reading.read, leases: leases.read });
+    let reclaim = NO_RECLAIM;
     return {
         perf,
         resourceOwners: () => {
@@ -50,5 +65,9 @@ export const createResourcesSlice = ({ workspaceRoot, perf, owners }: ResourcesD
         resources,
         answerToHost: reading.answerToHost,
         answerToLeases: leases.answerToLeases,
+        hostReclaim: { press: () => reclaim.press(), available: () => reclaim.available() },
+        answerToReclaim: (door) => {
+            reclaim = door;
+        },
     };
 };

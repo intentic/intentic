@@ -6,6 +6,17 @@ import type { Caller, VerifiedIdentity } from "../auth/auth.js";
 const entries = new Map<string, PresenceUser>();
 const listeners = new Set<(users: PresenceUser[]) => void>();
 
+/* WHEN A PERSON WAS LAST AT AN EDITOR (2026-11-26). Connected is not the same as used: an editor left open in a
+   background tab, or on screen overnight, holds its connection for as long as the browser runs, and the machine's sleep
+   for memory must not read that as somebody at work (device/sandbox-rounds/memory-relief in @intentic/machine). The
+   editor already says which it is, as it changes and never on a timer: `idle` is its window off screen, `away` its window
+   on screen and untouched for ten minutes (usePresence.ts, inputAway.ts). A connection is a person at work while neither
+   holds; a fresh one is, until its first report says otherwise, so a report that went missing reads as somebody there. */
+const atWork = (user: PresenceUser): boolean => !user.idle && user.away !== true;
+
+// When the last connection with a person at it stopped being one (off screen, untouched, or closed), 0 for none this boot.
+let leftAt = 0;
+
 // Broadcasts the full roster on every change; snapshots are small enough that reconnects just take the latest frame, no
 // diffing.
 const broadcast = (): void => {
@@ -26,6 +37,10 @@ export const registerPresence = (clientId: string, identity: Caller): (() => voi
     });
     broadcast();
     return () => {
+        const entry = entries.get(clientId);
+        if (entry !== undefined && atWork(entry)) {
+            leftAt = Date.now();
+        }
         entries.delete(clientId);
         broadcast();
     };
@@ -37,6 +52,9 @@ export const updatePresence = (identity: VerifiedIdentity, report: PresenceRepor
     const entry = entries.get(report.clientId);
     if (entry === undefined || entry.email !== identity.email) {
         return;
+    }
+    if (atWork(entry) && (report.idle || report.away === true)) {
+        leftAt = Date.now();
     }
     entries.set(report.clientId, {
         clientId: entry.clientId,
@@ -63,6 +81,10 @@ export const presentMembers = (): ReadonlySet<string> =>
 
 // Live /events connections, not idleEverywhere: an idle tab is still a person who expects the workspace to stay alive.
 export const connectedCount = (): number => entries.size;
+
+// The last moment a person was at an editor connected here: `now` while one is, else when the last one stopped being.
+// Coarse by as much as the editor's away window (ten untouched minutes are reported at their end), and never early.
+export const editorActiveAt = (now: number = Date.now()): number => ([...entries.values()].some(atWork) ? now : leftAt);
 
 // The people actually at the editor right now, by the name they go by, once each: a tab on screen that somebody has
 // touched in the last few minutes (`away` is a tab left on screen untouched). What an automatic update will not restart

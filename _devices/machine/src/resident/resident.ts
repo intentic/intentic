@@ -39,7 +39,7 @@ import { startLogRoll } from "./log-roll.js";
 import { startMemoryLog } from "./memory-log.js";
 import { startWatchdog, type Watchdog } from "./watchdog.js";
 import { WINDOWS_SIDE } from "../environments/wsl.js";
-import { type CacheDrop, startCacheDrop } from "../environments/wsl-cache-drop.js";
+import { type CacheDrop, giveWslMemoryBack } from "../environments/wsl-cache-drop.js";
 import { watchWslMemory, type WslMemoryWatch } from "../environments/wsl-memory-watch.js";
 import { startedBeforeSignIn } from "../device/session.js";
 
@@ -304,7 +304,7 @@ interface Runtime {
     readonly kept: KeptCheck;
     readonly children: Children | undefined;
     readonly autoUpgrade: AutoUpgrade | undefined;
-    // The Windows side only: gives the WSL VM's file cache back to Windows when Windows runs low (wsl-cache-drop.ts).
+    // The Windows side only: gives the WSL VM's memory back to Windows when Windows runs low (wsl-cache-drop.ts).
     readonly cacheDrop: CacheDrop | undefined;
     // The Windows side only: whether the WSL VM's size fits this PC, for the facts (wsl-memory-watch.ts).
     readonly wslMemory: WslMemoryWatch | undefined;
@@ -363,6 +363,9 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
     const rounds = [...(beforeSignIn ? [startLogRoll(runLogPath, log)] : sessionRounds(supervised, connections, lease, log)), startMemoryLog(memoryLogPath, log)];
     const autoUpgrade = supervised || beforeSignIn ? undefined : startAutoUpgrade(log);
     const unproven = trial.prove(log);
+    // Before sign-in too: a PC short of memory is short whoever is signed in, and the drop needs no desktop.
+    const cacheDrop = WINDOWS_SIDE ? giveWslMemoryBack(log) : undefined;
+    const wslMemory = WINDOWS_SIDE ? watchWslMemory(log) : undefined;
     const finish = async (code: number): Promise<never> => {
         for (const round of rounds) {
             round.stop();
@@ -378,6 +381,8 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
         // remoted is left running for the next agent to adopt, so people's terminals outlive this restart; one that is
         // this agent's own child (before sign-in, or a remoted from before adoption) is stopped.
         await machineRemote(log).shutdown();
+        // The WSL VM's page_reporting_order, if this agent holds it lowered, goes back to the kernel's own.
+        await cacheDrop?.restore();
         await trial.clean();
         await release();
         const { reason, detail } = reasonForCode(code);
@@ -387,9 +392,6 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
     for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
         process.on(signal, () => void finish(signalExitCode(signal)));
     }
-    // Before sign-in too: a PC short of memory is short whoever is signed in, and the drop needs no desktop.
-    const cacheDrop = WINDOWS_SIDE ? startCacheDrop(log) : undefined;
-    const wslMemory = WINDOWS_SIDE ? watchWslMemory(log) : undefined;
     return { beforeSignIn, connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, cacheDrop, wslMemory, finish };
 };
 

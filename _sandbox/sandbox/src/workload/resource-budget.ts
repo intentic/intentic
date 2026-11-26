@@ -279,8 +279,10 @@ const startSampler = (sampleMs: number, reading: () => Promise<Taken>, holds: Pi
 // (2026-11-02) The sandbox's reading with the machine it runs on beside it, so work nobody waits on also waits for that
 // machine (memory-room.mjs `hostShortOf`). Where the host part comes from is handed over at boot, once the device hub
 // exists (`answerToHost`, from hosts/host-memory.ts); until then, and whenever it answers undefined or fails, the reading
-// is the sandbox's own: no host constraint, never no room.
-export type HostSource = () => Promise<HostRoom | undefined>;
+// is the sandbox's own: no host constraint, never no room. `fresh` asks the machine now rather than reading its last
+// heartbeat (up to HOST_HEARTBEAT_MS old): what a person's "Free memory" measures before and after by
+// (hosts/reclaim/host-reclaim.ts).
+export type HostSource = (options?: { readonly fresh?: boolean }) => Promise<HostRoom | undefined>;
 interface HostAwareReading {
     readonly read: () => Promise<MemoryReading>;
     readonly answerToHost: (host: HostSource) => void;

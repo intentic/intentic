@@ -1037,6 +1037,11 @@ enum SandboxCommand {
         /// boot): the machine agent's keeper names the computer's memory when it sleeps a sandbox to give memory back
         #[arg(long, value_name = "TEXT")]
         reason: Option<String>,
+        /// With `--idle`: count an editor nobody has been at for half an hour as nobody, by the daemon's own word (the
+        /// machine agent's keeper, sleeping a sandbox to give memory back); work, a person at an editor, an app in use
+        /// and a wake due still keep it awake
+        #[arg(long, requires = "idle")]
+        unattended: bool,
     },
     /// Start every sandbox asleep on this side that somebody has opened since (asks the platform; polled by the
     /// machine agent while anything sleeps)
@@ -1574,6 +1579,7 @@ fn execute(mut cli: Cli) -> i32 {
                 json,
                 source,
                 reason,
+                unattended,
             } => keeper_if(source == FixSource::Agent, || {
                 sandbox::sleep::run(sandbox::sleep::Args {
                     slug,
@@ -1581,6 +1587,7 @@ fn execute(mut cli: Cli) -> i32 {
                     json,
                     source: source.source(),
                     reason,
+                    unattended,
                 })
             }),
             SandboxCommand::Wakes { json, source, wait } => {
@@ -3274,6 +3281,7 @@ mod tests {
                     json,
                     source,
                     reason,
+                    unattended,
                 }),
         }) = parse(&["sandbox", "sleep", "abc123"])
         else {
@@ -3282,6 +3290,7 @@ mod tests {
         assert_eq!((slug.as_deref(), idle, json), (Some("abc123"), None, false));
         assert_eq!(source, FixSource::Command);
         assert_eq!(reason, None);
+        assert!(!unattended);
         // The machine agent's keeper's own command line.
         let Ok(Cli {
             command:
@@ -3330,6 +3339,28 @@ mod tests {
             )
         );
         assert!(parse(&["sandbox", "sleep", "--reason"]).is_err());
+        // The keeper's sleep for memory counts an editor left alone as nobody, and only with --idle.
+        let Ok(Cli {
+            command: Command::Sandbox(SandboxCommand::Sleep { unattended, .. }),
+        }) = parse(&[
+            "sandbox",
+            "sleep",
+            "abc123",
+            "--idle",
+            "60",
+            "--json",
+            "--source",
+            "agent",
+            "--unattended",
+        ])
+        else {
+            panic!("sleep --unattended did not parse")
+        };
+        assert!(unattended);
+        assert!(
+            parse(&["sandbox", "sleep", "abc123", "--unattended"]).is_err(),
+            "a sleep asked for now has no quiet to read"
+        );
         assert!(
             parse(&["sandbox", "sleep", "--idle", "0"]).is_err(),
             "at least a minute"

@@ -1,5 +1,6 @@
 import type { HostRoom } from "@intentic/constants/memory-room";
-import { DevicePingSchema, HOST_NATIVE_ENVIRONMENT, hostConnectionKey, hostMemoryLowBytes, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
+import { DevicePingSchema, HOST_NATIVE_ENVIRONMENT, hostConnectionKey, type HostMemory, hostMemoryLowBytes, parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
+import { opt } from "../opt.js";
 import type { Pinged } from "../peers/peer-hub.js";
 
 /* WHAT A CONNECTED MACHINE'S OWN OS HAS FREE, from the last heartbeat its agent answered (DevicePingSchema `memory`).
@@ -43,8 +44,19 @@ export const hostRoomFrom = (door: string | undefined, pinged: (door: string) =>
         const parsed = DevicePingSchema.safeParse(beat.answer);
         const memory = parsed.success ? parsed.data.memory : undefined;
         if (memory !== undefined) {
-            return { name: card, availableBytes: memory.availableBytes, totalBytes: memory.totalBytes, reserveBytes: hostMemoryLowBytes(memory.totalBytes) };
+            return roomOf(card, memory);
         }
     }
     return undefined;
 };
+
+// One heartbeat's memory as the host part of a reading, with the WSL VM's share where the agent read it (a VM that is not
+// running reads 0, which says nothing about this one).
+const roomOf = (name: string, memory: HostMemory): HostRoom => ({
+    name,
+    availableBytes: memory.availableBytes,
+    totalBytes: memory.totalBytes,
+    reserveBytes: hostMemoryLowBytes(memory.totalBytes),
+    ...opt("vmBytes", memory.vm === undefined || memory.vm.workingSetBytes === 0 ? undefined : memory.vm.workingSetBytes),
+    ...opt("vmUnusedBytes", memory.guestFree?.strandedBytes),
+});

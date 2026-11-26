@@ -359,12 +359,15 @@ const WORK_SIGNAL_STALE_MS: u64 = 3 * 60_000;
 /// `keepAwake` (2026-10-18) says its owner switched sleep off in its settings; such a daemon writes no `quietSince`
 /// either, so an ic that predates the flag keeps it awake just the same, only without naming why. From the same day
 /// `nextWakeAt` counts crons too (the sleep's alarm is set by it), and `personAt` says when a person was last there
-/// since the daemon booted, 0 for never; absent from a daemon that does not say.
+/// since the daemon booted, 0 for never; absent from a daemon that does not say. `unattendedSince` (2026-11-26) is
+/// `quietSince` with an editor nobody has been at for half an hour counted as nobody, which only the keeper's sleep for
+/// memory reads (sleep.rs `--unattended`); absent from an older daemon, and whenever somebody needs the sandbox.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WorkSignal {
     pub at: u64,
     pub live_turns: u32,
     pub quiet_since: Option<u64>,
+    pub unattended_since: Option<u64>,
     pub next_wake_at: Option<u64>,
     pub person_at: Option<u64>,
     pub keep_awake: bool,
@@ -381,6 +384,7 @@ impl WorkSignal {
                 .as_u64()
                 .and_then(|n| u32::try_from(n).ok())?,
             quiet_since: value.get("quietSince").and_then(Value::as_u64),
+            unattended_since: value.get("unattendedSince").and_then(Value::as_u64),
             next_wake_at: value.get("nextWakeAt").and_then(Value::as_u64),
             person_at: value.get("personAt").and_then(Value::as_u64),
             keep_awake: value.get("keepAwake").and_then(Value::as_bool) == Some(true),
@@ -1516,6 +1520,7 @@ mod tests {
                 next_wake_at: Some(9_000),
                 person_at: Some(3_000),
                 keep_awake: false,
+                unattended_since: None,
             })
         );
         assert_eq!(
@@ -1527,6 +1532,7 @@ mod tests {
                 next_wake_at: None,
                 person_at: None,
                 keep_awake: false,
+                unattended_since: None,
             })
         );
         assert_eq!(
@@ -1538,6 +1544,7 @@ mod tests {
                 next_wake_at: None,
                 person_at: None,
                 keep_awake: true,
+                unattended_since: None,
             }),
             "sleep switched off by the owner"
         );

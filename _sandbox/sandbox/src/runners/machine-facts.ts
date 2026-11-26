@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { cpus, loadavg, totalmem } from "node:os";
 import type { HostRoom } from "@intentic/constants/memory-room";
 import type { RunnerFacts } from "@intentic/sandbox-contract/protocol/doors/runner-protocol";
+import type { MachineHost } from "@intentic/sandbox-contract/schemas/offload";
 import { GPU_LIBRARY_ENV, gpuHere, WSL_GPU_LIBRARY_PATH } from "../hosts/gpu/gpu-state.js";
 import { type Pressure, readPressure } from "../system/resources/cgroup.js";
 import { readHistorySpace } from "../system/resources/storage/checkout-admission.js";
@@ -117,15 +118,41 @@ export const onHost = (facts: RunnerFacts, host: HostRoom | undefined): RunnerFa
     return { ...facts, memoryFreeMb: Math.min(facts.memoryFreeMb ?? room, room) };
 };
 
+// What the budget itself has free, before its host is asked.
+const ownFreeMbOf = (snapshot: BudgetSnapshot): number | undefined =>
+    snapshot.freeBytes === undefined ? undefined : Math.max(0, Math.floor(snapshot.freeBytes / MB));
+
 // What the budget has free, never more than its host has room for (above).
 const freeMbOf = (snapshot: BudgetSnapshot): number | undefined => {
-    const own = snapshot.freeBytes === undefined ? undefined : Math.max(0, Math.floor(snapshot.freeBytes / MB));
+    const own = ownFreeMbOf(snapshot);
     const { host } = snapshot.reading;
     if (host === undefined) {
         return own;
     }
     const room = hostRoomMb(host, snapshot.reservedBytes);
     return own === undefined ? room : Math.min(own, room);
+};
+
+const mbOf = (bytes: number): number => Math.max(0, Math.round(bytes / MB));
+
+/** The computer under this machine in the figures its owner can check (offload.ts MachineHostSchema), and whether its room
+ *  is what this machine's free memory came to; undefined where the reading has no host part. */
+const hostOf = (snapshot: BudgetSnapshot | undefined): MachineHost | undefined => {
+    const host = snapshot?.reading.host;
+    if (snapshot === undefined || host === undefined) {
+        return undefined;
+    }
+    const own = ownFreeMbOf(snapshot);
+    return {
+        name: host.name,
+        availableMb: mbOf(host.availableBytes),
+        totalMb: Math.max(1, mbOf(host.totalBytes)),
+        reserveMb: mbOf(host.reserveBytes),
+        ...opt("vmMb", host.vmBytes === undefined ? undefined : mbOf(host.vmBytes)),
+        ...opt("vmUnusedMb", host.vmUnusedBytes === undefined ? undefined : mbOf(host.vmUnusedBytes)),
+        ...opt("ownFreeMb", own),
+        binding: own === undefined || hostRoomMb(host, snapshot.reservedBytes) < own,
+    };
 };
 
 // The budget's own reading, not a second one: what the turn door admits by is what "free" means everywhere.
@@ -141,8 +168,15 @@ export const budgetFigures = (snapshot: BudgetSnapshot | undefined): Pick<Runner
     };
 };
 
+// This sandbox's facts with the computer under it beside them (fleet-advice.ts readHere). What a runner answers its parent
+// leaves the host out: the parent reads that computer from its own heartbeat (fleet-advice.ts readRunners).
+export type HereFacts = RunnerFacts & { readonly host?: MachineHost };
+
 // freeDiskMb is read where the workspace lives, which is the disk a turn actually fills.
-export const machineFacts = async (workspaceRoot: string, sources: MachineFactsSources): Promise<RunnerFacts> => {
+const measured = async (
+    workspaceRoot: string,
+    sources: MachineFactsSources,
+): Promise<{ readonly facts: RunnerFacts; readonly snapshot: BudgetSnapshot | undefined }> => {
     const os = (sources.os ?? realOs)();
     const [disk, snapshot, pressure, gpus] = await Promise.all([
         (sources.disk ?? realDisk)(workspaceRoot),
@@ -153,7 +187,7 @@ export const machineFacts = async (workspaceRoot: string, sources: MachineFactsS
         (sources.gpus ?? cachedGpus)(),
     ]);
     const cores = Math.max(1, os.cores);
-    return {
+    const facts: RunnerFacts = {
         cpus: cores,
         memoryMb: Math.max(1, Math.round(os.totalMemoryBytes / MB)),
         freeDiskMb: disk === undefined ? 0 : Math.round(disk.freeBytes / MB),
@@ -163,4 +197,13 @@ export const machineFacts = async (workspaceRoot: string, sources: MachineFactsS
         ...opt("cpuPressure", pressure?.cpu?.some),
         gpus,
     };
+    return { facts, snapshot };
+};
+
+export const machineFacts = async (workspaceRoot: string, sources: MachineFactsSources): Promise<RunnerFacts> =>
+    (await measured(workspaceRoot, sources)).facts;
+
+export const hereFacts = async (workspaceRoot: string, sources: MachineFactsSources): Promise<HereFacts> => {
+    const { facts, snapshot } = await measured(workspaceRoot, sources);
+    return { ...facts, ...opt("host", hostOf(snapshot)) };
 };

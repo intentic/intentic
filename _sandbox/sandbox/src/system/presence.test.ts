@@ -1,5 +1,5 @@
 import type { PresenceUser } from "@intentic/sandbox-contract/events/system-events";
-import { idleEverywhere, presentMembers, registerPresence, subscribePresence, updatePresence } from "./presence.js";
+import { editorActiveAt, idleEverywhere, presentMembers, registerPresence, subscribePresence, updatePresence } from "./presence.js";
 
 // The registry is module-level state shared across tests; each test registers under unique clientIds and
 // unregisters what it created, so tests stay order-independent.
@@ -75,5 +75,46 @@ describe("presence registry", () => {
         for (const unregister of leave.slice(1)) {
             unregister();
         }
+    });
+
+    // What the machine's sleep for memory reads through the work signal (quiet-watch.ts): connected is not used.
+    describe("when a person was last at an editor", () => {
+        const LATER = 9_999_999_999_999;
+        // The stamp a transition leaves, between the clock before it and after it.
+        const stampedDuring = (act: () => void): void => {
+            const before = Date.now();
+            act();
+            const after = Date.now();
+            expect(editorActiveAt(LATER)).toBeGreaterThanOrEqual(before);
+            expect(editorActiveAt(LATER)).toBeLessThanOrEqual(after);
+        };
+
+        test("now while a connection has a person at it, a fresh one included, until its report says otherwise", () => {
+            const leave = registerPresence("w1", { email: "a@x.com", tier: "owner" });
+            expect(editorActiveAt(LATER)).toBe(LATER);
+            updatePresence({ email: "a@x.com" }, { clientId: "w1", idle: false, view: "workspace" });
+            expect(editorActiveAt(LATER)).toBe(LATER);
+            // Off screen: the moment it went is the last activity, however long it stays connected.
+            stampedDuring(() => updatePresence({ email: "a@x.com" }, { clientId: "w1", idle: true }));
+            const offScreen = editorActiveAt(LATER);
+            updatePresence({ email: "a@x.com" }, { clientId: "w1", idle: true, view: "automations" });
+            expect(editorActiveAt(LATER)).toBe(offScreen);
+            // Back on screen is a person again; on screen but untouched is not.
+            updatePresence({ email: "a@x.com" }, { clientId: "w1", idle: false });
+            expect(editorActiveAt(LATER)).toBe(LATER);
+            stampedDuring(() => updatePresence({ email: "a@x.com" }, { clientId: "w1", idle: false, away: true }));
+            leave();
+        });
+
+        test("one tab at work holds it whatever the others do; closing the last one at work is its last activity", () => {
+            const leave = [registerPresence("w2", { email: "a@x.com", tier: "owner" }), registerPresence("w3", { email: "a@x.com", tier: "owner" })];
+            updatePresence({ email: "a@x.com" }, { clientId: "w2", idle: true });
+            expect(editorActiveAt(LATER)).toBe(LATER);
+            stampedDuring(() => leave[1]?.());
+            const closed = editorActiveAt(LATER);
+            // Closing a tab nobody was at says nothing new.
+            leave[0]?.();
+            expect(editorActiveAt(LATER)).toBe(closed);
+        });
     });
 });

@@ -1,7 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import { execBounded } from "@intentic/base/process";
 import type { Log } from "@intentic/local-agent";
-import type { HostMemory } from "@intentic/sandbox-contract/schemas/hosts";
+import type { HostMemory, HostVmMemory } from "@intentic/sandbox-contract/schemas/hosts";
 import type { WslMemory, WslMemoryCap, WslMemoryFit } from "@intentic/sandbox-contract/schemas/wsl-memory";
 import { fleet } from "../device/tools/listing/sandbox-fleet.js";
 import { windowsMemory } from "./windows-memory.js";
@@ -72,6 +72,8 @@ export interface WslMemoryWatch {
     readonly tick: () => void;
     // What the facts carry: undefined until `.wslconfig` was read once.
     readonly current: () => WslMemory | undefined;
+    // vmmemWSL's working set as last read, for the heartbeat (HostMemory `vm`): undefined until read.
+    readonly vm: () => HostVmMemory | undefined;
     // Reads `.wslconfig` and decides again now, on the readings held: after this agent changed it.
     readonly reread: () => Promise<void>;
     // One pass, awaited: for the tests.
@@ -92,6 +94,7 @@ export const startWslMemoryWatch = (
     let readings: WslMemoryReading[] = [];
     let lastAt = Number.NEGATIVE_INFINITY;
     let state: WslMemory | undefined;
+    let vmRead: HostVmMemory | undefined;
     let underway: Promise<void> | undefined;
     // Each failure is said once until that read works again.
     const failing = new Set<string>();
@@ -139,6 +142,7 @@ export const startWslMemoryWatch = (
             failed("reading vmmemWSL", errorMessage(error));
             return;
         }
+        vmRead = { workingSetBytes: vm, at };
         readings = [...readings.filter((reading) => at - reading.at <= FIT_WINDOW_MS), { at, availableBytes: memory.availableBytes, totalBytes: memory.totalBytes, vmBytes: vm }];
         await decide();
     };
@@ -162,6 +166,7 @@ export const startWslMemoryWatch = (
             });
         },
         current: () => state,
+        vm: () => vmRead,
         reread: async () => {
             try {
                 await decide();
@@ -179,6 +184,9 @@ export const watchWslMemory = (log: Log): WslMemoryWatch => (watch ??= startWslM
 
 /** The device facts' `wslMemory`: undefined anywhere but a resident agent on Windows' own side, and until it read `.wslconfig`. */
 export const wslMemoryFacts = (): WslMemory | undefined => watch?.current();
+
+/** The heartbeat's `vm`: vmmemWSL's working set as the watch last read it; undefined anywhere else, and until then. */
+export const wslVmMemory = (): HostVmMemory | undefined => watch?.vm();
 
 /** After this agent changed `.wslconfig` (the `wsl-memory` op): the facts say what it holds now. */
 export const rereadWslMemory = async (): Promise<void> => {

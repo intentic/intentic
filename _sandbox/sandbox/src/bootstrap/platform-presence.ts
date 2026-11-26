@@ -1,6 +1,6 @@
 import type { ReachPosture } from "../system/listeners/reach-posture.js";
 import { DEFAULT_PROBES, lastTerminalActivity, startIdleStop } from "../system/sleep/idle-stop.js";
-import { connectedCount } from "../system/presence.js";
+import { connectedCount, editorActiveAt } from "../system/presence.js";
 import type { QuietProbes } from "../system/quiet-watch.js";
 import { anyConnected } from "../ports/established.js";
 import { fileRestartResume } from "../system/restart-resume.js";
@@ -49,6 +49,7 @@ export const quietProbes = (services: BootPhase["services"]): QuietProbes => ({
     working: () => workingNow(services, "idle-stop").length,
     terminalActivityAt: lastTerminalActivity,
     appsInUse: () => anyConnected(services.processes.ports()),
+    editorActiveAt,
     nextWakeAt: async () => (await nextPromisedWake(services, "sleep")) ?? 0,
     keepAwake: async () =>
         services.runnerParent.current !== undefined || !(await services.sandboxSettings.get()).sleepWhenUnused || (await continuousReception(services)),
