@@ -20,12 +20,17 @@ import { evaluated } from "../../browser/tools/evaluate-answer.js";
    nobody reads what it does as it does it:
    - Only the page's own tools (the contract's EXTENSION_BROWSER_TOOLS). `browser_run_code_unsafe` runs in Playwright's process against the whole
      browser, every site's cookies included, and goes anywhere; the network tools carry a session's headers; the tab
-     list names every site the profile has open; the router's own site kits are another extension's to move.
+     list names every site the profile has open.
    - Only on the account's own sites: the hosts its sign-in and home pages are on, widened to its operator's sign-in
      family (accounts-tools.ts accountSites, the sites `type_credential` holds a page to). A navigation elsewhere is
      refused before it is sent; any other call first reads where the page is and is refused off those sites, since an
      account's browser is often an identity's, signed in to its mail and every other account born of it; and a call that
      leaves them (a link clicked, a redirect) has its answer withheld.
+   A chooser or a dialog the page waits on (2026-11-26, found moving the ChatGPT kit, whose files go in as an agent's
+   do: a click that opens the file chooser, then browser_file_upload) stops @playwright/mcp running anything but the tool
+   that answers it, browser_evaluate included, so where the page is cannot be read before that tool. It is answered only
+   when one of this extension's own calls opened it, on the account's sites, in this turn; and where the page went is read
+   after it as after any call.
    Stored credentials never come this way: typing one is `type_credential`'s, on the `accounts` server, which no extension
    reaches, and the door masks every stored secret's value in what comes back (tool-turn-doors.ts). */
 
@@ -33,6 +38,15 @@ import { evaluated } from "../../browser/tools/evaluate-answer.js";
 const ALLOWED: ReadonlySet<string> = new Set(EXTENSION_BROWSER_TOOLS);
 
 const NAVIGATE = "browser_navigate";
+
+// The tools that answer what a page waits on, which @playwright/mcp runs only while it waits.
+const MODAL_TOOLS: ReadonlySet<string> = new Set(["browser_file_upload", "browser_handle_dialog"]);
+// What @playwright/mcp answers any other tool meanwhile (its tool.ts, defineTabTool).
+const WAITS_ON_MODAL = /does not handle the modal state/u;
+
+// Per turn's router (a WeakMap: they go with it), the accounts whose page waits on a chooser or a dialog that a call
+// begun on the account's sites opened: the only ones an extension may answer.
+const openedModals = new WeakMap<InProcessServer, Set<string>>();
 
 // A call's arguments, as the door's request carries them.
 export type BrowserArguments = NonNullable<ExtensionBrowserCall["arguments"]>;
@@ -45,8 +59,12 @@ export type ScopedBrowserAnswer =
     | { readonly refusal: string; readonly withheld?: true };
 
 // Where the account's current page is: on one of its sites, on no site at all (about:blank, a data: page, a browser's
-// own error page, where nothing is signed in), on a site of somebody else's, or nowhere it could tell.
-type PageSite = { readonly on: "site" | "none" } | { readonly on: "off"; readonly host: string } | { readonly on: "unknown"; readonly why: string };
+// own error page, where nothing is signed in), on a site of somebody else's, waiting on a chooser or a dialog (where it
+// is cannot be read then), or nowhere it could tell.
+type PageSite =
+    | { readonly on: "site" | "none" | "modal" }
+    | { readonly on: "off"; readonly host: string }
+    | { readonly on: "unknown"; readonly why: string };
 
 // Each call its own id: the router maps a client's id to the backend call it became, to chase a cancellation.
 const callOf = (account: string, name: string, args: BrowserArguments): RpcMessage => ({
@@ -63,7 +81,7 @@ const pageSite = async (router: InProcessServer, account: ToolGrantAccount, sign
     const answer = await router.handle(callOf(account.id, "browser_evaluate", { function: "() => location.href" }), signal);
     const read = answer === undefined ? { failure: "the browser gave no answer" } : evaluated(answer);
     if ("failure" in read) {
-        return { on: "unknown", why: read.failure };
+        return WAITS_ON_MODAL.test(read.failure) ? { on: "modal" } : { on: "unknown", why: read.failure };
     }
     const href = HrefSchema.safeParse(read.value);
     if (!href.success) {
@@ -88,6 +106,8 @@ const placeRefusal = (account: ToolGrantAccount, where: PageSite): string | unde
             return `account "${account.id}"'s page is on ${where.host}, outside its sites (${sitesOf(account)}): navigate to one of them first. Nothing was done.`;
         case "unknown":
             return `could not tell where account "${account.id}"'s page is (${where.why}): navigate to one of its sites (${sitesOf(account)}) first. Nothing was done.`;
+        case "modal":
+            return `account "${account.id}"'s page waits on a file chooser or a dialog that no call of this extension's opened on its sites, so where it is cannot be read. Nothing was done.`;
     }
 };
 
@@ -111,6 +131,10 @@ const asResult = (answer: RpcMessage | undefined): ToolResultOf => {
     return { content: [{ type: "text", text: message }], isError: true };
 };
 
+// Why a call may not run where the page is, or where it would go, or undefined.
+const refusalBefore = async (router: InProcessServer, account: ToolGrantAccount, call: { readonly tool: string; readonly args: BrowserArguments }, signal: AbortSignal): Promise<string | undefined> =>
+    call.tool === NAVIGATE ? navigationRefusal(account, call.args) : placeRefusal(account, await pageSite(router, account, signal));
+
 /**
  * One call of an extension's tool to the turn's signed-in browser router for `account`, held to the page tools and the
  * account's own sites. `router` is the turn's own `browser` mount.
@@ -127,12 +151,21 @@ export const scopedBrowserCall = async (
     if (account.sites.length === 0) {
         return { refusal: `nothing on record names a site account "${account.id}" signs in on, so an extension drives its browser nowhere.` };
     }
-    const before = call.tool === NAVIGATE ? navigationRefusal(account, call.args) : placeRefusal(account, await pageSite(router, account, signal));
+    const modals = openedModals.get(router) ?? new Set<string>();
+    openedModals.set(router, modals);
+    // Answering what this extension's own call opened, the page is not read first: it cannot be while it waits.
+    const own = MODAL_TOOLS.has(call.tool) && modals.has(account.id);
+    const before = own ? undefined : await refusalBefore(router, account, call, signal);
     if (before !== undefined) {
         return { refusal: before };
     }
+    modals.delete(account.id);
     const answer = await router.handle(callOf(account.id, call.tool, call.args), signal);
     const after = await pageSite(router, account, signal);
+    // A call begun on the account's sites that left the page waiting (a click that opened the file chooser) opened it.
+    if (after.on === "modal") {
+        modals.add(account.id);
+    }
     if (after.on === "off") {
         return {
             refusal: `account "${account.id}"'s page went to ${after.host} during ${call.tool}, outside its sites (${sitesOf(account)}), so its answer is withheld: navigate back to one of them.`,

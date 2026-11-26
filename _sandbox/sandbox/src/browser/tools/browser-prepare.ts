@@ -34,7 +34,7 @@ export const prepareKnownOwner = async (services: Pick<Services, "capabilities" 
 // `turnNotice` writes a notice into a conversation's running turn: the composition fills it, since a turn is above the
 // browser's layer.
 type RouterServices = Pick<Services, "capabilities" | "workspace"> &
-    Partial<Pick<Services, "logger" | "presentation" | "config" | "sandboxSettings">> & { readonly turnNotice?: (conversationId: string, text: string) => void };
+    Partial<Pick<Services, "logger" | "sandboxSettings">> & { readonly turnNotice?: (conversationId: string, text: string) => void };
 
 // What a turn's recording reaches (media/agent-recording.ts): the sandbox's switch, the conversation's transcript, and
 // the owner's window, castd started cropped to it where nobody watches it yet.
@@ -81,16 +81,6 @@ const routerCastd = (services: () => RouterServices): RouterCastd => {
     };
 };
 
-// What the sandbox's own ChatGPT project is called after (chatgpt-kit.ts): the name the owner gave the sandbox, else its
-// container's, else its address's host.
-const sandboxNameOf = async (services: RouterServices): Promise<string> => {
-    // allow(silent-catch): a name that cannot be read falls to the next one; the project is found again by name either way.
-    const held = await services.presentation?.held().catch(() => undefined);
-    const publicUrl = services.config?.sandbox.publicUrl ?? "";
-    const host = URL.canParse(publicUrl) ? new URL(publicUrl).host : "";
-    return [held?.name, services.config?.sandbox.name, host].find((name) => name !== undefined && name !== "") ?? "sandbox";
-};
-
 // Every turn's router is made here and mounted by the turn (browser-tools.ts), which reaches it at the daemon's one MCP
 // door. Services are read lazily, since the factory is one of them.
 // `logger` is optional only so a caller handing just the two stores still compiles; without it a sidecar that failed
@@ -120,7 +110,6 @@ export const createBrowserRouters = (services: () => RouterServices): BrowserRou
         return createBrowserRouter(manifest, {
             ...deps,
             outputDir: browserOutputDir(root),
-            kits: { root, sandboxName: () => sandboxNameOf(services()) },
             castd: routerCastd(services),
         });
     };

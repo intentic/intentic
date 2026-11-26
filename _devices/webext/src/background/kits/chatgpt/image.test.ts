@@ -1,5 +1,5 @@
-import type { ImageTiming } from "@intentic/site-kits/chatgpt";
-import { CHAT_ID, type Reply } from "@intentic/site-kits/chatgpt/testing";
+import type { ImageTiming } from "@intentic/ext-chatgpt/kit/chatgpt";
+import { CHAT_ID, type Reply } from "@intentic/ext-chatgpt/kit/chatgpt/testing";
 import { dom } from "@intentic/testing/dom";
 import { store } from "../../store.js";
 import { kitBrowser, resetKitBrowser, SANDBOX, untilSent } from "./kit-chrome.testing.js";

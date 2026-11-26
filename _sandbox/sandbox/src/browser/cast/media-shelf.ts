@@ -75,9 +75,8 @@ export interface StoredMedia {
 }
 
 // Writes one file into `dir` on the shelf under a name no earlier file holds (`frame-2.png` after `frame.png`), never in
-// place of one: an earlier save is some transcript's file. The sandbox's own browser saves its ChatGPT kit's files this
-// way too (browser/tools/chatgpt-host.ts), into a directory of its own.
-export const storeMediaIn = async (dir: string, bytes: Uint8Array, mimeType: string, suggested: string): Promise<StoredMedia> => {
+// place of one: an earlier save is some transcript's file.
+const storeMediaIn = async (dir: string, bytes: Uint8Array, mimeType: string, suggested: string): Promise<StoredMedia> => {
     await mkdir(dir, { recursive: true });
     const ext = EXTENSIONS.get(mimeType) ?? "bin";
     const target = await placeArtifact(dir, `${safeStem(suggested)}.${ext}`);

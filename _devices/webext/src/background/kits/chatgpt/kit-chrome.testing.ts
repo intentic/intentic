@@ -1,9 +1,9 @@
-import { type FakeAccount, type FakeChatgpt, type FakeOptions, fakePageAt, giveEveryElementABox, mountFakeChatgpt } from "@intentic/site-kits/chatgpt/testing";
+import { type FakeAccount, type FakeChatgpt, type FakeOptions, fakePageAt, giveEveryElementABox, mountFakeChatgpt } from "@intentic/ext-chatgpt/kit/chatgpt/testing";
 import { object, string } from "zod";
 import { store } from "../../store.js";
 
 // The browser the ChatGPT kit's worker suites run in: a hand-written Chrome whose executeScript runs each injected
-// function against jsdom's document, where the kit's stand-in ChatGPT page answers (@intentic/site-kits). Tabs, windows,
+// function against jsdom's document, where the kit's stand-in ChatGPT page answers (@intentic/ext-chatgpt). Tabs, windows,
 // storage and the person's answers are all here; what a suite changes between tests is on `kitBrowser`.
 
 export const SANDBOX = "https://sandbox-1.example.dev";

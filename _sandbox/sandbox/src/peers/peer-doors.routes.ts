@@ -3,7 +3,6 @@ import { cleanMcpResult } from "../guard/mcp-output.js";
 import { maskDeep, maskJson, maskTargets } from "../agent/tools/agent-redaction.js";
 import { turnSecretAccess } from "../agent/run/harness/harness-servers.js";
 import { daemonEndpoint, createTurnMountRoute } from "../agent/tools/turn-mounts.routes.js";
-import { chatgptImagesInBackground } from "../agent/tools/jobs/daemon/chatgpt-image-jobs.js";
 import { conversationJobSeeds, startDaemonJob } from "../agent/tools/jobs/daemon/daemon-jobs.js";
 import { createJobLanes } from "../agent/tools/jobs/daemon/job-lanes.js";
 import { judgeIndependentCommand } from "../agent/tools/command-judge.js";
@@ -65,12 +64,11 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
         "ALL /mcp/{mount}": createTurnMountRoute(
             services.turnMounts,
             {
-                browser: (target, message, call) => target.router.handle(message, call.signal, call),
+                browser: (target, message, call) => target.router.handle(message, call.signal),
                 daemon: daemonEndpoint,
                 device: hostRoutes.mcp,
                 devices: createDevicesEndpoint(hostDevicesDeps(services, hostRoutes.mcp)),
-                // chatgpt_image answered with a job id at once, its picture collected with `wait` (chatgpt-image-jobs.ts).
-                webext: chatgptImagesInBackground({ seedOf }, webextRoutes.mcp),
+                webext: webextRoutes.mcp,
                 phone: phoneRoutes.mcp,
                 tools: createExtensionToolsEndpoint(services),
                 extension: createExtensionMcpEndpoint(services),
@@ -107,7 +105,7 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
         ),
         // (2026-11-26) The doors an extension tool's call opens onto its turn (extensions/turn/tool-turn-doors.ts): the
         // turn's signed-in browser for an account it holds, the owner's browser it holds through the same peer door as
-        // the agent's own calls (before the ChatGPT image jobs above), and a background job in its conversation.
+        // the agent's own calls, and a background job in its conversation.
         ...createTurnDoors({
             tickets: turnTickets,
             caller: (c) => ownCaller(services, c),

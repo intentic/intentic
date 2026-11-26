@@ -48,7 +48,11 @@ const router: InProcessServer = {
     close: () => undefined,
 };
 
-const setup = () => {
+// The owner's browser answering a call, as its peer door does.
+type OwnerAnswer = (message: RpcMessage) => Promise<RpcMessage>;
+const READS: OwnerAnswer = async (message) => ({ jsonrpc: "2.0", id: message.id ?? null, result: { content: [{ type: "text", text: "read s3cret" }] } });
+
+const setup = (owner: OwnerAnswer = READS) => {
     const tickets = createTurnTickets();
     const ownerCalls: { readonly id: string; readonly message: RpcMessage; readonly call: MountCall }[] = [];
     const mounted = new Map<string, MountTarget>([["browser", { kind: "browser", router }]]);
@@ -61,7 +65,7 @@ const setup = () => {
         mask: async (value) => JSON.parse(JSON.stringify(value).replaceAll("s3cret", "{{secret:token}}")),
         ownerBrowser: async (target, message, call) => {
             ownerCalls.push({ id: target.id, message, call });
-            return { jsonrpc: "2.0", id: message.id ?? null, result: { content: [{ type: "text", text: "read s3cret" }] } };
+            return await owner(message);
         },
         seedOf: (conversationId) => ({ conversationId, profile: {}, conversations: actors, tmp: ROOT }),
         startJob: startDaemonJob,
@@ -117,6 +121,22 @@ describe("the owner's browser", () => {
         const removed = await post("/extension/turn/owner-browser", "kit", { turn: mint({ grants: { ...GRANTS, browsers: ["chrome"] } }), browser: "chrome", tool: "read" });
         expect(await refusalOf(removed)).toContain("no longer one of the owner's connected browsers");
         expect(ownerCalls).toHaveLength(1);
+    });
+
+    // (2026-11-26) Node's fetch gives up on headers that take five minutes, and a ChatGPT image there takes nine.
+    test("answers its status at once and the browser's answer when it comes, a failure past that as the result's error", async () => {
+        const browser = Promise.withResolvers<RpcMessage>();
+        const slow = setup(async () => await browser.promise);
+        const answer = await slow.post("/extension/turn/owner-browser", "kit", { turn: slow.mint(), browser: "brave", tool: "chatgpt_image", arguments: { prompt: "A fox." } });
+        expect(answer.status).toBe(200);
+        expect(slow.ownerCalls).toHaveLength(1);
+        browser.resolve({ jsonrpc: "2.0", id: null, result: { content: [{ type: "text", text: "Made 1 image." }] } });
+        expect(await answer.json()).toEqual({ result: { content: [{ type: "text", text: "Made 1 image." }] } });
+
+        const failing = setup(async () => await Promise.reject(new Error("the browser went away")));
+        const failed = await failing.post("/extension/turn/owner-browser", "kit", { turn: failing.mint(), browser: "brave", tool: "read" });
+        expect(failed.status).toBe(200);
+        expect(await failed.json()).toEqual({ result: { content: [{ type: "text", text: "The call failed: the browser went away" }], isError: true } });
     });
 });
 

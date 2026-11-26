@@ -11,7 +11,6 @@ import { withSignedInDoor } from "./account-hosts.js";
 import { fileUrlRefusal, withSandboxNotes } from "./tool-notes.js";
 import { settleTargets } from "./element-targets.js";
 import { callWebmcp, WEBMCP_CALL_SCHEMA, WEBMCP_CALL_TOOL, type WebmcpTarget, webmcpTargetOf } from "./webmcp-call.js";
-import { type BackendLine, createChatgptKit, type KitDeps } from "./chatgpt-kit.js";
 
 // One MCP server standing in for every browser a turn may drive, hosted in this daemon and reached over HTTP, so a
 // session costs no router process of its own. Each tool takes an `account`, resolved through the turn's manifest to an
@@ -63,9 +62,6 @@ export interface RouterManifest {
     // navigation there still runs, and its answer opens by naming the account's own browser, since this one shows that
     // site's login wall and a turn reading the wall concludes the account is signed out.
     readonly coveredHosts?: Readonly<Record<string, string>>;
-    // The signed-in browsers' alone: each granted browser account to the hosts it signs in on (account-hosts.ts), so a
-    // site kit lists its tools, and runs, only where its site is signed in (chatgpt-kit.ts).
-    readonly accountSites?: Readonly<Record<string, readonly string[]>>;
 }
 
 // One screenshot a backend answered for, handed to RouterDeps.screenshotTaken.
@@ -91,8 +87,6 @@ export interface RouterDeps {
     // How long a WebMCP call waits for a tool the page has not registered yet (webmcp-call.ts); absent is its default,
     // tests shorten it.
     readonly webmcpGraceMs?: number;
-    // What the router's site kits need of the workspace (chatgpt-kit.ts); absent lists none.
-    readonly kits?: KitDeps;
     // What a window castd streams answers itself (media/agent-capture.ts, media/agent-recording.ts); absent, every call
     // goes to its backend.
     readonly castd?: RouterCastd;
@@ -237,6 +231,9 @@ const backendCallOf = (listed: readonly McpToolSchema[], call: CallParams, args:
     return "refusal" in targeted ? targeted : { asked: { ...call, arguments: targeted.args } };
 };
 
+// The router's line to one owner's backend once it is up: one tools/call sent on it, or why it would not come up.
+type BackendLine = { readonly send: (params: CallParams, signal?: AbortSignal) => Promise<RpcMessage> } | { readonly refusal: string };
+
 // What forward needs of its router: its line to a backend, and the client ids mapped to the backend calls they became.
 interface Wire {
     readonly request: (backend: Backend, method: string, params: RpcMessage["params"]) => { readonly id: number; readonly answer: Promise<RpcMessage> };
@@ -275,15 +272,10 @@ const forward = async (wire: Wire, backend: Backend, params: NonNullable<RpcMess
     }
 };
 
-// The longest the turn's MCP client waits on one call, where its runtime cannot be told longer (MountCall).
-export interface ClientLimit {
-    readonly clientCeilingMs?: number;
-}
-
 export interface BrowserRouter {
     // Answers one client message; undefined for a notification, which expects none. `signal` is the HTTP request's
     // own: a client that hung up takes its in-flight call with it.
-    readonly handle: (message: RpcMessage, signal?: AbortSignal, client?: ClientLimit) => Promise<RpcMessage | undefined>;
+    readonly handle: (message: RpcMessage, signal?: AbortSignal) => Promise<RpcMessage | undefined>;
     // Kills every backend; later calls are refused, not respawned.
     readonly close: () => void;
     // Owners whose backend is running now; for tests and the hub's accounting.
@@ -298,8 +290,6 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
     const inflight = new Map<string | number, { readonly backend: Backend; readonly id: number }>();
     let clientInitialize: Record<string, unknown> | undefined;
     let closed = false;
-    // The router's own ChatGPT tools, answered through each owner's backend (chatgpt-kit.ts).
-    const kit = createChatgptKit(manifest, deps.kits);
 
     const send = (backend: Backend, message: RpcMessage): void => {
         try {
@@ -424,7 +414,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         return { send: (sent: CallParams, bound: AbortSignal | undefined = signal) => forward({ request, send, inflight }, ready.backend, sent, clientId, bound) };
     };
 
-    const call = async (message: RpcMessage, signal: AbortSignal | undefined, client: ClientLimit | undefined): Promise<RpcMessage> => {
+    const call = async (message: RpcMessage, signal: AbortSignal | undefined): Promise<RpcMessage> => {
         // `account` is stripped either way: a sole-owner router never declared it, so one passed anyway is noise the
         // real server would reject.
         const { account, ...rest } = (message.params?.["arguments"] ?? {}) as Record<string, unknown>;
@@ -441,13 +431,6 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         }
         if (closed) {
             return toolRefusal(message.id, "this turn's browsers are already closed");
-        }
-        if (kit.handles(message)) {
-            const named = z.string().safeParse(account).data;
-            // The kit's own calls are not the client's to cancel by id: a backend told to drop one never answers it, and
-            // the kit would wait on it holding the account's tab. A client that hangs up still ends them (`signal`).
-            const line = (): Promise<BackendLine> => lineFor(owner, reserved.port, undefined, signal);
-            return await kit.call(message, { account: named, owner, args: rest, signal, clientCeilingMs: client?.clientCeilingMs, line });
         }
         // allow(silent-catch): an unreadable list holds no tool to read a call against, so it goes on as asked and meets
         // whatever broke the list on its way to the backend, which reports it there.
@@ -487,7 +470,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
         return { ...(network === undefined ? steered : redactNetworkAnswer(network, steered)), id: message.id ?? null };
     };
 
-    const handle = async (message: RpcMessage, signal?: AbortSignal, client?: ClientLimit): Promise<RpcMessage | undefined> => {
+    const handle = async (message: RpcMessage, signal?: AbortSignal): Promise<RpcMessage | undefined> => {
         switch (message.method) {
             case "initialize":
                 clientInitialize = message.params;
@@ -508,7 +491,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
                 try {
                     const probed = await deps.toolSchemas();
                     const listed = withSandboxNotes(describeBoundedWait(probed));
-                    const tools = [...(listed.some((tool) => tool.name === WEBMCP_CALL_TOOL) ? listed : [...listed, WEBMCP_CALL_SCHEMA]), ...kit.listed()];
+                    const tools = listed.some((tool) => tool.name === WEBMCP_CALL_TOOL) ? listed : [...listed, WEBMCP_CALL_SCHEMA];
                     return {
                         jsonrpc: "2.0",
                         id: message.id ?? null,
@@ -518,7 +501,7 @@ export const createBrowserRouter = (manifest: RouterManifest, deps: RouterDeps):
                     return rpcError(message.id, -32603, `browser tools unavailable: ${errorMessage(error)}`);
                 }
             case "tools/call":
-                return call(message, signal, client);
+                return call(message, signal);
             // A call whose backend is still being prepared has sent nothing to cancel; it lands when the backend does.
             case "notifications/cancelled": {
                 const route = inflight.get(message.params?.["requestId"] as string | number);

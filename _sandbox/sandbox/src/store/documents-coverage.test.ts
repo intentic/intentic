@@ -63,8 +63,6 @@ const CACHES_OUTSIDE_RUNTIMES = [
     "agent/providers/translator-models.ts",
     // The browser MCP's tool list, probed from the backend again whenever the file is gone or not a list.
     "browser/tools/browser-schema-cache.ts",
-    // What the ChatGPT kit remembers per browser (a project's address, a chat's): lost, it is looked up in the sidebar.
-    "browser/tools/chatgpt-host.ts",
     // A custom endpoint's last discovered model list, standing in while its server is down.
     "endpoints/endpoint-catalog.ts",
     // A geo exit provider's relay or server catalog, refreshed past its TTL.

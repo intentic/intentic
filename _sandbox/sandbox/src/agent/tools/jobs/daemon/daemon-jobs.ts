@@ -55,7 +55,7 @@ export interface JobSeedDeps {
 
 /**
  * A conversation's job seed, woken as the conversation's own profile, as a child's report wakes its parent: what a job
- * the daemon carries for a tool call (chatgpt-image-jobs.ts, an extension's, extensions/turn/tool-turn-doors.ts) is filed
+ * the daemon carries for a tool call (an extension's, extensions/turn/tool-turn-doors.ts) is filed
  * with. Undefined for a conversation the registry does not know.
  */
 export const conversationJobSeeds =

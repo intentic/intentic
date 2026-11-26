@@ -1,4 +1,4 @@
-import { KitRefusal } from "../host.js";
+import { KitRefusal } from "../site-kit.js";
 import { afterword, aside, imageLines, limited, saveImages, stemOf, UNSENT, where } from "./answers.js";
 import { type ChatTiming, CHAT_TIMING, type Ran, runChat } from "./engine.js";
 import type { ChatgptHost } from "./host.js";

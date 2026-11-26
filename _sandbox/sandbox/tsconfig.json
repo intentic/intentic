@@ -26,7 +26,6 @@
         { "path": "../../_shared/extension-manifest" },
         { "path": "../../_agent-tools/text-search" },
         { "path": "../../_shared/registry" },
-        { "path": "../../_shared/site-kits" },
         { "path": "../../_sandbox/scaffold" },
         { "path": "../../_agent-tools/fileq" },
         { "path": "../../_sandbox/ocr" },

@@ -158,20 +158,18 @@ flowchart LR
   (`save_media`, or a download its click started) under `.intentic/records/artifacts/chrome/` with a sanitized name, at
   most 50 MB; `POST /system/webext/file` hands one shelf file to the browser for `upload_file`, only for a one-time
   ticket the daemon adds to that call on its way to the browser, after checking the file's real path is on the shelf.
-- `chatgpt_image` on the owner's own browser does not hold the turn (`agent/tools/jobs/daemon/chatgpt-image-jobs.ts`,
-  2026-11-17): the MCP door makes the extension's call itself and files it as a background job the daemon runs in its
-  own process (`daemon-jobs.ts`), so the agent is answered within seconds with a job id that `wait` collects (the saved
-  path, or why no image came), the card lists, `stop` ends and a turn ended on it is woken by. A refusal that comes back
-  within 5 s is the call's own answer, with no job. Calls queue per browser (`job-lanes.ts`): two at once, one at a time
-  until one image has been made since boot (so two first calls do not both make the sandbox's ChatGPT project), and one
-  chat's calls one after another. The door also rewrites the tool's description in the listing, since the extension's
-  own describes one blocking call. A turn with no conversation has nobody to wake, so its call still waits for the
-  picture; a restart mid-image ends the job as lost, and the image may still land on the shelf.
 - An extension's agent tools act within the turn calling them (`extensions/turn/tool-grants.ts`, `tool-turn-doors.ts`,
   2026-11-26): the MCP door tells each call what the turn holds and mints it a ticket, which opens the turn's own
   browser router for an account it holds, on that account's sites only (`turn-browser.ts`), the owner's browser it
-  holds through the webext door, and a background job on the same job files and lanes as the ChatGPT image's, its work
-  done in the extension's backend ([extensions.md](../../docs/architecture/extensions.md)).
+  holds through the webext door, and a background job on the daemon's job files and lanes (`daemon-jobs.ts`,
+  `job-lanes.ts`), its work done in the extension's backend ([extensions.md](../../docs/architecture/extensions.md)).
+  A file chooser or a dialog the page waits on stops @playwright/mcp running anything but the tool that answers it, so
+  the browser door lets `browser_file_upload` or `browser_handle_dialog` answer one only when the extension's own
+  previous call opened it on the account's sites, without reading the page first. The owner's-browser door answers its
+  status at once and its JSON when the browser does, a space on the events' beat between, since the backend host's
+  Node fetch gives up on headers after five minutes and a ChatGPT image there takes nine. The ChatGPT kit
+  ([chatgpt](../../_extensions/chatgpt)) is their first consumer; until 2026-11-26 the `browser` router listed its
+  three tools itself and this door ran its owner's-browser images as jobs.
 - The audit trail (`audit/`, `/history/audit/`): who changed a setting, a member, an area, a secret's gate or a policy,
   who signed in, what was exported or deleted, and with `settings.audit.recordReads` who opened what. One middleware
   records by contract route name (`audit/audit-http.ts`); another module calls `services.audit.record({ actor, action,
@@ -877,17 +875,9 @@ flowchart LR
   The `bookmarks.*` group lists the whole tree and adds, edits, moves and removes; a folder cannot go inside itself and
   the roots stay put. Every change is pushed as the `bookmarks` runtime domain, so every star, bar and manager moves at
   once. Like the profiles around them they do not travel in a bundle.
-- The routers also answer tools of their own, sent to a backend as its own tools: `browser_webmcp_call`
-  (`webmcp-call.ts`) and, on `browser`, the ChatGPT kit of [site-kits](../../_shared/site-kits) (`chatgpt_send`,
-  `chatgpt_read`, `chatgpt_image`; `chatgpt-kit.ts`), listed only when one of the turn's accounts signs in on
-  chatgpt.com (the turn's `accountSites`, from `account-hosts.ts`) and refused, before any browser starts, for an
-  `account` whose browser holds none. `chatgpt-host.ts` is the kit's second host, after the person's own Chrome: each
-  page step is ONE `browser_evaluate` that installs the step's helpers, calls it, and takes them off ChatGPT's window as
-  soon as the step has them; files are artifacts-shelf paths `browser_run_code_unsafe` puts into the file input with
-  `setInputFiles`; pictures and long answers land in `.intentic/records/artifacts/chatgpt/`; what the kit remembers (its
-  project, its chats) is a cache, `.intentic/local/browser/<owner>.chatgpt.json`. One kit call at a time per browser,
-  and a router listing the kit is waited on 11 minutes a call, not 5; a client with a shorter ceiling gets the same
-  shortened `wait` as through the extension (`browser/webext-client-ceiling.ts`).
+- The routers also answer a tool of their own, sent to a backend as its own tools: `browser_webmcp_call`
+  (`webmcp-call.ts`). The ChatGPT kit's tools, which `browser` listed beside it until 2026-11-26, are the
+  [chatgpt](../../_extensions/chatgpt) extension's, reaching an account's browser through the extensions' browser door.
 - The sandbox has a desktop of its own (`desktop/`): one more virtual X display beside the browsers', 1280×800 with
   openbox on it, for programs with a window and no other way in. A turn whose role may drive a browser and run programs
   (its `browser` and `shell` powers: `open` starts any program) mounts it as the `desktop` server beside the browser

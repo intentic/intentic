@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { KitRefusal, type SavedFile } from "../host.js";
+import { KitRefusal, type SavedFile } from "../site-kit.js";
 import { type Chat, type ChatRequest, type ChatTiming, CHAT_TIMING, type Mode, type Ran, readChat, runChat } from "./engine.js";
 import type { ChatgptHost, ChatgptVoice } from "./host.js";
 import type { FoundImage } from "./page-hands.js";

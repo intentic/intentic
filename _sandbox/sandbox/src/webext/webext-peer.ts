@@ -184,15 +184,12 @@ const ListingSchema = z.looseObject({ result: z.looseObject({ tools: z.array(z.l
 
 type MountEndpoint = (target: { readonly id: string }, message: RpcMessage, call: MountCall) => Promise<RpcMessage | undefined>;
 
-// A call shaped to what the turn's MCP client can wait for (webext-client-ceiling.ts): passed as it is, shortened with a
-// line saying so after the browser's answer, or refused before the browser is asked.
+// A call shaped to what the turn's MCP client can wait for (webext-client-ceiling.ts): passed as it is, or shortened with
+// a line saying so after the browser's answer.
 export const fittedToClient =
     (mcp: MountEndpoint): MountEndpoint =>
     async (target, message, call) => {
         const fitted = fitToClient(message, call);
-        if (fitted.kind === "refused") {
-            return fitted.answer;
-        }
         if (fitted.kind === "as-is") {
             return await mcp(target, message, call);
         }

@@ -8,14 +8,14 @@ import {
     CHATGPT_TOOL_EFFECTS,
     CHATGPT_TOOL_NAMES,
     chatgptToolDescriptions,
-} from "@intentic/site-kits/chatgpt";
+} from "@intentic/ext-chatgpt/kit/chatgpt";
 import { array, object, string } from "zod";
 import { RefusedError } from "../../policy.js";
 import type { Kit } from "../kit.js";
 import { CHROME_VOICE, chatgptImage, chatgptRead, chatgptSend } from "./chrome-host.js";
 
 // The ChatGPT kit: the person's own signed-in ChatGPT, driven in one call per prompt. Everything but this browser's
-// own part is in @intentic/site-kits (its page knowledge, its steps in the page, the chat engine, the sandbox's project,
+// own part is in @intentic/ext-chatgpt (its page knowledge, its steps in the page, the chat engine, the sandbox's project,
 // what the agent is told, and these tools' descriptions and inputs); this browser's part is chrome-host.ts.
 
 const DESCRIPTIONS = chatgptToolDescriptions(CHROME_VOICE);

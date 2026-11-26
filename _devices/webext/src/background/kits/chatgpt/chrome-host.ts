@@ -1,4 +1,4 @@
-import type { PageCall, PageStep } from "@intentic/site-kits";
+import type { PageCall, PageStep } from "@intentic/ext-chatgpt/kit";
 import {
     CHATGPT_PAGE,
     CHATGPT_SITE,
@@ -12,7 +12,7 @@ import {
     KitRefusal,
     type ReadRequest,
     type SendRequest,
-} from "@intentic/site-kits/chatgpt";
+} from "@intentic/ext-chatgpt/kit/chatgpt";
 import { putFile, receiveFileSlice } from "../../../page/media-driver.js";
 import { agentWindow } from "../../agent-window.js";
 import { askPerson } from "../../asking.js";
@@ -27,7 +27,7 @@ import { assertSiteAllowed, frontKitTab, injectTolerant, type KitPlace, kitStora
 import { pinFileInputStep } from "./file-steps.js";
 
 // THE CHATGPT KIT'S CHROME HOST (2026-11-14): the person's own signed-in Chrome, driven from this worker, for the kit's
-// engine in @intentic/site-kits, which decides every step and every word the agent reads. What is the extension's own
+// engine in @intentic/ext-chatgpt, which decides every step and every word the agent reads. What is the extension's own
 // is here: the gates, the tabs (beside the agent's own, fronted for a call and given back after), steps injected into
 // the isolated world, files on the daemon's tickets with the person asked, saving through media.ts, and chrome.storage.
 // What each member means is said once, for both hosts, at the top of the kit's host.ts.

@@ -45,7 +45,9 @@ export const WEBEXT_MEDIA_SOURCE_HEADER = "x-intentic-source";
 export const WEBEXT_UPLOAD_TOOL = "upload_file";
 
 // The ChatGPT kit's send, whose `files` (sandbox paths) are ticketed the same way, one ticket per file, into its
-// `tickets` in the same order.
+// `tickets` in the same order. (2026-11-26) The kit is the chatgpt extension's now (_extensions/chatgpt); this stays
+// because the browser extension runs the kit as tools of its own and refuses a file without its ticket, at every
+// version in the field, whether the agent or that extension's `browser` half calls it.
 export const WEBEXT_CHATGPT_SEND_TOOL = "chatgpt_send";
 
 // How long a file ticket waits to be collected; the extension collects it before it asks the person anything.

@@ -68,6 +68,17 @@ export const CONSUMERS = new Map([
     // The desktop app mounts the Passwords app on this computer's own vault, over its Tauri port. The package is no
     // extension any more (no sandbox hosts Passwords), but stays on the extension SDK, and this is its one entry.
     ["_editor/desktop-app", { extensions: new Set(["@intentic/ext-passwords"]), specifiers: new Set(["@intentic/ext-passwords/app"]) }],
+    // (2026-11-26) The owner's browser extension runs the ChatGPT kit's engine in their own Chrome, through the kit's
+    // entries: the engine is the chatgpt extension's (about 2,800 lines its backend also runs in a sandbox account's
+    // browser), as ONLYOFFICE's is onlyoffice's, so it stays there rather than in a shared package an extension may not
+    // name.
+    [
+        "_devices/webext",
+        {
+            extensions: new Set(["@intentic/ext-chatgpt"]),
+            specifiers: new Set(["@intentic/ext-chatgpt/kit", "@intentic/ext-chatgpt/kit/chatgpt", "@intentic/ext-chatgpt/kit/chatgpt/testing"]),
+        },
+    ],
 ]);
 
 /** `path:line` findings for a manifest outside _extensions: every extension it names that CONSUMERS does not allow it. */

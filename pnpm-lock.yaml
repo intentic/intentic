@@ -1177,12 +1177,12 @@ importers:
       '@intentic/browser':
         specifier: workspace:*
         version: link:../browser
+      '@intentic/ext-chatgpt':
+        specifier: workspace:*
+        version: link:../../_extensions/chatgpt
       '@intentic/sandbox-contract':
         specifier: workspace:*
         version: link:../../_shared/sandbox-contract
-      '@intentic/site-kits':
-        specifier: workspace:*
-        version: link:../../_shared/site-kits
       '@orpc/server':
         specifier: 'catalog:'
         version: 1.16.1(@opentelemetry/api@1.10.0)(crossws@0.3.5)(ws@8.22.0)
@@ -1731,6 +1731,40 @@ importers:
         version: 3.3.13(typescript@6.0.3)
 
   _extensions/browsers: {}
+
+  _extensions/chatgpt:
+    dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: link:../../_shared/extension-api
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.4
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
 
   _extensions/connectors:
     dependencies:
@@ -2812,9 +2846,6 @@ importers:
       '@intentic/share-view':
         specifier: workspace:*
         version: link:../../_editor/share-view
-      '@intentic/site-kits':
-        specifier: workspace:*
-        version: link:../../_shared/site-kits
       '@intentic/speech':
         specifier: workspace:*
         version: link:../speech
@@ -3356,28 +3387,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-
-  _shared/site-kits:
-    dependencies:
-      '@intentic/base':
-        specifier: workspace:*
-        version: link:../../_tools/base
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@intentic/testing':
-        specifier: workspace:*
-        version: link:../../_tools/testing
-      '@intentic/tsconfig':
-        specifier: workspace:*
-        version: link:../../_tools/tsconfig
-      '@types/bun':
-        specifier: 'catalog:'
-        version: 1.4.4
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

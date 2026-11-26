@@ -60,7 +60,6 @@
         "@intentic/sandbox-run": "workspace:*",
         "@intentic/scaffold": "workspace:*",
         "@intentic/share-view": "workspace:*",
-        "@intentic/site-kits": "workspace:*",
         "@intentic/speech": "workspace:*",
         "@intentic/text-search": "workspace:*",
         "@intentic/webq": "workspace:*",

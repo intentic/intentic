@@ -320,3 +320,34 @@ export const modeStep = async (mode: "deep_research" | "agent", waitMs: number):
     }
     return took === true ? answer(true, `It shows as chosen.`) : answer(false, `ChatGPT does not show it as chosen after the click.`);
 };
+
+// Marks the element a host presses with its own pointer, a click a page's file chooser opens for where a script's click
+// does not (the sandbox's browser, through Playwright): the composer's tools button, or, once its menu is open, the item
+// that opens the file chooser, waited for up to `waitMs`. Every earlier mark is taken off first; `attribute` is the mark,
+// which the host's click names as its selector.
+export const markStep = async (target: "toolsMenu" | "uploadItem", attribute: string, waitMs: number): Promise<StepAnswer | null> => {
+    const reading = window.intenticChatgpt?.reading;
+    const acting = window.intenticChatgpt?.acting;
+    if (reading === undefined || acting === undefined) {
+        return null;
+    }
+    for (const marked of Array.from(document.querySelectorAll(`[${attribute}]`))) {
+        marked.removeAttribute(attribute);
+    }
+    const lookup = reading.site[target];
+    const found = await acting.until(() => reading.locate(lookup), waitMs);
+    if (found === undefined) {
+        const missing = target === "toolsMenu" ? `ChatGPT's "Add files and more" button is not on the page.` : `ChatGPT's tools menu has no "Add photos & files" item.`;
+        return { kind: "answer", ok: false, message: missing };
+    }
+    found.setAttribute(attribute, "");
+    return { kind: "answer", ok: true, message: "" };
+};
+
+// Takes every mark `markStep` left off the page again.
+export const unmarkStep = (attribute: string): StepAnswer => {
+    for (const marked of Array.from(document.querySelectorAll(`[${attribute}]`))) {
+        marked.removeAttribute(attribute);
+    }
+    return { kind: "answer", ok: true, message: "" };
+};

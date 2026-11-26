@@ -23,8 +23,8 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/browser": "workspace:*",
+        "@intentic/ext-chatgpt": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
-        "@intentic/site-kits": "workspace:*",
         "@orpc/server": "catalog:",
         "zod": "catalog:"
     },

@@ -1,6 +1,6 @@
 import { sleep, within } from "@intentic/base/async";
 import { enum as zEnum, number, object, string } from "zod";
-import { KitRefusal, type Need } from "../host.js";
+import { KitRefusal, type Need } from "../site-kit.js";
 import { keptList } from "../memory.js";
 import { readable, step } from "./drive.js";
 import type { ChatgptHost, OpenedPage } from "./host.js";

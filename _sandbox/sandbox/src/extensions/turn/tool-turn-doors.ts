@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { anySignal, whenAborted } from "@intentic/base/async";
+import { errorMessage } from "@intentic/base/errors";
 import { declaredReachOf, type ExtensionTurnPower } from "@intentic/extension-manifest";
 import {
     EXTENSION_EVENTS_HEARTBEAT_MS,
@@ -51,7 +52,7 @@ export interface TurnDoorDeps {
     readonly capabilities: Pick<Services["capabilities"], "get">;
     // Every stored secret's value masked to its reference.
     readonly mask: <T>(value: T) => Promise<T>;
-    // The owner's-browser door the agent's own calls go through, before the MCP door's ChatGPT image jobs.
+    // The owner's-browser door the agent's own calls go through.
     readonly ownerBrowser: MountEndpoints["webext"];
     // The seed a conversation's job is filed with; undefined for a conversation the registry does not know.
     readonly seedOf: (conversationId: string) => BackgroundJobSeed | undefined;
@@ -120,6 +121,27 @@ const resultOf = (answer: RpcMessage | undefined): ExtensionToolResult => {
 };
 
 const heldNames = (names: readonly string[]): string => (names.length === 0 ? "none" : names.map((name) => `"${name}"`).join(", "));
+
+// (2026-11-26) A call that may take minutes answered as it comes: its status and headers at once, a space on the events'
+// beat, then its JSON, which leading whitespace leaves as it was. The backend host reaches this door with Node's fetch,
+// which gives up on an answer whose headers have not come in five minutes (undici's headersTimeout) and on a body silent
+// as long; one ChatGPT image in the owner's browser takes nine. A failure past the headers answers as the result's error.
+const answeredAsItComes = (c: Context<AppEnv>, answer: () => Promise<ExtensionToolResult>): Response => {
+    c.header("content-type", "application/json");
+    return stream(c, async (out) => {
+        // allow(silent-catch): the only failure is a reader that went away, whose call its own signal already ends.
+        const beat = setInterval(() => void out.write(" ").catch(() => undefined), EXTENSION_EVENTS_HEARTBEAT_MS);
+        let result: ExtensionToolResult;
+        try {
+            result = await answer();
+        } catch (error) {
+            result = { content: [{ type: "text", text: `The call failed: ${errorMessage(error)}` }], isError: true };
+        } finally {
+            clearInterval(beat);
+        }
+        await out.write(JSON.stringify({ result }));
+    });
+};
 
 // ---- jobs -------------------------------------------------------------------------------------------------------
 
@@ -208,12 +230,15 @@ const ownerBrowserDoor =
             return refused(c, `"${asked.browser}" is no longer one of the owner's connected browsers`);
         }
         const message: RpcMessage = { jsonrpc: "2.0", id: `extension-owner-browser-${randomUUID()}`, method: "tools/call", params: { name: asked.tool, arguments: asked.arguments ?? {} } };
-        const answer = await deps.ownerBrowser({ kind: "webext", id: asked.browser }, message, {
-            name: asked.browser,
-            conversationId: ticket.conversationId,
-            signal: c.req.raw.signal,
+        // The browser's own tools wait as long as a person's page takes (a ChatGPT image, nine minutes).
+        return answeredAsItComes(c, async () => {
+            const answer = await deps.ownerBrowser({ kind: "webext", id: asked.browser }, message, {
+                name: asked.browser,
+                conversationId: ticket.conversationId,
+                signal: c.req.raw.signal,
+            });
+            return await deps.mask(resultOf(answer));
         });
-        return c.json({ result: await deps.mask(resultOf(answer)) });
     };
 
 // A lane of the extension's own, by name; its `most` is the first start's.

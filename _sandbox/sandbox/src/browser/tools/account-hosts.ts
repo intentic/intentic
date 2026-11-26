@@ -22,8 +22,8 @@ export const bareHost = (address: string): string | undefined => {
     }
 };
 
-// Each granted browser account to the hosts its sign-in and home pages are on, in the order granted: what the signed-in
-// router's site kits read to know whose browser is signed in to their site (chatgpt-kit.ts).
+// Each granted browser account to the hosts its sign-in and home pages are on, in the order granted: what the
+// credential-free browser reads to name an account's own browser for a site it signs in on (coveredHostsOf).
 export const accountSitesOf = async (
     granted: readonly Capability[],
     signInUrls: (capability: Capability) => Promise<readonly string[]>,

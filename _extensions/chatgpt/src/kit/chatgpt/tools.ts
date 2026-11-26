@@ -2,8 +2,8 @@ import { array, boolean, enum as zEnum, number, string } from "zod";
 import type { ChatgptVoice } from "./host.js";
 
 // The ChatGPT kit's three tools as an agent reads them, the same through every host: each host defines the tools on
-// its own surface (the extension's chatgpt-kit.ts) with these descriptions and inputs, and only its voice (host.ts)
-// says where its browser is and what access it needs.
+// its own surface (the browser extension's kits/chatgpt/chatgpt-kit.ts, this extension's ../../served-tools.ts) with these
+// descriptions and inputs, and only its voice (host.ts) says where its browser is and what access it needs.
 
 export const CHATGPT_TOOL_NAMES = { send: "chatgpt_send", read: "chatgpt_read", image: "chatgpt_image" } as const;
 

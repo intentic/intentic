@@ -1,5 +1,6 @@
 /* HOW MANY OF ONE KIND OF DAEMON JOB RUN AT ONCE, AND IN WHAT ORDER (2026-11-17, the shinobi-society audit). Jobs the
-   daemon runs itself in one place (ChatGPT images in one browser, chatgpt-image-jobs.ts) wait their turn here instead of
+   daemon runs in one place (an extension's lane, extensions/turn/tool-turn-doors.ts: the chatgpt extension's images in one
+   of the person's browsers) wait their turn here instead of
    being refused: each lane runs up to `most` at once, first come first served, and never two that name the same key at
    once (two prompts into one chat would read each other's answer). A lane runs one at a time until one of its runs has
    gone well since the daemon started (`warm`), since two first runs may race to make the same thing (the sandbox's one

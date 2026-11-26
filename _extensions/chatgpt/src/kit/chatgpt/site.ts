@@ -73,6 +73,10 @@ export interface ChatGptPage {
     readonly modes: { readonly deep_research: Pattern; readonly agent: Pattern };
     // guess: the composer's own file input, which "Add photos & files" opens.
     readonly fileInput: string;
+    // guess (2026-11-26): the tools menu's item that opens the file chooser, for a host that attaches a file the way a
+    // person does, with its own pointer (the sandbox's browser: a click, then the chooser answered). seen beside it in
+    // the fake page only: `menuitem "Add photos & files"`.
+    readonly uploadItem: Lookup;
     // guess: what ChatGPT puts in front of an answer it will not go on with until the person says so: an app about to
     // search outside the project, agent mode's sensitive step, a sign-in it hands over. The kit never presses one.
     readonly confirmation: Lookup;
@@ -109,6 +113,7 @@ export const CHATGPT_PAGE: ChatGptPage = {
     toolsMenu: { role: "button", name: pattern(/^(Add files and more|Add photos (&|and) files|Tools)/i), testId: "composer-plus-btn" },
     modes: { deep_research: pattern(/^Deep research/i), agent: pattern(/^Agent( mode)?/i) },
     fileInput: 'form input[type="file"]',
+    uploadItem: { role: "menuitem", name: pattern(/^(Add photos (&|and) files|Upload (photos (&|and) )?files?|Add files|Upload from computer)/i) },
     confirmation: { role: "button", name: pattern(/^(Confirm|Allow|Approve|Take over|Continue)$/i) },
 };
 

@@ -151,6 +151,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.approvals",
         "intentic.automations",
         "intentic.browsers",
+        "intentic.chatgpt",
         "intentic.connectors",
         "intentic.devices",
         "intentic.discord",

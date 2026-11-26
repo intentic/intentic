@@ -94,3 +94,56 @@ test("a blank page holds nothing signed in, and an account with no site on recor
     });
     expect(nowhere.sent).toEqual([]);
 });
+
+// A page that opens a file chooser on a click, and refuses every tool but browser_file_upload while it waits, as
+// @playwright/mcp does.
+const choosing = (start: string) => {
+    let waiting = false;
+    const sent: string[] = [];
+    const text = (body: string, id: RpcMessage["id"], isError = false): RpcMessage => ({
+        jsonrpc: "2.0",
+        id: id ?? null,
+        result: isError ? { content: [{ type: "text", text: body }], isError: true } : { content: [{ type: "text", text: body }] },
+    });
+    const server: InProcessServer = {
+        handle: async (message) => {
+            const asked = CallSchema.parse(message.params);
+            sent.push(asked.name);
+            if (waiting && asked.name !== "browser_file_upload") {
+                return text(`### Error\nError: Tool "${asked.name}" does not handle the modal state.\n### Modal state\n- [File chooser]: can be handled by browser_file_upload`, message.id, true);
+            }
+            if (asked.name === "browser_click") {
+                waiting = true;
+                return text("### Modal state\n- [File chooser]: can be handled by browser_file_upload", message.id);
+            }
+            if (asked.name === "browser_file_upload") {
+                waiting = false;
+                return text("### Ran Playwright code\nawait fileChooser.setFiles([])", message.id);
+            }
+            return text(`### Result\n${JSON.stringify(start)}`, message.id);
+        },
+        close: () => undefined,
+    };
+    return { server, sent, open: () => void (waiting = true) };
+};
+
+test("a file chooser the extension's own click opened on the account's site is answered by browser_file_upload, where the page could not be read before it", async () => {
+    const page = choosing("https://chatgpt.com/");
+    expect(await scopedBrowserCall(page.server, CHATGPT, call("browser_click", { target: "[data-mark]" }), signal)).toMatchObject({ result: {} });
+    expect(await scopedBrowserCall(page.server, CHATGPT, call("browser_file_upload"), signal)).toMatchObject({ result: {} });
+    // Read before the click, not before the upload; read after each.
+    expect(page.sent).toEqual(["browser_evaluate", "browser_click", "browser_evaluate", "browser_file_upload", "browser_evaluate"]);
+    // Answered once: another upload has a page to read first, and finds no chooser.
+    expect(await scopedBrowserCall(page.server, CHATGPT, call("browser_file_upload"), signal)).toMatchObject({ result: {} });
+    expect(page.sent.slice(5)).toEqual(["browser_evaluate", "browser_file_upload", "browser_evaluate"]);
+});
+
+test("a chooser or dialog no call of the extension's opened is not answered, and nothing else runs while it waits", async () => {
+    const page = choosing("https://chatgpt.com/");
+    page.open();
+    expect(await scopedBrowserCall(page.server, CHATGPT, call("browser_file_upload"), signal)).toEqual({
+        refusal: 'account "chatgpt"\'s page waits on a file chooser or a dialog that no call of this extension\'s opened on its sites, so where it is cannot be read. Nothing was done.',
+    });
+    expect(await scopedBrowserCall(page.server, CHATGPT, call("browser_snapshot"), signal)).toMatchObject({ refusal: expect.stringContaining("waits on a file chooser") });
+    expect(page.sent).toEqual(["browser_evaluate", "browser_evaluate"]);
+});

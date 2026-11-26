@@ -7,4 +7,4 @@ export type { Baseline, FoundImage } from "./page-hands.js";
 export { CHATGPT_PAGE, CHATGPT_SITE } from "./site.js";
 export type { StepAnswer, Watched } from "./steps.js";
 export { CHATGPT_IMAGE_FIELDS, CHATGPT_READ_FIELDS, CHATGPT_SEND_FIELDS, CHATGPT_TOOL_EFFECTS, CHATGPT_TOOL_NAMES, chatgptToolDescriptions } from "./tools.js";
-export { KitRefusal, type Need, type PageCall, type PageStep, type SavedFile } from "../host.js";
+export { KitRefusal, type Need, type PageCall, type PageStep, type SavedFile } from "../site-kit.js";

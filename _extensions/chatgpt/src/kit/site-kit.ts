@@ -1,6 +1,6 @@
 // What every site kit hands the browser that runs it, whichever browser that is (2026-11-14). A kit's engine decides
-// every step and every word an agent reads; its host (a browser extension's worker, the sandbox's daemon driving
-// Playwright) does only what its browser does differently. These are the pieces that cross between them.
+// every step and every word an agent reads; its host (a browser extension's worker, the chatgpt extension's backend
+// driving a sandbox browser) does only what its browser does differently. These are the pieces that cross between them.
 
 // A refusal the agent reads as written: nothing went wrong in the code, the call cannot go on, and the message says
 // why and what to do instead. Each host turns it into its own refusal, so the words reach the agent unchanged.

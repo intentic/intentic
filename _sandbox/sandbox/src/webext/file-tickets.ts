@@ -6,7 +6,9 @@ import type { PeerCallRoute } from "../peers/peer-routes.js";
 import { releasable, type ShelfFile } from "../browser/cast/media-shelf.js";
 
 // A sandbox file put into a page in the owner's own browser (`upload_file`, and `chatgpt_send`'s `files`, one ticket
-// each into its `tickets` in the same order), released only for a call an agent's turn
+// each into its `tickets` in the same order; 2026-11-26: the browser extension runs the ChatGPT kit as tools of its own,
+// in the field at every version, and refuses a file without its ticket, so its send keeps its arm here whether the agent
+// or the chatgpt extension's `browser` half calls it), released only for a call an agent's turn
 // actually made. The extension never asks for a file by path: the daemon sees the agent's call on its way to the
 // browser, checks the path is a file on the artifacts shelf (browser/cast/media-shelf.ts), and adds a one-time ticket to the call's
 // arguments; the extension presents that ticket at its own door (POST /system/webext/file, on its enrollment token) and

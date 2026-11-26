@@ -1,9 +1,9 @@
 import "@intentic/testing/dom";
-import { CHATGPT_PAGE } from "@intentic/site-kits/chatgpt";
-import { giveEveryElementABox, mountFakeChatgpt } from "@intentic/site-kits/chatgpt/testing";
+import { CHATGPT_PAGE } from "@intentic/ext-chatgpt/kit/chatgpt";
+import { giveEveryElementABox, mountFakeChatgpt } from "@intentic/ext-chatgpt/kit/chatgpt/testing";
 import { pinFileInputStep } from "./file-steps.js";
 
-// The extension's file step inside ChatGPT's page, against the kit's stand-in page (@intentic/site-kits).
+// The extension's file step inside ChatGPT's page, against the kit's stand-in page (@intentic/ext-chatgpt).
 
 beforeEach(() => {
     giveEveryElementABox();

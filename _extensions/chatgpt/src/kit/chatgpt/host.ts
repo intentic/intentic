@@ -1,10 +1,11 @@
 import type { JsonValue } from "@intentic/base/json";
-import type { Need, PageStep, SavedFile } from "../host.js";
+import type { Need, PageStep, SavedFile } from "../site-kit.js";
 
 // A CHATGPT HOST is the browser the ChatGPT kit runs in (2026-11-14). The engine (engine.ts) decides every step in the
 // page and every word the agent reads; a host does only what its own browser does differently. Two hosts are meant:
 // THE EXTENSION (_devices/webext: the person's own signed-in Chrome, from its service worker) and THE SANDBOX'S BROWSER
-// (Playwright, through @playwright/mcp from the sandbox's daemon). A page is a number the host chose: the extension's
+// (Playwright through @playwright/mcp, driven from this extension's backend with `api.browser.call`, ../../sandbox/account-host.ts;
+// the daemon's browser router until 2026-11-26). A page is a number the host chose: the extension's
 // tab id; the sandbox's one tab per account. What each member is for, and what it means for each:
 //
 // - voice: the few words an answer or a tool description says differently. Extension: "tab 101", `snapshot`,
@@ -33,7 +34,8 @@ import type { Need, PageStep, SavedFile } from "../host.js";
 // - collectFiles(given) / allowFiles(page, url, files) / attachFiles(page, files): the files to attach, collected
 //   before anything slow, allowed, then put into ChatGPT's file input (CHATGPT_PAGE.fileInput). Extension: the
 //   daemon's one-minute tickets, the person asked on the page, bytes sent into the input in slices. Sandbox: shelf
-//   paths, allowed or refused by the host's own rule, and Playwright's setInputFiles.
+//   paths, allowed or refused by the host's own rule, and the page's own file chooser, opened by a click and answered
+//   with browser_file_upload.
 // - saveImage(page, src, stem) / saveText(text, stem): a picture on the page or a long answer as Markdown, saved for
 //   the agent. Extension: fetched in the tab and handed to the sandbox. Sandbox: written to the shelf directly.
 // - sandboxName(): what the sandbox's own ChatGPT project is called after ("Intentic · <name>").

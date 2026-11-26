@@ -1,0 +1,18 @@
+/* Type-checked only: vite bundles `src/server.ts` into dist/server.js (vite.server.config.ts), and the browser extension
+   (_devices/webext) bundles the kit (`src/kit`) from source. The kit runs in a page and in whatever drives one, so DOM
+   types stand beside Node's. */
+{
+    "compilerOptions": {
+        "lib": ["ES2024", "DOM", "DOM.Iterable"],
+        "types": ["node", "bun", "@intentic/testing/globals"],
+        "noEmit": true,
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "rootDir": ".",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "resolveJsonModule": true
+    },
+    "include": ["./src/**/*.ts", "./intentic-extension.json"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

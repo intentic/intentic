@@ -2,9 +2,9 @@ import { z } from "zod";
 import { type JsonValue, parseJsonOr } from "@intentic/base/json";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
 
-// How the router's own tools (webmcp-call.ts, chatgpt-kit.ts) read what @playwright/mcp answered a call they sent it: an
-// answer is text in `### Title` sections (response.ts serialize), and browser_evaluate and browser_run_code_unsafe put
-// what the page or the code returned, as JSON, under `### Result`.
+// How the router's own tools (webmcp-call.ts) and an extension's browser door (extensions/turn/turn-browser.ts) read
+// what @playwright/mcp answered a call they sent it: an answer is text in `### Title` sections (response.ts serialize),
+// and browser_evaluate and browser_run_code_unsafe put what the page or the code returned, as JSON, under `### Result`.
 
 // One `### Title` section of an answer.
 export interface Section {

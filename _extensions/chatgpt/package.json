@@ -1,0 +1,41 @@
+{
+    "name": "@intentic/ext-chatgpt",
+    "version": "1.0.0",
+    "description": "The ChatGPT kit as an intentic extension: chatgpt_send, chatgpt_read and chatgpt_image in a sandbox account's signed-in browser or the owner's own, and the kit's engine the browser extension runs too",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "exports": {
+        "./kit": {
+            "types": "./src/kit/index.ts",
+            "default": "./src/kit/index.ts"
+        },
+        "./kit/chatgpt": {
+            "types": "./src/kit/chatgpt/index.ts",
+            "default": "./src/kit/chatgpt/index.ts"
+        },
+        "./kit/chatgpt/testing": {
+            "types": "./src/kit/chatgpt/fake-chatgpt.testing.ts",
+            "default": "./src/kit/chatgpt/fake-chatgpt.testing.ts"
+        }
+    },
+    "scripts": {
+        "build": "vite build --config vite.server.config.ts",
+        "typecheck": "tsc -p tsconfig.json",
+        "test": "suites"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:"
+    }
+}

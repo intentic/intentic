@@ -1,5 +1,5 @@
 import { sleep } from "@intentic/base/async";
-import { type PageCall, pageCall } from "../host.js";
+import { type PageCall, pageCall } from "../site-kit.js";
 import type { ChatgptHost } from "./host.js";
 import { installActing, installAsking, installReading, installWatching, removeHelpers } from "./page-hands.js";
 import { CHATGPT_PAGE, CHATGPT_SITE } from "./site.js";

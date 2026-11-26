@@ -1,7 +1,7 @@
 import { runInThisContext } from "node:vm";
 import type { JsonValue } from "@intentic/base/json";
 import { dom } from "@intentic/testing/dom";
-import { KitRefusal, type PageCall, type SavedFile } from "../host.js";
+import { KitRefusal, type PageCall, type SavedFile } from "../site-kit.js";
 import { chatgptRead, chatgptSend } from "./answers.js";
 import type { ChatTiming } from "./engine.js";
 import { CHAT_ID, type FakeAccount, type FakeChatgpt, type FakeOptions, fakePageAt, giveEveryElementABox, mountFakeChatgpt } from "./fake-chatgpt.testing.js";

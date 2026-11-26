@@ -73,11 +73,14 @@ It is the same browser their bank is open in. The habits that make this feel saf
 
 ## Asking their ChatGPT
 
-Use `chatgpt_send` when they want their own ChatGPT on something: a second opinion, Deep Research, agent mode, their
-connected apps (Google Drive, Slack…), or files from the sandbox read by it. Each prompt spends their plan's allowance.
-When a sandbox account is signed in on chatgpt.com, the `browser` server has the same three tools (with that account's
-`account`), in the sandbox's own browser with no card in front of the person: prefer those unless the person wants
-this browser, or ChatGPT needs something only it has.
+Use `chatgpt_send` on the `chatgpt` server (`mcp__chatgpt__chatgpt_send`, with `browser: "${id}"`) when they want
+their own ChatGPT on something: a second opinion, Deep Research, agent mode, their connected apps (Google Drive,
+Slack…), or files from the sandbox read by it. Each prompt spends their plan's allowance. When a sandbox account is
+signed in on chatgpt.com, the same three tools without `browser` (or with that account's `account`) run in the
+sandbox's own browser with no card in front of the person: prefer those unless the person wants this browser, or
+ChatGPT needs something only it has. This browser lists `chatgpt_send`, `chatgpt_read` and `chatgpt_image` as tools of
+its own too: they do the same in one call each, but its `chatgpt_image` holds your turn until the picture is made, so
+use the `chatgpt` server's, and these only when that server is missing (its extension switched off).
 
 - **Where it goes.** New chats go into a ChatGPT project of this sandbox's own, "Intentic · <sandbox>", made on first
   use with project-only memory: their saved memories and other chats stay out, while apps, files and every tool work,
@@ -100,8 +103,8 @@ the sandbox has no key for. Every image spends their plan's allowance. A local m
 is unattended and leaves their account alone, so prefer those when the result is good enough. Before the first image,
 say how many you mean to make and where.
 
-**ChatGPT: `chatgpt_image`, one call per image, collected with `wait`.** The call answers within seconds with a job
-id, and nothing waits on it: ChatGPT makes the image in a chat in the sandbox's own ChatGPT project (see below), in a
+**ChatGPT: `chatgpt_image` on the `chatgpt` server with `browser: "${id}"`, one call per image, collected with
+`wait`.** The call answers within seconds with a job id, and nothing waits on it: ChatGPT makes the image in a chat in the sandbox's own ChatGPT project (see below), in a
 tab of your own window, and several minutes is normal. Collect it with the `wait` tool on the `subagents` server,
 target the job id (`targets` for a set): it answers with the saved paths, the `chat` and whatever ChatGPT wrote, or a
 failed job with why no image came. Or end your turn: each job's end wakes the conversation. Never poll with
@@ -113,8 +116,8 @@ ends with: a refusal means rewrite the prompt, never resend it as it was; a usag
 it resets; a question from ChatGPT gets a short answer in the same `chat`. A prompt whose job is running, or whose end
 says it was sent or may already have gone, is never sent again: collect a slow one with `chatgpt_read`. A refusal
 that needs no wait (chatgpt.com not allowed in read and act, the browser asleep) comes back as the call's own answer,
-with no job. The `browser` server's `chatgpt_image` (a sandbox account's ChatGPT) still holds the call until the image
-is made, one at a time.
+with no job. Without `browser` (a sandbox account's ChatGPT) `chatgpt_image` holds the call until the image is made,
+one at a time.
 
 **By hand, on another site or when the kit fails or is missing:**
 1. On ChatGPT, open a new chat inside the sandbox's own project ("Intentic · <sandbox>", above), whose memory is the

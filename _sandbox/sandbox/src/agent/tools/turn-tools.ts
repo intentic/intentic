@@ -65,8 +65,7 @@ export const turnToolsOf = async (
     });
     try {
         // The sites the turn's signed-in accounts are on, so the credential-free browser can name the right door when
-        // it is pointed at one, and the signed-in browsers list a site kit only where its site is signed in
-        // (browser/tools/account-hosts.ts, chatgpt-kit.ts).
+        // it is pointed at one (browser/tools/account-hosts.ts).
         const signInUrls = services.accountSignInUrls;
         const sites = signInUrls === undefined ? {} : await accountSitesOf(granted, signInUrls);
         const [extension, browser] = await Promise.all([

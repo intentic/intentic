@@ -1,7 +1,7 @@
 import { kitStorage, releaseKitTab } from "./kit.js";
 
 // What a kit keeps between calls, and how it lets a tab go once it no longer does. Which entries it keeps is the kit's
-// own (@intentic/site-kits' memory.test.ts).
+// own (the kit's memory.test.ts, in @intentic/ext-chatgpt).
 
 const SANDBOX = "https://sandbox-1.example.dev";
 let removed: number[] = [];

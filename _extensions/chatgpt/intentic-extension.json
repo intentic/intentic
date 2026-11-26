@@ -1,0 +1,17 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "chatgpt",
+    "version": "1.0.0",
+    "category": "connections",
+    "logo": "openai",
+    "engines": { "intentic": "^2.55.0" },
+    "server": "dist/server.js",
+    "permissions": {
+        "daemon": ["GET /system/presentation", "GET /info"],
+        "turn": ["browser", "owner-browser", "jobs"]
+    },
+    "contributes": {
+        "tools": {}
+    }
+}

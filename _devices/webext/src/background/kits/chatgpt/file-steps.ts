@@ -1,4 +1,4 @@
-import type { StepAnswer } from "@intentic/site-kits/chatgpt";
+import type { StepAnswer } from "@intentic/ext-chatgpt/kit/chatgpt";
 
 // The extension's own way of giving ChatGPT a file (chrome-host.ts): the bytes travel into the page in slices and are
 // put into the composer's file input there (page/media-driver.ts); the sandbox's browser sets the input's files itself.

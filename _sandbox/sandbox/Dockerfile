@@ -351,6 +351,10 @@ COPY --from=trees extensions/connectors/dist /opt/extensions/connectors/dist
 # its gateway process (`gateway.js`: a visitor's late replies into their outbox) and the widget itself (`widget.js`).
 COPY _extensions/visitor-chat/intentic-extension.json /opt/extensions/visitor-chat/
 COPY --from=trees extensions/visitor-chat/dist /opt/extensions/visitor-chat/dist
+# chatgpt is a backend and nothing else: its manifest, and its dist (`server.js`), the ChatGPT kit's three tools, which
+# the daemon held in its browser tools until 2026-11-26. Baked, so a sandbox whose agents use the kit keeps it.
+COPY _extensions/chatgpt/intentic-extension.json /opt/extensions/chatgpt/
+COPY --from=trees extensions/chatgpt/dist /opt/extensions/chatgpt/dist
 # ---- packs:post-trees ---- (spliced by compose-image-dockerfile.mjs — packs that read the daemon tree or
 # COPY from the trees context land here, below every tree COPY they depend on)
 # Image-baked agent skills (the daemon runs as root; the agent's settingSources loads /root/.claude). The

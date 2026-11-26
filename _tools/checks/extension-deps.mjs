@@ -36,7 +36,7 @@ finish(
             findings,
         ],
         [
-            `A package outside _extensions depends on an extension it may not (lib/extension-deps.mjs CONSUMERS): an extension stands on the SDK and nothing stands on it, apart from the web app's bundle and the files sidecar's one entry. Move what both need into the SDK or sandbox-contract, or, if this package really hosts the extension, add it to CONSUMERS with its reason`,
+            `A package outside _extensions depends on an extension it may not (lib/extension-deps.mjs CONSUMERS): an extension stands on the SDK and nothing stands on it, apart from the web app's bundle and the entries CONSUMERS names. Move what both need into the SDK or sandbox-contract, or, if this package really hosts the extension, add it to CONSUMERS with its reason`,
             consumers,
         ],
         [

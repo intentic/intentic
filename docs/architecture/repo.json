@@ -58,7 +58,6 @@
                 "_shared/sandbox-contract",
                 "_shared/sandbox-openapi",
                 "_shared/sandbox-run",
-                "_shared/site-kits",
                 "_shared/workspace-ignore",
                 "_shared/workspace-setup"
             ]
@@ -74,6 +73,7 @@
                 "_extensions/approvals",
                 "_extensions/automations",
                 "_extensions/browsers",
+                "_extensions/chatgpt",
                 "_extensions/connectors",
                 "_extensions/devices",
                 "_extensions/discord",

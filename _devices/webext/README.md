@@ -155,8 +155,9 @@ flowchart LR
   `chatgpt_send` (one prompt in, ChatGPT's answer out: words, images saved into the sandbox, files attached from the
   artifacts shelf, Deep research or agent mode chosen from the composer's tools menu), `chatgpt_read` (a chat's latest
   answer, waited for, for a job that outlived the call that sent it) and `chatgpt_image` (the same engine, done only
-  when a picture comes; the sandbox makes this call itself and hands the agent a job id instead of holding its turn,
-  so several can be in flight, each in a tab of its own, `_sandbox/sandbox/src/agent/tools/jobs/daemon/chatgpt-image-jobs.ts`). Each types the prompt into the composer the way a person's typing reaches a rich editor, sends
+  when a picture comes; the sandbox's [chatgpt](../../_extensions/chatgpt) extension makes this call itself, with its
+  `browser`, and hands the agent a job id instead of holding its turn, so several can be in flight, each in a tab of its
+  own). Each types the prompt into the composer the way a person's typing reaches a rich editor, sends
   it, waits up to 9 minutes, and saves pictures through `saveMediaFromTab` and long answers through `saveBytes`
   ([`tools/media.ts`](src/background/tools/media.ts)). It never presses ChatGPT's own confirmation buttons (an app
   searching outside the project, agent mode's sensitive step): the answer says ChatGPT is waiting on the person.
@@ -166,16 +167,18 @@ flowchart LR
   are, and travel on the same one-time tickets the daemon adds (`chatgpt_send`'s `files` get one each). It works in a
   new tab beside the agent's own and gives the front back when done, or in a new tab in front of the person when they
   chose to have it work in their tabs.
-  - Since 2026-11-14 a kit's page knowledge, its steps in the page, its engine and every word an agent reads live in
-    [`@intentic/site-kits`](../../_shared/site-kits), behind a host interface, so the sandbox's own browser can run the
-    same kit and say the same things. This extension is one host:
+  - Since 2026-11-14 a kit's page knowledge, its steps in the page, its engine and every word an agent reads live
+    behind a host interface, so the sandbox's own browser can run the same kit and say the same things: since
+    2026-11-26 in the sandbox's [chatgpt](../../_extensions/chatgpt) extension (`src/kit`, reached here through
+    `@intentic/ext-chatgpt/kit/chatgpt`, the one entry `CONSUMERS` in `_tools/checks/lib/extension-deps.mjs` allows),
+    before that in a shared package of its own. This extension is one host:
     [`kits/chatgpt/chrome-host.ts`](src/background/kits/chatgpt/chrome-host.ts) holds what is Chrome's (the gates, the
     tabs and the agent's window, steps injected into the isolated world, file tickets and the person's yes,
     `chrome.storage`) and turns the kit's refusals into this extension's, and
     [`kits/chatgpt/chatgpt-kit.ts`](src/background/kits/chatgpt/chatgpt-kit.ts) defines the tools from the kit's own
     descriptions and inputs.
   - New chats go into one ChatGPT project per sandbox, "Intentic · <sandbox>", made on first use with project-only
-    memory and instructions of its own ([`project.ts`](../../_shared/site-kits/src/chatgpt/project.ts) in the kit), and
+    memory and instructions of its own ([`project.ts`](../../_extensions/chatgpt/src/kit/chatgpt/project.ts) in the kit), and
     remembered in `chrome.storage.local`. Until 2026-11-14 every chat was temporary and unpersonalized, which kept the
     owner's memory out but also turned off apps and connectors (OpenAI's help page: an unpersonalized temporary chat
     "does not use memory, custom instructions, or plugins") and could not be opened again once its tab moved on. A
@@ -184,12 +187,11 @@ flowchart LR
     another's context). When the project cannot be made, the call falls back to a temporary, unpersonalized chat and
     says so; `temporary: true` asks for one, and `personalized: true` uses a regular chat with the owner's memory.
   - A kit breaks when its site changes its page, and that is expected. Each keeps every string and element lookup it
-    assumes in one table, `site.ts` in its folder of `@intentic/site-kits`, with each line marked as seen in a real
+    assumes in one table, `site.ts` in its folder of the kit, with each line marked as seen in a real
     snapshot or guessed, so the fix after a redesign is there. Elements are found by role and accessible name, as the
     snapshot names them, not by class names.
-  - One call to this browser is capped at ten minutes, so a call waits at most 9 (`wait` shortens it; the daemon cuts
-    it further for a runtime whose client gives up sooner) and answers that ChatGPT is still working; `chatgpt_read`
-    collects the rest, never a second send.
+  - One call to this browser is capped at ten minutes, so a call waits at most 9 (`wait` shortens it) and answers that
+    ChatGPT is still working; `chatgpt_read` collects the rest, never a second send.
   - ChatGPT's page is watched in rounds of 30 seconds from the worker rather than one long injected wait: Chrome ends a
     worker whose single call runs past five minutes, the page may be replaced mid-answer (sending moves it from `/` to
     `/c/<id>`), and each round re-checks pause and the site's grant. Inside a round the page is watched with a
@@ -248,7 +250,7 @@ flowchart LR
 - [src/popup/scripts-section.ts](src/popup/scripts-section.ts) — the popup's Scripts section: turning scripts on, install requests, the installed list.
 - [src/popup/line-diff.ts](src/popup/line-diff.ts) — the line diff an update is reviewed as.
 - [src/background/kits/kit.ts](src/background/kits/kit.ts) — what a site kit is, its gates, and the tab it works in.
-- [src/background/kits/chatgpt/chrome-host.ts](src/background/kits/chatgpt/chrome-host.ts) — the ChatGPT kit's Chrome host: what this browser does for the kit's engine in `@intentic/site-kits`.
+- [src/background/kits/chatgpt/chrome-host.ts](src/background/kits/chatgpt/chrome-host.ts) — the ChatGPT kit's Chrome host: what this browser does for the kit's engine in the chatgpt extension.
 - [src/background/kits/chatgpt/chatgpt-kit.ts](src/background/kits/chatgpt/chatgpt-kit.ts) — `chatgpt_send`, `chatgpt_read` and `chatgpt_image` on this extension's tool surface.
 - [src/background/native.ts](src/background/native.ts) — the one native-messaging port to Passwords on this computer, requests correlated by id.
 - [src/background/passwords.ts](src/background/passwords.ts) — registers the passwords content script and routes capture/fill.

@@ -2,8 +2,8 @@ import type { RpcMessage } from "../agent/tools/turn-mounts.js";
 import { fitToClient } from "../browser/webext-client-ceiling.js";
 import { fittedToClient } from "./webext-peer.js";
 
-// A browser call for a runtime whose MCP client gives up at 60 s (Cursor): wait_for is cut to fit and says so, and
-// chatgpt_image is refused before it starts, rather than either being cut off mid-call with nothing said.
+// A browser call for a runtime whose MCP client gives up at 60 s (Cursor): wait_for is cut to fit and says so, rather than
+// being cut off mid-call with nothing said.
 
 const CURSOR = { clientCeilingMs: 60_000 };
 
@@ -31,24 +31,11 @@ test("a long wait_for is cut to 50 s under a 60 s client, with a line telling th
     expect(quiet.kind === "shortened" ? quiet.note : "").toContain("cut to 50 s and quietFor to 49 s");
 });
 
-test("chatgpt_image is refused before it starts under a 60 s client, naming the way that works there", () => {
-    const fitted = fitToClient(call("chatgpt_image", { prompt: "a lotus" }), CURSOR);
-    expect(fitted.kind).toBe("refused");
-    const text = JSON.stringify(fitted.kind === "refused" ? fitted.answer : {});
-    expect(text).toContain(`use chatgpt_send with mode \\"image\\" and wait at most 50`);
-    expect(text).toContain("chatgpt_read (wait at most 50, again until it is done) collects and saves the image");
-    expect(text).toContain(`"isError":true`);
-});
-
-test("chatgpt_send and chatgpt_read are shortened to the client's ceiling, an unset wait counted as the browser's own", () => {
-    const send = fitToClient(call("chatgpt_send", { prompt: "a report" }), CURSOR);
-    expect(send).toMatchObject({ kind: "shortened", message: { params: { arguments: { prompt: "a report", wait: 50 } } } });
-    expect(send.kind === "shortened" ? send.note : "").toBe(
-        "This runtime's MCP client stops waiting at 60 s, so this chatgpt_send waited at most 50 s instead of 540 s. If ChatGPT is still working, call chatgpt_read again to keep waiting.",
-    );
-    expect(fitToClient(call("chatgpt_read", { chat: "abc123" }), CURSOR)).toEqual({ kind: "as-is" });
-    expect(fitToClient(call("chatgpt_read", { chat: "abc123", wait: 50 }), CURSOR)).toEqual({ kind: "as-is" });
-    expect(fitToClient(call("chatgpt_read", { chat: "abc123", wait: 51 }), CURSOR)).toMatchObject({ kind: "shortened", message: { params: { arguments: { wait: 50 } } } });
+// (2026-11-26) The ChatGPT kit's tools are the browser's own through this door, passed as they come: the chatgpt
+// extension (_extensions/chatgpt) is where they are fitted to a call.
+test("the ChatGPT kit's tools pass as they came, under any client", () => {
+    expect(fitToClient(call("chatgpt_image", { prompt: "a lotus" }), CURSOR)).toEqual({ kind: "as-is" });
+    expect(fitToClient(call("chatgpt_send", { prompt: "a report" }), CURSOR)).toEqual({ kind: "as-is" });
 });
 
 test("through the browser's endpoint: the shortened call is what the browser is asked, and the note follows its answer", async () => {
@@ -61,7 +48,7 @@ test("through the browser's endpoint: the shortened call is what the browser is 
     const answer = await endpoint({ id: "chrome" }, call("wait_for", { quietFor: 20, seconds: 540 }), { name: "chrome", conversationId: "c", signal, ...CURSOR });
     expect(asked[0]?.params).toMatchObject({ arguments: { seconds: 50 } });
     expect(answer?.result).toMatchObject({ content: [{ text: "the page" }, { text: expect.stringContaining("call wait_for again") }] });
-    // A refused call never reaches the browser.
+    // Any other call reaches the browser as it came.
     await endpoint({ id: "chrome" }, call("chatgpt_image", { prompt: "a lotus" }), { name: "chrome", conversationId: "c", signal, ...CURSOR });
-    expect(asked).toHaveLength(1);
+    expect(asked[1]?.params).toEqual({ name: "chatgpt_image", arguments: { prompt: "a lotus" } });
 });

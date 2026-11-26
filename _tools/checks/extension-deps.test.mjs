@@ -70,7 +70,7 @@ test("the manifests' list is the linter's", () => {
     assert.deepEqual([...ALLOWED.devDependencies].sort(), [...SHIPPED, ...BUILD_ONLY].sort());
 });
 
-// Outside _extensions, only the web app and the files sidecar may name an extension, the sidecar only ONLYOFFICE.
+// Outside _extensions, only the web app and the hosts CONSUMERS names may name an extension, each only its own.
 test("a package outside _extensions may name an extension only as CONSUMERS allows it", () => {
     const named = (name, dependencies) => JSON.stringify({ name, dependencies }, null, 4);
     assert.deepEqual(consumerFindings("_editor/web/package.json", named("@intentic/web", { "@intentic/ext-activity": "workspace:*" })), []);
@@ -101,4 +101,20 @@ test("the files sidecar reaches ONLYOFFICE through its local-office entry alone"
         "_devices/local-files/src/x.ts:2 imports @intentic/ext-onlyoffice",
         "_devices/local-files/src/x.ts:3 imports @intentic/ext-onlyoffice/src/server/bundle.js",
     ]);
+});
+
+// (2026-11-26) The owner's browser extension runs the ChatGPT kit's engine, which is the chatgpt extension's.
+test("the browser extension reaches the ChatGPT kit through its kit entries alone", () => {
+    const named = (dependencies) => JSON.stringify({ name: "@intentic/webext", dependencies }, null, 4);
+    assert.deepEqual(
+        consumerFindings("_devices/webext/package.json", named({ "@intentic/ext-chatgpt": "workspace:*", "@intentic/ext-social": "workspace:*" })),
+        ["_devices/webext/package.json:5 @intentic/webext names the extension @intentic/ext-social in dependencies"],
+    );
+    const { specifiers } = CONSUMERS.get("_devices/webext");
+    const source = [
+        `import { CHATGPT_PAGE } from "@intentic/ext-chatgpt/kit/chatgpt";`,
+        `import { mountFakeChatgpt } from "@intentic/ext-chatgpt/kit/chatgpt/testing";`,
+        `import { chatgptTools } from "@intentic/ext-chatgpt/src/tools.js";`,
+    ].join("\n");
+    assert.deepEqual(specifierFindings("_devices/webext/src/x.ts", source, specifiers), ["_devices/webext/src/x.ts:3 imports @intentic/ext-chatgpt/src/tools.js"]);
 });
