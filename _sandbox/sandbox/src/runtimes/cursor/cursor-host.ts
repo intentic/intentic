@@ -109,7 +109,10 @@ const spawnRuntime: CursorRuntimeSpawn = (command, args, spawnDepth, owner) => {
 export const runtimeCommand = (): { readonly file: string; readonly args: readonly string[] } => {
     const dev = import.meta.url.endsWith(".ts");
     const entry = fileURLToPath(new URL(dev ? "./cursor-agent-runtime.ts" : "./cursor-agent-runtime.js", import.meta.url));
-    return dev ? { file: process.execPath, args: ["--import", createRequire(import.meta.url).resolve("tsx"), entry] } : { file: process.execPath, args: [entry] };
+    // A source checkout may have no built workspace dependencies. Select their source exports in the child too.
+    return dev
+        ? { file: process.execPath, args: ["--conditions=@intentic/src", "--import", createRequire(import.meta.url).resolve("tsx"), entry] }
+        : { file: process.execPath, args: [entry] };
 };
 
 // How long a closing runtime gets to settle its local store after the close call before it is killed.

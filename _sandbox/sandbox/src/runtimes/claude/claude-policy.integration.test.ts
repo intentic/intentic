@@ -119,7 +119,7 @@ for (const [what, dir] of Object.entries(MODS)) {
     test.skipIf(!machine.runs)(
         machine.title(`with the image's managed settings, a user's mod that ${what} does not get the command run`),
         () => {
-            const probe = inPolicyNamespace(`exec node --import tsx ${PROBE} ${shellQuote(dir)}`);
+            const probe = inPolicyNamespace(`exec node --conditions=@intentic/src --import tsx ${PROBE} ${shellQuote(dir)}`);
             expect({ status: probe.status, stderr: probe.status === 0 ? "" : probe.stderr }).toEqual({ status: 0, stderr: "" });
             const lastLine = String(probe.stdout).trim().split("\n").at(-1) ?? "";
             expect(JSON.parse(lastLine)).toEqual({ hookRan: true, commandRan: false });
