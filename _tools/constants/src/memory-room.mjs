@@ -9,6 +9,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
 import { namedSignature, queuedSignature } from "./heavy/command-peaks.mjs";
+import { hostShortOf } from "./heavy/host-short.mjs";
 import { holdAtFloor, notStartedWords, waitWords } from "./heavy/memory-floor.mjs";
 
 // The price a measured peak sets, and the line a held command is told (beside the floor's own), both part of this formula.
@@ -328,21 +329,6 @@ export const judge = (reading, { workload, attended, reservedBytes = 0, size, co
     // Named, or a sandbox reading 3 GiB free would seem to refuse work that needs 2.
     const held = reservedBytes > 0 ? `, and ${gib(reservedBytes)} held for work that just started` : "";
     return shortOf(`Sandbox memory is low: ${used}${held}`, { limitBytes, residentBytes: usedBytes - swapBytes, swapBytes });
-};
-
-// (2026-11-02) Why work nobody is waiting on should wait for the machine this sandbox runs on, or undefined while it need
-// not. Everything else here reads the sandbox's own cgroup and the kernel under it, which on a Windows PC is Docker
-// Desktop's WSL2 VM: on 2026-11-02 that VM read as roomy while Windows had 1.1 GB left and froze for 43 s. The daemon adds
-// `reading.host` from what the host's agent last said (hosts/host-memory.ts), only while that is fresh, so a reading
-// without it is "no host to answer to", never "no room". Work waits while starting it would take the host below its
-// reserve, the line under which the host's agent starts giving the VM's cache back. Only the work's own cost counts here:
-// the person's share in `needBytes` is room inside the sandbox, which the sandbox's own figures already keep.
-const hostShortOf = (host, costBytes, reservedBytes) => {
-    if (host === undefined || host.availableBytes - host.reserveBytes - reservedBytes >= costBytes) {
-        return undefined;
-    }
-    const held = reservedBytes > 0 ? `, ${gib(reservedBytes)} of it held for work that just started` : "";
-    return `${host.name}, the machine this sandbox runs on, is low on memory: it has ${gib(host.availableBytes)} available of ${gib(host.totalBytes)}${held}, and heavy work waits while starting it would leave it under ${gib(host.reserveBytes)}`;
 };
 
 // The verdict that holds work nobody waits on for the host, or undefined while the host has room for it (hostShortOf).

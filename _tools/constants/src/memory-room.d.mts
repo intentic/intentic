@@ -63,6 +63,10 @@ export interface HostRoom {
     // back, where that machine's agent read them: what a person is told is holding the memory. The formula reads neither.
     readonly vmBytes?: number | undefined;
     readonly vmUnusedBytes?: number | undefined;
+    // (2026-11-26) The VM's free memory free page reporting already handed back to the machine: all that work started
+    // inside the VM can take from it. The formula charges work at most this much against the host (`hostShortOf`);
+    // absent, it charges the work's whole cost.
+    readonly vmReportableBytes?: number | undefined;
 }
 
 export interface ShortMemory {

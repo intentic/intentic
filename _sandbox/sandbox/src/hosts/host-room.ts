@@ -59,4 +59,5 @@ const roomOf = (name: string, memory: HostMemory): HostRoom => ({
     reserveBytes: hostMemoryLowBytes(memory.totalBytes),
     ...opt("vmBytes", memory.vm === undefined || memory.vm.workingSetBytes === 0 ? undefined : memory.vm.workingSetBytes),
     ...opt("vmUnusedBytes", memory.guestFree?.strandedBytes),
+    ...opt("vmReportableBytes", memory.guestFree?.reportableBytes),
 });

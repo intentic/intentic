@@ -27,6 +27,7 @@
         "src/ci-infra-steps.d.mts",
         "src/memory-room.mjs",
         "src/memory-room.d.mts",
+        "src/heavy/host-short.mjs",
         "src/heavy/memory-floor.mjs",
         "src/heavy/memory-floor.d.mts",
         "src/heavy/command-peaks.mjs",

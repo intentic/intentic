@@ -1007,7 +1007,12 @@ flowchart LR
   background children) then also waits while starting it would leave the host under 1.5 GiB or a tenth of its memory,
   whichever is more, and is told so by name ("rog, the machine this sandbox runs on, is low on memory: …"). A person's
   turn is never held for the host. No such machine, a distro whose Windows side is not connected, an agent older than
-  the field, or an answer over two minutes old is no host constraint, never "no room".
+  the field, or an answer over two minutes old is no host constraint, never "no room". (2026-11-26) Work is charged
+  against the host only what the VM would take back from Windows: the smaller of its cost and the VM's free memory that
+  free page reporting already handed back (`guestFree.reportableBytes`, below), after work that just started takes its
+  share. The VM's page cache and its stranded free memory are charged to Windows already, so work that would take
+  nothing is never held: on rog, whose VM keeps its 22 GiB while Windows sits under its line, 698 of 743 heavy commands
+  had waited the whole two minutes and then started anyway. Without the guest's figures the whole cost is charged.
 - (2026-11-26) While that host reading is under the same line, the daemon also gives memory back from its own cgroup
   (`hosts/reclaim/host-reclaim.ts`, ticked every 10 s from `bootstrap/boot-schedulers.ts`) by writing a byte target to
   `memory.reclaim`, with `swappiness=0` (file cache only) while turns run and `swappiness=200` (cold anon into zram too)

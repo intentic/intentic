@@ -12,6 +12,10 @@ cannot see.
   starts by itself; leave it, or run it in the background.
 - `[queue-run] <rule>: waiting: a command that must run with nothing else heavy beside it holds this sandbox` is a
   project's exclusive job or a `quiet` run. It starts when that ends.
+- A `wait` on your own background command says the same whatever its output went to (`> log 2>&1`, `| tail`):
+  `held 22m at the gate: nothing heavy starts while the lane is held by …`, `waiting 3m for a slot in the "cargo" pool`,
+  or, when your command is the one running alone, `it runs alone (…), and until it ends 3 heavy commands wait at the
+  gate`: other conversations' builds wait on it, so keep such a run short.
 - `[heavy] cargo: -j 6 and 6 test threads (…)` is the parallelism the queue chose for a cargo build, check, clippy, doc
   or test from the cores the heavy slots share, what is busy now and the memory it was given. Pass `-j N`,
   `--jobs N`, `-- --test-threads=N`, or set `CARGO_BUILD_JOBS` / `RUST_TEST_THREADS` (or `[build] jobs` in the

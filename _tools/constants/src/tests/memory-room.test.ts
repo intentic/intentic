@@ -304,6 +304,30 @@ test("work nobody waits on waits while it would take the machine running the san
     expect(judge(roomy, { workload: "toolchain", attended: false })).toMatchObject({ verdict: "run" });
 });
 
+// (2026-11-26) shinobi-society on rog: the VM kept its 22 GiB of 31.4, Windows sat under its line all day, and 698 of 743
+// heavy commands waited the whole two minutes for the host and then started anyway.
+test("work is charged against the host only what the VM would take back from it", () => {
+    const roomy = { limitBytes: 16 * GIB, usedBytes: 4 * GIB, swapBytes: 0, stallPercent: 0, oomKills: undefined };
+    const rog = { name: "rog", availableBytes: 2 * GIB, totalBytes: 31.4 * GIB, reserveBytes: 3.1 * GIB };
+    const build = { workload: "toolchain", attended: false, size: "cargo-build" } as const;
+    // Nothing handed back: the VM's cache and stranded free memory are charged to Windows already, and a build reclaims those.
+    expect(judge({ ...roomy, host: { ...rog, vmReportableBytes: 0 } }, build)).toMatchObject({ verdict: "run" });
+    // Some handed back: charged that much, so a Windows under its line holds it, and is told how much the VM would take.
+    const held = judge({ ...roomy, host: { ...rog, vmReportableBytes: GIB / 2 } }, build);
+    expect(held).toMatchObject({ verdict: "wait" });
+    expect(held.diagnosis).toBe(
+        "rog, the machine this sandbox runs on, is low on memory: it has 2.0 GiB available of 31.4 GiB; this work would take 0.5 GiB of it back into the WSL VM, and heavy work waits while starting it would leave it under 3.1 GiB",
+    );
+    // Room above the line for what it would take back is enough, though its whole cost would not fit there.
+    expect(judge({ ...roomy, host: { ...rog, availableBytes: 4 * GIB, vmReportableBytes: GIB / 2 } }, build)).toMatchObject({ verdict: "run" });
+    // Work that just started takes its share of what was handed back first.
+    const host = { ...rog, availableBytes: 4 * GIB, vmReportableBytes: 1.5 * GIB };
+    expect(judge({ ...roomy, host }, { workload: "toolchain", attended: false, reservedBytes: GIB })).toMatchObject({ verdict: "wait" });
+    expect(judge({ ...roomy, host }, { workload: "toolchain", attended: false, reservedBytes: 1.5 * GIB })).toMatchObject({ verdict: "run" });
+    // No guest figures: the whole cost, as before.
+    expect(judge({ ...roomy, host: { ...rog, availableBytes: 9 * GIB } }, build)).toMatchObject({ verdict: "wait" });
+});
+
 test("only a name the gate knows is a size; any other is priced as its class", () => {
     expect(["targeted", "editor-typecheck", "scoped-typecheck", "cargo-build"].filter((name) => isRoomSize(name))).toHaveLength(4);
     expect(isRoomSize("huge")).toBe(false);

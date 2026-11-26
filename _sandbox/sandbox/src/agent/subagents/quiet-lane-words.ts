@@ -66,6 +66,36 @@ export const quietLaneChildWords = (lane: QuietLane | undefined, child: string, 
     return parts.length === 0 ? undefined : parts.join("; ");
 };
 
+/* A CONVERSATION'S OWN JOB IN THE LANE (2026-11-26, the shinobi-society audit). Four children each parked `wait` on their
+   own `cargo test` job while their sibling's motion capture ran alone for 41 and then 25 minutes; queue-run said so on
+   the command's stderr, which went into `> log 2>&1` or a `| tail`, and each wait's progress read "running 22m, nothing
+   new". `own` is the job's processes (waiting/job-queue.ts), so these words speak of that job alone. */
+/** A wait progress part for a job whose processes are `own`: running alone, waiting for its turn to, or held at the gate. */
+export const quietLaneJobWords = (lane: QuietLane | undefined, own: ReadonlySet<number>, reader: LaneReader): string | undefined => {
+    if (lane === undefined) {
+        return undefined;
+    }
+    const holder = lane.holder === undefined ? undefined : `${whose(lane.holder.conversation, reader)} (${held(lane.holder)})`;
+    if (lane.holder !== undefined && own.has(lane.holder.pid)) {
+        const before = lane.before === 0 ? "" : `, still waiting out ${plural(lane.before, "heavy command")} let in before it`;
+        const behind = [
+            lane.waiting.length === 0 ? undefined : `${plural(lane.waiting.length, "run")} ${waitVerb(lane.waiting.length)} for its own turn`,
+            lane.held.length === 0 ? undefined : `${plural(lane.held.length, "heavy command")} ${waitVerb(lane.held.length)} at the gate`,
+        ].filter((part) => part !== undefined);
+        return `it runs alone (${held(lane.holder)})${before}${behind.length === 0 ? "" : `, and until it ends ${behind.join(" and ")}`}`;
+    }
+    const position = lane.waiting.findIndex((run) => own.has(run.pid));
+    const waiting = lane.waiting[position];
+    if (waiting !== undefined) {
+        return `waiting ${briefDuration(waiting.seconds)} for its turn to run alone, position ${String(position + 1)} of ${String(lane.waiting.length)}${holder === undefined ? "" : `; the lane is held by ${holder}`}`;
+    }
+    const gated = lane.held.find((run) => own.has(run.pid));
+    if (gated !== undefined && holder !== undefined) {
+        return `held ${briefDuration(gated.seconds)} at the gate: nothing heavy starts while the lane is held by ${holder}, which runs alone`;
+    }
+    return undefined;
+};
+
 /** The parent's spawned children, by conversation id: who "your child" is in these lines. */
 export const laneReaderOf = (actors: Pick<ConversationActors, "holdings">, conversationId: string): LaneReader => ({
     conversationId,

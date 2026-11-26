@@ -6,9 +6,10 @@ import { type Holding, turnRunOf } from "../../../conversations/actor/conversati
 import { ROSTER, subagentRunning } from "../../../conversations/actor/subagent-roster.js";
 import { type BackgroundJob, jobOutputPath, runningJobsOf } from "../../tools/jobs/background-jobs.js";
 import { jobReport } from "../../tools/jobs/job-report.js";
+import { type JobQueue, jobQueueOf } from "./job-queue.js";
 import { type OutputMark, readOutputOn, shownLine } from "./output-lines.js";
 import { childEditedPaths } from "../child-verification.js";
-import { type LaneReader, laneReaderOf, quietLaneChildWords, quietLaneNow } from "../quiet-lane-words.js";
+import { type LaneReader, laneReaderOf, quietLaneChildWords, quietLaneJobWords, quietLaneNow } from "../quiet-lane-words.js";
 import type { QuietLane } from "../../../system/resources/queue/quiet-lane.js";
 
 /* WHAT A WAIT THAT RAN OUT SAYS (2026-11-19, the shinobi-society audit). Parents hit `wait`'s 1800 s cap 66 times, each a
@@ -68,8 +69,29 @@ export const noteChildLook = (actors: Actors, child: Pick<SubagentSession, "id" 
 
 const age = (ms: number): string => briefDuration(Math.max(0, Math.round(ms / 1000)));
 
+// The quiet lane as this answer read it, for a job or a child whose own command waits in it (quiet-lane-words.ts).
+interface LaneSeen {
+    readonly lane: QuietLane | undefined;
+    readonly reader: LaneReader;
+}
+
+// What a running job's own heavy command waits on in the queue (job-queue.ts): its gate words, else its pool slot.
+const queueWords = (queue: JobQueue | undefined, seen: LaneSeen | undefined): string | undefined => {
+    if (queue === undefined) {
+        return undefined;
+    }
+    const gate = seen === undefined ? undefined : quietLaneJobWords(seen.lane, queue.own, seen.reader);
+    const slot = queue.slotWaits.toSorted((a, b) => b.seconds - a.seconds)[0];
+    return gate ?? (slot === undefined ? undefined : `waiting ${briefDuration(slot.seconds)} for a slot in the "${slot.pool}" pool${slot.label === undefined ? "" : ` (${slot.label})`}`);
+};
+
+// The queue as one job's line reads it, or nothing: a progress answer never fails over the queue.
+const jobQueueNow = (job: BackgroundJob, seen: LaneSeen | undefined): Promise<JobQueue | undefined> =>
+    // allow(silent-catch): an unreadable /proc or queue directory only leaves the queue words out of the line
+    jobQueueOf(job.dir, seen?.lane).catch(() => undefined);
+
 /** A command's progress since the last answer about it, in a few lines; files this as the new last look. */
-const jobProgress = async (actors: Actors, job: BackgroundJob, now: number = Date.now()): Promise<string> => {
+const jobProgress = async (actors: Actors, job: BackgroundJob, seen: LaneSeen | undefined, now: number = Date.now()): Promise<string> => {
     const report = await jobReport(actors, job, now);
     const source = report.outputTailFrom ?? jobOutputPath(job);
     const before = outputLookOf(actors, job);
@@ -77,8 +99,9 @@ const jobProgress = async (actors: Actors, job: BackgroundJob, now: number = Dat
     const read = readOutputOn(job.dir, looked ? before : { path: source, offset: 0, lines: 0 }, { final: !report.running });
     noteOutputLook(actors, job, read.mark);
     const since = looked ? "since your last look" : "so far";
+    const queued = report.running ? queueWords(await jobQueueNow(job, seen), seen) : undefined;
     const state = report.running
-        ? `running ${age(now - job.startedAt)}${report.quietForSeconds === undefined ? "" : `, quiet ${briefDuration(report.quietForSeconds)}`}`
+        ? `running ${age(now - job.startedAt)}${report.quietForSeconds === undefined ? "" : `, quiet ${briefDuration(report.quietForSeconds)}`}${queued === undefined ? "" : `; ${queued}`}`
         : `exited ${report.exitCode ?? "without a code"}`;
     const moved = read.bytes === 0 ? `nothing new ${since}` : `${read.skipped > 0 ? "over " : ""}${plural(read.lines, "new line")} (${sizeLabel(read.bytes)}) ${since}`;
     const prompt = report.waitingForInput === undefined ? "" : `; sitting at a prompt (${report.waitingForInput.program}) nothing will type into`;
@@ -113,12 +136,6 @@ const filesWords = (paths: readonly string[]): string | undefined => {
     const named = paths.slice(-FILES_NAMED).join(", ");
     return `${plural(paths.length, "file")} changed (${paths.length > FILES_NAMED ? `… ${named}` : named})`;
 };
-
-// The quiet lane as this answer read it, for a child whose own command waits in it (quiet-lane-words.ts).
-interface LaneSeen {
-    readonly lane: QuietLane | undefined;
-    readonly reader: LaneReader;
-}
 
 /** A child's progress since the last answer about it, in a line; files this as the new last look. */
 const childProgress = (actors: Actors, child: ChildSeen, seen: LaneSeen | undefined, now: number = Date.now()): string => {
@@ -161,11 +178,13 @@ export const progressOf = async (actors: Actors, conversationId: string, waited:
     const children = waited.children.flatMap((id) => own.find((record) => record.id === id || record.agentId === id) ?? []);
     const jobs = waited.jobs.slice(0, DESCRIBED);
     const described = children.slice(0, Math.max(0, DESCRIBED - jobs.length));
-    // Read once for every child described, and only when one is a spawned child still at work: what its commands wait on.
-    const seen = described.some((child) => child.kind === "spawned" && subagentRunning(child))
-        ? { lane: await quietLaneNow(), reader: laneReaderOf(actors, conversationId) }
-        : undefined;
-    const said = [...(await Promise.all(jobs.map((job) => jobProgress(actors, job, now)))), ...described.map((child) => childProgress(actors, child, seen, now))];
+    // Read once for every job and child described, and only when one is a command or a spawned child still at work: what
+    // its commands wait on.
+    const seen =
+        jobs.length > 0 || described.some((child) => child.kind === "spawned" && subagentRunning(child))
+            ? { lane: await quietLaneNow(), reader: laneReaderOf(actors, conversationId) }
+            : undefined;
+    const said = [...(await Promise.all(jobs.map((job) => jobProgress(actors, job, seen, now)))), ...described.map((child) => childProgress(actors, child, seen, now))];
     const left = waited.jobs.length + children.length - said.length;
     return left > 0 ? [...said, `… and ${String(left)} more`] : said;
 };

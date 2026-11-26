@@ -1,5 +1,5 @@
 import type { LaneRun, QuietLane } from "../../../system/resources/queue/quiet-lane.js";
-import { type LaneReader, quietLaneChildWords, quietLaneSpawnWords } from "../quiet-lane-words.js";
+import { type LaneReader, quietLaneChildWords, quietLaneJobWords, quietLaneSpawnWords } from "../quiet-lane-words.js";
 
 /* What a parent reads about the quiet lane: a spawn's answer while it is in use, and a waited child's progress while its
    own command holds it, waits for it, or is held at its gate. */
@@ -77,6 +77,39 @@ describe("a waited child's progress", () => {
         expect(quietLaneChildWords(busy, "sub-c", reader)).toBe("2 heavy commands of its wait at the gate until the quiet lane's run by your child `sub-a` (`quiet`, 4m) ends");
         expect(quietLaneChildWords(lane({ holder: run(1, "conv-else", 30), held: [run(5, "sub-c", 3, "cargo")] }), "sub-c", reader)).toBe(
             "a heavy command of its waits at the gate until the quiet lane's run by `conv-else` (`quiet`, 30s) ends",
+        );
+    });
+});
+
+describe("a conversation's own job", () => {
+    // The 2026-11-26 shinobi-society afternoon: a sibling's motion capture ran alone while three children's tests waited.
+    const capture = lane({
+        holder: run(90, "sub-a", 1500, "motion-capture"),
+        held: [run(41, "conv-lead", 1320, "cargo-verify"), run(42, "conv-else", 1300, "cargo-verify")],
+    });
+
+    test("says nothing for a job with no process in the lane, or a lane not read", () => {
+        expect(quietLaneJobWords(capture, new Set([7]), reader)).toBeUndefined();
+        expect(quietLaneJobWords(undefined, new Set([41]), reader)).toBeUndefined();
+    });
+
+    test("a job held at the gate names who holds the lane, and that it starts only once that ends", () => {
+        expect(quietLaneJobWords(capture, new Set([41]), reader)).toBe(
+            "held 22m at the gate: nothing heavy starts while the lane is held by your child `sub-a` (`motion-capture`, 25m), which runs alone",
+        );
+    });
+
+    test("a job running alone says what it holds off", () => {
+        expect(quietLaneJobWords(capture, new Set([90]), reader)).toBe("it runs alone (`motion-capture`, 25m), and until it ends 2 heavy commands wait at the gate");
+        expect(quietLaneJobWords(lane({ holder: run(90, "sub-a", 60, "motion-capture"), before: 3, waiting: [run(5, "conv-else", 30)] }), new Set([90]), reader)).toBe(
+            "it runs alone (`motion-capture`, 60s), still waiting out 3 heavy commands let in before it, and until it ends 1 run waits for its own turn",
+        );
+        expect(quietLaneJobWords(lane({ holder: run(90, "conv-lead", 5) }), new Set([90]), reader)).toBe("it runs alone (`quiet`, 5s)");
+    });
+
+    test("a job waiting for its own turn to run alone names its place and the holder", () => {
+        expect(quietLaneJobWords(lane({ holder: run(1, "conv-else", 30), waiting: [run(2, "sub-b", 50), run(3, "conv-lead", 20)] }), new Set([3]), reader)).toBe(
+            "waiting 20s for its turn to run alone, position 2 of 2; the lane is held by `conv-else` (`quiet`, 30s)",
         );
     });
 });
