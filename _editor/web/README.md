@@ -707,7 +707,20 @@ flowchart LR
   directory and a changed input names a new one. The first start of a cold key holds a lock until its first commit,
   so a second start waits and reuses it instead of bundling the same packages beside it. The `node_modules/.vite` in
   the path keeps the served URLs reading as dependencies to `loadChunk.ts`, `agentDevTools.ts` and perf's coverage.
-  The demo uses the same helper.
+  The demo uses the same helper. A key nobody started or kept running for two weeks is removed at the next start, or
+  for a day where `/tmp` is tmpfs (a dev PC's WSL distro), since there every stale 67 MB key is held in RAM: the
+  owner's PC held eleven, 728 MB, on 2026-11-26. A running server touches its key every hour.
+- **`pnpm dev` runs Vite with `MIMALLOC_PURGE_DELAY=0`** (2026-11-26). Most of the dev server's memory is what a cold
+  optimizer run (a new cache key: a pull that moved the lockfile, or a cleared `/tmp`) leaves behind in rolldown's
+  native allocator, mimalloc: it bundles monaco, mermaid and shiki and frees the memory, but by default mimalloc
+  returns freed pages only on a later allocation in the same thread, and rolldown's worker threads go idle, so it is
+  never returned. Measured cold on the owner's PC (RSS+swap, a minute after ready, four runs each): 1970-1989 MB,
+  about 1200 of it mimalloc, before; 1334-1562 MB, 490-750 mimalloc, after, and a peak of 1500-1670 MB instead of
+  about 2000. The cost: the cold optimizer run itself took 1.3-3.5 s longer in two back-to-back pairs (6.2 s to
+  7.5 s, 6.6 s to 10.1 s); HMR is unchanged (server 3-25 ms, browser 0.2-0.6 s). A warm start, the usual one, does
+  not run the optimizer and settles near 750-790 MB either way. Capping rolldown's tokio pool
+  (`ROLLDOWN_WORKER_THREADS=4`: 40 rolldown-worker threads to 20), `MIMALLOC_ARENA_EAGER_COMMIT=0` and leaving the
+  shiki grammars out of the prebundle each left it at 1950-2000 MB; dropping `server.warmup` saved 50-70 MB.
 
 ## Words
 

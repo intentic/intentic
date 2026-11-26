@@ -12,8 +12,8 @@
         "./chat-tabs": "./src/models/conversations/tabs/tabSnapshot.ts"
     },
     "scripts": {
-        "dev": "esbuild src/app/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && vite",
-        "watch": "esbuild src/app/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && vite",
+        "dev": "esbuild src/app/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && MIMALLOC_PURGE_DELAY=0 vite",
+        "watch": "esbuild src/app/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && MIMALLOC_PURGE_DELAY=0 vite",
         "build": "vite build && esbuild src/app/environments/environment.deployment.ts --bundle --minify --target=es2024 --outfile=dist/assets/js/env.js",
         "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh web",
         "test": "suites --worker-gib=3",

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -191,9 +191,16 @@ export const MONACO_WORKER = `monaco-editor-core/esm/vs/editor/editor.worker.sta
 // - Two servers optimizing the same cold key at once: Vite already writes each run into a `deps_temp_*` directory of
 //   its own and renames it into place, but two commits can interleave between its two renames. The first start of a
 //   cold key holds a lock until its first commit lands, and a second start waits for it, then reuses what it wrote.
-// - A key unused for two weeks is removed by the next start of the same app.
+// - A key unused for two weeks is removed by the next start of the same app, or after a day where /tmp is RAM.
+//   A running server touches its key every hour, so a key in use never reads as unused.
 const CACHE_ROOT = process.env[`INTENTIC_VITE_CACHE`] ?? join(tmpdir(), `intentic-vite`);
 const CACHE_UNUSED_MS = 14 * 86_400_000;
+// A tmpfs /tmp (a dev PC's WSL distro) holds the cache in RAM, and each pull that moves the lockfile names a new
+// 67 MB key: on 2026-11-26 the owner's PC held eleven keys, 728 MB, ten of them stale, after 2.5 days under the
+// two-week bound. There a key nobody started or kept running for a day goes. The sandbox's /tmp is on disk.
+const CACHE_UNUSED_RAM_MS = 86_400_000;
+const TMPFS_MAGIC = 0x01_02_19_94;
+const CACHE_TOUCH_MS = 3_600_000;
 // How long a cold start may hold the priming lock before a waiter treats it as abandoned.
 const PRIMING_STALE_MS = 5 * 60_000;
 const PRIMING_POLL_MS = 1_000;
@@ -293,13 +300,15 @@ const takeLock = (lock: string): boolean => {
     }
 };
 
-// Keys of the same app nobody has started for CACHE_UNUSED_MS; the key in use is touched first, so it is never one.
+// Keys of the same app nobody has started or kept running for the bound (CACHE_UNUSED_MS, CACHE_UNUSED_RAM_MS on a tmpfs);
+// the key in use is touched first, so it is never one.
 const pruneUnused = (cacheDir: string): void => {
     const keyDir = resolve(cacheDir, `..`, `..`);
     const prefix = `${keyDir.slice(keyDir.lastIndexOf(`/`) + 1).replace(/-[0-9a-f]+$/u, ``)}-`;
+    const unusedMs = statfsSync(keyDir).type === TMPFS_MAGIC ? CACHE_UNUSED_RAM_MS : CACHE_UNUSED_MS;
     for (const entry of readdirSync(dirname(keyDir), { withFileTypes: true })) {
         const path = join(dirname(keyDir), entry.name);
-        if (entry.isDirectory() && entry.name.startsWith(prefix) && path !== keyDir && Date.now() - statSync(path).mtimeMs > CACHE_UNUSED_MS) {
+        if (entry.isDirectory() && entry.name.startsWith(prefix) && path !== keyDir && Date.now() - statSync(path).mtimeMs > unusedMs) {
             rmSync(path, { recursive: true, force: true });
         }
     }
@@ -335,6 +344,22 @@ const sharedCacheKeeper = (cacheDir: string): Plugin => {
             process.once(`exit`, release);
         },
         configureServer: (server) => {
+            const keyDir = resolve(cacheDir, `..`, `..`);
+            const touch = setInterval(() => {
+                try {
+                    utimesSync(keyDir, new Date(), new Date());
+                } catch (error) {
+                    // A key removed under a running server (by hand, or /tmp cleared) is recreated by its next start.
+                    // Anything else is said once and the touching stops: thrown from a timer it would end the dev
+                    // server, and an untouched key only risks being pruned a day later and optimized again.
+                    if (errnoCode(error) !== "ENOENT") {
+                        server.config.logger.warn(`intentic-vite: could not keep the optimizer cache marked in use: ${String(error)}`);
+                        clearInterval(touch);
+                    }
+                }
+            }, CACHE_TOUCH_MS);
+            touch.unref();
+            server.httpServer?.once(`close`, () => clearInterval(touch));
             if (!holding) {
                 return;
             }

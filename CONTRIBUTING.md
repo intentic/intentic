@@ -17,7 +17,7 @@ flowchart LR
 1. Install Node and pnpm at the versions `package.json` pins (`engines`, `packageManager`). The Rust crates (`_hosts/ic`, `_sandbox/netd`, `_devices/win-launcher`, the desktop app's `src-tauri`) need cargo. The database, the sandbox image and the e2e tiers need Docker.
 2. `pnpm install`. Its `prepare` script points git at `.githooks/`, which holds the commit-msg hook. It reports what commitlint finds and never refuses.
 3. `pnpm build`, `pnpm test`, `pnpm typecheck` and `pnpm lint` cover the workspace; `pnpm --filter @intentic/<name> test` covers one package.
-4. `pnpm dev` starts Postgres, the api, the web editor and the site. `pnpm build:sandbox` builds the sandbox image locally.
+4. `pnpm dev` starts Postgres, the api, the web editor (https://localhost:47145) and the site. `pnpm dev:light` leaves out the site, which saves its ~0.6 GB Astro server; the editor still needs the api for sign-in and every call. `pnpm build:sandbox` builds the sandbox image locally.
 
 ## The checks
 
