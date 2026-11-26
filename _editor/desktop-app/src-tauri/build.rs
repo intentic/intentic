@@ -82,7 +82,8 @@ const COMMANDS: &[&str] = &[
     "home_facts",
     "setup_progress",
     "fit_to_content",
-    "close_workspace",
+    // The quit card's answer (windows/quit_card.rs), granted to that card alone (capabilities/confirm-close.json).
+    "quit_card_answer",
     "settings_get",
     "settings_set",
     "update_state",
@@ -169,8 +170,6 @@ const COMMANDS: &[&str] = &[
     "os_drives_list",
     "os_drives_seen",
     "os_drive_words",
-    // The words of the Quit question about a move between engines, in the reader's language (windows/quit.rs).
-    "quit_move_words",
     "os_drive_import",
     "os_drive_eject",
 ];

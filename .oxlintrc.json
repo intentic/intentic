@@ -79,6 +79,8 @@
                     // The account's preferences the desktop app hands its pages, and how it hands a page already up a change (web desktopPreferences.ts).
                     "__INTENTIC_PREFS__",
                     "__INTENTIC_PREFS_IN__",
+                    // What a close or a quit would interrupt, handed to the quit card's window (desktop-app src-tauri/src/windows/quit_card.rs).
+                    "__INTENTIC_QUIT_CARD__",
                     "__termFrames",
                     "__name",
                     "_core",

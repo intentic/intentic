@@ -39,7 +39,7 @@ flowchart LR
   content with no IPC. The main window is the local face: the same editor built into this package's bundle
   (`dist/files/`, `local/main.ts`), on a folder of this computer. A panel the editor floats out gets a frameless window
   of its own, and so does a folder or document opened on its own. This package's own `src/` bundle (`index.html`) now
-  draws one thing, the close question (`CloseConfirm.vue`). _(2026-10-21) Each face was a window of its own, and a
+  draws one thing, the quit card (`src/quit/QuitCard.vue`). _(2026-10-21) Each face was a window of its own, and a
   switch swapped the two in one place. The first switch after a launch built the second window on the spot and showed
   it before its page had drawn, so the reader saw their window close and an empty one open where it had been; every
   later switch still made and dropped a taskbar button and played Windows' open and close animations._
@@ -350,7 +350,7 @@ flowchart LR
   file server at its start and on its control channel, and said to every local window on `desktop://host-agents`). A
   page asks by command, which needs script, which the local windows' policy lets only the bundle run: a document drawn
   in a window cannot turn agents on for itself. **How many turns run:** the file server says so each time it changes,
-  and they end with it, so a Quit asks first and says how many (`windows/quit.rs` `hold_quit_for_agents`); a file server with turns running is then given a moment to write down what each had drawn before it is killed with the app (`sidecar.rs` `shutdown`). **The way in
+  and they end with it, so a Quit asks first and says how many, on the quit card (`windows/quit_card.rs`); a file server with turns running is then given a moment to write down what each had drawn before it is killed with the app (`sidecar.rs` `shutdown`). **The way in
   from a sandbox that cannot be reached:** `intentic://agent-here[?slug=…]`, heard from the app's own windows only (the
   offline page, the workspace's recovery panel), opens a window on Intentic's own folder of this computer
   (`~/.intentic`) with a first message written out for the reader to send or change (`recovery_brief`: which sandbox,
@@ -390,7 +390,7 @@ flowchart LR
   keeper's poll wakes the sandbox as before. _(2026-10-15) Opening the app on a sleeping sandbox waited out that poll
   on top of the start and the boot._
 - **Tray-resident.** The × of either face hides it into the tray, once the first × has asked whether that is what
-  closing should do (`close-action.json`, "Keep Intentic in the tray" or "Quit Intentic"). While a folder or document
+  closing should do (`close-action.json`, "Keep Intentic in the tray" or "Quit Intentic", on the quit card below). While a folder or document
   window is on screen beside it, a face's × hides that face alone and asks nothing, since the app is not closing
   (`face_close`); with "Quit" chosen, the app ends when the reader closes its last window on screen, a folder window's ×
   included (`quit_with_last_window`). _(2026-10-16) "Quit" ended the app from any face's ×, taking every folder window
@@ -487,8 +487,10 @@ flowchart LR
   app's launch asks ic for the app's start (`ic engine start --quiet --app`), which is what `when-open` waits for; its
   exit stops the engine in `when-open` (`before_exit`), not at an update's restart. An engine stopped under the app by a
   `wsl --shutdown` is left stopped in `when-open`, and started again in `always` with one notification saying so and
-  where to keep it stopped. The first quit while the engine runs says once what quitting does to the sandboxes, with
-  the other way at hand for that quit (`quit-engine-told.json`). This computer's section is also told how much memory
+  where to keep it stopped. Where nobody has chosen a setting, the first close or quit while the engine runs asks on the
+  quit card whether the sandboxes keep running after a quit, and the answer is the setting from then on ("Stop them"
+  writes `when-open`); it is never asked again (`quit-engine-told.json`). _(2026-11-24) It was a native box whose "Stop
+  them too" held for that one quit, so the next quit did the opposite of the answer._ This computer's section is also told how much memory
   the WSL VM holds and which of the person's own distros keep it up, since VmmemWSL is WSL's, not only the engine's.
 - **Google's sign-in runs in the default browser**, because Google refuses OAuth inside an embedded webview. The
   credential returns over `intentic://auth`, which also records that this install has an account (`account-seen.json`)
@@ -593,24 +595,34 @@ flowchart LR
   window, whoever asks for it, is held: the window comes to the front and its page hears `intentic:close-requested`,
   then saves or answers `window?do=close&confirmed=1`. The question is handed over by an `eval` whose completion is
   the page's receipt, so a page that has died or hung is seen not to take it: three seconds later, or at a second
-  close, the app asks in its place ("Discard unsaved changes?" / "Close anyway"). Quit, the ×'s "Quit" and a restart
-  with dirty windows ask first in a native dialog ("Quit anyway" / "Cancel"), and an update refuses to install until
+  close, the app asks in its place ("Discard unsaved changes?" / "Close anyway"). Quit and the ×'s "Quit" with dirty
+  windows ask first on the quit card (below: "Go back" / "Quit without saving"), and an update refuses to install until
   they are saved or closed, asked again just before the installer runs and before the restart onto it (a restart
   held that way is what the update's offer means from then on), since the Windows installer ends the process where
   nothing can ask.
 
-  A Quit while the app is still working on this computer (a setup handed over, a start, a recreate, a removal, a fix,
-  a sync's setup, a folder's bring-back) asks too, after the unsaved windows: "Quit when it's done" waits in the tray and
-  quits once nothing runs, "Quit now" quits and leaves the work to finish on its own (each run's transcript says where the
-  rest of its words went), "Cancel" stays. A folder's own sandbox's setup is not asked about: a quit stops it and the
-  next launch runs it again. _(2026-10-05) Quit used to ask about unsaved windows alone, and abandoned every run under
-  way with a dead pipe (`windows.rs` `hold_quit`)._
+  **Every question a close or a quit asks is on one card** (`src-tauri/src/windows/quit_card.rs`, drawn by
+  `src/quit/QuitCard.vue` in the `confirm-close` window, worded in every language by `src/quit/quitCard.ts`). The app
+  gathers what a quit would interrupt as facts (windows with unsaved changes, agents at work, work under way, a move
+  between engines, what happens to the sandboxes here) and hands them to the page before it runs
+  (`__INTENTIC_QUIT_CARD__`). The card shows each one as a row with an icon and what quitting does to it (lost, stops,
+  keeps going), then the answers as whole outcomes pressed once: "Keep Intentic in the tray" from the ×, "Quit when
+  it's done" (wait in the tray for the work, the agents' turns included, then quit) or "Quit now", the sandboxes
+  question, or "Go back" / "Quit without saving". The ×'s card carries the quit's facts too, so choosing Quit there asks
+  nothing more. Closing the card (its ×, Escape, Alt+F4) takes the quit back. "Always do this" keeps the ×'s answer
+  (`close-action.json`) and the answer about work under way (`quit-busy.json`), never over unsaved changes or a move.
+  Work nobody started is not asked about: the machine agent put in place ahead (`agent_install.rs`), and a folder's own
+  sandbox's setup, which a quit stops and the next launch runs again. "Quit now" leaves the rest to finish on its own
+  (each run's transcript says where the rest of its words went), except a setup handed over, which stops. _(2026-10-05)
+  Quit used to ask about unsaved windows alone, and abandoned every run under way with a dead pipe. (2026-11-25) Each
+  question was a native box of its own, one after another, "Intentic is still a task on this computer on this
+  computer" among them, and the machine agent's install asked it at every quit in a launch's first minutes._
 
-  A Quit that would stop a move between engines (a setup moving this PC's sandboxes off Docker Desktop inside
-  `ic docker prepare`, followed from its `intentic-move:` lines) asks in the reader's own language, whose words every
-  window hands the app (`quit_move_words`, `src/device/engine/quitWords.ts`): the move stops, and the sandboxes go back on
-  Docker Desktop the next time this PC is set up, which ic does itself on its next run. A stop goes in the setup's log.
-  _(2026-11-20, issue #48) A reader quit mid-copy of 92 GB, and the quit stopped the move without a word of it._
+  A quit that would stop a move between engines (a setup moving this PC's sandboxes off Docker Desktop inside
+  `ic docker prepare`, followed from its `intentic-move:` lines) says so on the card: the move stops, and the sandboxes
+  go back where they were the next time this PC is set up, which ic does itself on its next run. A stop goes in the
+  setup's log. _(2026-11-20, issue #48) A reader quit mid-copy of 92 GB, and the quit stopped the move without a word of
+  it._
 - **A folder becomes its own sandbox, copy-first** (2026-10-21). "Work on this with an agent" in a folder's window opens
   the folder's own page for it (the web's `local/setup/LocalSandboxSetup.vue`), drawn from `project_preview`
   (`src-tauri/src/project.rs`): the folder's name and path, what its first copy carries, anything to beware of (another

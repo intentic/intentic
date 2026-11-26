@@ -50,21 +50,83 @@
         "pcSetupAdminAgain": "Windows refused administrator permission again, so nothing changed. This step changes Windows itself, and only an administrator of this PC can allow it: ask one to choose Yes when Windows asks, with their password. Or run your sandbox on a machine we host, which needs nothing from this PC.",
         "pcSetupFailed": "This PC's setup stopped before it was done."
     },
-    "closeConfirm": {
-        "alwaysDoDontAsk": "Always do this: don't ask again",
-        "closeIntentic": "Close Intentic?",
-        "closesCompletelyStartAgain": "Closes it completely. Start it again whenever you need it.",
-        "keepIntenticInTray": "Keep Intentic in the tray",
-        "keepsRunningInBackground": "Keeps running in the background: reopening is instant, still signed in.",
-        "lookIconByClock": "Look for its icon by the clock, or behind the ^ arrow next to it.",
-        "quitIntentic": "Quit Intentic",
-        "sandboxesKeepRunningEither": "Your sandboxes keep running either way: they live in Docker, not in this window."
-    },
-    "quitMove": {
-        "title": "Stop moving your sandboxes?",
-        "message": "Intentic is moving this PC's sandboxes to its own engine right now. If you quit, the move stops, and your sandboxes are put back on Docker Desktop the next time this PC is set up.",
-        "wait": "Quit when it's done",
-        "quit": "Stop the move and quit"
+    "quitCard": {
+        "title": {
+            "close": "Close Intentic?",
+            "quit": "Quit Intentic?"
+        },
+        "lead": {
+            "busy": "Intentic is still busy.",
+            "unsaved": "Some of your changes aren't saved.",
+            "sandboxes": "Your sandboxes are running on this computer. Should they keep running after you quit?",
+            "sandboxesClose": "Your sandboxes are running on this computer."
+        },
+        "tray": {
+            "title": "Keep Intentic in the tray",
+            "hint": "It keeps running in the background and opens again instantly.",
+            "hintBusy": "Everything keeps going in the background.",
+            "where": "Find its icon by the clock, or behind the ^ arrow."
+        },
+        "quit": {
+            "title": "Quit Intentic",
+            "hint": "Closes it completely.",
+            "hintKeep": "Closes it completely. Your sandboxes keep running.",
+            "hintStop": "Closes it completely. Your sandboxes on this computer stop until you open it again."
+        },
+        "keep": {
+            "title": "Keep them running",
+            "titleQuit": "Quit, keep sandboxes running",
+            "hint": "Reach them anytime from the browser or your phone."
+        },
+        "stop": {
+            "title": "Stop them",
+            "titleQuit": "Quit and stop sandboxes",
+            "hint": "Frees up memory on this computer. They start again when you open Intentic."
+        },
+        "wait": {
+            "title": "Quit when it's done",
+            "hint": "Intentic waits in the tray, then quits by itself."
+        },
+        "now": {
+            "title": "Quit now",
+            "hint": "Closes Intentic right away."
+        },
+        "back": {
+            "title": "Go back",
+            "hint": "Save your changes first."
+        },
+        "discard": {
+            "title": "Quit without saving",
+            "hint": "Your unsaved changes are lost."
+        },
+        "fact": {
+            "unsaved": "1 window has unsaved changes | {count} windows have unsaved changes",
+            "unsavedThen": "Lost if you quit now.",
+            "agents": "An agent is working | {count} agents are working",
+            "agentsThen": "It stops if you quit now. You can continue it later. | They stop if you quit now. You can continue them later.",
+            "moving": "Moving your sandboxes",
+            "movingThen": "Stops if you quit now. Your sandboxes go back where they were the next time you set up this computer.",
+            "setup": "Setting up a sandbox",
+            "setupThen": "Stops if you quit now. Next time, it reuses what's already downloaded.",
+            "carriesOn": "Keeps going after you quit.",
+            "power": "Starting or stopping “{name}”",
+            "powerAny": "Starting or stopping a sandbox",
+            "update": "Updating “{name}”",
+            "updateAny": "Updating a sandbox",
+            "remove": "Removing “{name}”",
+            "removeAny": "Removing a sandbox",
+            "fix": "Fixing “{name}”",
+            "fixAny": "Fixing a sandbox",
+            "move": "Moving your sandboxes",
+            "sync": "Setting up folder sync",
+            "system": "Updating this computer's system",
+            "drive": "Copying files from a drive",
+            "pair": "Connecting this computer",
+            "bringBack": "Bringing changes back to a folder",
+            "other": "Finishing a background task"
+        },
+        "remember": "Always do this: don't ask again",
+        "remembersSandboxes": "Your choice for sandboxes is saved. Change it anytime on This computer."
     },
     "docker": {
         "accountNotAllowed": "This account isn't allowed to use Docker",

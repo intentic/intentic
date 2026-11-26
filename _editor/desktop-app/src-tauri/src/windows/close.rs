@@ -6,9 +6,9 @@ use super::{folder_window_on_screen, shown_face};
 use crate::state::CloseAction;
 use tauri::{AppHandle, LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder, Window};
 
-/// The third label, and NOT a third face: a dialog the app draws about the window it is standing in front of.
-/// It keeps to the one-window rule the way a dialog does — off the taskbar, owned by the frame it is about,
-/// and gone the moment it is answered.
+/// The third label, and NOT a third face: the quit card (quit_card.rs), a dialog the app draws about the window it is
+/// standing in front of. It keeps to the one-window rule the way a dialog does — off the taskbar, owned by the frame it
+/// is about, and gone the moment it is answered.
 pub const CONFIRM_CLOSE: &str = "confirm-close";
 
 /* THE × IS A QUESTION, ASKED BEFORE ANYTHING HAPPENS — and asked in this app's own voice. */
@@ -21,7 +21,10 @@ pub(crate) fn request_close(app: &AppHandle) {
     let chosen = app.state::<crate::state::AppState>().close_action();
     match face_close(folder_window_on_screen(app, None), chosen) {
         Some(action) => apply_close(app, action),
-        None => ask_before_closing(app),
+        // Asked on the quit card, with what a quit would interrupt on it too, so choosing Quit there asks nothing more.
+        None => {
+            super::quit_card::ask(app, true, 0);
+        }
     }
 }
 
@@ -58,7 +61,7 @@ fn quits_with_last_window(another_on_screen: bool, chosen: Option<CloseAction>) 
     !another_on_screen && chosen == Some(CloseAction::Quit)
 }
 
-/// Both answers, once one has been given. Hiding rather than destroying is what makes the tray instant, and
+/// Both answers, once one has been kept. Hiding rather than destroying is what makes the tray instant, and
 /// `exit` is the tray menu's own Quit reached from the × instead — same exit, so a downloaded update installs
 /// on the way out exactly as it would there. The frame steps aside with both faces in it, and the × was its.
 fn apply_close(app: &AppHandle, action: CloseAction) {
@@ -73,12 +76,13 @@ pub(super) fn hide_faces(app: &AppHandle) {
     crate::frame::hide(app);
 }
 
-/// Raise the dialog over the window it is about. Built hidden and placed before it is ever shown, the same as
-/// the frame, so nothing appears in the wrong spot for a frame.
+/// Raise the quit card over the window it is about, `card` being the script that hands the page what to ask. Built
+/// hidden and placed before it is ever shown, the same as the frame, so nothing appears in the wrong spot for a frame.
+/// Already up, it is put back over the face as it is (`card` is not drawn again).
 ///
-/// Every failure here falls through to the tray rather than leaving the × doing nothing: a close that seems to
-/// be ignored is the worst outcome available, and the app staying up is the recoverable one.
-fn ask_before_closing(app: &AppHandle) {
+/// A failure is the caller's to answer (quit_card.rs `fall_back`): a close that seems to be ignored is the worst outcome
+/// available, so a close falls through to the tray.
+pub(super) fn show_card(app: &AppHandle, card: Option<String>) -> Result<(), String> {
     let (face, was_minimized) = match face_to_ask_over(app) {
         Some(pair) => (Some(pair.0), pair.1),
         None => (None, false),
@@ -95,8 +99,11 @@ fn ask_before_closing(app: &AppHandle) {
         center_over(&window, face.as_ref(), size);
         let _ = window.show();
         let _ = window.set_focus();
-        return;
+        return Ok(());
     }
+    let Some(card) = card else {
+        return Err("the quit card is not up, and nothing was handed to draw".into());
+    };
     // Owned by the frame only while it is on screen: a dialog owned by a minimised window is hidden with it.
     // When the face was just unminimized, `is_minimized()` can still read true because Windows restores
     // asynchronously — but the face WILL be on screen, so the dialog must be owned by it: ownership is what
@@ -110,7 +117,7 @@ fn ask_before_closing(app: &AppHandle) {
     let mode = app.state::<crate::state::AppState>().ui_mode();
     let mut builder =
         WebviewWindowBuilder::new(app, CONFIRM_CLOSE, WebviewUrl::App("index.html".into()))
-            .title("Close Intentic?")
+            .title("Intentic")
             .inner_size(CONFIRM_WIDTH, CONFIRM_OPENING_HEIGHT)
             // A card, not a window: the page draws its own header and ×, and there is nothing in a two-answer
             // question for an OS title bar to add. Its shadow is what separates it from the workspace under
@@ -128,6 +135,7 @@ fn ask_before_closing(app: &AppHandle) {
             .background_color(face_background(mode))
             .initialization_script(launch_id_script())
             .initialization_script(face_init_script(mode))
+            .initialization_script(card)
             // Nothing here reaches loopback. It carries the arguments so every window in this process agrees
             // on them, because the first one built is the one that configures the environment (BROWSER_ARGS).
             .additional_browser_args(BROWSER_ARGS)
@@ -138,30 +146,25 @@ fn ask_before_closing(app: &AppHandle) {
             // rendered and the restore is over (2026-10-24).
             .always_on_top(was_minimized);
     if let Some(parent) = &parent {
-        builder = match owned_by(builder, parent) {
-            Ok(owned) => owned,
-            Err(error) => {
-                eprintln!("close confirmation could not be owned by the app's window: {error}");
-                return apply_close(app, CloseAction::Tray);
-            }
-        };
+        builder = owned_by(builder, parent)
+            .map_err(|error| format!("it could not be owned by the app's window: {error}"))?;
     }
-    match builder.build() {
-        Ok(window) => {
-            settle_background(&window.as_ref().window(), mode);
-            center_over(
-                &window,
-                parent.as_ref(),
-                LogicalSize::new(CONFIRM_WIDTH, CONFIRM_OPENING_HEIGHT),
-            );
-            let _ = window.show();
-            let _ = window.set_focus();
+    let window = builder.build().map_err(|error| error.to_string())?;
+    // Closed without an answer (its ×, Escape, Alt+F4): the app stays as it was.
+    window.on_window_event(|event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            super::quit_card::gone();
         }
-        Err(error) => {
-            eprintln!("close confirmation failed to open: {error}");
-            apply_close(app, CloseAction::Tray);
-        }
-    }
+    });
+    settle_background(&window.as_ref().window(), mode);
+    center_over(
+        &window,
+        parent.as_ref(),
+        LogicalSize::new(CONFIRM_WIDTH, CONFIRM_OPENING_HEIGHT),
+    );
+    let _ = window.show();
+    let _ = window.set_focus();
+    Ok(())
 }
 
 /// The face a close question stands over, brought back from the taskbar first. A × reaches a minimised face from its
@@ -200,20 +203,6 @@ fn owned_by<'a>(
         builder
     };
     Ok(owned)
-}
-
-/// The dialog's answer, arriving from the one command it can call (commands.rs). Cancelling is not an answer
-/// and never reaches here — it is the dialog closing itself and the window staying exactly as it was.
-pub fn resolve_close(app: &AppHandle, action: CloseAction, remember: bool) {
-    if remember {
-        app.state::<crate::state::AppState>()
-            .remember_close_action(action);
-    }
-    // Before the window it is about moves, so the two never animate against each other.
-    if let Some(window) = app.get_webview_window(CONFIRM_CLOSE) {
-        let _ = window.destroy();
-    }
-    apply_close(app, action);
 }
 
 #[cfg(test)]

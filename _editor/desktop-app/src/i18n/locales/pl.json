@@ -50,21 +50,83 @@
         "pcSetupAdminAgain": "Windows ponownie odmówił uprawnień administratora, więc nic się nie zmieniło. Ten krok zmienia sam Windows i może na niego pozwolić tylko administrator tego komputera: poproś go, by wybrał „Tak”, gdy Windows zapyta, i podał swoje hasło. Możesz też uruchomić sandbox na naszej maszynie, która niczego od tego komputera nie potrzebuje.",
         "pcSetupFailed": "Konfiguracja tego komputera zatrzymała się przed końcem."
     },
-    "closeConfirm": {
-        "alwaysDoDontAsk": "Zawsze tak rób: nie pytaj ponownie",
-        "closeIntentic": "Zamknąć Intentic?",
-        "closesCompletelyStartAgain": "Zamyka go całkowicie. Uruchom go znowu, kiedy będzie potrzebny.",
-        "keepIntenticInTray": "Zostaw Intentic w zasobniku",
-        "keepsRunningInBackground": "Działa dalej w tle: ponowne otwarcie jest natychmiastowe, wciąż z zalogowaną sesją.",
-        "lookIconByClock": "Szukaj jego ikony przy zegarze albo za strzałką ^ obok.",
-        "quitIntentic": "Zakończ Intentic",
-        "sandboxesKeepRunningEither": "Twoje sandboxy tak czy owak działają dalej: żyją w Dockerze, nie w tym oknie."
-    },
-    "quitMove": {
-        "title": "Przerwać przenoszenie sandboxów?",
-        "message": "Intentic właśnie przenosi sandboxy z tego komputera na swój własny silnik. Jeśli teraz zakończysz Intentic, przenoszenie zostanie przerwane, a Twoje sandboxy wrócą do Docker Desktop przy następnej konfiguracji tego komputera.",
-        "wait": "Zakończ po przeniesieniu",
-        "quit": "Przerwij i zakończ"
+    "quitCard": {
+        "title": {
+            "close": "Zamknąć Intentic?",
+            "quit": "Zakończyć Intentic?"
+        },
+        "lead": {
+            "busy": "Intentic jeszcze pracuje.",
+            "unsaved": "Część zmian nie jest zapisana.",
+            "sandboxes": "Twoje sandboxy działają na tym komputerze. Czy mają działać dalej po zakończeniu Intentic?",
+            "sandboxesClose": "Twoje sandboxy działają na tym komputerze."
+        },
+        "tray": {
+            "title": "Zostaw Intentic w zasobniku",
+            "hint": "Działa dalej w tle i otwiera się od razu.",
+            "hintBusy": "Wszystko toczy się dalej w tle.",
+            "where": "Jego ikona jest przy zegarze albo za strzałką ^."
+        },
+        "quit": {
+            "title": "Zakończ Intentic",
+            "hint": "Zamyka go całkowicie.",
+            "hintKeep": "Zamyka go całkowicie. Twoje sandboxy działają dalej.",
+            "hintStop": "Zamyka go całkowicie. Sandboxy na tym komputerze zatrzymają się do następnego otwarcia."
+        },
+        "keep": {
+            "title": "Niech działają dalej",
+            "titleQuit": "Zakończ, a sandboxy niech działają",
+            "hint": "Masz do nich dostęp w każdej chwili z przeglądarki lub telefonu."
+        },
+        "stop": {
+            "title": "Zatrzymaj je",
+            "titleQuit": "Zakończ i zatrzymaj sandboxy",
+            "hint": "Zwalnia pamięć tego komputera. Uruchomią się znowu, gdy otworzysz Intentic."
+        },
+        "wait": {
+            "title": "Zakończ, gdy skończy",
+            "hint": "Intentic poczeka w zasobniku i sam się zamknie."
+        },
+        "now": {
+            "title": "Zakończ teraz",
+            "hint": "Zamyka Intentic od razu."
+        },
+        "back": {
+            "title": "Wróć",
+            "hint": "Najpierw zapisz zmiany."
+        },
+        "discard": {
+            "title": "Zakończ bez zapisywania",
+            "hint": "Niezapisane zmiany przepadną."
+        },
+        "fact": {
+            "unsaved": "{count} okno ma niezapisane zmiany | {count} okna mają niezapisane zmiany | {count} okien ma niezapisane zmiany",
+            "unsavedThen": "Przepadną, jeśli zakończysz teraz.",
+            "agents": "Agent pracuje | {count} agenty pracują | {count} agentów pracuje",
+            "agentsThen": "Zatrzyma się, jeśli zakończysz teraz. Możesz go później kontynuować. | Zatrzymają się, jeśli zakończysz teraz. Możesz je później kontynuować. | Zatrzymają się, jeśli zakończysz teraz. Możesz je później kontynuować.",
+            "moving": "Przenoszenie sandboxów",
+            "movingThen": "Przerwie się, jeśli zakończysz teraz. Sandboxy wrócą na swoje miejsce przy następnej konfiguracji tego komputera.",
+            "setup": "Konfiguracja sandboxa",
+            "setupThen": "Przerwie się, jeśli zakończysz teraz. Następnym razem użyje tego, co już pobrano.",
+            "carriesOn": "Trwa dalej po zakończeniu.",
+            "power": "Uruchamianie lub zatrzymywanie „{name}”",
+            "powerAny": "Uruchamianie lub zatrzymywanie sandboxa",
+            "update": "Aktualizacja „{name}”",
+            "updateAny": "Aktualizacja sandboxa",
+            "remove": "Usuwanie „{name}”",
+            "removeAny": "Usuwanie sandboxa",
+            "fix": "Naprawa „{name}”",
+            "fixAny": "Naprawa sandboxa",
+            "move": "Przenoszenie sandboxów",
+            "sync": "Konfiguracja synchronizacji folderu",
+            "system": "Aktualizacja systemu tego komputera",
+            "drive": "Kopiowanie plików z dysku",
+            "pair": "Łączenie tego komputera",
+            "bringBack": "Przenoszenie zmian z powrotem do folderu",
+            "other": "Kończenie zadania w tle"
+        },
+        "remember": "Zawsze tak rób: nie pytaj ponownie",
+        "remembersSandboxes": "Twój wybór dla sandboxów jest zapamiętany. Zmienisz go w każdej chwili na stronie Ten komputer."
     },
     "docker": {
         "accountNotAllowed": "To konto nie ma prawa używać Dockera",

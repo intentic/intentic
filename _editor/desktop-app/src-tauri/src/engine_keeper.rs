@@ -396,9 +396,10 @@ pub fn tray_pressed(app: &AppHandle, row: &str) {
     });
 }
 
-/* QUITTING (windows/quit.rs asks; lib.rs carries it out at the exit). In `whenOpen` a quit stops the engine, held until
- * this app's next start; in `always` it keeps running, unless the person quitting said to stop it this time. The first
- * quit says which, once, with the other way at hand. */
+/* QUITTING (the quit card asks, windows/quit_card.rs; lib.rs carries it out at the exit). In `whenOpen` a quit stops the
+ * engine, held until this app's next start; in `always` it keeps running. Where nobody ever chose, the first quit while it
+ * runs asks which, once, and the answer is the setting from then on: "Stop them" writes `whenOpen`, and stops it at this
+ * exit even if ic did not take the setting. */
 
 /// The quit said to stop the engine this time.
 static QUIT_STOPS: AtomicBool = AtomicBool::new(false);
@@ -414,15 +415,9 @@ pub fn exiting(code: i32) {
     RESTARTING.store(code == tauri::RESTART_EXIT_CODE, Ordering::SeqCst);
 }
 
-/// Pure: whether the exit stops the engine: never at a restart; when the quit said so; and in `whenOpen` unless the
-/// quit said to keep it running this time.
-fn stops_at_exit(
-    mode: Option<&str>,
-    quit_said_stop: bool,
-    quit_said_keep: bool,
-    restarting: bool,
-) -> bool {
-    !restarting && (quit_said_stop || (mode == Some("whenOpen") && !quit_said_keep))
+/// Pure: whether the exit stops the engine: never at a restart; otherwise when the quit said so, or in `whenOpen`.
+fn stops_at_exit(mode: Option<&str>, quit_said_stop: bool, restarting: bool) -> bool {
+    !restarting && (quit_said_stop || mode == Some("whenOpen"))
 }
 
 /// At the app's exit (lib.rs `RunEvent::Exit`, a sign-out's included): the engine stopped and held until this app's next
@@ -434,7 +429,6 @@ pub fn before_exit() {
     let stop = stops_at_exit(
         scripts::engine_mode().as_deref(),
         QUIT_STOPS.load(Ordering::SeqCst),
-        QUIT_KEEPS.load(Ordering::SeqCst),
         RESTARTING.load(Ordering::SeqCst),
     );
     if stop {
@@ -442,45 +436,6 @@ pub fn before_exit() {
             eprintln!("intentic: the engine did not stop with the app: {problem}");
         }
     }
-}
-
-/// The question the first quit asks while the engine runs, by the setting: its title, what it says, the button for the
-/// setting's own way and the one for the other way this time. None when nothing is worth asking (`off`, or the engine
-/// down). Pure.
-pub fn quit_question(
-    mode: Option<&str>,
-    running: bool,
-) -> Option<(&'static str, &'static str, &'static str, &'static str)> {
-    if !running {
-        return None;
-    }
-    match mode.unwrap_or("always") {
-        "always" => Some((
-            "Keep your sandboxes running?",
-            "Intentic is set to keep the sandboxes on this computer running, so you can still reach them from the browser after you quit. You can change this on This computer.",
-            "Keep them running",
-            "Stop them too",
-        )),
-        "whenOpen" => Some((
-            "Stop your sandboxes?",
-            "Intentic is set to run only while it's open, so quitting stops the sandboxes on this computer. You can change this on This computer.",
-            "Stop them",
-            "Keep them running this time",
-        )),
-        _ => None,
-    }
-}
-
-/// The setting's own way at a quit, for the answer to [`quit_question`]: whether "the other way" means stopping.
-pub fn other_way_stops(mode: Option<&str>) -> bool {
-    mode.unwrap_or("always") == "always"
-}
-
-/// In `whenOpen`, "Keep them running this time": this exit leaves the engine up.
-static QUIT_KEEPS: AtomicBool = AtomicBool::new(false);
-
-pub fn quit_keeps_engine() {
-    QUIT_KEEPS.store(true, Ordering::SeqCst);
 }
 
 #[cfg(test)]
@@ -570,27 +525,13 @@ mod tests {
 
     #[test]
     fn a_quit_stops_the_engine_by_the_setting_and_the_answer() {
-        assert!(stops_at_exit(Some("whenOpen"), false, false, false));
-        assert!(!stops_at_exit(Some("whenOpen"), false, true, false));
-        assert!(!stops_at_exit(Some("always"), false, false, false));
-        assert!(stops_at_exit(Some("always"), true, false, false));
-        assert!(!stops_at_exit(None, false, false, false));
+        assert!(stops_at_exit(Some("whenOpen"), false, false));
+        assert!(!stops_at_exit(Some("always"), false, false));
+        assert!(stops_at_exit(Some("always"), true, false));
+        assert!(stops_at_exit(None, true, false));
+        assert!(!stops_at_exit(None, false, false));
         // An update's restart is back in a moment: nothing stops.
-        assert!(!stops_at_exit(Some("whenOpen"), true, false, true));
-    }
-
-    #[test]
-    fn the_first_quit_asks_only_while_there_is_something_running() {
-        assert!(quit_question(Some("always"), false).is_none());
-        assert!(quit_question(Some("off"), true).is_none());
-        let (_, said, own, other) = quit_question(Some("always"), true).unwrap();
-        assert!(said.contains("still reach them"));
-        assert_eq!((own, other), ("Keep them running", "Stop them too"));
-        assert!(other_way_stops(Some("always")));
-        let (_, said, _, other) = quit_question(Some("whenOpen"), true).unwrap();
-        assert!(said.contains("quitting stops"));
-        assert_eq!(other, "Keep them running this time");
-        assert!(!other_way_stops(Some("whenOpen")));
+        assert!(!stops_at_exit(Some("whenOpen"), true, true));
     }
 
     #[test]

@@ -94,20 +94,6 @@ pub fn running() -> usize {
     RUNNING.load(Ordering::SeqCst)
 }
 
-/// What a Quit asks while turns run: they end with the app. Pure.
-pub fn quit_question(running: usize) -> String {
-    let what = if running == 1 {
-        "An agent is".to_string()
-    } else {
-        format!("{running} agents are")
-    };
-    format!(
-        "{what} still working on this computer. If you quit now, {} where {} and can be continued later.",
-        if running == 1 { "it stops" } else { "they stop" },
-        if running == 1 { "it is" } else { "they are" },
-    )
-}
-
 fn state_of(app: &AppHandle) -> serde_json::Value {
     serde_json::json!({ "accepted": accepted(app), "running": running() })
 }
@@ -212,18 +198,6 @@ mod tests {
         assert_eq!(
             control_line(false),
             "{\"accepted\":false,\"op\":\"agents\"}\n"
-        );
-    }
-
-    #[test]
-    fn a_quit_says_how_many_agents_it_would_stop() {
-        assert_eq!(
-            quit_question(1),
-            "An agent is still working on this computer. If you quit now, it stops where it is and can be continued later."
-        );
-        assert_eq!(
-            quit_question(3),
-            "3 agents are still working on this computer. If you quit now, they stop where they are and can be continued later."
         );
     }
 

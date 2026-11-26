@@ -19,6 +19,7 @@ pub(crate) mod mode;
 pub(crate) mod prefs;
 pub(crate) mod present;
 pub(crate) mod quit;
+pub(crate) mod quit_card;
 pub(crate) mod scripts;
 pub(crate) mod setup;
 pub(crate) mod unsaved;

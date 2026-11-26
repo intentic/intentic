@@ -50,21 +50,83 @@
         "pcSetupAdminAgain": "Windows hat die Administratorberechtigung erneut verweigert, daher hat sich nichts geändert. Dieser Schritt ändert Windows selbst, und nur ein Administrator dieses PCs kann ihn erlauben: Bitte ihn, mit seinem Passwort „Ja“ zu wählen, wenn Windows fragt. Oder führe deine Sandbox auf einem von uns gehosteten Rechner aus, der nichts von diesem PC braucht.",
         "pcSetupFailed": "Die Einrichtung dieses PCs ist vor dem Abschluss stehen geblieben."
     },
-    "closeConfirm": {
-        "alwaysDoDontAsk": "Immer so machen: nicht mehr fragen",
-        "closeIntentic": "Intentic schließen?",
-        "closesCompletelyStartAgain": "Schließt es vollständig. Starten Sie es wieder, wann immer Sie es brauchen.",
-        "keepIntenticInTray": "Intentic im Infobereich lassen",
-        "keepsRunningInBackground": "Läuft im Hintergrund weiter: das Wiederöffnen geht sofort, noch angemeldet.",
-        "lookIconByClock": "Achten Sie auf sein Symbol neben der Uhr, oder hinter dem Pfeil ^ daneben.",
-        "quitIntentic": "Intentic beenden",
-        "sandboxesKeepRunningEither": "Ihre Sandboxes laufen so oder so weiter: sie leben in Docker, nicht in diesem Fenster."
-    },
-    "quitMove": {
-        "title": "Verschieben Ihrer Sandboxes abbrechen?",
-        "message": "Intentic verschiebt gerade die Sandboxes dieses PCs auf seine eigene Engine. Wenn Sie Intentic jetzt beenden, bricht das Verschieben ab, und Ihre Sandboxes kommen bei der nächsten Einrichtung dieses PCs zurück auf Docker Desktop.",
-        "wait": "Beenden, wenn es fertig ist",
-        "quit": "Verschieben abbrechen und beenden"
+    "quitCard": {
+        "title": {
+            "close": "Intentic schließen?",
+            "quit": "Intentic beenden?"
+        },
+        "lead": {
+            "busy": "Intentic arbeitet noch.",
+            "unsaved": "Einige Änderungen sind nicht gespeichert.",
+            "sandboxes": "Ihre Sandboxes laufen auf diesem Computer. Sollen sie weiterlaufen, wenn Sie Intentic beenden?",
+            "sandboxesClose": "Ihre Sandboxes laufen auf diesem Computer."
+        },
+        "tray": {
+            "title": "Intentic im Infobereich lassen",
+            "hint": "Läuft im Hintergrund weiter und ist sofort wieder offen.",
+            "hintBusy": "Alles läuft im Hintergrund weiter.",
+            "where": "Das Symbol finden Sie neben der Uhr oder hinter dem Pfeil ^."
+        },
+        "quit": {
+            "title": "Intentic beenden",
+            "hint": "Schließt es vollständig.",
+            "hintKeep": "Schließt es vollständig. Ihre Sandboxes laufen weiter.",
+            "hintStop": "Schließt es vollständig. Ihre Sandboxes auf diesem Computer stoppen, bis Sie es wieder öffnen."
+        },
+        "keep": {
+            "title": "Weiterlaufen lassen",
+            "titleQuit": "Beenden, Sandboxes laufen weiter",
+            "hint": "Jederzeit im Browser oder auf dem Telefon erreichbar."
+        },
+        "stop": {
+            "title": "Stoppen",
+            "titleQuit": "Beenden und Sandboxes stoppen",
+            "hint": "Gibt Arbeitsspeicher auf diesem Computer frei. Sie starten wieder, wenn Sie Intentic öffnen."
+        },
+        "wait": {
+            "title": "Beenden, wenn es fertig ist",
+            "hint": "Intentic wartet im Infobereich und beendet sich dann selbst."
+        },
+        "now": {
+            "title": "Jetzt beenden",
+            "hint": "Schließt Intentic sofort."
+        },
+        "back": {
+            "title": "Zurück",
+            "hint": "Speichern Sie zuerst Ihre Änderungen."
+        },
+        "discard": {
+            "title": "Ohne Speichern beenden",
+            "hint": "Ungespeicherte Änderungen gehen verloren."
+        },
+        "fact": {
+            "unsaved": "1 Fenster hat ungespeicherte Änderungen | {count} Fenster haben ungespeicherte Änderungen",
+            "unsavedThen": "Gehen verloren, wenn Sie jetzt beenden.",
+            "agents": "Ein Agent arbeitet | {count} Agenten arbeiten",
+            "agentsThen": "Er stoppt, wenn Sie jetzt beenden. Sie können ihn später fortsetzen. | Sie stoppen, wenn Sie jetzt beenden. Sie können sie später fortsetzen.",
+            "moving": "Ihre Sandboxes werden verschoben",
+            "movingThen": "Stoppt, wenn Sie jetzt beenden. Ihre Sandboxes kommen bei der nächsten Einrichtung dieses Computers dorthin zurück, wo sie waren.",
+            "setup": "Eine Sandbox wird eingerichtet",
+            "setupThen": "Stoppt, wenn Sie jetzt beenden. Beim nächsten Mal wird verwendet, was schon heruntergeladen ist.",
+            "carriesOn": "Läuft nach dem Beenden weiter.",
+            "power": "„{name}“ wird gestartet oder gestoppt",
+            "powerAny": "Eine Sandbox wird gestartet oder gestoppt",
+            "update": "„{name}“ wird aktualisiert",
+            "updateAny": "Eine Sandbox wird aktualisiert",
+            "remove": "„{name}“ wird entfernt",
+            "removeAny": "Eine Sandbox wird entfernt",
+            "fix": "„{name}“ wird repariert",
+            "fixAny": "Eine Sandbox wird repariert",
+            "move": "Ihre Sandboxes werden verschoben",
+            "sync": "Ordner-Synchronisierung wird eingerichtet",
+            "system": "Das System dieses Computers wird aktualisiert",
+            "drive": "Dateien werden von einem Laufwerk kopiert",
+            "pair": "Dieser Computer wird verbunden",
+            "bringBack": "Änderungen werden in einen Ordner zurückgebracht",
+            "other": "Eine Hintergrundaufgabe wird abgeschlossen"
+        },
+        "remember": "Immer so machen: nicht mehr fragen",
+        "remembersSandboxes": "Ihre Wahl für die Sandboxes ist gespeichert. Ändern Sie sie jederzeit unter Dieser Computer."
     },
     "docker": {
         "accountNotAllowed": "Dieses Konto darf Docker nicht benutzen",

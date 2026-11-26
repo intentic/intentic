@@ -50,21 +50,83 @@
         "pcSetupAdminAgain": "Windows volvió a denegar el permiso de administrador, así que nada cambió. Este paso cambia el propio Windows y solo un administrador de este PC puede permitirlo: pídele que elija «Sí» con su contraseña cuando Windows pregunte. O ejecuta tu sandbox en una máquina que alojamos nosotros, que no necesita nada de este PC.",
         "pcSetupFailed": "La preparación de este PC se detuvo antes de terminar."
     },
-    "closeConfirm": {
-        "alwaysDoDontAsk": "Hacer siempre esto: no volver a preguntar",
-        "closeIntentic": "¿Cerrar Intentic?",
-        "closesCompletelyStartAgain": "Lo cierra por completo. Vuelve a abrirlo cuando lo necesites.",
-        "keepIntenticInTray": "Dejar Intentic en la bandeja",
-        "keepsRunningInBackground": "Sigue funcionando en segundo plano: volver a abrirlo es instantáneo, con la sesión aún iniciada.",
-        "lookIconByClock": "Busca su icono junto al reloj, o detrás de la flecha ^ que está al lado.",
-        "quitIntentic": "Salir de Intentic",
-        "sandboxesKeepRunningEither": "Tus sandboxes siguen en marcha en cualquier caso: viven en Docker, no en esta ventana."
-    },
-    "quitMove": {
-        "title": "¿Detener el traslado de tus sandboxes?",
-        "message": "Intentic está trasladando ahora los sandboxes de este PC a su propio motor. Si sales, el traslado se detiene y tus sandboxes vuelven a Docker Desktop la próxima vez que se configure este PC.",
-        "wait": "Salir cuando termine",
-        "quit": "Detener el traslado y salir"
+    "quitCard": {
+        "title": {
+            "close": "¿Cerrar Intentic?",
+            "quit": "¿Salir de Intentic?"
+        },
+        "lead": {
+            "busy": "Intentic aún está trabajando.",
+            "unsaved": "Hay cambios sin guardar.",
+            "sandboxes": "Tus sandboxes están en marcha en este ordenador. ¿Deben seguir en marcha cuando salgas de Intentic?",
+            "sandboxesClose": "Tus sandboxes están en marcha en este ordenador."
+        },
+        "tray": {
+            "title": "Dejar Intentic en la bandeja",
+            "hint": "Sigue funcionando en segundo plano y se abre al instante.",
+            "hintBusy": "Todo sigue en segundo plano.",
+            "where": "Busca su icono junto al reloj, o detrás de la flecha ^."
+        },
+        "quit": {
+            "title": "Salir de Intentic",
+            "hint": "Lo cierra por completo.",
+            "hintKeep": "Lo cierra por completo. Tus sandboxes siguen en marcha.",
+            "hintStop": "Lo cierra por completo. Tus sandboxes de este ordenador se detienen hasta que lo vuelvas a abrir."
+        },
+        "keep": {
+            "title": "Mantenerlos en marcha",
+            "titleQuit": "Salir y mantener los sandboxes en marcha",
+            "hint": "Accede a ellos cuando quieras desde el navegador o el teléfono."
+        },
+        "stop": {
+            "title": "Detenerlos",
+            "titleQuit": "Salir y detener los sandboxes",
+            "hint": "Libera memoria de este ordenador. Vuelven a arrancar cuando abres Intentic."
+        },
+        "wait": {
+            "title": "Salir cuando termine",
+            "hint": "Intentic espera en la bandeja y luego se cierra solo."
+        },
+        "now": {
+            "title": "Salir ahora",
+            "hint": "Cierra Intentic de inmediato."
+        },
+        "back": {
+            "title": "Volver",
+            "hint": "Guarda primero tus cambios."
+        },
+        "discard": {
+            "title": "Salir sin guardar",
+            "hint": "Los cambios sin guardar se pierden."
+        },
+        "fact": {
+            "unsaved": "1 ventana tiene cambios sin guardar | {count} ventanas tienen cambios sin guardar",
+            "unsavedThen": "Se pierden si sales ahora.",
+            "agents": "Un agente está trabajando | {count} agentes están trabajando",
+            "agentsThen": "Se detiene si sales ahora. Puedes continuarlo más tarde. | Se detienen si sales ahora. Puedes continuarlos más tarde.",
+            "moving": "Trasladando tus sandboxes",
+            "movingThen": "Se detiene si sales ahora. Tus sandboxes vuelven a donde estaban la próxima vez que configures este ordenador.",
+            "setup": "Configurando un sandbox",
+            "setupThen": "Se detiene si sales ahora. La próxima vez reutiliza lo que ya se descargó.",
+            "carriesOn": "Sigue en marcha cuando salgas.",
+            "power": "Iniciando o deteniendo «{name}»",
+            "powerAny": "Iniciando o deteniendo un sandbox",
+            "update": "Actualizando «{name}»",
+            "updateAny": "Actualizando un sandbox",
+            "remove": "Eliminando «{name}»",
+            "removeAny": "Eliminando un sandbox",
+            "fix": "Reparando «{name}»",
+            "fixAny": "Reparando un sandbox",
+            "move": "Trasladando tus sandboxes",
+            "sync": "Configurando la sincronización de carpetas",
+            "system": "Actualizando el sistema de este ordenador",
+            "drive": "Copiando archivos desde una unidad",
+            "pair": "Conectando este ordenador",
+            "bringBack": "Devolviendo cambios a una carpeta",
+            "other": "Terminando una tarea en segundo plano"
+        },
+        "remember": "Hacer siempre esto: no volver a preguntar",
+        "remembersSandboxes": "Tu elección para los sandboxes queda guardada. Cámbiala cuando quieras en Este ordenador."
     },
     "docker": {
         "accountNotAllowed": "Esta cuenta no tiene permiso para usar Docker",

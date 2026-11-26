@@ -50,21 +50,83 @@
         "pcSetupAdminAgain": "Windows a de nouveau refusé l'autorisation d'administrateur, rien n'a donc changé. Cette étape modifie Windows lui-même, et seul un administrateur de ce PC peut l'autoriser : demandez-lui de choisir « Oui » avec son mot de passe quand Windows le demande. Ou lancez votre sandbox sur une machine que nous hébergeons, qui n'a besoin de rien de ce PC.",
         "pcSetupFailed": "La préparation de ce PC s'est arrêtée avant la fin."
     },
-    "closeConfirm": {
-        "alwaysDoDontAsk": "Toujours faire ainsi : ne plus demander",
-        "closeIntentic": "Fermer Intentic ?",
-        "closesCompletelyStartAgain": "Le ferme complètement. Relancez-le quand vous en avez besoin.",
-        "keepIntenticInTray": "Garder Intentic dans la barre d'état",
-        "keepsRunningInBackground": "Continue de tourner en arrière-plan : la réouverture est instantanée, toujours connecté.",
-        "lookIconByClock": "Cherchez son icône près de l'horloge, ou derrière la flèche ^ à côté.",
-        "quitIntentic": "Quitter Intentic",
-        "sandboxesKeepRunningEither": "Vos sandboxes continuent de tourner dans les deux cas : ils vivent dans Docker, pas dans cette fenêtre."
-    },
-    "quitMove": {
-        "title": "Arrêter le déplacement de vos sandboxes ?",
-        "message": "Intentic déplace en ce moment les sandboxes de ce PC vers son propre moteur. Si vous quittez, le déplacement s'arrête, et vos sandboxes reviennent sur Docker Desktop la prochaine fois que ce PC est configuré.",
-        "wait": "Quitter une fois terminé",
-        "quit": "Arrêter le déplacement et quitter"
+    "quitCard": {
+        "title": {
+            "close": "Fermer Intentic ?",
+            "quit": "Quitter Intentic ?"
+        },
+        "lead": {
+            "busy": "Intentic travaille encore.",
+            "unsaved": "Certaines modifications ne sont pas enregistrées.",
+            "sandboxes": "Vos sandboxes tournent sur cet ordinateur. Doivent-ils continuer de tourner une fois Intentic quitté ?",
+            "sandboxesClose": "Vos sandboxes tournent sur cet ordinateur."
+        },
+        "tray": {
+            "title": "Garder Intentic dans la barre d'état",
+            "hint": "Continue de tourner en arrière-plan et se rouvre instantanément.",
+            "hintBusy": "Tout continue en arrière-plan.",
+            "where": "Son icône est près de l'horloge, ou derrière la flèche ^."
+        },
+        "quit": {
+            "title": "Quitter Intentic",
+            "hint": "Le ferme complètement.",
+            "hintKeep": "Le ferme complètement. Vos sandboxes continuent de tourner.",
+            "hintStop": "Le ferme complètement. Vos sandboxes sur cet ordinateur s'arrêtent jusqu'à sa prochaine ouverture."
+        },
+        "keep": {
+            "title": "Les laisser tourner",
+            "titleQuit": "Quitter et laisser tourner les sandboxes",
+            "hint": "Accessibles à tout moment depuis le navigateur ou votre téléphone."
+        },
+        "stop": {
+            "title": "Les arrêter",
+            "titleQuit": "Quitter et arrêter les sandboxes",
+            "hint": "Libère de la mémoire sur cet ordinateur. Ils redémarrent quand vous ouvrez Intentic."
+        },
+        "wait": {
+            "title": "Quitter une fois terminé",
+            "hint": "Intentic attend dans la barre d'état, puis se ferme tout seul."
+        },
+        "now": {
+            "title": "Quitter maintenant",
+            "hint": "Ferme Intentic tout de suite."
+        },
+        "back": {
+            "title": "Revenir",
+            "hint": "Enregistrez d'abord vos modifications."
+        },
+        "discard": {
+            "title": "Quitter sans enregistrer",
+            "hint": "Les modifications non enregistrées sont perdues."
+        },
+        "fact": {
+            "unsaved": "1 fenêtre a des modifications non enregistrées | {count} fenêtres ont des modifications non enregistrées",
+            "unsavedThen": "Perdues si vous quittez maintenant.",
+            "agents": "Un agent travaille | {count} agents travaillent",
+            "agentsThen": "Il s'arrête si vous quittez maintenant. Vous pourrez le reprendre plus tard. | Ils s'arrêtent si vous quittez maintenant. Vous pourrez les reprendre plus tard.",
+            "moving": "Déplacement de vos sandboxes",
+            "movingThen": "S'arrête si vous quittez maintenant. Vos sandboxes reviennent là où ils étaient à la prochaine configuration de cet ordinateur.",
+            "setup": "Configuration d'un sandbox",
+            "setupThen": "S'arrête si vous quittez maintenant. La prochaine fois, ce qui est déjà téléchargé sera réutilisé.",
+            "carriesOn": "Continue une fois Intentic quitté.",
+            "power": "Démarrage ou arrêt de « {name} »",
+            "powerAny": "Démarrage ou arrêt d'un sandbox",
+            "update": "Mise à jour de « {name} »",
+            "updateAny": "Mise à jour d'un sandbox",
+            "remove": "Suppression de « {name} »",
+            "removeAny": "Suppression d'un sandbox",
+            "fix": "Réparation de « {name} »",
+            "fixAny": "Réparation d'un sandbox",
+            "move": "Déplacement de vos sandboxes",
+            "sync": "Configuration de la synchronisation d'un dossier",
+            "system": "Mise à jour du système de cet ordinateur",
+            "drive": "Copie de fichiers depuis un disque",
+            "pair": "Connexion de cet ordinateur",
+            "bringBack": "Retour des modifications vers un dossier",
+            "other": "Fin d'une tâche en arrière-plan"
+        },
+        "remember": "Toujours faire ainsi : ne plus demander",
+        "remembersSandboxes": "Votre choix pour les sandboxes est enregistré. Modifiez-le à tout moment dans Cet ordinateur."
     },
     "docker": {
         "accountNotAllowed": "Ce compte n'a pas le droit d'utiliser Docker",

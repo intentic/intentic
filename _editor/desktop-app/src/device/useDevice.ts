@@ -34,7 +34,6 @@ import * as sandboxes from "./sandboxes";
 import * as setup from "./setup";
 import * as sync from "./sync";
 import { titleTheSetup } from "./title";
-import { startQuitWords } from "./engine/quitWords";
 import { listenForAnswers } from "../processes";
 import { tellPcSetup } from "../onboarding/pcProcess";
 import { tellDeviceWork } from "./processes/deviceProcesses";
@@ -172,8 +171,6 @@ const startOnce = async (options: DeviceOptions): Promise<void> => {
     void system.loadOs();
     // On Intentic OS, the drives plugged in and every copy off one, and the words of the app's notification for a new drive.
     void drives.startDrives();
-    // The words of the Quit question about a move between engines, which the app asks in a native dialog (engine/quitWords.ts).
-    void startQuitWords();
     // Registered before a parked setup can start a run, or its first seconds would show an empty log. A move between
     // engines, and a change to Intentic OS, is heard by every window, whichever started it.
     const listening = [

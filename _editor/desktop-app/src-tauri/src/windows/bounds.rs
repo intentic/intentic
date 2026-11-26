@@ -102,7 +102,7 @@ pub(crate) fn place_in_work_area(window: &Window, work: WorkArea, inner: (f64, f
 /// The dialog's frame: a card, fixed in width and fitted to its content. It opens at a
 /// guess close to what its page measures a moment later, because it has to be on screen the instant the × is
 /// clicked, before its page has run; the fit then corrects the guess by a few pixels at most. Taller on
-/// Windows, the one platform where the tray option has to say where the icon goes (CloseConfirm.vue).
+/// Windows, the one platform where the tray option has to say where the icon goes (src/quit/QuitCard.vue).
 pub(super) const CONFIRM_WIDTH: f64 = 440.0;
 
 pub(super) const CONFIRM_OPENING_HEIGHT: f64 = if cfg!(target_os = "windows") {

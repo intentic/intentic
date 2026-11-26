@@ -16,7 +16,8 @@ use tauri::{AppHandle, Emitter};
 use crate::commands;
 use crate::scripts::{self, Heard, Host, Stream};
 
-/// The run a move streams under (`desktop://run` and its transcript); windows.rs `run_said` names it when Quit asks.
+/// The run a move streams under (`desktop://run` and its transcript); the quit card names it (windows/quit_card.rs
+/// `work_of`).
 pub const RUN: &str = "engine-move";
 
 /// What every window hears of a move: each `intentic-move:` line ic prints, as its JSON with the engine it goes `to`,

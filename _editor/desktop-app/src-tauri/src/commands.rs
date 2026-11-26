@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::scripts::{self, Host, ScriptRun};
 use crate::setup_link::{RecreateArgs, SetupArgs, SyncArgs};
-use crate::state::{AppState, CloseAction, Face, SessionEnd, Settings};
+use crate::state::{AppState, Face, SessionEnd, Settings};
 
 type CommandResult<T> = Result<T, String>;
 
@@ -1247,19 +1247,6 @@ pub fn setup_progress(app: AppHandle, report: SetupReport) {
 #[tauri::command]
 pub fn fit_to_content(app: AppHandle, window: tauri::WebviewWindow, height: f64) {
     crate::windows::bounds::fit_to_content(&app, &window, height);
-}
-
-/// The close confirmation's answer (windows.rs). `remember` is the dialog's "always do this" — the only thing
-/// that retires the question, and the reason it is worth asking at all.
-///
-/// There is no command for cancelling: that is the dialog closing its own window, which changes nothing.
-#[tauri::command]
-pub fn close_workspace(app: AppHandle, action: CloseAction, remember: bool) {
-    // Handled OFF this callback, because answering destroys the very webview that called it — the WebView2 COM
-    // re-entrancy the workspace window's navigation handler already steps around the same way (windows.rs).
-    tauri::async_runtime::spawn(async move {
-        crate::windows::close::resolve_close(&app, action, remember);
-    });
 }
 
 /* WHAT THE APP IS DOING ABOUT ITS OWN VERSION — read on mount, then followed on `desktop://update`. */

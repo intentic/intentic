@@ -21,6 +21,16 @@ pub enum CloseAction {
     Quit,
 }
 
+/// What a quit does while work is still under way on this computer, once the quit card's "always do this" was ticked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum QuitBusy {
+    /// Wait in the tray, and quit once nothing runs.
+    Wait,
+    /// Quit at once, leaving what carries on to finish by itself.
+    Now,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -237,8 +247,12 @@ pub struct Project {
 /// The file earlier versions kept the folders in (2026-10-20: the agent's pairings are the one record, bindings.rs).
 const RETIRED_PROJECTS: &str = "projects.json";
 
-/// Whether the first quit's word about the sandboxes here was said (engine_keeper.rs `quit_question`).
+/// Whether the sandboxes question has been answered here (windows/quit_card.rs): what a quit does to them is then the
+/// background setting, and nothing asks again. The name is the file the first version of that question wrote.
 const QUIT_ENGINE_TOLD: &str = "quit-engine-told.json";
+
+/// What a quit does about work under way without asking ([`QuitBusy`]).
+const QUIT_BUSY: &str = "quit-busy.json";
 
 pub struct AppState {
     config_dir: PathBuf,
@@ -267,8 +281,8 @@ pub struct AppState {
     /// Whether this install has ever shown the workspace: the older half of [`AppState::account_seen`]. It no longer
     /// decides what a launch opens (see [`face_or_first`]).
     workspace_seen: Mutex<bool>,
-    /// Whether a quit has said, once, what quitting does to the sandboxes on this computer (engine_keeper.rs
-    /// `quit_question`).
+    /// Whether the quit card has asked, once, what quitting does to the sandboxes on this computer, and been answered
+    /// (windows/quit_card.rs).
     quit_engine_told: Mutex<bool>,
     /// The face a launch and the tray's "Open Intentic" open onto (lib.rs `opening`).
     last_face: Mutex<Face>,
@@ -420,7 +434,7 @@ impl AppState {
         *self.quit_engine_told.lock().unwrap()
     }
 
-    /// Written the first time a quit says what it does to the sandboxes here, and never unwritten.
+    /// Written the first time the sandboxes question is answered, and never unwritten.
     pub fn remember_quit_engine_told(&self) {
         let mut held = self.quit_engine_told.lock().unwrap();
         if *held {
@@ -559,6 +573,16 @@ impl AppState {
 
     fn close_action_path(&self) -> PathBuf {
         self.config_dir.join("close-action.json")
+    }
+
+    /// What a quit does about work still under way without asking again, `None` until the quit card's "always do this"
+    /// was ticked on that question (windows/quit_card.rs). Read each time, like [`AppState::close_action`].
+    pub fn quit_busy(&self) -> Option<QuitBusy> {
+        read_json(&self.config_dir.join(QUIT_BUSY))
+    }
+
+    pub fn remember_quit_busy(&self, busy: QuitBusy) {
+        write_json(&self.config_dir.join(QUIT_BUSY), &busy);
     }
 
     /* A SETUP THAT A RESTART INTERRUPTED — the one piece of this app's state that has to outlive the process by design rather than by accident. */

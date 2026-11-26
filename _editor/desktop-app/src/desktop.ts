@@ -99,10 +99,6 @@ export interface DesktopInfo {
     fixLimitSeconds: number;
 }
 
-// What the workspace window's × does: `tray` hides it and leaves the app running; `quit` ends it, same as the tray
-// menu's Quit.
-export type CloseAction = `tray` | `quit`;
-
 // Everything the machine agent knows: sandboxes that may work on this device (links only, never tokens) and the
 // sync report. `summary` is the agent's own one-liner, also used by the tray row.
 export interface DeviceStatus {
@@ -584,8 +580,6 @@ export const homeFacts = (): Promise<HomeFacts> => invoke(`home_facts`);
 // Platform sign-in in the default browser (auth.rs); the account comes back over `intentic://auth`.
 // `switchAccount` has the sign-in page ask which account rather than answer with the one the browser holds (lib.rs `sign_in`).
 export const signIn = (switchAccount = false): Promise<void> => invoke(`sign_in`, { switchAccount });
-// `remember` makes this answer the × from now on and retires the dialog; otherwise it applies once.
-export const closeWorkspace = (action: CloseAction, remember: boolean): Promise<void> => invoke(`close_workspace`, { action, remember });
 
 export const onRun = (handler: (event: RunEvent) => void): Promise<UnlistenFn> =>
     listen<RunEvent>(`desktop://run`, (event) => handler(event.payload));

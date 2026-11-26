@@ -14,7 +14,7 @@ flowchart LR
 ```
 
 - **Trust follows the window label.** Only the local windows (`home` and `files-*`) and `confirm-close` hold
-  capabilities (`capabilities/`): a local window the commands its shell and This device call, the close question its
+  capabilities (`capabilities/`): a local window the commands its shell and This device call, the quit card its
   one answer. The workspace and floating windows show remote content, get no IPC, and reach the app only by navigating
   to an `intentic://` link. `parse_link` believes a link fully only when its `Source` is one of the app's own windows,
   and a local window's links only as its own title bar and folder.

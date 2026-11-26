@@ -137,7 +137,6 @@
         "allow-os-drives-list",
         "allow-os-drives-seen",
         "allow-os-drive-words",
-        "allow-quit-move-words",
         "allow-os-drive-import",
         "allow-os-drive-eject"
     ]

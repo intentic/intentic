@@ -238,7 +238,7 @@ pub fn run() {
             new_sandbox::new_sandbox_hosted,
             commands::setup_progress,
             commands::fit_to_content,
-            commands::close_workspace,
+            windows::quit_card::quit_card_answer,
             commands::settings_get,
             commands::settings_set,
             commands::update_state,
@@ -325,7 +325,6 @@ pub fn run() {
             os_settings::os_drives_list,
             os_settings::os_drives_seen,
             os_settings::os_drive_words,
-            windows::quit::quit_move_words,
             os_settings::os_drive_import,
             os_settings::os_drive_eject,
         ])

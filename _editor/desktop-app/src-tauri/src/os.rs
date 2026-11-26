@@ -166,7 +166,8 @@ impl Verb {
         }
     }
 
-    /// The run it streams under (`desktop://run`, its transcript, and what a Quit names, windows.rs `run_said`).
+    /// The run it streams under (`desktop://run`, its transcript, and what the quit card names: windows/quit_card.rs
+    /// `work_of`).
     pub fn run(self) -> &'static str {
         match self {
             Verb::Update { .. } => "os-update",
