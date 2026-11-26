@@ -118,7 +118,12 @@ const cacheChip = computed((): { icon: `sun` | `moon` | `bolt`; text: string; hi
         // Still drawn when the next message would not read it, since the hold is spending until it is stopped, and the
         // press on this chip is where it is stopped: toned and said, rather than shown as the reason to reply soon.
         return cacheReused.value
-            ? { icon: `sun`, text: t(`chat.chatPaneStatus.cacheKept`, { time }), hint: { title: t(`chat.chatPaneStatus.keptWarm`), rows }, tone: `text-link` }
+            ? {
+                  icon: `sun`,
+                  text: t(`chat.chatPaneStatus.cacheKept`, { time }),
+                  hint: { title: t(`chat.chatPaneStatus.keptWarm`), rows },
+                  tone: `text-link`,
+              }
             : {
                   icon: `sun`,
                   text: t(`chat.chatPaneStatus.cacheKept`, { time }),
@@ -179,6 +184,7 @@ const usageChip = computed(() => {
         return undefined;
     }
     // Once a pool is effectively spent, its reset joins the visible label instead of waiting behind a hover.
+    // Its own span, so a tight column drops it first and keeps the figure: the card a hover opens still says it.
     const reset =
         headroom.percent >= SPENT_UTILIZATION && headroom.binding.resetsAt !== undefined
             ? ` · ${t(`common.usageRing.resets`, { resetsAt: formatReset(headroom.binding.resetsAt) })}`
@@ -186,7 +192,7 @@ const usageChip = computed(() => {
     const left = maker.value
         ? t(`chat.usageStatus.plain.percentLeft`, { percent: remainingFigure(headroom.percent, headroom.stale) })
         : formatRemaining(headroom.percent, headroom.stale);
-    return { headroom, label: `${left}${reset}` };
+    return { headroom, left, reset };
 });
 
 // What is left on the API key this chat runs on, where its vendor tells the key (models/conversations/accounts/keyBalance.ts): a key's
@@ -207,79 +213,89 @@ const balanceChip = computed(() => {
 </script>
 
 <template>
-    <!-- Keep the composer above the mobile keyboard inset. On a desktop the row stands 8px up over the end of the composer's
+    <!-- The outer box keeps the strip in the composer's column, clear of the scroller's gutters and the side rail
+         (`.chat-pane-status`, chat.css), and is the container the strip's breakpoints measure: the pane's own width counts
+         the rail, so a column squeezed by it would never have shed a label. A query container is its own stacking
+         context, so the lift over the composer's footer is this box's, not the row's. -->
+    <div class="chat-pane-status @container" :class="{ 'relative z-20 -mt-2': !mobile }">
+        <!-- Keep the composer above the mobile keyboard inset. On a desktop the row stands 8px up over the end of the composer's
          footer (ChatPane's `pb-5`), above it and with no ground of its own, so the composer's shadow fades out behind it. -->
-    <div
-        class="mx-auto flex w-full max-w-[calc(var(--chat-measure,48rem)+3rem)] items-center gap-2 px-3 text-2xs text-subtle"
-        :class="{ 'pb-2': !mobile || block !== undefined || homeDoor, 'relative z-20 -mt-2': !mobile }"
-        :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
-    >
-        <!-- No tool-calls switch here: on a narrow pane it was the one thing holding this strip a full row tall under the
+        <div
+            class="mx-auto flex w-full max-w-[calc(var(--chat-measure,48rem)+3rem)] items-center gap-2 px-3 text-2xs text-subtle"
+            :class="{ 'pb-2': !mobile || block !== undefined || homeDoor }"
+            :style="mobile && keyboardInset > 0 ? { paddingBottom: `${keyboardInset + 8}px` } : undefined"
+        >
+            <!-- No tool-calls switch here: on a narrow pane it was the one thing holding this strip a full row tall under the
              composer. It lives on the runs it governs (transcript/asides/ChatTurnAsides.vue) and in Settings → Appearance. -->
-        <!-- The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard hint. -->
-        <span v-if="block !== undefined" class="flex min-w-0 flex-1 items-center gap-1 text-warning">
-            <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
-            <span class="truncate">{{ block }}</span>
-        </span>
-        <span v-else-if="!mobile" class="@max-md:hidden min-w-0 flex-1 truncate">{{ hint }}</span>
-        <HomeDoor v-if="homeDoor" :class="{ 'ml-auto': mobile && block === undefined }" />
-        <!-- ONE LINE, EVERY READOUT WHOLE. On a phone only the refusal stands here, and the strip takes no room without it:
+            <!-- The refusal owns this slot whenever set, since a tooltip alone never reaches touch; it displaces the keyboard hint. -->
+            <span v-if="block !== undefined" class="flex min-w-0 flex-1 items-center gap-1 text-warning">
+                <Icon name="exclamation-circle" class="shrink-0 text-2xs" />
+                <span class="truncate">{{ block }}</span>
+            </span>
+            <span v-else-if="!mobile" class="@max-md:hidden min-w-0 flex-1 truncate">{{ hint }}</span>
+            <HomeDoor v-if="homeDoor" :class="{ 'ml-auto': mobile && block === undefined }" />
+            <!-- ONE LINE, EVERY READOUT WHOLE. On a phone only the refusal stands here, and the strip takes no room without it:
              the readouts are the desktop's. Under a phone's composer each held a whole row for a glance nobody takes there,
              and each has its own place on the phone (running jobs on their transcript rows and the card, keeping the chat
              warm in the session menu, the allowance in Sandbox ▸ Usage). A home's memory has none yet: it starts fresh by
              itself there, and the two presses that empty it by hand are the desktop's. -->
-        <div v-if="!mobile" class="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
-            <!-- By the composer, for as long as the chat is with an agent on this computer itself (ChatComputerBadge). -->
-            <ChatComputerBadge />
-            <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
-            <ChatJobsReadout />
-            <!-- How long answering stays cheap, and the one press that keeps it so while the chat sits idle. -->
-            <template v-if="cacheChip !== undefined && card !== undefined && !maker">
-                <button
-                    ref="cacheTrigger"
-                    type="button"
-                    class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content"
-                    :class="cacheChip.tone"
-                    :aria-expanded="cacheOpen"
-                    v-tooltip.top="cacheChip.hint"
-                    @click="cacheOpen = !cacheOpen"
-                >
-                    <Icon :name="cacheChip.icon" class="text-2xs" />
-                    <span class="tabular-nums @max-xs:hidden">{{ cacheChip.text }}</span>
-                </button>
-                <ResponsiveOverlay v-model="cacheOpen" :anchor="cacheTrigger" cross="end" :header="t(`agents.keepWarm.title`)" panel-class="w-80">
-                    <KeepWarmPanel :agent="card" @done="cacheOpen = false" />
-                </ResponsiveOverlay>
-            </template>
-            <HomeMemory v-if="homeMemory !== undefined && card !== undefined" :card="card" />
-            <span v-else-if="contextRing && !maker" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
-                <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-accent'" />
-                <span class="@max-xs:hidden">{{ contextRing.label }}</span>
-            </span>
-            <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost,
+            <div v-if="!mobile" class="ml-auto flex shrink-0 items-center gap-3 whitespace-nowrap">
+                <!-- By the composer, for as long as the chat is with an agent on this computer itself (ChatComputerBadge). -->
+                <ChatComputerBadge />
+                <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
+                <ChatJobsReadout />
+                <!-- How long answering stays cheap, and the one press that keeps it so while the chat sits idle. -->
+                <template v-if="cacheChip !== undefined && card !== undefined && !maker">
+                    <button
+                        ref="cacheTrigger"
+                        type="button"
+                        class="touch-target inline-flex items-center gap-1 transition-colors hover:text-content"
+                        :class="cacheChip.tone"
+                        :aria-expanded="cacheOpen"
+                        v-tooltip.top="cacheChip.hint"
+                        @click="cacheOpen = !cacheOpen"
+                    >
+                        <Icon :name="cacheChip.icon" class="text-2xs" />
+                        <span class="tabular-nums @max-xs:hidden">{{ cacheChip.text }}</span>
+                    </button>
+                    <ResponsiveOverlay v-model="cacheOpen" :anchor="cacheTrigger" cross="end" :header="t(`agents.keepWarm.title`)" panel-class="w-80">
+                        <KeepWarmPanel :agent="card" @done="cacheOpen = false" />
+                    </ResponsiveOverlay>
+                </template>
+                <HomeMemory v-if="homeMemory !== undefined && card !== undefined" :card="card" />
+                <span v-else-if="contextRing && !maker" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">
+                    <ProgressRing :value="contextRing.value" :class="contextRing.warn ? 'text-warning' : 'text-accent'" />
+                    <span class="@max-xs:hidden">{{ contextRing.label }}</span>
+                </span>
+                <!-- The chip answers "am I about to get rate-limited": hover opens the pool-by-pool card, a click goes to the cost,
                  for a maintainer, who may open that page; anyone else reads the chip alone. -->
-            <RouterLink
-                v-if="usageChip && canShip"
-                :to="here(page.sandboxSettings(`usage`))"
-                class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
-            >
-                <UsageMeter :headroom="usageChip.headroom"
-                    ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
+                <RouterLink
+                    v-if="usageChip && canShip"
+                    :to="here(page.sandboxSettings(`usage`))"
+                    class="touch-target inline-flex cursor-pointer items-center transition-colors hover:text-content"
                 >
-            </RouterLink>
-            <UsageMeter v-else-if="usageChip && !isGuest" :headroom="usageChip.headroom"
-                ><span class="@max-xs:hidden">{{ usageChip.label }}</span></UsageMeter
-            >
-            <!-- An API key's credit, where its vendor says: the same question as the ring, "how long can I keep going", in money. -->
-            <span
-                v-if="balanceChip && !isGuest"
-                class="inline-flex items-center gap-1"
-                :class="{ 'text-warning': balanceChip.low }"
-                v-tooltip.top="balanceChip.tip"
-            >
-                <Icon name="credit-card" class="text-2xs" />
-                <span class="tabular-nums @max-xs:hidden">{{ balanceChip.label }}</span>
-            </span>
+                    <UsageMeter :headroom="usageChip.headroom"
+                        ><span class="@max-xs:hidden"
+                            >{{ usageChip.left }}<span class="@max-sm:hidden">{{ usageChip.reset }}</span></span
+                        ></UsageMeter
+                    >
+                </RouterLink>
+                <UsageMeter v-else-if="usageChip && !isGuest" :headroom="usageChip.headroom"
+                    ><span class="@max-xs:hidden"
+                        >{{ usageChip.left }}<span class="@max-sm:hidden">{{ usageChip.reset }}</span></span
+                    ></UsageMeter
+                >
+                <!-- An API key's credit, where its vendor says: the same question as the ring, "how long can I keep going", in money. -->
+                <span
+                    v-if="balanceChip && !isGuest"
+                    class="inline-flex items-center gap-1"
+                    :class="{ 'text-warning': balanceChip.low }"
+                    v-tooltip.top="balanceChip.tip"
+                >
+                    <Icon name="credit-card" class="text-2xs" />
+                    <span class="tabular-nums @max-xs:hidden">{{ balanceChip.label }}</span>
+                </span>
+            </div>
         </div>
     </div>
 </template>

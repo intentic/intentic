@@ -570,6 +570,14 @@
 .chat-panel .chat-panes > .chat-pane:last-child .chat-scroller {
     padding-inline: var(--capacity-balance, 0px) var(--capacity-rail, 0px);
 }
+/* THE STATUS STRIP STANDS IN THE COMPOSER'S COLUMN, NEVER UNDER THE RAIL. It lives outside the scroller, so beside the
+   rail it keeps the scroller's two gutters and the rail's reserve itself: without them a long readout ("0% left · resets
+   Mon 11:00") ran on past the composer's edge and drew over the rail's last rows. The gutters only count while the rail
+   stands (min() is 0 without it), so a phone's overlay scrollbar, which takes no gutter, adds no inset. */
+.chat-panel .chat-panes > .chat-pane:last-child .chat-pane-status {
+    --status-gutter: min(var(--chat-scrollbar, 0px), var(--capacity-rail, 0px));
+    padding-inline: calc(var(--status-gutter) + var(--capacity-balance, 0px)) calc(var(--status-gutter) + var(--capacity-rail, 0px));
+}
 /* THE LANE PAST THE READING COLUMN, and every mark that stands in it (ChatAsideLane): the notes the sandbox prepended to
    a message, an errand's own words — what went out on the reader's side. What the agent thought and ran stands on the
    spine instead (above). One bar per row carrying all of that row's marks, so two can never stack on each other. */
