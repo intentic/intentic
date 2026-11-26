@@ -1,5 +1,5 @@
 import type { StoredTab, TabSnapshot } from "@intentic/web/chat-tabs";
-import { deskEdition } from "../mode";
+import { deskEdition, demoMode } from "../mode";
 import { DESK_FEATURED_ID, DESK_FEATURED_SESSION, DESK_FEATURED_TITLE } from "./desk";
 import { FEATURED_AGENT_ID } from "./fleet";
 
@@ -41,8 +41,12 @@ const OPEN_TABS: readonly StoredTab[] = [
 // The desk opens holding one chat: a person with an assistant, not a team with roles.
 const DESK_TABS: readonly StoredTab[] = [tab(DESK_FEATURED_ID, DESK_FEATURED_TITLE, DESK_FEATURED_SESSION)];
 
+// The landing page's hero opens holding the featured run alone: one agent's work beside a calm board, no role tabs.
+const HERO_TABS: readonly StoredTab[] = OPEN_TABS.slice(0, 1);
+
 // Strip opens with four tabs, the featured run focused, in the app's ordinary single-column layout.
 export const openTabSnapshot = (): TabSnapshot => {
     const featured = deskEdition ? DESK_FEATURED_ID : FEATURED_AGENT_ID;
-    return { active: featured, panes: [featured], tabs: deskEdition ? DESK_TABS : OPEN_TABS };
+    const tabs = deskEdition ? DESK_TABS : demoMode.id === `hero` ? HERO_TABS : OPEN_TABS;
+    return { active: featured, panes: [featured], tabs };
 };

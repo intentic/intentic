@@ -139,6 +139,14 @@ statement of what the product *is* had been kept out of the first screen along w
 is not a differentiator to be earned later, it is the sentence every other claim hangs on. Same order for
 the page title and the meta description: category first, differentiators after.
 
+**The first screen as it stands (2026-11-26).** Headline `Shared AI agents.`; subhead `Agents that do
+anything you ask, shared with your team, on your Claude, Codex, Gemini or Grok plan.`, each provider drawn
+with its mark (`hero.pitch` in `landing.ts`); over the headline one chip, `Free and open source` and the three
+places it runs (`hero.chip`). The subhead answers the headline's "shared" and names the plans as plural
+examples, which is what side-by-side reviews credited openbot.run's subhead for; the owner chose it over
+`…powered by your Claude, Codex or other plan.` It runs past fifteen words because the four names are the
+point of it. The chip is one line above the headline, not the row of fact chips under the CTAs retired below.
+
 Retired from the fold (2026-09-06, do not bring back, and `landing.ts` has no slots for them): the
 subhead's second beat "Nothing happens out of sight." (visibility is shown by the three live surfaces),
 a literal restatement line under the subhead, three fact chips under the CTAs ("Free and open source",

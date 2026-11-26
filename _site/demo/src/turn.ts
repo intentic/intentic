@@ -5,7 +5,7 @@ import { isTurnFact } from "@intentic/sandbox-contract/events/agent-events";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { DESK_FEATURED_ID, OCTOBER_AFTER, OCTOBER_BEFORE } from "./fixture/desk";
 import { CHECKOUT_LIB_AFTER, CHECKOUT_LIB_BEFORE, CHECKOUT_ROUTE } from "./fixture/workspace";
-import { demoQuiet } from "./mode";
+import { demoMode, demoQuiet } from "./mode";
 import type { StreamSink } from "@intentic/contract-serve";
 
 // `/agent/attach`: rows on the head, then every patch and fact as it lands, folded by the same function the daemon uses
@@ -531,11 +531,24 @@ export const createRun = (conversationId: string, prompt: string, beats: readonl
 const plain = (beats: Beat[]): Beat[] =>
     demoQuiet() ? beats.filter(({ event }) => event.kind !== `agent_status` && event.kind !== `agent_notice`) : beats;
 
+// The landing page's hero opens on the plan already waiting for a yes: every beat up to the plan is due at once, so the
+// live frame's first view is the poster's (capture.mts `hero-home`) and Approve is the first thing a visitor can press.
+// Played out, the frame swapped a finished plan for a chat three seconds short of one.
+const openOnPlan = (beats: readonly Beat[]): Beat[] => {
+    const plan = beats.findIndex((beat) => beat.park !== undefined);
+    return beats.map((beat, index) => (index <= plan ? { ...beat, after: 0 } : beat));
+};
+
 // Which script a featured conversation plays is the conversation's own: the desk's id names the desk's run.
 export const featuredRun = (conversationId: string, now: number): Run =>
     conversationId === DESK_FEATURED_ID
         ? createRun(conversationId, `Rewrite the October newsletter for the autumn sale. Shorter, and the 20% off has to be the first thing people read.`, plain(DESK_FEATURED), now)
-        : createRun(conversationId, `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`, plain(FEATURED), now);
+        : createRun(
+              conversationId,
+              `Add Stripe checkout to the pricing page: the CTA is already there, it just throws.`,
+              demoMode.id === `hero` ? openOnPlan(plain(FEATURED)) : plain(FEATURED),
+              now,
+          );
 
 export const visitorRun = (conversationId: string, prompt: string, now: number, watch?: (event: AgentEvent) => void): Run =>
     createRun(conversationId, prompt, replyScript(prompt), now, watch);

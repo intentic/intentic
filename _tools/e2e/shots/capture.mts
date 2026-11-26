@@ -169,12 +169,15 @@ const wing = (column: { chat: number; height: number }, dock = TERMINAL_DOCK): P
 const inDemo = (link: PageLink): string => insidePath(DEMO_SANDBOX, link);
 
 const SHOTS: Shot[] = [
+    // The live frame's first view: the calm board, and beside it the checkout agent's plan waiting on Approve (the hero
+    // recording opens its run parked there, _site/demo/src/turn.ts). Tool calls shown, as the embedded frame shows them.
     {
         name: "hero-home",
         path: inDemo(pages.agents()),
         mode: "hero",
         viewport: { width: 1280, height: 720 },
-        waitFor: "text=ACTIVE",
+        storage: { "ui-chat-show-tool-calls": "on" },
+        waitFor: "text=Keep planning",
         settleMs: 1400,
         fullHeight: true,
     },

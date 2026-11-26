@@ -211,9 +211,20 @@ bands and a trust band**, down from fourteen. Section ids in parens; copy per se
 except `#trust`, whose copy is in `about.ts` because `/about/` shares it, and `#build`, whose handful of
 words are in `temple.ts`.
 
-1. **Hero (`#hero`)**: the greeting eyebrow, the brand line kept verbatim ("More work. Less AI waste.
-   Same subscriptions."), the one-sentence subhead `A workspace for coding agents.`, two CTAs, and **one frame
-   running the app itself** (below). The
+1. **Hero (`#hero`)**: a one-line chip (free and open source, and where it runs: Windows, Linux, the
+   browser), the headline `Shared AI agents.` with the shared-agent emblem, a subhead that answers "shared"
+   and names the plans it runs on with each provider's mark, two CTAs (the install first, the browser beside
+   it), and **one frame running the app itself** (below).
+
+   **The first screen was re-inked (2026-11-26)** after side-by-side reviews preferred openbot.run's on
+   reading alone: contrast, a busy background, a subhead that named nothing. The headline is lit ivory
+   Lora 500 (was the temple's stone, #ab8c6c), the subhead parchment at reading size, the plate steps back
+   so the devatas frame the words instead of standing beside them, and the lotus on the frame throws a warm
+   light up the wall and along the frame's top edge. A sans headline over a plain ground with a gold halo
+   was built and shown beside it, and rejected: it read as anyone's product. The chip is one line ABOVE
+   the headline, not the row of fact chips under the CTAs cut on 2026-09-06.
+
+   The
    subhead **says what the product is**: nothing else above the fold did, and that is precisely what
    readers bounced on. Visibility is shown by the live app, not said; scale is shown by the board a click
    away inside it; persistence lives in the meta description and the FAQ; ownership stays out of the first screen
@@ -230,13 +241,15 @@ words are in `temple.ts`.
    devata standing in each outer third and a deliberately empty middle; the copy sits on that middle,
    capped at 44rem, and the product is laid out UNDER it rather than beside it. An off-centre column
    over this art reads as a misprint. The band itself takes no measure: the frame takes its width
-   from the window exactly as the plate does, the whole 74rem stack since it went live (an app is read
+   from the window exactly as the plate does, the whole 78rem stack since it went live (an app is read
    at its own size), so the two track each other at every size.
 
    **The frame is the app, live (2026-10-26), not a slideshow of it.** The stills that cycled here, and the
    press that sent a visitor off to `/demo/`, gave way to the demo running in the hero's own window
    (`landing/live-demo.ts`; the demo's half is `src/embed.ts`), as openbot.run does: the reader clicks into
-   the product where they first see it. It stands on a poster, `hero-home`, captured from the same `hero`
+   the product where they first see it. It opens on the calm board with the checkout agent's chat docked
+   beside it, its plan waiting on Approve (2026-11-26; with no chat open, half the frame was an empty
+   "Start a conversation" pane). It stands on a poster, `hero-home`, captured from the same `hero`
    recording at the frame's own 1280×720, which is the page's LCP and all a reader without JavaScript gets.
    A wide screen loads the frame once the page is idle and the frame is in view, and swaps it in when the app
    says it has drawn; it is drawn at 1280×720 and scaled to the frame, never below 0.75, so the app's type

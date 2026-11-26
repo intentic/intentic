@@ -130,16 +130,19 @@ const HOME: DemoMode = {
 };
 
 // What the landing page's hero runs live (src/embed.ts): the fleet board, kept as calm as a board can be. One agent at
-// work on the checkout and one that finished, nothing asking for the visitor, no home conversation card, no chats open.
-// The showcase's seven cards in every state were a wall to someone who had only just arrived (the owner's, 2026-10-28).
+// work on the checkout and one that finished, nothing asking for the visitor, no home conversation card. The showcase's
+// seven cards in every state were a wall to someone who had only just arrived (the owner's, 2026-10-28). The checkout
+// agent's own chat is docked beside the board (fixture/openChats.ts), and only that one: with no chat open, half the
+// frame was an empty "Start a conversation" pane, and the landing page lost to its competitors on exactly that half
+// (the owner's, 2026-11-26).
 const HERO: DemoMode = {
     id: `hero`,
     label: `Hero`,
-    note: `A calm board, one agent at work and one finished: what the landing page runs live.`,
+    note: `A calm board, one agent at work and one finished, its chat beside it: what the landing page runs live.`,
     agents: [FEATURED_AGENT_ID, RELEASE_NOTES_AGENT_ID],
     extensions: [],
     teammate: false,
-    openChats: false,
+    openChats: true,
     quiet: true,
 };
 

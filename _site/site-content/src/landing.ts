@@ -62,11 +62,33 @@ export interface WorkspaceComparison {
     footnote: string;
 }
 
+/** A provider named in the hero's subhead, drawn with its own mark (paths live in @intentic/constants). */
+export interface HeroProvider {
+    name: string;
+    logo: ProviderBrand;
+}
+
+/** The hero's subhead: a sentence whose providers are drawn as marks, so the plans it runs on are seen before they are read. */
+export interface HeroPitch {
+    lead: string;
+    /** Joined as "A, B, C or D" between `lead` and `tail`. */
+    providers: HeroProvider[];
+    tail: string;
+}
+
+/** The line over the headline: what it costs and where it runs, the two things a stranger checks before reading on. */
+export interface HeroChip {
+    label: string;
+    /** Where it runs, each with a mark: the desktop builds and the browser. */
+    platforms: { name: string; mark: "windows" | "linux" | "browser" }[];
+}
+
 export interface LandingContent {
     meta: { title: string; description: string };
     hero: {
         headlineLines: string[];
-        subhead: string;
+        chip: HeroChip;
+        pitch: HeroPitch;
         demo: HeroDemo;
     };
     // Same five rows as the Features menu; no `sub` (showcase). Its old branch claim now closes `workspace`.
@@ -106,11 +128,29 @@ export const landingContent: LandingContent = {
     },
     hero: {
         headlineLines: ["Shared AI agents."],
-        subhead: "Agents that can do anything you ask, powered by your Claude, Codex or other plan.",
+        chip: {
+            label: "Free and open source",
+            platforms: [
+                { name: "Windows", mark: "windows" },
+                { name: "Linux", mark: "linux" },
+                { name: "Browser", mark: "browser" },
+            ],
+        },
+        // The headline's "Shared" answered in the first clause, the plans it runs on named with their marks.
+        pitch: {
+            lead: "Agents that do anything you ask, shared with your team, on your",
+            providers: [
+                { name: "Claude", logo: "claude" },
+                { name: "Codex", logo: "codex" },
+                { name: "Gemini", logo: "gemini" },
+                { name: "Grok", logo: "grok" },
+            ],
+            tail: "plan.",
+        },
         demo: {
             poster: {
                 name: "hero-home",
-                alt: "The real intentic agents board: nothing waiting in Attention, one agent at work in Active and two finished, each card showing its model, its branch and its diff stats, with an empty chat docked beside it.",
+                alt: "The real intentic agents board: nothing waiting in Attention, the Stripe checkout agent at work in Active and the release notes finished, each card showing its model, its branch and its diff stats. Beside it, the checkout agent's chat: the task it was given, the pricing page it read, and its four-step plan waiting on Keep planning or Approve.",
             },
             frameTitle: "intentic, live: the real app on a recorded workspace",
             startLabel: "Try it live",
