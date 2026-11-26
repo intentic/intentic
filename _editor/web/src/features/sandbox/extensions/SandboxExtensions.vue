@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
-import { Button, ui, FilterBar, type NoticeModel, NoticeStack, SegmentedControl, timeAgo, vAction } from "@intentic/ui";
+import { Button, ui, FilterBar, type NoticeModel, NoticeStack, SegmentedControl, vAction } from "@intentic/ui";
 import { computed, nextTick, ref, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { storedValue, storeValue } from "../../../app/storage/browserStorage";
@@ -14,6 +14,7 @@ import { openEntryOf } from "./extensionRoute";
 import { endedNotice, ROWS, SECTION } from "./extensionWork";
 import ExtensionsBrowse from "./ExtensionsBrowse.vue";
 import ExtensionsInstalled from "./ExtensionsInstalled.vue";
+import ExtensionUpdatesLine from "./ExtensionUpdatesLine.vue";
 import { INSTALLS, type InstallVerb, installNotice, installsInFlight, listingOf } from "./installsInFlight";
 import NewExtensionDialog from "./NewExtensionDialog.vue";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
@@ -70,6 +71,8 @@ const { extensions } = useExtensions();
 const { entries: listed, isFetching, refetch } = useRegistry({ read: computed(() => view.value === `browse`) });
 const listings = computed(() => listed.value.map((entry) => toListing(entry, extensions.value)));
 const updatable = computed(() => updateCount(listings.value));
+// Only an install from a registry has updates to take; without one the line would answer a question nobody has.
+const fromRegistry = computed(() => extensions.value.some((extension) => extension.source === `installed`));
 
 // Below this many rows a filter box would be more chrome than the list itself; the threshold differs per view.
 const FILTERABLE_FROM: Record<View, number> = { installed: 8, browse: 6 };
@@ -351,6 +354,17 @@ const dismissWork = (notice: NoticeModel): void => {
             </template>
         </FilterBar>
 
+        <!-- Whether installs from a registry update by themselves, over whichever list is open: it is about both. -->
+        <ExtensionUpdatesLine
+            v-if="fromRegistry && !detailOpen"
+            :manage="manage"
+            :checked-at="updatesCheckedAt"
+            :checking="checking"
+            @check="checkNow"
+            @open="reveal"
+            @browse="show(`browse`)"
+        />
+
         <NewExtensionDialog v-model="creating" :create="create" @created="created" />
 
         <ExtensionsInstalled
@@ -376,24 +390,5 @@ const dismissWork = (notice: NoticeModel): void => {
             @reveal="reveal"
             @detail="detailOpen = $event"
         />
-
-        <!-- How many installed extensions have a newer commit and when that was checked; absent until first check runs. -->
-        <!-- A flex line rather than right-aligned text: its presses are block-level, and would otherwise each take a line. -->
-        <p
-            v-if="manage && updatesCheckedAt !== undefined && !detailOpen"
-            class="flex flex-wrap items-center justify-end gap-x-1 text-2xs text-subtle"
-        >
-            <template v-if="updatable > 0">
-                <button v-if="view === `installed`" type="button" :class="ui.textButton({ size: `xs` })" @click="show(`browse`)">
-                    {{ t(`sandbox.sandboxExtensions.updatesToInstall`, { count: updatable }, updatable) }}
-                </button>
-                <span v-else class="text-content">{{ t(`sandbox.sandboxExtensions.updatesToInstall`, { count: updatable }, updatable) }}</span>
-                ·
-            </template>
-            {{ t(`sandbox.sandboxExtensions.updatesChecked`) }} {{ timeAgo(Date.parse(updatesCheckedAt)) }} ·
-            <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="checking" v-action="checkNow">
-                {{ checking ? t(`sandbox.sandboxExtensions.checking`) : t(`sandbox.sandboxExtensions.checkNow`) }}
-            </button>
-        </p>
     </div>
 </template>

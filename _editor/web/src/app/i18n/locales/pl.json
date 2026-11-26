@@ -8014,14 +8014,18 @@
             "newReleaseListed": "Gdy pojawi się nowe wydanie",
             "notify": "Powiadom",
             "policyAgent": "Twój agent czyta diff, gdy tylko wydanie się pojawi, a Ty otwierasz gotowy przegląd i decydujesz.",
-            "policyAuto": "Wydanie zweryfikowane przez człowieka, którego uprawnienia nie urosły, instaluje się samo, pod obserwacją stanu, i jest automatycznie cofane, jeśli wyjdzie źle. Wszystko poniżej tego wraca do powiadamiania.",
+            "policyAuto": "Wydanie, które nie prosi o nic nowego, instaluje się samo, jest obserwowane przez minutę i cofane do poprzedniego, jeśli wyjdzie źle. Takie, które prosi o więcej, czeka na Ciebie.",
             "policyNotify": "Nowe wydania oznaczają ten wiersz plakietką i czekają na Ciebie.",
             "previousVersionKept": "Poprzednia wersja zostaje zachowana",
             "revertTo": "Wróć do {ref}",
             "saving": "Zapisywanie polityki aktualizacji {id}",
             "updates": "Aktualizacje",
             "offIfFlagged": "Wyłącz po oznaczeniu",
-            "offIfFlaggedWhen": "Gdy rejestr oznaczy je jako złośliwe lub zepsute"
+            "offIfFlaggedWhen": "Gdy rejestr oznaczy je jako złośliwe lub zepsute",
+            "followsAll": "Działa według ustawienia dla wszystkich rozszerzeń.",
+            "ownAnswer": "Ustawione tylko dla tego rozszerzenia.",
+            "useAll": "Użyj ustawienia dla wszystkich",
+            "updatedByItself": "zaktualizowane samo {when}"
         },
         "extensionsBrowse": {
             "anyGitRepositoryHolding": "Dowolne repozytorium gita, które zawiera",
@@ -8756,8 +8760,12 @@
             "updatable": "Do aktualizacji",
             "updatedBrowserStillRunning": "{names} {plural} zaktualizowane, ta przeglądarka wciąż działa na poprzednim kodzie, dopóki rozszerzenia się nie przeładują.",
             "updatesChecked": "Sprawdzono aktualizacje",
-            "updatesToInstall": "{count} aktualizacja do zainstalowania | {count} aktualizacje do zainstalowania | {count} aktualizacji do zainstalowania",
-            "wasWere": "zostało | zostały | zostały"
+            "wasWere": "zostało | zostały | zostały",
+            "updateAutomatically": "Aktualizuj automatycznie",
+            "updatesItself": "Aktualizuje się sama",
+            "newPowersWait": "Nowe uprawnienia czekają na Ciebie.",
+            "waitingForYou": "{count} aktualizacja czeka na Ciebie | {count} aktualizacje czekają na Ciebie | {count} aktualizacji czeka na Ciebie",
+            "couldntChangeAutomatic": "Nie udało się zmienić automatycznych aktualizacji."
         },
         "sandboxHub": {
             "addedByExtensions": "Dodane przez rozszerzenia"

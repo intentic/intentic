@@ -23,6 +23,9 @@ const previewUpdate = (id: string, ref?: string) => sandboxRpc.extensions.update
 // the same reason: it never reads back into the query.
 export const removalPlan = (id: string) => sandboxRpc.extensions.removalPlan({ id });
 
+// One extension's answer about updates; `updates: "default"` drops its own, so it follows the sandbox's again.
+type UpdatePolicyPatch = { updates?: ExtensionUpdatePolicy[`updates`] | `default`; advisories?: ExtensionUpdatePolicy[`advisories`] };
+
 export function useExtensions() {
     const { query, error, loaded } = useSandboxQuery(rpcQuery(`extensions.list`));
     const extensions = computed<ExtensionSummary[]>(() => query.data.value?.extensions ?? []);
@@ -95,7 +98,7 @@ export function useExtensions() {
         await query.refetch();
         return reverted;
     };
-    const setUpdatePolicy = async (id: string, patch: Partial<ExtensionUpdatePolicy>): Promise<void> => {
+    const setUpdatePolicy = async (id: string, patch: UpdatePolicyPatch): Promise<void> => {
         await sandboxRpc.extensions.setUpdatePolicy({ id, ...patch });
         await query.refetch();
     };
@@ -118,6 +121,8 @@ export function useExtensions() {
         setUpdatePolicy,
         // When the registry comparison last ran, the honesty line under the tab's update badges.
         updatesCheckedAt: computed(() => query.data.value?.updatesCheckedAt),
+        // The sandbox's answer for every install without its own; absent from a daemon that predates it.
+        updateDefaults: computed(() => query.data.value?.updateDefaults),
         // When the list on screen was read from the daemon (epoch ms); a hydrated one keeps its original read time.
         listedAt: computed(() => query.dataUpdatedAt.value),
         error,

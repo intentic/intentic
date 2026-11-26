@@ -19,6 +19,7 @@ export const extensionsSamples: GroupSamples<`extensions`> = () => ({
     applyUpdate: { id: `storefront` },
     revert: { id: `storefront` },
     setUpdatePolicy: { id: `storefront`, updates: `agent` },
+    setUpdateDefaults: { updates: `auto` },
     processStart: { id: `intentic.slack`, name: `gateway` },
     processStatus: { id: `intentic.slack`, name: `gateway` },
     processStop: { id: `intentic.slack`, name: `gateway` },

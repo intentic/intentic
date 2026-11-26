@@ -3,7 +3,7 @@ import { demoExtensions, setExtensionEnabled } from "./extensionList";
 import { pushWorkspaceChanged } from "../broadcast";
 import { processStatus, startProcess, stopAllOf, stopProcess } from "./extensionProcesses";
 import { clearDev, readinessOf, recordUsage, removalPlanOf, removeExtension, saveSettings, settingsOf, withDev } from "./extensionRecords";
-import { applyUpdate, checkUpdates, previewUpdate, revertUpdate, setUpdatePolicy, updatesCheckedAt, withUpdates } from "./extensionUpdates";
+import { applyUpdate, checkUpdates, previewUpdate, revertUpdate, setUpdateDefaults, setUpdatePolicy, updateDefaults, updatesCheckedAt, withUpdates } from "./extensionUpdates";
 import { approveExtension, createExtension, pendingExtensions } from "./extensionWorkspace";
 import { type Doors, okAfter } from "../doors";
 
@@ -12,7 +12,13 @@ import { type Doors, okAfter } from "../doors";
 // processes extensions declare (extensionProcesses.ts).
 export const extensionsDoors = {
     // `invalid` and `pending` are required by the contract; omitting either fails the whole list to parse.
-    list: () => ({ extensions: withDev(withUpdates()), invalid: [], pending: pendingExtensions(), updatesCheckedAt: updatesCheckedAt() }),
+    list: () => ({
+        extensions: withDev(withUpdates()),
+        invalid: [],
+        pending: pendingExtensions(),
+        updatesCheckedAt: updatesCheckedAt(),
+        updateDefaults: updateDefaults(),
+    }),
     setEnabled: ({ id, enabled }) =>
         okAfter(() => {
             setExtensionEnabled(id, enabled);
@@ -37,6 +43,7 @@ export const extensionsDoors = {
     applyUpdate: ({ id, ref }) => applyUpdate(id, ref),
     revert: ({ id }) => revertUpdate(id),
     setUpdatePolicy: ({ id, ...patch }) => setUpdatePolicy(id, patch),
+    setUpdateDefaults: ({ updates }) => setUpdateDefaults(updates),
     processStatus: ({ id, name }) => processStatus(id, name),
     processStart: ({ id, name }) => startProcess(id, name),
     processStop: ({ id, name }) => stopProcess(id, name),

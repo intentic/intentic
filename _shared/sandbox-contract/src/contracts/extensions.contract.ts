@@ -17,6 +17,7 @@ import {
     ExtensionsListSchema,
     ExtensionUpdateActionSchema,
     ExtensionUpdateAppliedSchema,
+    ExtensionUpdateDefaultsInputSchema,
     ExtensionUpdatePolicyInputSchema,
     ExtensionUpdatePreviewSchema,
     ExtensionUpdatesCheckedSchema,
@@ -189,6 +190,16 @@ export const extensionsContract = {
                 "The owner's standing answer for one extension: tell me, have an agent look at it, or just do it. Security advisories can be opted out of separately.",
         })
         .input(ExtensionUpdatePolicyInputSchema)
+        .output(OkSchema),
+    setUpdateDefaults: procedure
+        .route({
+            method: "POST",
+            path: "/extensions/update-policy",
+            summary: "Whether extensions update by themselves",
+            description:
+                "The sandbox's answer for every extension installed from a repository that has no answer of its own. Automatic takes a release with the same powers by itself and leaves one that asks for more to you.",
+        })
+        .input(ExtensionUpdateDefaultsInputSchema)
         .output(OkSchema),
     // Declared via `contributes.processes`; the terminals list shows each one's log as `svc-ext-<id>-<name>`.
     processStatus: procedure

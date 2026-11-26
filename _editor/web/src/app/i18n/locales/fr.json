@@ -8639,14 +8639,18 @@
             "newReleaseListed": "Quand une nouvelle version est listée",
             "notify": "Notifier",
             "policyAgent": "Votre agent lit le diff dès qu'une version est répertoriée. Vous ouvrez une revue terminée et décidez.",
-            "policyAuto": "Une version vérifiée par une personne et sans nouveaux pouvoirs s'applique automatiquement, avec surveillance de son état et retour arrière en cas de problème. Sinon, une notification vous est envoyée.",
+            "policyAuto": "Une version qui ne demande rien de nouveau s'installe seule, est surveillée une minute et l'ancienne revient si elle démarre mal. Une version qui demande plus vous attend.",
             "policyNotify": "Les nouvelles versions sont signalées sur cette ligne et vous attendent.",
             "previousVersionKept": "La version précédente est conservée",
             "revertTo": "Revenir à {ref}",
             "saving": "Enregistrement de la politique de mise à jour de {id}",
             "updates": "Mises à jour",
             "offIfFlagged": "Désactiver si signalée",
-            "offIfFlaggedWhen": "Quand son registre la signale comme malveillante ou cassée"
+            "offIfFlaggedWhen": "Quand son registre la signale comme malveillante ou cassée",
+            "followsAll": "Suit le réglage de toutes les extensions.",
+            "ownAnswer": "Réglé pour cette extension seulement.",
+            "useAll": "Utiliser le réglage commun",
+            "updatedByItself": "mise à jour seule {when}"
         },
         "extensionsBrowse": {
             "anyGitRepositoryHolding": "N'importe quel dépôt git contenant un",
@@ -9355,8 +9359,12 @@
             "updatable": "À mettre à jour",
             "updatedBrowserStillRunning": "{names} {plural} mises à jour ; ce navigateur exécute encore le code précédent tant que les extensions ne sont pas rechargées.",
             "updatesChecked": "Mises à jour vérifiées",
-            "updatesToInstall": "{count} mise à jour à installer | {count} mises à jour à installer",
-            "wasWere": "était | étaient"
+            "wasWere": "était | étaient",
+            "updateAutomatically": "Mettre à jour automatiquement",
+            "updatesItself": "Mise à jour seule",
+            "newPowersWait": "Les nouveaux droits vous attendent.",
+            "waitingForYou": "{count} mise à jour vous attend | {count} mises à jour vous attendent",
+            "couldntChangeAutomatic": "Impossible de modifier les mises à jour automatiques."
         },
         "sandboxHub": {
             "addedByExtensions": "Ajouté par des extensions"

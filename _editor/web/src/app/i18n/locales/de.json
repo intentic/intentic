@@ -8639,14 +8639,18 @@
             "newReleaseListed": "Wenn ein neues Release gelistet wird",
             "notify": "Benachrichtigen",
             "policyAgent": "Ihr Agent liest den Diff, sobald ein Release erscheint; Sie öffnen eine fertige Durchsicht und entscheiden.",
-            "policyAuto": "Ein von Menschen verifiziertes Release, dessen Rechte nicht gewachsen sind, wird unbeaufsichtigt angewendet, auf seine Gesundheit überwacht und automatisch zurückgesetzt, wenn es fehlerhaft startet. Alles andere fällt auf Benachrichtigen zurück.",
+            "policyAuto": "Ein Release, das nichts Neues verlangt, wird von selbst übernommen, eine Minute lang überwacht und durch das alte ersetzt, wenn es fehlerhaft startet. Eines, das mehr verlangt, wartet auf Sie.",
             "policyNotify": "Neue Releases markieren diese Zeile und warten auf Sie.",
             "previousVersionKept": "Die vorherige Version bleibt erhalten",
             "revertTo": "Auf {ref} zurücksetzen",
             "saving": "Die Update-Richtlinie von {id} wird gespeichert",
             "updates": "Updates",
             "offIfFlagged": "Bei Warnung ausschalten",
-            "offIfFlaggedWhen": "Wenn die Registry sie als schädlich oder defekt markiert"
+            "offIfFlaggedWhen": "Wenn die Registry sie als schädlich oder defekt markiert",
+            "followsAll": "Folgt der Einstellung für alle Erweiterungen.",
+            "ownAnswer": "Nur für diese Erweiterung festgelegt.",
+            "useAll": "Einstellung für alle verwenden",
+            "updatedByItself": "{when} von selbst aktualisiert"
         },
         "extensionsBrowse": {
             "anyGitRepositoryHolding": "Jedes Git-Repository, das ein",
@@ -9355,8 +9359,12 @@
             "updatable": "Aktualisierbar",
             "updatedBrowserStillRunning": "{names} {plural} aktualisiert, dieser Browser führt noch den vorherigen Code aus, bis die Erweiterungen neu geladen werden.",
             "updatesChecked": "Updates geprüft",
-            "updatesToInstall": "{count} Update zu installieren | {count} Updates zu installieren",
-            "wasWere": "war | waren"
+            "wasWere": "war | waren",
+            "updateAutomatically": "Automatisch aktualisieren",
+            "updatesItself": "Aktualisiert sich selbst",
+            "newPowersWait": "Neue Rechte warten auf Sie.",
+            "waitingForYou": "{count} Update wartet auf Sie | {count} Updates warten auf Sie",
+            "couldntChangeAutomatic": "Automatische Updates konnten nicht geändert werden."
         },
         "sandboxHub": {
             "addedByExtensions": "Von Erweiterungen hinzugefügt"

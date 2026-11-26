@@ -11,9 +11,10 @@ const extensionId = z
     .min(1)
     .max(121)
     .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/);
-// Owner's per-extension update posture.
-// updates: notify (default, badge and wait), agent (also prepares an agent diff-read), auto (apply unattended if
-// verified and powers didn't grow, health-watched with auto-revert; otherwise falls back to notify).
+// Owner's update posture, for one extension or as the sandbox's default for every extension without its own answer.
+// updates: auto (the default: apply unattended any release its registry admitted whose powers didn't grow and whose
+// engines this app satisfies, health-watched with auto-revert; anything else waits as with notify), notify (badge and
+// wait) or agent (also prepares an agent diff-read).
 // advisories: auto-disable (default, since disabling runs no new code) or notify.
 export const ExtensionUpdatePolicySchema = z.object({
     updates: z.enum(["notify", "agent", "auto"]),
@@ -41,7 +42,7 @@ export const ExtensionUpdateSchema = z.object({
         .string()
         .optional()
         .describe(
-            "Why this one was not taken automatically and is asking for a person instead: it wants more than it used to, or nobody has vouched for it.",
+            "Why this one was not taken automatically and is asking for a person instead: it wants more than it used to, needs a newer sandbox, or taking it failed.",
         ),
     review: z
         .object({
@@ -78,6 +79,10 @@ export const ExtensionHealthSchema = z.object({
         .boolean()
         .optional()
         .describe("The update was already rolled back without anybody asking. The record stays rather than pretending the attempt never happened."),
+    automatic: z
+        .boolean()
+        .optional()
+        .describe("The update was taken by itself under the owner's automatic-updates answer, not by anybody pressing Update."),
 });
 export type ExtensionHealth = z.infer<typeof ExtensionHealthSchema>;
 // Mechanical comparison of two manifests' declared reach (`diffPowers`), as plain sentences the update dialog can
@@ -122,10 +127,18 @@ export const ExtensionUpdateAppliedSchema = z.object({
 export const ExtensionUpdatePolicyInputSchema = z.object({
     id: extensionId.describe("Which extension."),
     updates: z
-        .enum(["notify", "agent", "auto"])
+        .enum(["notify", "agent", "auto", "default"])
         .optional()
-        .describe("What to do about a newer version: tell you, have an agent read the difference first, or just take it."),
+        .describe(
+            "What to do about a newer version: tell you, have an agent read the difference first, or just take it. `default` drops this extension's own answer, so it follows the sandbox's.",
+        ),
     advisories: z.enum(["auto-disable", "notify"]).optional().describe("What to do about a security warning: switch it off at once, or tell you."),
+});
+// The sandbox's answer for every installed extension that has none of its own.
+export const ExtensionUpdateDefaultsInputSchema = z.object({
+    updates: z
+        .enum(["notify", "agent", "auto"])
+        .describe("What every extension without its own answer does about a newer version: tell you, have an agent read it first, or take it."),
 });
 export const ExtensionUpdatesCheckedSchema = z.object({
     ok: z.literal(true).describe("The check ran."),
@@ -240,8 +253,12 @@ export const ExtensionSummarySchema = z.object({
         .optional()
         .describe("The version kept one step back, which is what going back means."),
     updatePolicy: ExtensionUpdatePolicySchema.optional().describe(
-        "The owner's standing answer for this one: tell me, have an agent look, or just do it.",
+        "The standing answer that applies to this one: tell me, have an agent look, or just do it. Its own when `updatePolicyOwn`, else the sandbox's default.",
     ),
+    updatePolicyOwn: z
+        .boolean()
+        .optional()
+        .describe("This extension has its own answer about updates, set for it alone. Absent or false means it follows the sandbox's default."),
     dev: ExtensionDevSchema.optional().describe(
         "Set while an extension installed from a repository is pointed at a source checkout in this workspace, for working on the extension itself: its code is served from there instead of the pinned copy. `commit` keeps naming the pinned version, which is what updates and the registry compare against.",
     ),
@@ -353,6 +370,9 @@ export const ExtensionsListSchema = z.object({
         .describe(
             "When updates were last looked for. Absent until the first check has run. Sent so a screen can say checked an hour ago rather than presenting staleness as certainty.",
         ),
+    updateDefaults: ExtensionUpdatePolicySchema.optional().describe(
+        "The sandbox's answer for every extension installed from a repository that has none of its own. Absent from a sandbox that predates it.",
+    ),
 });
 // Persisted at .intentic/config/extension-settings.json, keyed by extension id so a re-clone never loses them. Secret
 // values are stripped from `settings`; `secretsSet` names which ones are set.

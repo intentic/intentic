@@ -74,6 +74,7 @@ export const ORG_SECTION_ROUTES = {
             "extensions.applyUpdate",
             "extensions.revert",
             "extensions.setUpdatePolicy",
+            "extensions.setUpdateDefaults",
             "extensions.devSet",
             "extensions.devClear",
             "extensions.devReload",

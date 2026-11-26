@@ -107,7 +107,7 @@ const openRole = computed(() => (typeof route.query[`open`] === `string` ? route
 const HUB = `sandbox`;
 
 // The count the index carries, and whatever is running behind the row. Extensions counts installed extensions with a
-// newer registry commit; info, not warning, since nothing here auto-updates. Models counts what needs a person (an
+// newer registry commit waiting for a person; info, not warning, since an old version still runs. Models counts what needs a person (an
 // account to sign in again or verify, a seat only an admin can restore, a sign-in that ended without connecting) as a
 // warning, since a model that cannot serve is a turn that will not run. Secrets counts the credentials agents asked the
 // owner's computers for that wait on an answer (secrets/useWants.ts), as info: the answer is given in Passwords on that

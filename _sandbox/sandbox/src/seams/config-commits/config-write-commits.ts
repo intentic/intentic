@@ -36,6 +36,7 @@ export const CONFIG_WRITES = new Map<string, string>([
     ["extensions.remove", "extension removed"],
     ["extensions.setSettings", "extension settings"],
     ["extensions.setUpdatePolicy", "extension update policy"],
+    ["extensions.setUpdateDefaults", "extension update default"],
     ["extensions.setEnabled", "extension switched"],
     ["extensions.applyUpdate", "extension updated"],
     ["extensions.revert", "extension reverted"],

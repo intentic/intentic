@@ -1,11 +1,9 @@
 import { join } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import { oneLine } from "@intentic/base/one-line";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { diffPowers, extensionIdOf, type PowersDiff } from "@intentic/extension-manifest";
 import { isShaPinned, OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
-import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import {
     type ExtensionAdvisory,
     ExtensionAdvisorySchema,
@@ -15,7 +13,6 @@ import {
     ExtensionUpdateSchema,
 } from "@intentic/sandbox-contract/schemas/extension-updates";
 import type { ExtensionConfig } from "@intentic/sandbox-contract/schemas/git-installs";
-import { updateBrief } from "@intentic/sandbox-contract/briefs/extension-update-brief";
 import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, parseExtensionManifest, readExtensionManifest, extensionProcessKey } from "../capabilities/extension-dirs.js";
@@ -28,6 +25,9 @@ import { defineDocument } from "../store/evolution/documents.js";
 import type { JsonFile } from "../store/json-file.js";
 import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
+import { opt } from "../opt.js";
+import { forgetUpdatePolicy, policyOf, readUpdatePolicies } from "./extension-update-policy.js";
+import { prepareAgentReview } from "./extension-update-review.js";
 import { readExtensionEnablement, writeExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
 import { EARLY_PROBE_MS, FINAL_PROBE_MS, type HealthVerdicts, scheduleHealthProbes } from "./extension-health.js";
 import { reconcileListenerProcesses, startAutoStartProcesses } from "./extension-processes.js";
@@ -39,7 +39,9 @@ import { installedExtensions } from "../capabilities/extension-inventory/install
 // - apply: re-clone, validate, quiesce, swap (keeping the old checkout one back), restart, health-watch.
 // - revert: swaps the kept-previous checkout back; symmetric, so reverting a revert is redo.
 // - watch: probes for a minute after a swap that the new version actually came up.
-// Nothing auto-updates by default; an advisory's only automatic action is disabling, which reverses with a click.
+// Unattended by default: a release its registry admitted that asks for no new powers and fits this app is taken by
+// itself (the `auto` answer, the sandbox default unless the owner says otherwise); anything else waits for a person.
+// An advisory's only automatic action is disabling, which reverses with a click.
 
 // State: .intentic/records/extension-updates.json, keyed by the manifest identity, so records survive a remove/re-add.
 
@@ -48,6 +50,10 @@ const RecordSchema = z.object({
     advisory: ExtensionAdvisorySchema.optional(),
     health: ExtensionHealthSchema.optional(),
     healthWatch: z.object({ id: z.string(), autoRevert: z.boolean() }).optional(),
+    // Why the automatic step left the recorded update to a person: `review` (it asks for new powers or a newer app,
+    // which no later pass changes for the same commit) or `failed` (taking it broke, so the next pass tries again).
+    // Absent: never attempted, which the next pass under `auto` does. Dropped with the update it is about.
+    autoHeld: z.enum(["review", "failed"]).optional(),
 });
 type UpdateRecord = z.infer<typeof RecordSchema>;
 const StateSchema = z.object({ checkedAt: z.string().optional(), extensions: z.record(z.string(), RecordSchema) });
@@ -73,51 +79,11 @@ const patchRecord = async (root: string, identity: string, patch: (record: Updat
     });
 };
 
-// Policy: .intentic/config/extension-update-policy.json; absent defaults to notify updates, auto-disable advisories.
-
-const PolicySchema = z.object({
-    updates: z.enum(["notify", "agent", "auto"]).optional(),
-    advisories: z.enum(["auto-disable", "notify"]).optional(),
-});
-type PolicyFile = Record<string, z.infer<typeof PolicySchema>>;
-
-export const extensionUpdatePolicyDocument = defineDocument({
-    path: stateRelPath(".intentic/config/extension-update-policy.json"),
-    schema: PolicySchema,
-    granularity: "record",
-});
-
-// A handle per call: every handle on one path shares its write queue (queueOnFile).
-const policyFile = (root: string): JsonFile<PolicyFile> =>
-    openDocument(extensionUpdatePolicyDocument, join(root, extensionUpdatePolicyDocument.path), { fallback: () => ({}) });
-
-export const resolveUpdatePolicy = (stored: PolicyFile[string] | undefined): ExtensionUpdatePolicy => ({
-    updates: stored?.updates ?? "notify",
-    advisories: stored?.advisories ?? "auto-disable",
-});
-
-export const readUpdatePolicies = async (root: string): Promise<PolicyFile> => policyFile(root).read();
-
-export const writeUpdatePolicy = async (
-    root: string,
-    identity: string,
-    patch: { updates?: ExtensionUpdatePolicy["updates"]; advisories?: ExtensionUpdatePolicy["advisories"] },
-): Promise<void> => {
-    await policyFile(root).update((all) => ({ ...all, [identity]: { ...all[identity], ...patch } }));
-};
-
 // Both update-lifecycle ledgers for one extension. Records survive a remove/re-add on purpose (the comment at the top
 // of this file); removal is the one act that means the identity itself is going, so they go with it.
 export const forgetUpdateState = async (root: string, identity: string): Promise<void> => {
     await patchRecord(root, identity, () => undefined);
-    await policyFile(root).update((all) => {
-        if (!(identity in all)) {
-            // By reference, so jsonFile skips the write when there is nothing to drop.
-            return all;
-        }
-        const { [identity]: _dropped, ...rest } = all;
-        return rest;
-    });
+    await forgetUpdatePolicy(root, identity);
 };
 
 // Installed side of the comparison: every extension-kind capability whose checkout still parses.
@@ -242,7 +208,7 @@ export const applyExtensionUpdate = async (
     services: Services,
     id: string,
     refOverride?: string,
-    options?: { readonly autoRevert?: boolean },
+    options?: { readonly autoRevert?: boolean; readonly automatic?: boolean },
 ): Promise<{ ref: string; rebuildNeeded: boolean }> => {
     const capability = await services.capabilities.get(id);
     if (capability?.kind !== "extension") {
@@ -289,10 +255,10 @@ export const applyExtensionUpdate = async (
         if (identity !== undefined) {
             // The recorded update is spent the moment the pinned sha matches it; the health watch takes over.
             await patchRecord(root, identity, (record) => {
-                const { update, ...rest } = record;
+                const { update, autoHeld: _held, ...rest } = record;
                 return update !== undefined && update.ref !== target.ref ? record : rest;
             });
-            await watchExtensionHealth(services, id, identity, fromRef, options?.autoRevert === true);
+            await watchExtensionHealth(services, id, identity, fromRef, options?.autoRevert === true, options?.automatic === true);
         }
         return { ref: target.ref, rebuildNeeded: rebuild };
     } finally {
@@ -360,16 +326,26 @@ export const revertExtensionUpdate = async (services: Services, id: string): Pro
 
 // Health: for a minute after a swap, extension-health.ts checks that what the new version declared actually came up.
 const healthVerdicts = (services: Services): HealthVerdicts => ({
+    // A verdict keeps saying the swap was unattended: the drawer reads that off whichever health record is current.
     record: (identity, health) =>
-        patchRecord(services.workspace.root, identity, ({ health: _previous, healthWatch: _watch, ...rest }) => (health === undefined ? rest : { ...rest, health })),
+        patchRecord(services.workspace.root, identity, ({ health: previous, healthWatch: _watch, ...rest }) =>
+            health === undefined ? rest : { ...rest, health: previous?.automatic === true ? { ...health, automatic: true } : health },
+        ),
     revert: revertExtensionUpdate,
 });
 
 // Resolves once the watch is on disk; timers can be rebuilt from that record after a crash.
-const watchExtensionHealth = async (services: Services, id: string, identity: string, fromRef: string, autoRevert: boolean): Promise<void> => {
+const watchExtensionHealth = async (
+    services: Services,
+    id: string,
+    identity: string,
+    fromRef: string,
+    autoRevert: boolean,
+    automatic: boolean,
+): Promise<void> => {
     await patchRecord(services.workspace.root, identity, (record) => ({
         ...record,
-        health: { state: "watching", fromRef, at: new Date().toISOString() },
+        health: { state: "watching", fromRef, at: new Date().toISOString(), ...(automatic ? { automatic: true } : {}) },
         healthWatch: { id, autoRevert },
     }));
     scheduleHealthProbes(services, healthVerdicts(services), { id, identity, fromRef, autoRevert });
@@ -394,113 +370,90 @@ export const resumeExtensionHealthWatches = async (services: Services, earlyMs =
     }
 };
 
-// Agent-prepared rung: runs the update card's diff-read unprompted the moment the check records a new sha.
-// An ordinary unattended fleet entry in a shared workspace; the update record links to it. Its id is also its branch
-// and folder, so kept short: `upd-`, the name without the built-ins' publisher, cut at 16.
-let reviewSeq = 0;
-const reviewConversationId = (identity: string): string =>
-    `upd-${identity.replace(/^intentic\./u, "").replaceAll(/[^a-zA-Z0-9_-]/gu, "-").slice(0, 16).replace(/-+$/u, "")}-${Date.now().toString(36)}${(reviewSeq++).toString(36)}`;
-
-// How much of a failure the card quotes; the review conversation holds the whole of it.
-const REVIEW_FAILURE_MAX = 240;
-
-// Runs the review through the detached run every conversation's turn takes (`turns.run`), so it routes its model by the
-// `extension-review` role like the rest, and its transcript is recorded for the card's link to open. Resolves to why the
-// agent could not read the update, or undefined once it did.
-const readUpdate = async (services: Services, turn: AgentTurn & { conversationId: string }): Promise<string | undefined> => {
-    const run = services.turns.run(turn);
-    if (run === "busy" || run === "archived") {
-        return run === "busy" ? "a turn was already running on its conversation" : "its conversation was archived";
-    }
-    let failure: string | undefined;
-    for await (const event of run.frames()) {
-        if (event.kind === "error") {
-            failure = event.message;
-        }
-    }
-    return failure;
-};
-
-// A review that could not read the update turns the card back to its owner with the reason, and drops the link claiming
-// an agent already read it; a person can still start one by hand. The conversation keeps the failure in its own record.
-const recordReviewFailure = async (services: Services, target: InstalledTarget, update: ExtensionUpdate, why: string): Promise<void> => {
-    const needsReview = `an agent was asked to read this update and could not: ${oneLine(why, REVIEW_FAILURE_MAX)}`;
-    await patchRecord(services.workspace.root, target.identity, (record) => {
-        if (record.update?.ref !== update.ref) {
-            return record;
-        }
-        const { review: _read, ...kept } = record.update;
-        return { ...record, update: { ...kept, needsReview } };
-    });
-};
-
-const prepareAgentReview = (services: Services, target: InstalledTarget, update: ExtensionUpdate): void => {
-    const conversationId = reviewConversationId(target.identity);
-    const prompt = updateBrief({
-        label: target.identity,
-        url: update.url,
-        fromRef: target.ref,
-        toRef: update.ref,
-        path: update.path ?? target.config.path ?? "",
-    });
-    const turn: AgentTurn & { conversationId: string } = {
-        prompt,
-        conversationId,
-        unattended: true,
-        // Model list this read bills to (model-roles.ts); reviewing another author's diff isn't fixing a pipeline.
-        runRole: `extension-review`,
-        isolated: true,
-        title: `Update review: ${target.identity} ${target.version} → ${update.version ?? update.ref.slice(0, 7)}`.slice(0, 80),
-    };
-    void (async () => {
-        await patchRecord(services.workspace.root, target.identity, (record) =>
-            record.update?.ref === update.ref
-                ? { ...record, update: { ...record.update, review: { conversationId, at: new Date().toISOString() } } }
-                : record,
-        );
-        // A review that throws before its first frame fails the same way one that ends in an error frame does.
-        const failure = await readUpdate(services, turn).catch(errorMessage);
-        if (failure !== undefined) {
-            services.logger.warn({ extension: target.identity, conversationId, failure }, "extension update: agent review failed");
-            await recordReviewFailure(services, target, update, failure);
-        }
-    })().catch((error: unknown) =>
-        services.logger.warn({ err: error, extension: target.identity, conversationId }, "extension update: agent review could not be recorded"),
-    );
-};
-
-// Auto rung's gates, cheapest first: an unverified listing is refused before any clone; the rest come from the preview.
+// Auto rung's gates, both read off the preview: the release must fit this app and ask for no power the installed
+// version was not given. Any release its registry admitted passes otherwise, listed or verified: admission is the review
+// an owner who chose automatic updates relies on, and the health watch takes back one that comes up broken.
 
 const autoUpdate = async (services: Services, target: InstalledTarget, update: ExtensionUpdate): Promise<void> => {
-    let needsReview: string | undefined;
+    if (applying.has(target.id)) {
+        // Already being taken, by a press or an earlier pass; whichever finishes spends the record.
+        return;
+    }
+    let needsReview: string;
+    let held: NonNullable<UpdateRecord["autoHeld"]>;
     try {
-        if (update.trust !== "verified") {
-            needsReview = "the listing isn't verified: no human has read this code";
+        const preview = await previewExtensionUpdate(services, target.id, update.ref);
+        if (!preview.compatible) {
+            needsReview = `it asks for app ${preview.engines}; this app is ${extensionApiVersion}`;
+            held = "review";
+        } else if (preview.powers.added.length > 0) {
+            needsReview = `it asks for powers the installed version didn't: ${preview.powers.added.join("; ")}`;
+            held = "review";
         } else {
-            const preview = await previewExtensionUpdate(services, target.id, update.ref);
-            if (!preview.compatible) {
-                needsReview = `it asks for app ${preview.engines}; this app is ${extensionApiVersion}`;
-            } else if (preview.powers.added.length > 0) {
-                needsReview = `it asks for powers the installed version didn't: ${preview.powers.added.join("; ")}`;
-            } else {
-                await applyExtensionUpdate(services, target.id, update.ref, { autoRevert: true });
-                return;
-            }
+            await applyExtensionUpdate(services, target.id, update.ref, { autoRevert: true, automatic: true });
+            return;
         }
     } catch (error) {
         needsReview = `auto-update failed: ${errorMessage(error)}`;
+        held = "failed";
     }
-    const reason = needsReview;
     await patchRecord(services.workspace.root, target.identity, (record) =>
-        record.update?.ref === update.ref ? { ...record, update: { ...record.update, needsReview: reason } } : record,
+        record.update?.ref === update.ref ? { ...record, update: { ...record.update, needsReview }, autoHeld: held } : record,
     );
+};
+
+// After the owner turns automatic updates on (for one extension or as the sandbox's default): every update already
+// waiting under an automatic answer is looked at again now, holds included, since the answer they were held under has
+// changed. Runs in the background; the route that changed the answer does not wait for clones.
+export const takeWaitingUpdates = (services: Services, identities?: readonly string[]): void => {
+    void (async () => {
+        try {
+            const root = services.workspace.root;
+            const [targets, state, policies] = await Promise.all([installedTargets(services), readExtensionUpdateState(root), readUpdatePolicies(root)]);
+            for (const target of targets) {
+                const update = state.extensions[target.identity]?.update;
+                const asked = identities === undefined || identities.includes(target.identity);
+                if (update !== undefined && asked && policyOf(policies, target.identity).updates === "auto") {
+                    await autoUpdate(services, target, update);
+                }
+            }
+        } catch (error) {
+            services.logger.warn({ err: error }, "extension update: taking waiting updates failed");
+        }
+    })();
 };
 
 // STALE_MS bounds a page-view refresh; CHECK_INTERVAL_MS is the ceiling for a sandbox nobody opens.
 const STALE_MS = 6 * 60 * 60 * 1000;
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// As often as the staleness floor: an update that takes itself should land the same day it is listed.
+const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 const inFlight = new SingleFlight<string, string>();
+
+// The update a registry row offers, keeping what an earlier pass learned about the same commit.
+const offeredUpdate = (
+    row: RegistryEntry,
+    install: { readonly ref: string; readonly url: string; readonly path?: string | undefined },
+    registryUrl: string,
+    known: ExtensionUpdate | undefined,
+    now: string,
+): ExtensionUpdate => ({
+    ref: install.ref,
+    ...opt("version", row.version),
+    url: install.url,
+    ...opt("path", install.path),
+    trust: row.trust === "verified" ? "verified" : "listed",
+    ...opt("securityFix", row.securityFix === true ? true : undefined),
+    registry: registryUrl,
+    at: known?.at ?? now,
+    ...opt("needsReview", known?.needsReview),
+    ...opt("review", known?.review),
+});
+
+// Whether a pass acts on an offer: a new commit gets whatever its answer does. One already recorded is taken under
+// `auto` unless it was held for review: never attempted (the answer changed since) or failed (try again).
+const actsOn = (known: boolean, policy: ExtensionUpdatePolicy["updates"], held: UpdateRecord["autoHeld"]): boolean =>
+    !known || (policy === "auto" && held !== "review");
 
 // Thrown by a check pass once everything reachable is recorded; names each registry it could not read and why.
 export class RegistryUnreachableError extends Error {
@@ -567,7 +520,7 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
                         autoDisabled: previous.advisory?.autoDisabled === true,
                     };
                     record.advisory = advisory;
-                    if (resolveUpdatePolicy(policies[target.identity]).advisories === "auto-disable" && enablement[target.identity] !== false) {
+                    if (policyOf(policies, target.identity).advisories === "auto-disable" && enablement[target.identity] !== false) {
                         advisoriesToEnforce.push(target);
                     }
                 } else if (
@@ -577,21 +530,15 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
                     row.install.ref !== target.ref
                 ) {
                     const known = previous.update?.ref === row.install.ref ? previous.update : undefined;
-                    const update: ExtensionUpdate = {
-                        ref: row.install.ref,
-                        ...(row.version !== undefined ? { version: row.version } : {}),
-                        url: row.install.url,
-                        ...(row.install.path !== undefined ? { path: row.install.path } : {}),
-                        trust: row.trust === "verified" ? "verified" : "listed",
-                        ...(row.securityFix === true ? { securityFix: true } : {}),
-                        registry: registryUrl,
-                        at: known?.at ?? now,
-                        ...(known?.needsReview !== undefined ? { needsReview: known.needsReview } : {}),
-                        ...(known?.review !== undefined ? { review: known.review } : {}),
-                    };
+                    const update = offeredUpdate(row, { ...row.install, ref: row.install.ref }, registryUrl, known, now);
                     record.update = update;
-                    if (known === undefined) {
-                        updatesToAct.push({ target, update, policy: resolveUpdatePolicy(policies[target.identity]).updates });
+                    const held = known === undefined ? undefined : previous.autoHeld;
+                    if (held !== undefined) {
+                        record.autoHeld = held;
+                    }
+                    const policy = policyOf(policies, target.identity).updates;
+                    if (actsOn(known !== undefined, policy, held)) {
+                        updatesToAct.push({ target, update, policy });
                     }
                 }
                 if (Object.keys(record).length > 0) {
@@ -620,7 +567,12 @@ export const checkExtensionUpdates = (services: Services): Promise<string> => {
             if (policy === "auto") {
                 await autoUpdate(services, target, update);
             } else if (policy === "agent") {
-                prepareAgentReview(services, target, update);
+                prepareAgentReview(services, target, update, (identity, patch) =>
+                    patchRecord(root, identity, (record) => {
+                        const next = patch(record.update);
+                        return next === record.update ? record : { ...record, ...opt("update", next) };
+                    }),
+                );
             }
         }
         if (unreached.length > 0) {
@@ -641,7 +593,7 @@ export const refreshUpdatesIfStale = (services: Services): void => {
     })().catch((error: unknown) => services.logger.warn({ err: error }, "extension update check failed"));
 };
 
-// Boot wiring (bootstrap/version-watches.ts): one check shortly after boot, delayed to avoid the boot path's own git work, then daily.
+// Boot wiring (bootstrap/version-watches.ts): one check shortly after boot, delayed to avoid the boot path's own git work, then every six hours.
 // The list-read staleness refresh above is the floor for a sandbox somebody is actually looking at.
 export const startExtensionUpdateWatch = (services: Services): { stop: () => void } => {
     const initial = setTimeout(() => refreshUpdatesIfStale(services), 60_000);

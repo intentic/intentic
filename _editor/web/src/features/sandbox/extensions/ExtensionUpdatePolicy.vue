@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary, ExtensionUpdatePolicy } from "@intentic/sandbox-contract/schemas/extension-updates";
-import { Button, Row, RowGroup, RowNote, SegmentedControl } from "@intentic/ui";
+import { Button, Row, RowGroup, RowNote, SegmentedControl, timeAgo, ui } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useOperations } from "../../../workbench/operations/operations";
@@ -10,8 +10,8 @@ import { useExtensionUpdates } from "./useExtensionUpdates";
 import { useT } from "@intentic/ui/i18n";
 
 // The owner's standing answer for one git-installed extension, one line each: what happens next time its registry lists
-// a release, what happens if the registry flags it, and the way back to the version before. The release on offer right
-// now leads the page (ExtensionUpdateOffer), not a part of this.
+// a release (its own answer, or the one every extension follows, set over the list), what happens if the registry flags
+// it, and the way back to the version before. The release on offer right now leads the page (ExtensionUpdateOffer).
 
 const t = useT();
 
@@ -43,7 +43,7 @@ const POLICY_OPTIONS = computed(() => [
     { label: t(`sandbox.extensionUpdatePolicy.auto`), value: `auto` },
 ]);
 // The answer shows itself on the controls, so a write raises no receipt of its own.
-const save = async (patch: Partial<ExtensionUpdatePolicy>): Promise<void> => {
+const save = async (patch: { updates?: ExtensionUpdatePolicy[`updates`] | `default`; advisories?: ExtensionUpdatePolicy[`advisories`] }): Promise<void> => {
     if (busy.value) {
         return;
     }
@@ -56,10 +56,25 @@ const save = async (patch: Partial<ExtensionUpdatePolicy>): Promise<void> => {
 };
 const setPolicy = (updates: ExtensionUpdatePolicy["updates"]): Promise<void> => save({ updates });
 const setAdvisories = (autoDisable: boolean): Promise<void> => save({ advisories: autoDisable ? `auto-disable` : `notify` });
+// Where the answer comes from; an older daemon does not say, and then neither does this.
+const own = computed(() => extension.updatePolicyOwn);
+const followAll = (): Promise<void> => save({ updates: `default` });
 
 // The way back, ordinary and visible: "the last update made it worse" needs no failing probe. An unhealthy update
 // offers the same revert from the drawer's lead, so it is not said twice.
 const previous = computed(() => (extension.health?.state === `unhealthy` ? undefined : extension.previous));
+const previousLine = computed(() => {
+    const kept = previous.value;
+    if (kept === undefined) {
+        return ``;
+    }
+    const named = kept.version === undefined ? kept.ref.slice(0, 7) : `v${kept.version} · ${kept.ref.slice(0, 7)}`;
+    // Said when the swap was unattended, so a version that moved by itself is never a surprise.
+    const health = extension.health;
+    return health?.automatic === true
+        ? `${named} · ${t(`sandbox.extensionUpdatePolicy.updatedByItself`, { when: timeAgo(Date.parse(health.at)) })}`
+        : named;
+});
 const revert = async (): Promise<void> => {
     if (busy.value) {
         return;
@@ -76,6 +91,18 @@ const revert = async (): Promise<void> => {
 <template>
     <RowGroup id="extension-updates" :label="t(`sandbox.extensionUpdatePolicy.updates`)">
         <Row :title="t(`sandbox.extensionUpdatePolicy.newReleaseListed`)" :description="policyCaption(policy.updates)" wide-control>
+            <!-- Where the answer comes from: the setting over the list, or this extension's own, with the way back. -->
+            <template v-if="own !== undefined" #below>
+                <p class="flex flex-wrap items-center gap-x-1 text-2xs text-subtle">
+                    <template v-if="own">
+                        {{ t(`sandbox.extensionUpdatePolicy.ownAnswer`) }}
+                        <button type="button" :class="ui.textButton({ size: `xs` })" :disabled="busy" @click="followAll">
+                            {{ t(`sandbox.extensionUpdatePolicy.useAll`) }}
+                        </button>
+                    </template>
+                    <template v-else>{{ t(`sandbox.extensionUpdatePolicy.followsAll`) }}</template>
+                </p>
+            </template>
             <template #control>
                 <SegmentedControl
                     :model-value="policy.updates"
@@ -99,7 +126,7 @@ const revert = async (): Promise<void> => {
         <Row
             v-if="previous"
             :title="t(`sandbox.extensionUpdatePolicy.previousVersionKept`)"
-            :description="previous.version === undefined ? previous.ref.slice(0, 7) : `v${previous.version} · ${previous.ref.slice(0, 7)}`"
+            :description="previousLine"
         >
             <template #control>
                 <Button

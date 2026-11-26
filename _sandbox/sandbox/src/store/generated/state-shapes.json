@@ -1767,6 +1767,10 @@
     {
       "type": "{ checkedAt?: string; extensions: Record<string, { advisory?: { at: string; autoDisabled: boolean; reason: string; registry: string }; health?: { at: string; autoReverted?: boolean; detail?: string; fromRef?: string; state: \"watching\" | \"healthy\" | \"unhealthy\" }; healthWatch?: { autoRevert: boolean; id: string }; update?: { at: string; needsReview?: string; path?: string; ref: string; registry: string; review?: { at: string; conversationId: string }; securityFix?: boolean; trust: \"verified\" | \"listed\"; url: string; version?: string } }> }",
       "since": "v1.346.0"
+    },
+    {
+      "type": "{ checkedAt?: string; extensions: Record<string, { advisory?: { at: string; autoDisabled: boolean; reason: string; registry: string }; autoHeld?: \"review\" | \"failed\"; health?: { at: string; autoReverted?: boolean; automatic?: boolean; detail?: string; fromRef?: string; state: \"watching\" | \"healthy\" | \"unhealthy\" }; healthWatch?: { autoRevert: boolean; id: string }; update?: { at: string; needsReview?: string; path?: string; ref: string; registry: string; review?: { at: string; conversationId: string }; securityFix?: boolean; trust: \"verified\" | \"listed\"; url: string; version?: string } }> }",
+      "since": "unreleased"
     }
   ],
   "workspace:.intentic/records/extension-usage.json": [

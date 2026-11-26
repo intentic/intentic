@@ -8639,14 +8639,18 @@
             "newReleaseListed": "When a new release is listed",
             "notify": "Notify",
             "policyAgent": "Your agent reads the diff the moment a release is listed, you open a finished review and decide.",
-            "policyAuto": "A human-verified release whose powers didn't grow applies unattended, health-watched, auto-reverted if it comes up wrong. Anything less falls back to notify.",
+            "policyAuto": "Takes a release that asks for nothing new by itself, watches it for a minute and puts the old one back if it comes up broken. One that asks for more waits for you.",
             "policyNotify": "New releases badge this row and wait for you.",
             "previousVersionKept": "The previous version is kept",
             "revertTo": "Revert to {ref}",
             "saving": "Saving the update policy of {id}",
             "updates": "Updates",
             "offIfFlagged": "Switch off if flagged",
-            "offIfFlaggedWhen": "When its registry marks it malicious or broken"
+            "offIfFlaggedWhen": "When its registry marks it malicious or broken",
+            "followsAll": "Follows the setting for all extensions.",
+            "ownAnswer": "Set for this extension only.",
+            "useAll": "Use the setting for all",
+            "updatedByItself": "updated by itself {when}"
         },
         "extensionsBrowse": {
             "anyGitRepositoryHolding": "Any git repository holding a",
@@ -9355,8 +9359,12 @@
             "updatable": "Updatable",
             "updatedBrowserStillRunning": "{names} {plural} updated, this browser is still running the previous code until the extensions reload.",
             "updatesChecked": "Updates checked",
-            "updatesToInstall": "{count} update to install | {count} updates to install",
-            "wasWere": "was | were"
+            "wasWere": "was | were",
+            "updateAutomatically": "Update automatically",
+            "updatesItself": "Updates itself",
+            "newPowersWait": "New powers wait for you.",
+            "waitingForYou": "{count} update waits for you | {count} updates wait for you",
+            "couldntChangeAutomatic": "Couldn't change automatic updates."
         },
         "sandboxHub": {
             "addedByExtensions": "Added by extensions"

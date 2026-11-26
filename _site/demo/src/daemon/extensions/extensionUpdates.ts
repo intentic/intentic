@@ -24,7 +24,18 @@ const CHECK_MS = 1_800;
 // An update is watched for a while before it counts as healthy, as the daemon's health check does.
 const WATCH_MS = 25_000;
 
-const DEFAULT_POLICY: ExtensionUpdatePolicy = { updates: `notify`, advisories: `auto-disable` };
+// The sandbox's answer for every install without one of its own (automatic, as a daemon with nothing written answers),
+// and the installs that answer for themselves.
+let defaults: ExtensionUpdatePolicy = { updates: `auto`, advisories: `auto-disable` };
+const own = new Map<string, ExtensionUpdatePolicy[`updates`]>();
+export const updateDefaults = (): ExtensionUpdatePolicy => defaults;
+
+// What applies to one row: its own answer, else the sandbox's.
+const applyPolicy = (extension: ExtensionSummary): void => {
+    const answer = own.get(extension.id);
+    extension.updatePolicy = { updates: answer ?? defaults.updates, advisories: extension.updatePolicy?.advisories ?? defaults.advisories };
+    extension.updatePolicyOwn = answer !== undefined;
+};
 
 // What an offer asks for that the running version does not: the new routes its UI calls. Kept beside the offer so the
 // preview names them and the apply grants them.
@@ -49,7 +60,8 @@ const repoOf = (extension: ExtensionSummary): string => `https://github.com/${ex
 const installed = (): ExtensionSummary[] => demoExtensions().filter((extension) => extension.source === `installed`);
 
 // The recording's opening position, applied once: every repository install carries its policy; the loud recording also
-// has one update on offer (asking for a route more) and one extension a week past an update that went well.
+// has one update on offer (asking for a route more, so automatic left it to the owner) and one extension a week past an
+// update it took by itself, which went well.
 let seeded = false;
 const seed = (): void => {
     if (seeded) {
@@ -58,7 +70,7 @@ const seed = (): void => {
     seeded = true;
     const rows = installed();
     for (const extension of rows) {
-        extension.updatePolicy = { ...DEFAULT_POLICY };
+        applyPolicy(extension);
     }
     if (demoQuiet()) {
         return;
@@ -72,7 +84,7 @@ const seed = (): void => {
             trust: `listed`,
             registry: `intentic.dev`,
             at: new Date(Date.now() - 26 * HOUR).toISOString(),
-            needsReview: `It asks to read the pipeline runs, which the installed version never did`,
+            needsReview: `it asks for powers the installed version didn't: its UI calls the sandbox route GET /ci/runs`,
         };
         offers.set(offered.id, { update, addsRoutes: [`GET /ci/runs`] });
         offered.update = update;
@@ -81,7 +93,7 @@ const seed = (): void => {
     if (watched !== undefined) {
         const fromRef = `b71f03aa9e5c2d64f80b13e7a92c4d6f1e08b35c`;
         watched.previous = { ref: fromRef, version: `${watched.manifest.version.split(`.`)[0] ?? `1`}.0.0` };
-        watched.health = { state: `healthy`, fromRef, at: new Date(Date.now() - 6 * 24 * HOUR).toISOString() };
+        watched.health = { state: `healthy`, fromRef, at: new Date(Date.now() - 6 * 24 * HOUR).toISOString(), automatic: true };
     }
 };
 
@@ -184,13 +196,35 @@ export const checkUpdates = async (): Promise<SandboxHandlerOutput<`extensions`,
     return { ok: true, checkedAt };
 };
 
-export const setUpdatePolicy = (id: string, patch: Partial<ExtensionUpdatePolicy>) => {
+// `updates: "default"` drops the row's own answer, so it follows the sandbox's again.
+export const setUpdatePolicy = (
+    id: string,
+    patch: { updates?: ExtensionUpdatePolicy[`updates`] | `default`; advisories?: ExtensionUpdatePolicy[`advisories`] },
+) => {
     const extension = findInstalled(id);
     return okAfter(() => {
-        extension.updatePolicy = { ...DEFAULT_POLICY, ...extension.updatePolicy, ...patch };
+        if (patch.updates === `default`) {
+            own.delete(id);
+        } else if (patch.updates !== undefined) {
+            own.set(id, patch.updates);
+        }
+        if (patch.advisories !== undefined) {
+            extension.updatePolicy = { ...defaults, ...extension.updatePolicy, advisories: patch.advisories };
+        }
+        applyPolicy(extension);
         pushWorkspaceChanged(POLICY_FILE);
     });
 };
+
+export const setUpdateDefaults = (updates: ExtensionUpdatePolicy[`updates`]) =>
+    okAfter(() => {
+        seed();
+        defaults = { ...defaults, updates };
+        for (const extension of installed()) {
+            applyPolicy(extension);
+        }
+        pushWorkspaceChanged(POLICY_FILE);
+    });
 
 /** What removing one forgets of its lifecycle, so a later list never names a version nothing holds. */
 export const forgetUpdates = (id: string): void => {

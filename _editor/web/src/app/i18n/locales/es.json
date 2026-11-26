@@ -8639,14 +8639,18 @@
             "newReleaseListed": "Cuando se liste una versión nueva",
             "notify": "Avisar",
             "policyAgent": "Tu agente lee el diff en cuanto se publica una versión; tú abres una revisión terminada y decides.",
-            "policyAuto": "Una versión verificada por una persona cuyos poderes no han crecido se aplica sola, vigilada y revertida automáticamente si arranca mal. Cualquier otra cosa pasa a avisar.",
+            "policyAuto": "Una versión que no pide nada nuevo se instala sola, se vigila un minuto y se vuelve a la anterior si arranca mal. Una que pide más te espera.",
             "policyNotify": "Las versiones nuevas marcan esta fila y te esperan.",
             "previousVersionKept": "La versión anterior se conserva",
             "revertTo": "Volver a {ref}",
             "saving": "Guardando la política de actualización de {id}",
             "updates": "Actualizaciones",
             "offIfFlagged": "Desactivar si se marca",
-            "offIfFlaggedWhen": "Cuando su registro la marca como maliciosa o rota"
+            "offIfFlaggedWhen": "Cuando su registro la marca como maliciosa o rota",
+            "followsAll": "Sigue el ajuste de todas las extensiones.",
+            "ownAnswer": "Elegido solo para esta extensión.",
+            "useAll": "Usar el ajuste de todas",
+            "updatedByItself": "actualizada sola {when}"
         },
         "extensionsBrowse": {
             "anyGitRepositoryHolding": "Cualquier repositorio git que contenga un",
@@ -9355,8 +9359,12 @@
             "updatable": "Actualizables",
             "updatedBrowserStillRunning": "{names} {plural} actualizadas; este navegador sigue ejecutando el código anterior hasta que las extensiones se recarguen.",
             "updatesChecked": "Actualizaciones comprobadas",
-            "updatesToInstall": "{count} actualización por instalar | {count} actualizaciones por instalar",
-            "wasWere": "fue | fueron"
+            "wasWere": "fue | fueron",
+            "updateAutomatically": "Actualizar automáticamente",
+            "updatesItself": "Se actualiza sola",
+            "newPowersWait": "Los permisos nuevos te esperan.",
+            "waitingForYou": "{count} actualización te espera | {count} actualizaciones te esperan",
+            "couldntChangeAutomatic": "No se han podido cambiar las actualizaciones automáticas."
         },
         "sandboxHub": {
             "addedByExtensions": "Añadido por extensiones"

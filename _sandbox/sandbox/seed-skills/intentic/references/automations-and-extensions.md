@@ -78,6 +78,14 @@ to the owner in the Approvals view. (They were called drafts, with a `drafts` sk
 **Extensions** add connectors, channels (Slack, Discord, Telegram, WhatsApp…), viewers and skills, found and installed
 on Sandbox ▸ Extensions.
 
+An extension installed from a registry updates itself by default. The sandbox compares it with its registry every six
+hours and whenever Extensions is opened. A release the registry admitted that asks for no new powers and fits this
+sandbox's version is installed by itself, watched for a minute, and put back if it comes up broken. A release that asks
+for more waits for the owner, with the reason on the extension's page. "Update automatically", the switch over the
+Extensions lists, sets this for every extension. One extension can answer for itself in its page's Updates section
+(Notify, Agent-prepared or Auto), and "Use the setting for all" there goes back to the switch. A baked extension updates
+with the sandbox instead.
+
 A change to an installed extension (a page under `/ext/…`, its panel, tools or skill) is made in its source checkout
 under `/work/extensions/<name>` (`extension list` names each one's), never in the installed copy in
 `.intentic/local/extensions/`, which every conversation runs live, nobody reviews, and the next update replaces. Build

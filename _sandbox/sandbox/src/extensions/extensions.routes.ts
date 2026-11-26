@@ -26,13 +26,20 @@ import {
     previewExtensionUpdate,
     previousVersionOf,
     readExtensionUpdateState,
-    readUpdatePolicies,
     refreshUpdatesIfStale,
     RegistryUnreachableError,
-    resolveUpdatePolicy,
     revertExtensionUpdate,
-    writeUpdatePolicy,
+    takeWaitingUpdates,
 } from "./extension-updates.js";
+import {
+    ownsUpdateAnswer,
+    type PolicyFile,
+    policyOf,
+    readUpdatePolicies,
+    resolveUpdateDefaults,
+    writeUpdateDefaults,
+    writeUpdatePolicy,
+} from "./extension-update-policy.js";
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
 import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions, type PendingExtension } from "../capabilities/extension-inventory/installed-extensions.js";
 import { listenerOwnership } from "./listener/listener-state.js";
@@ -78,6 +85,26 @@ const saySourceOff = async (
                 .catch((error: Error) => services.logger.warn({ err: error, automation: automation.id }, "an off source's automation could not be told"));
         }
     }
+};
+
+// A git install's update lifecycle, the one source that has it: its record, the checkout kept one back, and the answer
+// about updates that applies to it (its own, or the sandbox's it follows).
+const updateLifecycleOf = async (
+    services: Services,
+    id: string,
+    identity: string,
+    updates: Awaited<ReturnType<typeof readExtensionUpdateState>>,
+    policies: PolicyFile,
+): Promise<Pick<ExtensionSummary, "update" | "advisory" | "health" | "previous" | "updatePolicy" | "updatePolicyOwn">> => {
+    const record = updates.extensions[identity];
+    return {
+        ...opt("update", record?.update),
+        ...opt("advisory", record?.advisory),
+        ...opt("health", record?.health),
+        ...opt("previous", await previousVersionOf(services, id, undefined)),
+        updatePolicy: policyOf(policies, identity),
+        updatePolicyOwn: ownsUpdateAnswer(policies, identity),
+    };
 };
 
 export const createExtensionsRoutes = (services: Services) => {
@@ -169,9 +196,7 @@ export const createExtensionsRoutes = (services: Services) => {
                 // Keyed by publisher.name like settings and the switch, surviving a git install's remove/re-add.
                 const identity = extensionIdOf(extension.manifest);
                 const observed = usage[identity];
-                // Update lifecycle exists only for a git install; record, kept-previous checkout and policy join here.
-                const record = installed ? updates.extensions[identity] : undefined;
-                const previous = installed ? await previousVersionOf(services, extension.id, undefined) : undefined;
+                const lifecycle = installed ? await updateLifecycleOf(services, extension.id, identity, updates, policies) : undefined;
                 const refusal = extension.enabled ? refused.get(extension.id) : undefined;
                 return {
                     id: extension.id,
@@ -184,11 +209,7 @@ export const createExtensionsRoutes = (services: Services) => {
                     ...(observed !== undefined && Object.keys(observed).length > 0 ? { usage: observed } : {}),
                     ...backendStateOf(extension),
                     ...opt("problems", refusal === undefined ? undefined : [refusal]),
-                    ...opt("update", record?.update),
-                    ...opt("advisory", record?.advisory),
-                    ...opt("health", record?.health),
-                    ...opt("previous", previous),
-                    ...(installed ? { updatePolicy: resolveUpdatePolicy(policies[identity]) } : {}),
+                    ...lifecycle,
                     ...opt("dev", await devSummaryOf(extension)),
                     ...opt("revision", await workspaceRevisionOf(extension)),
                 };
@@ -201,7 +222,8 @@ export const createExtensionsRoutes = (services: Services) => {
                 extensions,
                 invalid: inventory.invalid,
                 pending: inventory.pending.map(pendingRow),
-                ...(updates.checkedAt !== undefined ? { updatesCheckedAt: updates.checkedAt } : {}),
+                ...opt("updatesCheckedAt", updates.checkedAt),
+                updateDefaults: resolveUpdateDefaults(policies),
             };
         }),
         create: i.create.handler(async ({ input, context }) => {
@@ -374,10 +396,17 @@ export const createExtensionsRoutes = (services: Services) => {
             if (extension.source !== "installed") {
                 throw new ORPCError("PRECONDITION_FAILED", { message: "only a git-installed extension has an update lifecycle" });
             }
-            await writeUpdatePolicy(root, extensionIdOf(extension.manifest), {
-                ...(input.updates !== undefined ? { updates: input.updates } : {}),
-                ...(input.advisories !== undefined ? { advisories: input.advisories } : {}),
-            });
+            const identity = extensionIdOf(extension.manifest);
+            await writeUpdatePolicy(root, identity, { ...opt("updates", input.updates), ...opt("advisories", input.advisories) });
+            // An update already waiting is looked at again under the answer it now has, not at the next check.
+            takeWaitingUpdates(services, [identity]);
+            return { ok: true } as const;
+        }),
+        // The sandbox's answer for every extension without one of its own; the same gate as one extension's.
+        setUpdateDefaults: i.setUpdateDefaults.handler(async ({ input, context }) => {
+            await authorizeOperator(context);
+            await writeUpdateDefaults(root, input.updates);
+            takeWaitingUpdates(services);
             return { ok: true } as const;
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {

@@ -21,7 +21,8 @@ import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspace
 import { workspacePaths } from "../workspace/workspace.js";
 import type { Services } from "../composition.js";
 import { readExtensionEnablement } from "../capabilities/extension-inventory/extension-enablement.js";
-import { applyExtensionUpdate, checkExtensionUpdates, readExtensionUpdateState, resumeExtensionHealthWatches, writeUpdatePolicy } from "./extension-updates.js";
+import { applyExtensionUpdate, checkExtensionUpdates, readExtensionUpdateState, resumeExtensionHealthWatches } from "./extension-updates.js";
+import { readUpdatePolicies, writeUpdatePolicy } from "./extension-update-policy.js";
 
 // Update lifecycle end-to-end (discover, preview, apply, revert), driven over the daemon's HTTP surface, browser-style.
 // Against real git fixtures standing in for the author's repo and the registry.
@@ -55,6 +56,12 @@ const authorRepo = async (): Promise<{ url: string; v1: string; v2: string }> =>
     await writeFile(join(dir, "intentic-extension.json"), JSON.stringify(MANIFEST_V2));
     const v2 = await commit(dir);
     return { url: dir, v1, v2 };
+};
+
+// A release after v1 that asks for exactly what v1 did: the kind the automatic answer takes by itself.
+const samePowersRelease = async (author: { url: string }): Promise<string> => {
+    await writeFile(join(author.url, "intentic-extension.json"), JSON.stringify({ ...MANIFEST_V1, version: "1.0.1" }));
+    return commit(author.url);
 };
 
 // Registry repo with one row pointing at the author's repo; `entry` overrides let a test bless or block the listing.
@@ -113,7 +120,12 @@ test("discover → preview → apply → revert: the whole update lifecycle over
     // Unabbreviated, so Browse's equality with the registry's pinned ref can hold at all.
     expect(row?.commit).toBe(author.v1);
     expect(row?.update?.ref).toBe(author.v2);
-    expect(row?.updatePolicy).toEqual({ updates: "notify", advisories: "auto-disable" });
+    // Nothing written: automatic, the sandbox's default, which this extension follows rather than answering for itself.
+    expect(row?.updatePolicy).toEqual({ updates: "auto", advisories: "auto-disable" });
+    expect(row?.updatePolicyOwn).toBe(false);
+    expect(listed.updateDefaults).toEqual({ updates: "auto", advisories: "auto-disable" });
+    // v2 asks for a new route, so automatic leaves it to a person and says why.
+    expect(row?.update?.needsReview).toContain("POST /panels/*/start");
     expect(listed.updatesCheckedAt).toEqual(expect.any(String));
 
     const preview = await client.extensions.updatePreview({ id: "demo" });
@@ -172,17 +184,87 @@ test("a blocked listing raises an advisory and pulls the switch: the fail-safe d
     expect(row?.update).toBeUndefined();
 });
 
-test("the auto rung refuses an unverified listing and says so: the click stays the owner's", async () => {
+test("a listed release asking for nothing new takes itself by default, health-watched and marked as unattended", async () => {
     const author = await authorRepo();
-    const registry = await registryRepo(author, author.v2);
+    const same = await samePowersRelease(author);
+    const registry = await registryRepo(author, same);
     const { workspace, svc } = await installedWorkspace(author, registry);
-    await writeUpdatePolicy(workspace.root, "acme.demo", { updates: "auto" });
+
+    await checkExtensionUpdates(svc);
+
+    expect(await installedVersion(workspace.root)).toBe("1.0.1");
+    const record = (await readExtensionUpdateState(workspace.root)).extensions["acme.demo"];
+    expect(record?.update).toBeUndefined();
+    expect(record?.health).toMatchObject({ state: "watching", fromRef: author.v1, automatic: true });
+    expect(record?.healthWatch).toEqual({ id: "demo", autoRevert: true });
+});
+
+test("an extension's own Notify outranks the sandbox's automatic default", async () => {
+    const author = await authorRepo();
+    const same = await samePowersRelease(author);
+    const registry = await registryRepo(author, same);
+    const { workspace, svc, client } = await installedWorkspace(author, registry);
+    await client.extensions.setUpdatePolicy({ id: "demo", updates: "notify" });
 
     await checkExtensionUpdates(svc);
 
     expect(await installedVersion(workspace.root)).toBe("1.0.0");
-    const state = await readExtensionUpdateState(workspace.root);
-    expect(state.extensions["acme.demo"]?.update?.needsReview).toContain("isn't verified");
+    const row = (await client.extensions.list()).extensions.find((extension) => extension.id === "demo");
+    expect(row?.update).toMatchObject({ ref: same });
+    expect(row?.update?.needsReview).toBeUndefined();
+    expect(row).toMatchObject({ updatePolicy: { updates: "notify" }, updatePolicyOwn: true });
+
+    // `default` drops its own answer: it follows the sandbox again, and the record that held only that answer goes.
+    await client.extensions.setUpdatePolicy({ id: "demo", updates: "default" });
+    expect((await readUpdatePolicies(workspace.root))["acme.demo"]).toBeUndefined();
+    await waitFor(async () => expect(await installedVersion(workspace.root)).toBe("1.0.1"), SETTLES);
+});
+
+test("the sandbox's switch holds every extension without an answer of its own, and turning it back on takes what waits", async () => {
+    const author = await authorRepo();
+    const same = await samePowersRelease(author);
+    const registry = await registryRepo(author, same);
+    const { workspace, svc, client } = await installedWorkspace(author, registry);
+    await client.extensions.setUpdateDefaults({ updates: "notify" });
+
+    await checkExtensionUpdates(svc);
+
+    expect(await installedVersion(workspace.root)).toBe("1.0.0");
+    const listed = await client.extensions.list();
+    expect(listed.updateDefaults).toEqual({ updates: "notify", advisories: "auto-disable" });
+    expect(listed.extensions.find((extension) => extension.id === "demo")).toMatchObject({ updatePolicy: { updates: "notify" }, updatePolicyOwn: false });
+
+    // Not at the next check: the switch itself looks at the update already waiting.
+    await client.extensions.setUpdateDefaults({ updates: "auto" });
+    await waitFor(async () => expect(await installedVersion(workspace.root)).toBe("1.0.1"), SETTLES);
+    expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.health?.automatic).toBe(true);
+});
+
+test("a release held for its powers stays held pass after pass; one that failed to take is tried again", async () => {
+    const author = await authorRepo();
+    const held = await registryRepo(author, author.v2);
+    const { workspace, svc } = await installedWorkspace(author, held);
+    await checkExtensionUpdates(svc);
+    await checkExtensionUpdates(svc);
+    expect(await installedVersion(workspace.root)).toBe("1.0.0");
+    expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]).toMatchObject({ autoHeld: "review" });
+
+    const other = await authorRepo();
+    const same = await samePowersRelease(other);
+    const registry = await registryRepo(other, same);
+    const second = await installedWorkspace(other, registry);
+    // The author's repository is unreachable for the first pass, so taking the release fails.
+    const away = `${other.url}-away`;
+    await exec("mv", [other.url, away]);
+    await checkExtensionUpdates(second.svc);
+    const failed = (await readExtensionUpdateState(second.workspace.root)).extensions["acme.demo"];
+    expect(failed).toMatchObject({ autoHeld: "failed" });
+    expect(failed?.update?.needsReview).toContain("auto-update failed");
+
+    await exec("mv", [away, other.url]);
+    await checkExtensionUpdates(second.svc);
+    expect(await installedVersion(second.workspace.root)).toBe("1.0.1");
+    expect((await readExtensionUpdateState(second.workspace.root)).extensions["acme.demo"]?.autoHeld).toBeUndefined();
 });
 
 test("a verified release whose powers grew still falls back to notify, naming the new power", async () => {
