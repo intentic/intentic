@@ -5,6 +5,7 @@ import { useWallpaper } from "../../../skins/useWallpaper";
 import { computerAgents } from "../../../client/sandbox/useDaemonRoutes";
 import ChatCapacityRail from "../../chat/panel/capacity/ChatCapacityRail.vue";
 import type { CapacityMine } from "../../chat/panel/capacity/chatCapacity";
+import { useCapacityRail } from "../../chat/panel/capacity/capacityMemory";
 import { useShellChatLink } from "../../chat/panel/shellChatLink";
 import { chatRailOnScreen, showChat } from "../../../models/conversations/panel/chatPanelLayout";
 import { draftConversation } from "../../../models/conversations/panel/useChat-reveal";
@@ -31,7 +32,11 @@ import AgentsView from "../board/AgentsView.vue";
    pixel the drag passed. */
 const { mobile } = useDevice();
 // None on this computer: its agents spend the reader's own harness's allowance, which nothing here meters (local/agents/).
-const usageHere = computed(() => !mobile.value && !chatRailOnScreen.value && !computerAgents.value);
+// None with no account connected either (every fresh sandbox): the column would say "nowhere has room" about accounts
+// that don't exist. The same rule the chat's own rail stands on (capacityMemory.ts), so mid-read it holds only where it
+// last had figures.
+const capacityRail = useCapacityRail();
+const usageHere = computed(() => !mobile.value && !chatRailOnScreen.value && !computerAgents.value && capacityRail.value);
 // The focused chat's account, marked in Usage left as the one the reader typing beside it is spending (ChatSideRail's rule).
 const chat = useChat();
 const mine = computed((): CapacityMine => {
