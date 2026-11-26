@@ -7,7 +7,8 @@ import { DEMO_PATH, HOSTED_START_LABEL, HOSTED_START_URL } from "@intentic/site-
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
 import { buildSoftwareAppSchema } from "@intentic/site-content/structured-data";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { desktopPlatforms } from "../lib/desktop-downloads";
+import { DESKTOP_DOWNLOADS_PAGE, desktopPlatforms } from "../lib/desktop-downloads";
+import Lozenge from "./Lozenge.astro";
 import { DESK_VARIANT } from "../lib/variant";
 import ProductShot from "./ProductShot.astro";
 import Corners from "./Corners.astro";
@@ -40,6 +41,9 @@ const demo = content.hero.demo;
 const { chip, pitch } = content.hero;
 // The chip's marks: the systems' own for the two desktop builds (the download page's), a globe for the browser.
 const platformMarks = { windows: desktopPlatforms.windows.icon, linux: desktopPlatforms.linux.icon } as const;
+// Read as one phrase, since the marks between the words say nothing aloud.
+const platformNames = chip.platforms.map((platform) => platform.name);
+const chipName = `${chip.label}, on ${platformNames.slice(0, -1).join(", ")} and ${platformNames.at(-1)}. Every download`;
 
 // FAQPage data stays flat; topic bands belong only to the page layout.
 const faq = faqGroups.flatMap((group) => group.items).map((item) => ({ question: item.question, answer: item.answer.join(" ") }));
@@ -87,30 +91,35 @@ const { steps: appSteps, alternatives } = content.connect;
 
                 <div class="hero-grid">
                     <div class="hero-copy">
-                        {/* What it costs and where it runs, read before the headline is. */}
-                        <p class="hero-chip">
+                        {/* What it costs and where it runs, read before the headline is; it opens every download. */}
+                        <a class="hero-chip" href={DESKTOP_DOWNLOADS_PAGE} aria-label={chipName}>
                             <span class="hero-chip-label">{chip.label}</span>
-                            <span class="hero-chip-rule" aria-hidden="true"></span>
                             <span class="hero-chip-platforms">
                                 {
-                                    chip.platforms.map((platform) => (
-                                        <span class="hero-chip-platform">
-                                            {platform.mark === "browser" ? (
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                                                    <circle cx="12" cy="12" r="9.2" />
-                                                    <path d="M2.8 12h18.4M12 2.8c2.6 2.6 3.9 5.7 3.9 9.2s-1.3 6.6-3.9 9.2c-2.6-2.6-3.9-5.7-3.9-9.2S9.4 5.4 12 2.8Z" />
-                                                </svg>
-                                            ) : (
-                                                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                                                    <path d={platformMarks[platform.mark]} />
-                                                </svg>
-                                            )}
-                                            <span class="hero-chip-name">{platform.name}</span>
-                                        </span>
+                                    chip.platforms.map((platform, index) => (
+                                        <>
+                                            {index > 0 && <Lozenge class="hero-chip-sep" />}
+                                            <span class="hero-chip-platform">
+                                                {platform.mark === "browser" ? (
+                                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                                        <circle cx="12" cy="12" r="9.2" />
+                                                        <path d="M2.8 12h18.4M12 2.8c2.6 2.6 3.9 5.7 3.9 9.2s-1.3 6.6-3.9 9.2c-2.6-2.6-3.9-5.7-3.9-9.2S9.4 5.4 12 2.8Z" />
+                                                    </svg>
+                                                ) : (
+                                                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                                        <path d={platformMarks[platform.mark]} />
+                                                    </svg>
+                                                )}
+                                                <span class="hero-chip-name">{platform.name}</span>
+                                            </span>
+                                        </>
                                     ))
                                 }
                             </span>
-                        </p>
+                            <svg class="hero-chip-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="m9 6 6 6-6 6" />
+                            </svg>
+                        </a>
 
                         <Headline lines={content.hero.headlineLines} shared />
 
