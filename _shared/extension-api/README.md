@@ -99,6 +99,7 @@ flowchart LR
   owner's floor for those wakes. `fakeExtensionApi` models them: `route(path, init, { caller, mintedAgoMs })` attaches
   an assertion, its fake daemon believes only those it minted and records the caller a call carried (`calls[].caller`),
   and `publicRoute(path, init, verified)` refuses a path no declared route answers, as the daemon does.
+- `api.backend.available` reads the daemon's installed manifest. It is false when the manifest has no server and undefined when the host has no inventory for the extension. It describes the declaration, so the server may still be starting.
 - A backend hears CI and writes the activity feed (2026-11-26, 2.56.0): `api.events.onCi` hears each frame of the CI feed
   as the core's ingestion hears it from a forge (`events: ["ci"]`; a failed job's frame carries what the forge said of
   it, `failed`), one frame a batch and an empty batch after a gap in the stream; `api.activity.append(row)` writes a row

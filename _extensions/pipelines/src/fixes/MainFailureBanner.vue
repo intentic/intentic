@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
                          title's line (the group above is `order-last`) and the pill and the press share the next one. -->
                     <Button
                         data-resolve
-                        class="order-last @max-md:hidden"
+                        class="order-last hidden @md:inline-flex"
                         :label="t(`mainFailure.resolve`)"
                         size="small"
                         tier="quiet"

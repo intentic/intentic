@@ -5,20 +5,6 @@ import { testConfig } from "../../env.config.testing.js";
 import { planGeminiTurn } from "./gemini-provider.js";
 import type { GeminiModel } from "./gemini-models.js";
 
-// The browser stack reads the machine to find its runtime; planning asks it for servers and nothing more here.
-const browserServers = jest.fn();
-jest.mock("../../browser/tools/browser-tools.js", () => ({
-    ROUTED_BROWSER_SERVER: "browser",
-    ANONYMOUS_BROWSER_SERVER: "web",
-    browserServersOf: (...args: unknown[]) => browserServers(...args),
-    prepareBrowserOwner: jest.fn(),
-}));
-
-beforeEach(() => {
-    browserServers.mockReset();
-    browserServers.mockResolvedValue({ servers: [], accounts: {}, ports: {}, passkeys: {} });
-});
-
 // What the Google channel does with the model a turn names. The channel vends one row per model AND per thinking level
 // (Claude Opus beside Gemini Pro), each metered on its own allowance, so which id is sent is not a detail: substituting
 // spends a different allowance than the one the user chose.
@@ -32,6 +18,7 @@ const OFFERED: readonly GeminiModel[] = [
 const geminiServices = (
     models: readonly GeminiModel[] = OFFERED,
     served: { live: readonly GeminiModel[] | undefined } = { live: models },
+    overrides: Partial<Services> = {},
 ): Services =>
     servicesWith({
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
@@ -45,6 +32,7 @@ const geminiServices = (
         async *geminiAgent() {},
         // The daemon's own servers ride every planned turn (daemon-tools/door-tools.ts); the deps server names its conversation.
         agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+        ...overrides,
     });
 
 test("sends the pinned model the channel offers", async () => {
@@ -88,30 +76,31 @@ test("refuses a turn the translator has no Google model to serve, instead of sen
     });
 });
 
-// Gemini rides OpenCode, which takes the turn's remote MCP servers as Codex does (the browser the role may drive is one
-// of them), and the daemon's own servers after them on the same lease, with the relay its loop attaches to.
-test("hands the turn its remote MCP servers, the browser first and the daemon's own after", async () => {
-    const web = { name: "web", url: "http://127.0.0.1:1/mcp/web", token: "turn-bearer", timeoutMs: 120_000 };
-    browserServers.mockResolvedValue({ servers: [web], accounts: {}, ports: { web: 41_000 }, passkeys: {} });
+// Gemini rides OpenCode: the turn's leased mounts are forwarded, followed by the daemon's own servers.
+test("hands the turn its remote MCP servers, the linked sandbox first and the daemon's own after", async () => {
+    const link = { name: "linked", url: "http://127.0.0.1:8787/mcp/linked", token: "turn-bearer", timeoutMs: 120_000 };
+    const services = geminiServices(OFFERED, { live: OFFERED }, { linkMounts: () => [link] });
 
-    const plan = await planGeminiTurn(geminiServices(), turn({ model: "gemini-3.1-pro-low", conversationId: "chat-1" }), context, []);
+    const plan = await planGeminiTurn(services, turn({ model: "gemini-3.1-pro-low", conversationId: "chat-1" }), context, []);
     if (!plan.ok) {
         throw new Error(`planning refused the turn: ${plan.message}`);
     }
 
     const remote = plan.request.tools.remote ?? [];
-    expect(remote[0]).toEqual(web);
+    expect(remote[0]).toEqual(link);
     expect(remote.map((tool) => tool.name)).toEqual(expect.arrayContaining(["ui", "subagents", "watch"]));
     expect(plan.request.hooks.relay).toMatchObject({ attach: expect.any(Function), push: expect.any(Function) });
 });
 
-// A helper's request reads nothing past its prompt, so the browser the role could drive is not mounted for it.
+// A helper's request reads nothing past its prompt, so it never leases the turn's tools.
 test("a sealed request is handed no MCP server, on the model it pinned", async () => {
-    const web = { name: "web", url: "http://127.0.0.1:1/mcp/web", token: "turn-bearer", timeoutMs: 120_000 };
-    browserServers.mockResolvedValue({ servers: [web], accounts: {}, ports: { web: 41_000 }, passkeys: {} });
+    const lease = jest.fn(() => {
+        throw new Error("a sealed turn requested a tool lease");
+    });
+    const services = geminiServices(OFFERED, { live: OFFERED }, { turnMounts: unstubbed<Services["turnMounts"]>("turnMounts", { lease }) });
     const sealed = { ...context, base: { ...context.base, policy: { sealed: true as const } } };
 
-    const plan = await planGeminiTurn(geminiServices(), turn({ model: "gemini-3.1-pro-low" }), sealed, []);
+    const plan = await planGeminiTurn(services, turn({ model: "gemini-3.1-pro-low" }), sealed, []);
     if (!plan.ok) {
         throw new Error(`planning refused the sealed request: ${plan.message}`);
     }
@@ -119,5 +108,5 @@ test("a sealed request is handed no MCP server, on the model it pinned", async (
     expect(plan.request.tools).toEqual(context.base.tools);
     expect(plan.request.policy).toEqual({ sealed: true });
     expect(plan.request.spec.model).toBe("gemini-3.1-pro-low");
-    expect(browserServers).not.toHaveBeenCalled();
+    expect(lease).not.toHaveBeenCalled();
 });

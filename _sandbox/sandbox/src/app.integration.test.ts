@@ -1091,6 +1091,8 @@ test("agent.run merges internal (env) tools with the mcp-kind capabilities for t
     expect(remote).toEqual([
         { name: "obs", url: "https://signoz.example.com/mcp", token: "internal" },
         { name: "linear", url: expect.stringMatching(/\/mcp\/linear$/), token: expect.any(String) },
+        { name: "chatgpt", url: expect.stringMatching(/\/mcp\/chatgpt$/), token: expect.any(String) },
+        { name: "pipelines", url: expect.stringMatching(/\/mcp\/pipelines$/), token: expect.any(String) },
     ]);
     expect(remote?.[1]?.token).not.toBe("external");
 });

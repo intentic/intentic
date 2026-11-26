@@ -32,6 +32,7 @@ interface RecordedSurface {
     readonly listener?: readonly string[];
     // api.sandbox's own members, recorded from 2.3.0 on; optional since earlier entries predate it.
     readonly sandboxApi?: readonly string[];
+    readonly backendApi?: readonly string[];
     // api.workspace's own members, recorded from 2.10.0 on; a top-level record can't see additions inside workspace.
     readonly workspaceApi?: readonly string[];
     /* api.chat's own members, recorded from 2.11.0 on: `openAgent` was added there. */
@@ -159,6 +160,7 @@ const liveSurface = (): RecordedSurface => ({
     api: apiMembers(),
     listener: Object.keys(ListenerContributionSchema.shape).toSorted(),
     sandboxApi: nestedMembers(`sandbox`),
+    backendApi: nestedMembers(`backend`),
     workspaceApi: nestedMembers(`workspace`),
     chatApi: nestedMembers(`chat`),
     modelsApi: nestedMembers(`models`),

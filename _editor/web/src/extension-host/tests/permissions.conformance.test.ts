@@ -150,14 +150,15 @@ const everyExtension = readdirSync(extensionsRoot, { withFileTypes: true })
     .map((entry) => entry.name);
 
 // Every sandbox call an extension's source makes; a data-only pack (manifest, no src/) makes none.
-const callsOf = (name: string): Call[] => {
+const callsOf = (name: string): (Call & { readonly file: string })[] => {
     const dir = join(extensionsRoot, name, "src");
     if (!existsSync(dir)) {
         return [];
     }
-    const texts = sourceFiles(dir).map((file) => readFileSync(file, "utf8"));
-    const constants = scanStringConstants(texts);
-    return texts.flatMap((text) => scanTypedCalls(text).concat(scanCalls(text, scanMethodHelpers(text), scanRouteSegments(text), constants)));
+    const texts = sourceFiles(dir).map((file) => ({ file, text: readFileSync(file, "utf8") }));
+    const constants = scanStringConstants(texts.map(({ text }) => text));
+    return texts.flatMap(({ file, text }) => scanTypedCalls(text).concat(scanCalls(text, scanMethodHelpers(text), scanRouteSegments(text), constants))
+        .map((call) => ({ ...call, file: file.slice(dir.length + 1) })));
 };
 
 // Calls into an extension's own /x/publisher.name/ namespace are exempt from declaration, mirroring apiImpl.ts: it's
@@ -167,9 +168,15 @@ const ownNamespaceOf = (name: string): string => {
     const manifest = ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(extensionsRoot, name, "intentic-extension.json"), "utf8")));
     return `/x/${manifest.publisher}.${manifest.name}/`;
 };
+// The app uses these calls only with the older Pipelines manifest that granted them.
+const legacyPipelines = new Set([
+    "ciRunsQuery.ts:GET /ci/runs",
+    "useFailureHistory.ts:POST /ci/runs/jobs",
+    "useRunJobs.ts:POST /ci/runs/jobs",
+]);
 const declarableCallsOf = (name: string): Call[] => {
     const own = ownNamespaceOf(name);
-    return callsOf(name).filter((call) => !call.path.startsWith(own));
+    return callsOf(name).filter((call) => !call.path.startsWith(own) && !(name === "pipelines" && legacyPipelines.has(`${call.file}:${call.method} ${call.path}`)));
 };
 
 describe.each(everyExtension)("%s reads models and accounts through api.models, not the daemon", (name) => {
@@ -256,10 +263,11 @@ const { createExtensionApi, deactivateAllExtensions } = await import("../apiImpl
 const manifestOf = (name: string): ExtensionManifest =>
     ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(extensionsRoot, name, "intentic-extension.json"), "utf8")));
 
-const hostApiOf = (manifest: ExtensionManifest): IntenticApi =>
+const hostApiOf = (manifest: ExtensionManifest, fromInventory = true): IntenticApi =>
     createExtensionApi(
-        { id: extensionIdOf(manifest), manifest, commit: `conformance`, source: `builtin`, enabled: true },
+        { id: extensionIdOf(manifest), manifest, commit: `builtin`, source: `builtin`, enabled: true },
         { repos: () => [], capabilities: () => [] },
+        fromInventory,
     ).api;
 
 // A value for every `{param}`, so the gate judges a concrete path, as it does for a real call.
@@ -278,6 +286,23 @@ const doorOutcome = async (call: () => Promise<unknown>): Promise<string> => {
     }
     return judged.calls.join(`, `) || `refused`;
 };
+
+test(`only the older Pipelines manifest grants the legacy board routes`, async () => {
+    const current = manifestOf(`pipelines`);
+    const { server: _server, ...older } = current;
+    const reads = [`GET /ci/runs`, `POST /ci/runs/jobs`];
+    const original = { ...older, permissions: { ...older.permissions, sandbox: reads } };
+    const next = hostApiOf(current);
+    expect(next.backend.available).toBe(true);
+    expect(await doorOutcome(() => next.sandbox.rpc.ci.runs())).toBe(`refused`);
+    expect(await doorOutcome(() => next.sandbox.rpc.ci.jobs({ repo: `demo`, runId: 1 }))).toBe(`refused`);
+
+    const previous = hostApiOf(original);
+    expect(previous.backend.available).toBe(false);
+    expect(await doorOutcome(() => previous.sandbox.rpc.ci.runs())).toBe(reads[0]);
+    expect(await doorOutcome(() => previous.sandbox.rpc.ci.jobs({ repo: `demo`, runId: 1 }))).toBe(reads[1]);
+    expect(hostApiOf(current, false).backend.available).toBeUndefined();
+});
 
 type Procedures = Readonly<Record<string, Readonly<Record<string, (input: unknown) => Promise<unknown>>>>>;
 

@@ -19,7 +19,6 @@ import { extensionsSamples } from "./extensions.samples.ts";
 import { gitSamples } from "./git.samples.ts";
 import { historySamples } from "./history.samples.ts";
 import { hubSamples } from "./hub.samples.ts";
-import { issuesSamples } from "./issues.samples.ts";
 import { logsSamples } from "./logs.samples.ts";
 import { loopsSamples } from "./loops.samples.ts";
 import { needsSamples } from "./needs.samples.ts";
@@ -106,7 +105,6 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         share: shareSamples(context),
         seal: sealSamples(context),
         hub: hubSamples(context),
-        issues: issuesSamples(context),
         logs: logsSamples(context),
     };
 };

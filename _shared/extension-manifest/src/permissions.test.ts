@@ -133,10 +133,10 @@ describe("declaredReachOf", () => {
             version: "1.0.0",
             engines: { intentic: "^2.50.0" },
             server: "dist/server.js",
-            permissions: { events: ["run", "activity"], work: true, exec: ["toolchain"], fires: ["sweep", "nightly-report"], turn: ["browser", "jobs"] },
+            permissions: { events: ["run", "activity", "ci"], work: true, exec: ["toolchain"], fires: ["sweep", "nightly-report"], turn: ["browser", "jobs"] },
         });
         expect(declaredReachOf(manifest.permissions)).toEqual({
-            events: ["run", "activity"],
+            events: ["run", "activity", "ci"],
             work: true,
             exec: ["toolchain"],
             fires: ["sweep", "nightly-report"],
@@ -145,7 +145,7 @@ describe("declaredReachOf", () => {
     });
 
     test.each([
-        ["an event kind nobody serves", { events: ["ci"] }],
+        ["an event kind nobody serves", { events: ["deployment"] }],
         ["a class outside the two", { exec: ["service"] }],
         ["a handler that is not a lowercase word", { fires: ["Sweep Now"] }],
         ["a turn power nobody serves", { turn: ["devices"] }],

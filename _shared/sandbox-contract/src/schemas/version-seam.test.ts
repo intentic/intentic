@@ -22,7 +22,10 @@ test("a payload from a build that predates a toggle parses, with the new toggle 
 
 test("no field is required: a workspace that has never written settings parses", () => {
     const defaults = SandboxSettingsSchema.parse({});
-    expect(Object.keys(defaults).toSorted()).toEqual(Object.keys(SandboxSettingsSchema.shape).toSorted());
+    // An absent role map selects the suggested setups, while a saved empty map disables every job's setup.
+    expect(Object.keys(defaults).toSorted()).toEqual(Object.keys(SandboxSettingsSchema.shape).filter((key) => key !== "roleSetups").toSorted());
+    expect(defaults.roleSetups).toBeUndefined();
+    expect(SandboxSettingsSchema.parse({ roleSetups: {} }).roleSetups).toEqual({});
 });
 
 test("a key of the wrong type is still a parse failure: tolerance is for absence, not for garbage", () => {

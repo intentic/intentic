@@ -8,6 +8,7 @@ import { workspaceRaw } from "./workspace/rawFile";
 import { repoAppsBackend } from "./workspace/graph";
 import { maintenanceBackend } from "./extensions/maintenance.backend";
 import { issuesBackend } from "./extensions/issues.backend";
+import { pipelinesBackend } from "./board/ci.handler";
 import { visitorChatBackend } from "./extensions/visitor-chat.backend";
 import { linksRoutes } from "./machine/links.routes";
 import { machineRoutes } from "./machine/machine.routes";
@@ -133,7 +134,7 @@ const knowledge: Readonly<Record<string, (context: RawContext) => Response | Pro
 };
 
 // Every extension backend the demo stands in for, by method and path.
-const backends: typeof knowledge = { ...knowledge, ...repoAppsBackend, ...maintenanceBackend, ...issuesBackend, ...visitorChatBackend };
+const backends: typeof knowledge = { ...knowledge, ...repoAppsBackend, ...maintenanceBackend, ...issuesBackend, ...visitorChatBackend, ...pipelinesBackend };
 
 // The API keys the visitor's laptop holds, for GET /arrivals/keys: the hint and digest only, as the daemon answers.
 const DEMO_KEYS = [
@@ -233,7 +234,7 @@ export const raw = {
             failed: ids.filter((id) => !known.includes(id)).map((id) => ({ id, error: `that key is no longer on a connected device` })),
         });
     },
-    // Knowledge, repo-apps, maintenance, issues and the Visitor chat answer in the same namespaces their real backends use.
+    // The demo extensions answer in the same namespaces their real backends use.
     "ALL /x/*": (context) => backends[`${context.request.method} ${context.url.pathname}`]?.(context),
     // Each area's routes from a file of its own (`<area>/<name>.routes.ts`), so they can be answered without touching this table.
     ...workspaceRoutes,

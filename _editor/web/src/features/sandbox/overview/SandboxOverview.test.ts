@@ -2,9 +2,11 @@
 // jsdom: mounts the component tree and reads rendered DOM.
 import "@intentic/testing/dom";
 import type { HostedPlanState, SandboxSummary } from "@intentic/api-contract";
+import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { type DeviceSandboxRow, SWATCHES, swatchHex } from "@intentic/ui";
 import { waitFor } from "@intentic/testing/bun";
 import PrimeVue from "primevue/config";
+import { createMemoryHistory, createRouter } from "vue-router";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { hostedLane, hostedMachine, hostedPlanState, spentHours } from "../../../testing/hostedPlan";
@@ -92,19 +94,14 @@ const mount = (sandbox: SandboxSummary): HTMLElement => {
     document.body.append(el);
     app = createApp({ render: () => h(SandboxOverview) });
     app.component(`Icon`, IconStub);
-    // RouterLink stub renders an anchor so the hosted upgrade card doesn't warn about a missing router.
-    app.component(
-        `RouterLink`,
-        defineComponent({
-            props: { to: { type: String, default: `` } },
-            render() {
-                return h(`a`, { href: this.to }, this.$slots[`default`]?.());
-            },
-        }),
-    );
+    app.use(createRouter({
+        history: createMemoryHistory(),
+        routes: [{ path: `/:pathMatch(.*)*`, component: defineComponent({ render: () => null }) }],
+    }));
     app.directive(`tooltip`, {});
     // The Resources form is a PrimeVue dialog and reads the plugin's config while rendering.
     app.use(PrimeVue);
+    app.use(VueQueryPlugin, { queryClient: new QueryClient() });
     app.mount(el);
     return el;
 };
@@ -136,9 +133,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    app?.unmount();
     daemonUrl.value = undefined;
     selfRow.value = undefined;
-    app?.unmount();
+    hostedPlan.value = undefined;
+    planOffered.value = false;
+    pending.value = undefined;
     app = undefined;
     document.body.innerHTML = ``;
 });
@@ -356,12 +356,12 @@ it(`states this sandbox's own hours on the hosted card, with Billing where a pla
     planOffered.value = true;
     const root = mount(sandboxRow({ tier: `owner`, hosted: { region: `arn`, warm: true } }));
     await nextTick();
-    expect(root.textContent).toContain(`Free hours · 12h of 40h left this month`);
+    expect(root.querySelector(`[data-plan-card]`)?.textContent).toContain(`Free hours12h of 40h left this month`);
     expect(root.textContent).toContain(`Billing`);
 
     planOffered.value = false;
     await nextTick();
-    expect(root.textContent).toContain(`Free hours · 12h of 40h left this month`);
+    expect(root.querySelector(`[data-plan-card]`)?.textContent).toContain(`Free hours12h of 40h left this month`);
     expect(root.textContent).not.toContain(`Billing`);
 });
 

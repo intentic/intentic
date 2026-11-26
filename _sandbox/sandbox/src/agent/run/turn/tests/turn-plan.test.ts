@@ -413,7 +413,7 @@ test("Codex receives the connected browser granted to its role, and no other acc
         // No site the turn's accounts sign in on could be read (this suite stubs no card), so no account names a site.
         {},
     );
-    expect(request.tools.remote?.[0]).toEqual(routed);
+    expect(request.tools.remote?.slice(0, 3).map((tool) => tool.name)).toEqual(["chatgpt", "pipelines", "browser"]);
     expect(request.tools.remote?.map((tool) => tool.name)).toContain("gate");
     expect(request.tools.remote?.filter((tool) => tool.name === "browser")).toEqual([routed]);
     expect(request.tools.sdkServers).toBeUndefined();
@@ -463,8 +463,8 @@ test("Grok receives the connected browser granted to its role, and no other acco
         // No site the turn's accounts sign in on could be read (this suite stubs no card), so no account names a site.
         {},
     );
-    // The daemon's own servers ride the same lease after it (daemon-tools/door-tools.ts); no other browser does.
-    const daemonOwn = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code", "terminal"]);
+    // Builtin extension tools ride before the browser and the daemon's own servers after it.
+    const daemonOwn = new Set(["chatgpt", "pipelines", "ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code", "terminal"]);
     expect(request.tools.remote?.filter((tool) => !daemonOwn.has(tool.name))).toEqual([routed]);
     expect(request.tools.sdkServers).toBeUndefined();
     // 2026-10-25: OpenCode turns held the accounts' browser and were told nothing of it. Now they are, by the name

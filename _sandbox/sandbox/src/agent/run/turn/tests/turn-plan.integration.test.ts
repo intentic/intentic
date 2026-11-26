@@ -12,6 +12,7 @@ import type { Services } from "../../../../composition.js";
 import { conversationAfter } from "../../../../conversations/registry/agents-store.testing.js";
 import { testConfig } from "../../../../env.config.testing.js";
 import { memoryFleet } from "../../../../conversations/registry/agents-registry.testing.js";
+import { brokerSliceFake } from "../../../../capabilities/broker/broker-slice.testing.js";
 import { testTurnMounts } from "../../../tools/turn-mounts.testing.js";
 import { SKILL_CATALOG_NOTE_HEADER } from "../../../../store/loaded-skills.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../../../../workspace/layout/workspace-setup.js";
@@ -116,6 +117,7 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
         webextReach: async () => undefined,
         phoneReach: async () => undefined,
         // Leased by every planned turn: its browsers, peers and extension cards mount here.
+        ...brokerSliceFake(),
         ...testTurnMounts(),
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {

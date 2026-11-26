@@ -102,7 +102,7 @@ const refusedAdmission = async (get: () => Promise<AgentDomainPolicy>) => {
             count: async () => rows.length,
             append,
         }),
-        logger: unstubbed<Services["logger"]>("logger", { info: () => {} }),
+        logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {} }),
     });
     const turns = turnDoors(() => services, (input, signal) => streamAgent(services, input, signal));
     const currentRun = (): LiveRun => {

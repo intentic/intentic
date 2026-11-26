@@ -12,6 +12,7 @@ describe("TurnProfile", () => {
             "fast",
             "harness",
             "isolated",
+            "job",
             "model",
             "runRole",
             "thinking",
@@ -35,6 +36,7 @@ describe("TurnProfile", () => {
             isolated: true,
             unattended: true,
             runRole: "loop-iteration",
+            job: "pipeline-fix",
             permissionMode: "plan",
             autoLand: false,
         });
@@ -50,6 +52,7 @@ describe("TurnProfile", () => {
             isolated: true,
             unattended: true,
             runRole: "loop-iteration",
+            job: "pipeline-fix",
         });
     });
 

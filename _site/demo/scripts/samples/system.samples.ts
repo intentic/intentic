@@ -28,6 +28,7 @@ export const systemSamples: GroupSamples<`system`> = ({ host }) => ({
     subagents: undefined,
     storage: undefined,
     diskPressure: undefined,
+    reclaimMemory: undefined,
     scanStorage: undefined,
     cancelStorageScan: undefined,
     cleanStorage: { category: `logs` },

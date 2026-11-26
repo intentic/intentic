@@ -91,6 +91,30 @@ const ROWS: readonly Row[] = [
         adds: ["events:activity", "its backend hears whether any agent turn is running in the sandbox"],
     },
     {
+        power: "events:ci",
+        without: { permissions: { events: ["run"] } },
+        with: { permissions: { events: ["run", "ci"] } },
+        adds: ["events:ci", "its backend hears every CI run and job the workspace's forges report"],
+    },
+    {
+        power: "turn:browser",
+        without: { permissions: { turn: [] } },
+        with: { permissions: { turn: ["browser"] } },
+        adds: ["turn:browser", "its agent tools drive the sandbox's signed-in browsers, for the accounts the calling turn holds and on those accounts' own sites"],
+    },
+    {
+        power: "turn:owner-browser",
+        without: { permissions: { turn: ["browser"] } },
+        with: { permissions: { turn: ["browser", "owner-browser"] } },
+        adds: ["turn:owner-browser", "its agent tools use the owner's own browser when the calling turn holds it"],
+    },
+    {
+        power: "turn:jobs",
+        without: { permissions: { turn: [] } },
+        with: { permissions: { turn: ["jobs"] } },
+        adds: ["turn:jobs", "its agent tools start background jobs in the calling conversation"],
+    },
+    {
         power: "work",
         without: { permissions: { work: false } },
         with: { permissions: { work: true } },

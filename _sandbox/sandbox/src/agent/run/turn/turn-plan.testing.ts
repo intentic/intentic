@@ -17,6 +17,7 @@ import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import { parkedCards } from "../../../conversations/actor/parked-cards.js";
 import { privacySliceFake } from "../../../privacy/privacy-slice.testing.js";
+import { brokerSliceFake } from "../../../capabilities/broker/broker-slice.testing.js";
 import { translatorGatewayFake } from "../../providers/translator-gateway.testing.js";
 
 // Shared fixture both turn-plan suites build on, as a `*.testing.ts` module (not copied) so the integration-budget
@@ -114,6 +115,7 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", { status: async () => [], issueAt: async () => undefined }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        ...brokerSliceFake(),
         // Nothing gated by default; read on every turn regardless, since planTurn narrows the manifest once for every
         // runtime.
         credentialGates: unstubbed<Services["credentialGates"]>("credentialGates", { list: async () => [] }),

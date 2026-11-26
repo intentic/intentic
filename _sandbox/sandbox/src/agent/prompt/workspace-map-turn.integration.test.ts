@@ -13,6 +13,7 @@ import type { Services } from "../../composition.js";
 import { conversationAfter } from "../../conversations/registry/agents-store.testing.js";
 import { testConfig } from "../../env.config.testing.js";
 import { memoryFleet } from "../../conversations/registry/agents-registry.testing.js";
+import { brokerSliceFake } from "../../capabilities/broker/broker-slice.testing.js";
 import { testTurnMounts } from "../tools/turn-mounts.testing.js";
 import { workspaceSetup } from "../../workspace/layout/workspace-setup.js";
 import { LANDING_CHECKS_NOTE } from "./checks-note.js";
@@ -124,6 +125,7 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         // No other conversation changing this one's files (conversations/files-in-flight.ts): read on every turn.
         inFlight: unstubbed<Services["inFlight"]>("inFlight", { turnNote: () => undefined }),
         // Leased by every planned turn: its browsers, peers and extension cards mount here.
+        ...brokerSliceFake(),
         ...testTurnMounts(),
         async *codexAgent() {},
         async *grokAgent() {},

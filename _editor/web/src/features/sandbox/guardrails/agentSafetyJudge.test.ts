@@ -98,7 +98,7 @@ test("moving the switch writes the mode", async () => {
 test("says the judge has no model when it is taken off its setup", () => {
     settings.value = SandboxSettingsSchema.parse({ commandJudge: `on`, roleSetups: {} });
     const host = mount();
-    expect(settings.value.roleSetups[`safety-judge`]).toBeUndefined();
+    expect(settings.value.roleSetups).toEqual({});
     expect(host.textContent).toContain(`No model is set for the judge`);
     expect(host.textContent).toContain(`standing rule alone`);
     // Both providers are connected in this fixture; neither should be named without a pin.

@@ -82,7 +82,7 @@ const openLoopbackPreview = jest.fn();
 
 // Every ResizeObserver a mounted row builds, with the boxes it watches. jsdom has no layout to fire one, so the pinned
 // band's suite fires the row's own by hand; the others are left alone and never fire, as before.
-const resizers = [] as { readonly targets: Element[]; readonly fire: () => void }[];
+const resizers = [] as { readonly targets: Element[]; readonly fire: (target: Element) => void }[];
 
 (() => {
     // Resize/IntersectionObserver stubs since jsdom lacks both; never firing leaves clamp/pin at their default state.
@@ -96,7 +96,10 @@ const resizers = [] as { readonly targets: Element[]; readonly fire: () => void 
     globalThis.ResizeObserver = class {
         private readonly targets: Element[] = [];
         constructor(callback: ResizeObserverCallback) {
-            resizers.push({ targets: this.targets, fire: () => callback([], this as unknown as ResizeObserver) });
+            resizers.push({
+                targets: this.targets,
+                fire: (target) => callback([{ target, contentRect: target.getBoundingClientRect() } as ResizeObserverEntry], this as unknown as ResizeObserver),
+            });
         }
         observe(target: Element): void {
             if (!(target instanceof Element)) {
@@ -133,15 +136,8 @@ jest.mock("@intentic/ui", async () => {
             props: { name: { type: String, default: undefined } },
             setup: (props) => () => vue.h(`span`, { role: `img`, "aria-label": props.name }),
         }),
-        // Real `<button>` with attrs passthrough, since card answers are asserted by click; the kit's own press-lock
-        // has its own suite.
-        Button: vue.defineComponent({
-            inheritAttrs: false,
-            setup:
-                (_props, { attrs, slots }) =>
-                () =>
-                    vue.h(`button`, attrs, slots[`default`]?.()),
-        }),
+        // Use the kit's button so the notice checks PrimeVue's label and icon slots.
+        Button: (await import("../../../../../../ui/src/components/primitives/Button.vue")).default,
         // The kit's real parts loop, from the subpath this mock does not replace: the bubble's prose runs and figures are
         // what it draws.
         MarkdownParts: (await import("@intentic/ui/markdown-parts")).default,
@@ -1311,9 +1307,7 @@ describe(`ChatMessageView pinned band`, () => {
     // The row's flow position starts below it (8px down the scroller), which is a prompt that has not pinned yet.
     const box = { rowTop: 8, scrollerTop: 0 };
 
-    // SAFETY: every field a DOMRect reads is set here; the row only ever asks for `top` and `bottom`.
-    const rectAt = (top: number): DOMRect =>
-        ({ top, bottom: top, left: 0, right: 0, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    const rectAt = (top: number, height = 0): DOMRect => new DOMRect(0, top, 0, height);
 
     // The transcript as ChatPane builds it: the scroller the prompt pins against, and the wrapper inside it that
     // grows with the turn.
@@ -1343,7 +1337,7 @@ describe(`ChatMessageView pinned band`, () => {
     const resize = (target: Element): number => {
         const watching = resizers.filter((resizer) => resizer.targets.includes(target));
         for (const resizer of watching) {
-            resizer.fire();
+            resizer.fire(target);
         }
         return watching.length;
     };
@@ -1396,8 +1390,10 @@ describe(`ChatMessageView pinned band`, () => {
     // flips a second in the popped-out chat). Both boxes answer from the class actually on the row, which is the loop.
     const feedback = (row: HTMLElement, wrapped: { top: number; height: number }, titled: { top: number; height: number }): void => {
         const collapsed = (): boolean => row.className.includes(`chat-prompt-pinned`);
-        row.getBoundingClientRect = (): DOMRect => rectAt(collapsed() ? titled.top : wrapped.top);
-        Object.defineProperty(row, `offsetHeight`, { configurable: true, get: () => (collapsed() ? titled.height : wrapped.height) });
+        row.getBoundingClientRect = (): DOMRect => {
+            const layout = collapsed() ? titled : wrapped;
+            return rectAt(layout.top, layout.height);
+        };
     };
 
     // Each round is the browser observing the height the round before changed, which is how the loop ran.
@@ -1432,7 +1428,7 @@ describe(`ChatMessageView pinned band`, () => {
         expect(row.className).toContain(`chat-prompt-pinned`);
 
         // Scrolled back by more than the 56px the collapse freed: this is the reader moving the row, not the band.
-        row.getBoundingClientRect = (): DOMRect => rectAt(60);
+        row.getBoundingClientRect = (): DOMRect => rectAt(60, 40);
         scroller.dispatchEvent(new Event(`scroll`));
         await nextTick();
 

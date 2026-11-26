@@ -22,10 +22,11 @@ interface Reader {
 }
 
 // The two doors a read goes through: this extension's backend, and the daemon's own routes as the manifest grants them.
-const reader = (backend: Door, sandbox: Door): Reader => {
+const reader = (backend: Door, sandbox: Door, available?: boolean): Reader => {
     const asked: string[] = [];
     const api: BackendCaller = {
         backend: unstubbed<BackendCaller[`backend`]>(`backend`, {
+            available,
             json: async <T>(path: string, init?: RequestInit): Promise<T> => {
                 asked.push(`backend ${init?.method ?? `GET`} ${path}`);
                 // SAFETY: the test's answer stands in for whatever the backend would have parsed to.
@@ -42,6 +43,13 @@ const reader = (backend: Door, sandbox: Door): Reader => {
     };
     return { api, asked };
 };
+
+test(`a daemon whose installed manifest has no server is reached directly at its legacy route`, async () => {
+    const runs = { repos: [], runs: [], failures: [] };
+    const { api, asked } = reader(async () => { throw new Error(`unexpected backend probe`); }, async () => runs, false);
+    expect(await backendCall(api, `runs`, () => api.sandbox.json(`/ci/runs`))).toEqual(runs);
+    expect(asked).toEqual([`daemon GET /ci/runs`]);
+});
 
 const refusedBeforeSending = async (): Promise<never> => {
     throw new Error(`extension "intentic.pipelines" called undeclared sandbox route GET /ci/runs`);
@@ -68,10 +76,12 @@ test(`a daemon with no backend for this extension is asked at its own route, whe
 
 test(`the backend's own refusal stands when this daemon no longer grants the old route`, async () => {
     const missing = new Answered(404, `no CI project mapped for repo "shop"`);
-    const { api } = reader(async () => {
+    const { api, asked } = reader(async () => {
         throw missing;
-    }, refusedBeforeSending);
-    await expect(backendCall(api, `fix`, () => api.sandbox.json(`/ci/fix`, posting({ repo: `shop`, runId: 7 })), posting({ repo: `shop`, runId: 7 }))).rejects.toBe(missing);
+    }, refusedBeforeSending, true);
+    const body = posting({ repo: `shop`, runId: 7 });
+    await expect(backendCall(api, `fix`, () => api.sandbox.json(`/ci/fix`, body), body)).rejects.toBe(missing);
+    expect(asked).toEqual([`backend POST fix`]);
 });
 
 test(`an older daemon's own refusal is what it said`, async () => {

@@ -83,7 +83,13 @@ const hasUi = (manifest: ExtensionManifest): boolean =>
 // Loads settings first only if the manifest declares any, so compiled-ins with none skip a round-trip; then checks
 // startedIn against the current scope.
 // Skips activation silently if scope moved (a sandbox switch), since an overtaken pass's report is discarded anyway.
-const runActivate = async (summary: ExtensionSummary, host: HostBindings, module: ExtensionModule, startedIn: number): Promise<void> => {
+const runActivate = async (
+    summary: ExtensionSummary,
+    host: HostBindings,
+    module: ExtensionModule,
+    startedIn: number,
+    fromInventory = true,
+): Promise<void> => {
     if ((summary.manifest.contributes?.settings ?? []).length > 0) {
         await extensionSettingsStore(summary.id).load();
     }
@@ -96,7 +102,7 @@ const runActivate = async (summary: ExtensionSummary, host: HostBindings, module
     if (startedIn !== scope) {
         return;
     }
-    const { api, context } = createExtensionApi(summary, host);
+    const { api, context } = createExtensionApi(summary, host, fromInventory);
     await module.activate(api, context);
 };
 
@@ -189,7 +195,7 @@ const loadUnlisted = async (listed: ReadonlySet<string>, host: HostBindings, det
                 const summary: ExtensionSummary = { id: extensionId, manifest: module.manifest, commit: `builtin`, source: `builtin`, enabled: true };
                 const ran = { id: extensionId, extensionId, revision: `builtin`, bundle: `compiled-in` as const };
                 try {
-                    await runActivate(summary, host, module, startedIn);
+                    await runActivate(summary, host, module, startedIn, false);
                     return { ...ran, state: `unlisted`, detail };
                 } catch (error) {
                     const failed: ExtensionHostStatus = { ...ran, state: `error`, detail: messageOr(error, String(error)) };

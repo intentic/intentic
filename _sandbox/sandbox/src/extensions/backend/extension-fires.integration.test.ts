@@ -50,7 +50,7 @@ const setup = () => {
     let host: { readonly port: number; readonly hostToken: string } | undefined;
     const stored = new Map<string, AutomationRecord>();
     // A daemon: a fresh one after a "restart" shares the history and the extensions, nothing in memory.
-    const daemon = () =>
+    const daemon = (backend = host) =>
         unstubbed<Services>("services", {
             config: { ...testConfig, extensionsDir, historyRoot: join(root, "history") },
             workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -58,7 +58,7 @@ const setup = () => {
             capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
             logger: unstubbed<Services["logger"]>("logger", { warn: () => {}, info: () => {} }),
             extensionBackend: unstubbed<Services["extensionBackend"]>("extensionBackend", {
-                proxyTarget: () => host,
+                proxyTarget: () => backend,
                 status: () => ({ state: "starting", extensions: [] }),
             }),
             automations: unstubbed<Services["automations"]>("automations", {

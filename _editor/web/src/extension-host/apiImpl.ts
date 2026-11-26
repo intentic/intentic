@@ -20,6 +20,7 @@ import { useAgents } from "../models/fleet/useAgents";
 import { startAgent } from "../models/fleet/agentActions";
 import { draftFromBranch } from "../models/fleet/branches/branchStart";
 import { hostLaunchAgent } from "./agentLaunch";
+import { extensionBackendApi } from "./backendApi";
 import { declaredChord } from "../workbench/commands/builtinCommands";
 import { registerCommand, executeCommand } from "../workbench/commands/useCommands";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
@@ -157,6 +158,7 @@ const sideViewsApi = (
 export const createExtensionApi = (
     summary: ExtensionSummary,
     host: HostBindings,
+    fromInventory = true,
 ): { readonly api: IntenticApi; readonly context: ExtensionContext } => {
     const extensionId = extensionIdOf(summary.manifest);
     deactivateExtension(extensionId);
@@ -358,11 +360,7 @@ export const createExtensionApi = (
                 return track({ dispose: () => stop() });
             },
         },
-        // The extension's own namespace, which needs no declaration; built here so no bundle spells the routing id.
-        backend: {
-            request: (path, init) => sandboxRequest(backendPath(path), init),
-            json: (path, init) => sandboxJson(backendPath(path), init),
-        },
+        backend: extensionBackendApi(backendPath, summary.manifest.server, fromInventory),
         sandbox: {
             rpc,
             request: (path, init) => {

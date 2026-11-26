@@ -22865,6 +22865,11 @@
             "rpc",
             "tier"
         ],
+        "backendApi": [
+            "available",
+            "json",
+            "request"
+        ],
         "workspaceApi": [
             "capabilities",
             "file",
@@ -23538,7 +23543,7 @@
                     "UnfinishedWorkSchema",
                     "awaitsWake"
                 ],
-                "schemas": "1605dedb862861d35017b929be22c9a157d9290f7d75a26565acb67c76cb12a7"
+                "schemas": "28c46608892df866b6dbeeaa96ddb22163df504c46f67d93108c8b7e80181e7f"
             },
             "@intentic/sandbox-contract/schemas/approvals": {
                 "exports": [
@@ -23617,7 +23622,7 @@
                     "watchSentence",
                     "watchSourceSentence"
                 ],
-                "schemas": "1d8e5cfff537dd8f6db8d991e2a192904bf24a200789c048f0ea9f03a14d09f0"
+                "schemas": "53c83128763e497593f624381f960c9b646934765710bf60cada708d2a78d9f1"
             },
             "@intentic/sandbox-contract/schemas/ci": {
                 "exports": [

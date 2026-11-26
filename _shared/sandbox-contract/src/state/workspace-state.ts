@@ -210,13 +210,13 @@ const STATE_FILES = [
         why: "Where releases before 2026-10-12 kept the wakes automations held for a person; they now sit on the history volume, and nothing reads this copy. The intentic.approvals extension's contributes.files still binds it, with `automation-approvals` as its query key, not core's.",
         portability: "carry",
     },
-    // Bug-report inbox, one file per fingerprint, written and rendered by intentic.issues (the daemon wrote it until
-    // 2026-11-26). `carry`: a fact about the product, not the container. Not `versioned`: telemetry, not a decision.
+    // The issues extension keeps one report per fingerprint as telemetry. The daemon wrote these until 2026-11-26.
     {
         path: ".intentic/records/issues/",
         invalidates: [],
         why: "Declared by the intentic.issues extension's contributes.files, `issues` is its query key, not core's.",
         portability: "carry",
+        outsideWriter: "the intentic.issues extension's backend",
     },
     // Where releases before 2026-11-24 kept the reports this sandbox could not yet deliver to another of the account. They
     // now wait on the history volume (`account-outbox/`, the daemon's account-routing/account-outbox.ts), where no turn can rewrite
@@ -227,13 +227,13 @@ const STATE_FILES = [
         why: "Where releases before 2026-11-24 kept the account outbox; it now waits on the history volume, and nothing reads this copy.",
         portability: "carry",
     },
-    // Maintenance ledger and probe evidence, written and rendered by intentic.maintenance (its backend's store.ts; the
-    // daemon's chores-store until 2026-11-26). `carry`: point-in-time evidence about this workspace.
+    // The maintenance extension keeps its ledger and probe evidence here, taking over from the daemon's chores store.
     {
         path: ".intentic/records/chores/",
         invalidates: [],
         why: "Declared by the intentic.maintenance extension's contributes.files, `maintenance-report`/`maintenance-runs` are its query keys, not core's.",
         portability: "carry",
+        outsideWriter: "the intentic.maintenance extension's backend",
     },
     // Documentation staging tree (documentation extension's paths.ts): generation writes here, the owner approves
     // here, publishing copies into the repo. `authored`: draft READMEs, searchable like a post draft.
@@ -260,25 +260,27 @@ const STATE_FILES = [
         portability: "carry",
     },
 
-    // Reached by no query, by design: invalidation only reaches an observed query key, and none of these are observed.
-    // Each entry's `why` states the constraint so a future reader doesn't have to re-derive it.
+    // Each entry's `why` explains its empty query invalidation list.
     {
         path: ".intentic/records/webchat-installs.json",
         invalidates: [],
         why: "Which origins have loaded a Visitor chat's widget, written by the visitor-chat extension's backend (the daemon until 2026-11-26) on a 30s flush timer while a customer's site serves page views. The install panel that renders it fetches on open and polls itself while it is on screen, which is the whole window in which the answer changes for anyone. Pushing instead would bill every connected browser a refetch per flush, for a panel almost nobody has open.",
         portability: "carry",
+        outsideWriter: "the intentic.visitor-chat extension's backend",
     },
     {
         path: ".intentic/records/issue-installs.json",
         invalidates: [],
         why: "The same probe for the bug reporter's script, written by the issues extension's backend (the daemon until 2026-11-26) on the same flush timer and read by the same kind of panel, so it is outside the push path for the same reason the Visitor chat's is.",
         portability: "carry",
+        outsideWriter: "the intentic.issues extension's backend",
     },
     {
         path: ".intentic/records/webchat-outbox.json",
         invalidates: [],
         why: "Visitor chat replies a visitor has not collected yet, written by the visitor-chat extension's gateway (the daemon until 2026-11-26) when an approved wake answers or a human writes as the agent. The only reader is a stranger's browser polling the extension's public door, which no query key in this app addresses; the owner's own view of the same words is the conversation's transcript, which the agent registry already pushes.",
         portability: "carry",
+        outsideWriter: "the intentic.visitor-chat extension's gateway",
     },
     {
         path: ".intentic/records/thread-sessions.json",

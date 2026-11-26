@@ -8,6 +8,7 @@ import type {
     SideViewRegistration,
     ViewRegistration,
 } from "@intentic/extension-api";
+import { page } from "@intentic/sandbox-contract/app-routes";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { isIconName } from "@intentic/ui/icons";
@@ -61,6 +62,7 @@ const capture = () => {
             },
         },
         commands: { register: () => ({ dispose: () => {} }) },
+        links: page,
         // The project scope a detect() may read; none open, which is every fresh sandbox.
         workspace: { project: () => undefined },
     } as unknown as IntenticApi;

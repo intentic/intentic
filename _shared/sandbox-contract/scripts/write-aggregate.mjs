@@ -14,7 +14,7 @@ const INDEX = new URL("index.ts", SOURCE);
 // Served by a machine, the browser extension, the phone app and a runner, with the daemon as the client.
 export const INVERSE = new Set(["device", "phone", "runner", "webext"]);
 // Route groups composed into an aggregate subject instead of mounted on their own.
-const COMPOSED = new Set(["device-ci-runners"]);
+const COMPOSED = new Set(["device-ci-runners", "device-stacks"]);
 
 const IMPORT = /^import \{ (\w+) \} from "\.\/contracts\/([\w-]+)\.contract\.js";\n/gm;
 const AGGREGATE = /^export const sandboxContract(?:: \{\n(?: {4}[\w$]+: typeof \w+;\n)*\})? = \{\n([\s\S]*?)^\};\n/m;

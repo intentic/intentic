@@ -79,7 +79,7 @@ const planned = async (granted: readonly Capability[], overrides: Partial<Servic
 };
 
 // The daemon's own servers every runtime reaches at the door (daemon-servers.ts), mounted after the turn's own.
-const DOOR = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code", "gate", "terminal"]);
+const DOOR = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code", "gate", "terminal", "chatgpt", "pipelines"]);
 const own = (request: AgentRequest) => request.tools.remote?.filter((tool) => !DOOR.has(tool.name));
 
 beforeEach(() => {
@@ -103,6 +103,7 @@ test("a connected browser extension reaches the turn as an http MCP server named
         conversationId: "conv-1",
         hold: expect.any(Function),
         clientCeilingMs: CURSOR_MCP_CALL_CEILING_MS,
+        turn: { granted: ["chrome"], mounted: expect.any(Function) },
     });
     expect(cursorMcpServers(request)["chrome"]).toEqual({
         type: "http",

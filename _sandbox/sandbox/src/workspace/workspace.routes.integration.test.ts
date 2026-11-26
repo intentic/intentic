@@ -1061,7 +1061,7 @@ test("workspace.derived serves a file's shadow with its provenance, and distingu
             title: "Quarterly plan",
             // The cap the derivation hit rides with the text, or text that was cut reads as the whole document.
             notes: ["showing 200 of 4,000 rows"],
-            tokens: 10,
+            tokens: 9,
             truncated: false,
             stale: false,
             // Fresh, so settled.
