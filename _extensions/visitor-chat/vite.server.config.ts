@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defaultServerConditions, defineConfig } from "vite";
 
 /* The two node bundles: dist/server.js, the manifest's `server` (the public door's routes and the install panel's reads),
 and dist/gateway.js, its `gateway` process (the reply outbox's writer). Nothing but node builtins exists at runtime, so
@@ -14,5 +14,9 @@ export default defineConfig({
             output: { entryFileNames: "[name].js" },
         },
     },
-    ssr: { noExternal: true },
+    ssr: {
+        noExternal: true,
+        // A Turbo cache hit restores the workspace's dist and can leave pnpm's injected copies stale.
+        resolve: { conditions: ["@intentic/src", ...defaultServerConditions] },
+    },
 });
