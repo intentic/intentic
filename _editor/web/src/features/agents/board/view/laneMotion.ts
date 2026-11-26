@@ -2,6 +2,7 @@ import { nextTick, onBeforeUpdate, onMounted, onUpdated, type Ref } from "vue";
 import type { FleetLane } from "../../../../models/agent-status/agentStatus-lanes";
 import type { FleetAgent } from "../../../../models/fleet/useAgents-fleet";
 import { lessMotion, slideFrom, stopSlide } from "@intentic/ui/motion";
+import { type BoardPicture, flickerReporter } from "./laneFlicker";
 
 // Where the cards stand on screen and how they move between renders: a card changing lanes flies from where it stood,
 // with elevation and a landing pulse, and the cards it left close ranks, as do the cards below a tray that opened or
@@ -208,4 +209,13 @@ export const useLaneMotion = (host: MotionHost) => {
         cardEls.get(id)?.scrollIntoView({ block: `nearest` });
     };
     return { setCardEl, isMovingLane, revealCard };
+};
+
+/**
+ * Hands the picture the board drew to a flicker report after every render (laneFlicker.ts): a board flipping between
+ * the same two pictures is reported once, with what flipped. Read after a render, once everything it names exists.
+ */
+export const useFlickerReport = (picture: () => BoardPicture): void => {
+    const heard = flickerReporter();
+    onUpdated(() => heard(picture()));
 };

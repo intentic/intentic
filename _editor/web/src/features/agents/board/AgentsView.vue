@@ -80,7 +80,7 @@ import { useCardFocus, useCardRing } from "./view/cardSelection";
 import { useFoundCard } from "./view/foundCard";
 import { boardStarters } from "./view/firstScreen";
 import { useRowReveal } from "@intentic/ui/motion";
-import { laneOrder, useLaneMotion } from "./view/laneMotion";
+import { laneOrder, useFlickerReport, useLaneMotion } from "./view/laneMotion";
 import { useT } from "@intentic/ui/i18n";
 import { useWallpaper } from "../../../skins/useWallpaper";
 import { useNoticeToasts } from "./view/boardNotices";
@@ -305,6 +305,7 @@ const sliver = computed(() => fit.value === `mini` || fit.value === `tile`);
 const searchOpen = ref(false);
 const searchRow = computed(() => slim.value && (searchOpen.value || query.value !== ``));
 const { scroller: scrollerEl, grid: gridEl, active: cornered, attach: attachCorner, lane: cornerLane, cards: cornerCards, earlier, tailed, crowded: cornerCrowded } = useCornerFit({ drawn: () => withCorner, narrow, view, filtering, hiddenFinished, tailRow: () => fit.value === `tile` });
+useFlickerReport(() => ({ layout: `${laneGrid.value} fit=${fit.value} corner=${withCorner}/${cornered.value}`, lanes: scope.boardLanes.value }));
 
 // Being here is what the getting-started board moment asks for: once the reader has seen the board, it stops pointing.
 onMounted(() => markHinted(`board`, `visited`));
