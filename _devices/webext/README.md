@@ -117,7 +117,7 @@ flowchart LR
   one-time ticket, which the extension redeems at `/system/webext/file`. The person is then asked on the page every time,
   with the file's name and size, whatever their switches say, and only their yes puts it in, with `input` and `change`.
 - **Downloads (optional):** a site's Download button saves into the person's Downloads folder, out of the agent's reach.
-  The popup's "Save my agent's downloads to the sandbox" asks for the optional `downloads` permission (optional because
+  The popup's "Save my agent's downloads" switch asks for the optional `downloads` permission (optional because
   a new required permission makes Chrome disable the store-installed extension until the person re-approves it), and
   `describe` says whether it is on. Then a download that starts while one of a sandbox's calls runs (or within 5 s of
   it), from the site of a tab in that agent's own window, is fetched again from its own address in that tab, stored like

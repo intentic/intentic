@@ -143,7 +143,13 @@ window.chrome = {
         getURL: (path) => "about:blank#" + path,
     },
     tabs: { query: async () => [{ id: 1, url: "https://news.ycombinator.com/item?id=1", title: "Hacker News" }] },
-    permissions: { request: async () => true, remove: async () => true },
+    // Granted permissions kept for the page's life, so a switch that reads them back (Downloads) stays where it was put.
+    permissions: {
+        granted: false,
+        async request() { return (this.granted = true); },
+        async remove() { this.granted = false; return true; },
+        async contains() { return this.granted; },
+    },
     storage: { onChanged: { addListener: () => undefined } },
 };
 </script>`;

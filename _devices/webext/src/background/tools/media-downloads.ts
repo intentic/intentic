@@ -214,4 +214,4 @@ export const withCapturedDownloads = async (from: SandboxKey, message: Message, 
 export const downloadsLine = async (): Promise<string> =>
     (await downloadsOn())
         ? `Downloads: on. A file your click downloads in your own window is copied into the sandbox (the answer says where) and taken out of the person's Downloads folder.`
-        : `Downloads: off. A Download button you click saves into the person's own Downloads folder, out of your reach: use save_media on the picture or link instead. The person can turn on "Save my agent's downloads to the sandbox" in the extension's popup.`;
+        : `Downloads: off. A Download button you click saves into the person's own Downloads folder, out of your reach: use save_media on the picture or link instead. The person can turn on "Save my agent's downloads" in the extension's popup.`;

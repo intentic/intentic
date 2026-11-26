@@ -522,6 +522,12 @@
             .row .sub.here {
                 color: var(--link);
             }
+            /* A row that is one setting: the whole row turns its switch. */
+            .toggle-row {
+                padding-right: 12px;
+                cursor: pointer;
+                user-select: none;
+            }
             .row .buttons {
                 display: flex;
                 flex: none;
@@ -1049,13 +1055,13 @@
                 <section id="downloads" hidden>
                     <h2 class="label">Downloads</h2>
                     <div class="card">
-                        <label class="switch" title="Asks the browser for the downloads permission; turning it off gives it back.">
-                            <input id="downloads-on" type="checkbox" />
-                            <span>Save my agent's downloads to the sandbox</span>
+                        <label class="row toggle-row" title="Only files from your agent's own window. Your own downloads are never read.">
+                            <span class="host">
+                                <span class="name">Save my agent's downloads</span>
+                                <span class="sub">Into its sandbox, not your Downloads folder</span>
+                            </span>
+                            <span class="switch"><input id="downloads-on" type="checkbox" /></span>
                         </label>
-                        <p class="work-hint muted">
-                            A file your agent's click downloads in its own window goes into its sandbox instead of your Downloads folder. Your own downloads are never read.
-                        </p>
                         <div id="downloads-error" class="error" hidden></div>
                     </div>
                 </section>
