@@ -206,8 +206,9 @@ flowchart LR
   hold what the whole box does with what passes through it, each a page that sets it: Data protection (below), Privacy
   shield (`features/sandbox/privacy-shield/`: the shield, its trusted providers, and Intentic's product analytics),
   Guardrails (`features/sandbox/guardrails/`: the command judge, its policy, project installs, then per service whether
-  an outward action runs, asks first or is refused, `settings.actionRules`, and whether work started from outside may
-  run, `settings.admission`) and Retention (`features/sandbox/retention/`: every record's period, the audit trail's
+  an outward action runs, asks first or is refused, `settings.actionRules`, over the actions the enabled extensions
+  declare as the daemon serves them, `settings.outwardActions`, or an older daemon's fixed list, and whether work
+  started from outside may run, `settings.admission`) and Retention (`features/sandbox/retention/`: every record's period, the audit trail's
   included, then the rest of how the audit trail is kept, `settings.audit`: whether reads are recorded, a forward
   address and the stored secret sent with it). A setting about one thing stays with that thing (a gate on Secrets, a
   tier on Access). An organisation's Agent lock holds the three that write settings (`organisations/useOrgPolicy.ts`),

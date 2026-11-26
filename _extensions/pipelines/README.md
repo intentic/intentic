@@ -13,6 +13,11 @@ flowchart LR
 
 - Runs in the browser, compiled into the editor app as a builtin. It holds no CI state: runs, jobs and main's failures come
   from the daemon's `ci` procedures, which keep them fresh from vendor webhooks and backfill when stale.
+- Its manifest offers the "Fix failing CI" automation template (2026-11-26, from the sandbox's own catalogue): an agent
+  woken by the core `ci` source the moment a branch that was passing breaks, for any repository, not only main.
+- Its manifest declares the **Pipeline fixes** job (`contributes.modelRoles`, `pipeline-fix`, suggested High;
+  2026-11-26, from the sandbox's own table under the same id), which the owner places on a model setup in Sandbox ▸
+  Agent ▸ Models. A Fix press names it, and so does main's fix agent, which the daemon's `ci` still starts.
 - The tile appears only when a GitHub or GitLab `cli` capability is connected. The board shows the open project's
   repositories, ranks them by how loudly they ask (`src/repoStandings.ts`) and draws each run's jobs as a layered graph
   (`src/graph/pipelineDag.ts`). A GitHub run is drawn the way GitHub's own run page draws it: the same columns, cards and

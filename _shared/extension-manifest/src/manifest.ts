@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MARK_FIELDS } from "./mark.js";
-import { permissionProblem } from "./permissions.js";
+import { declaredReachOf, EXTENSION_FIRE_HANDLER, permissionProblem } from "./permissions.js";
 import { contributesSchema } from "./points/index.js";
 
 // The extension manifest (`intentic-extension.json`, not under .claude-plugin/): the approval surface the install
@@ -74,6 +74,73 @@ const ManifestShape = z.object({
                 .describe(
                     "Daemon routes your SERVER half may call. Separate from `sandbox` because the two halves run as different principals: the UI as the owner's session, the backend as a minted per-extension token, so a grant to one must never quietly widen the other.",
                 ),
+            // (2026-11-26) What the backend and processes may hear, hold, run and be woken by beyond their routes
+            // (permissions.ts EXTENSION_DECLARED_EVENTS and the rest); the daemon refuses each undeclared.
+            events: z
+                .array(
+                    z.union([
+                        z.literal("run").meta({ power: { key: "events:run", sentence: "its backend hears when a conversation it started finishes a turn" } }),
+                        z
+                            .literal("activity")
+                            .meta({ power: { key: "events:activity", sentence: "its backend hears whether any agent turn is running in the sandbox" } }),
+                    ]),
+                )
+                .optional()
+                .describe(
+                    "Events your backend hears through `api.events` beyond its settings and the workspace's changes: `run`, a turn ending in a conversation it started through POST /agent with its own token; `activity`, whether any agent turn is running in the sandbox.",
+                ),
+            work: z
+                .boolean()
+                .meta({ power: { key: "work", sentence: "its backend keeps the sandbox awake, and a restart waiting, while it holds work in flight" } })
+                .optional()
+                .describe(
+                    "Whether your backend may hold work in flight with `api.work.hold(label)`: while held, the sandbox stays awake and an update or restart waits for it, as for an agent's turn.",
+                ),
+            exec: z
+                .array(
+                    z.union([
+                        z.literal("command").meta({ power: { key: "exec:command", sentence: "its backend runs commands, admitted like an agent's" } }),
+                        z
+                            .literal("toolchain")
+                            .meta({ power: { key: "exec:toolchain", sentence: "its backend runs heavy tools, queued with the sandbox's builds and tests" } }),
+                    ]),
+                )
+                .optional()
+                .describe(
+                    "The workload classes `api.exec` may run a command under: `command`, admitted and ranked as an agent's shell command; `toolchain`, a heavy tool (a build, a test run, an analyser), which also takes turns in the sandbox's heavy-command queue.",
+                ),
+            fires: z
+                .array(
+                    z
+                        .string()
+                        .regex(EXTENSION_FIRE_HANDLER, "a handler is a lowercase word: letters, digits and dashes")
+                        .meta({ power: { key: "fires:${value}", sentence: 'the sandbox\'s automations wake its backend\'s "${value}" handler' } }),
+                )
+                .optional()
+                .describe(
+                    "Handlers an automation may fire in your backend (`api.automations.onFire(name, handler)`): an automation whose target is `{ kind: \"extension\" }` names this extension and one of these, and fires it on its trigger under the scheduler's admission, holds and journal, without an agent.",
+                ),
+            // (2026-11-26) What its agent tools may do with the calling turn's grants (permissions.ts
+            // EXTENSION_TURN_POWERS); the daemon refuses each undeclared, and anything the turn does not hold either way.
+            turn: z
+                .array(
+                    z.union([
+                        z.literal("browser").meta({
+                            power: {
+                                key: "turn:browser",
+                                sentence: "its agent tools drive the sandbox's signed-in browsers, for the accounts the calling turn holds and on those accounts' own sites",
+                            },
+                        }),
+                        z
+                            .literal("owner-browser")
+                            .meta({ power: { key: "turn:owner-browser", sentence: "its agent tools use the owner's own browser when the calling turn holds it" } }),
+                        z.literal("jobs").meta({ power: { key: "turn:jobs", sentence: "its agent tools start background jobs in the calling conversation" } }),
+                    ]),
+                )
+                .optional()
+                .describe(
+                    "What your agent tools (`contributes.tools`, served by `api.tools.serve`) may do with the grants of the turn that calls them: `browser`, drive the sandbox's signed-in browser of an account the turn holds, on that account's own sites (`api.browser.call`); `owner-browser`, call the owner's own browser the turn holds (`api.ownerBrowser.call`); `jobs`, start a background job in the calling conversation that the agent collects with `wait` (`api.jobs.start`). Never more than the turn holds.",
+                ),
         })
         .optional()
         .describe(
@@ -81,6 +148,54 @@ const ManifestShape = z.object({
         ),
     contributes: contributesSchema.optional(),
 });
+
+// (2026-11-26) A watch kind's check is answered by the backend, and the cards whose gateway addresses it is handed are
+// this extension's own: one extension never reaches another's connections through a check.
+const servedChecks = (manifest: z.infer<typeof ManifestShape>, ctx: z.RefinementCtx): void => {
+    const kinds = manifest.contributes?.watchKinds ?? [];
+    if (kinds.length > 0 && manifest.server === undefined) {
+        ctx.addIssue({ code: "custom", path: ["contributes", "watchKinds"], message: "watch kinds need a `server` bundle to answer their checks" });
+    }
+    const cards = new Set((manifest.contributes?.capabilities ?? []).map((card) => card.id));
+    for (const [index, kind] of kinds.entries()) {
+        const foreign = (kind.capabilities ?? []).find((card) => !cards.has(card));
+        if (foreign !== undefined) {
+            ctx.addIssue({ code: "custom", path: ["contributes", "watchKinds", index, "capabilities"], message: `"${foreign}" is not one of this extension's own capability cards` });
+        }
+    }
+    const ids = kinds.map((kind) => kind.id);
+    const doubled = ids.find((id, index) => ids.indexOf(id) !== index);
+    if (doubled !== undefined) {
+        ctx.addIssue({ code: "custom", path: ["contributes", "watchKinds"], message: `the watch kind "${doubled}" is declared twice` });
+    }
+};
+
+// One job per id within a manifest: a second declaration of an id would name the same stored choice twice.
+const declaredRoles = (manifest: z.infer<typeof ManifestShape>, ctx: z.RefinementCtx): void => {
+    const ids = (manifest.contributes?.modelRoles ?? []).map((role) => role.id);
+    const doubled = ids.find((id, index) => ids.indexOf(id) !== index);
+    if (doubled !== undefined) {
+        ctx.addIssue({ code: "custom", path: ["contributes", "modelRoles"], message: `the model role "${doubled}" is declared twice` });
+    }
+};
+
+// (2026-11-26) A public route is answered by the backend, and one scoped to an automation reads that automation from this
+// extension's own listener provider: a door never opens onto another extension's automations.
+const servedPublicRoutes = (manifest: z.infer<typeof ManifestShape>, ctx: z.RefinementCtx): void => {
+    const routes = manifest.contributes?.publicRoutes ?? [];
+    if (routes.length > 0 && manifest.server === undefined) {
+        ctx.addIssue({ code: "custom", path: ["contributes", "publicRoutes"], message: "public routes need a `server` bundle to answer them" });
+    }
+    for (const [index, route] of routes.entries()) {
+        if (route.automation === true && manifest.contributes?.listener === undefined) {
+            ctx.addIssue({
+                code: "custom",
+                path: ["contributes", "publicRoutes", index, "automation"],
+                message: "a route scoped to an automation reads it from this extension's own `contributes.listener`, which it does not declare",
+            });
+        }
+    }
+};
 
 // What each field means taken together, which no one field's schema can say: tools need something to serve them.
 const servedTools = (manifest: z.infer<typeof ManifestShape>, ctx: z.RefinementCtx): void => {
@@ -92,6 +207,9 @@ const servedTools = (manifest: z.infer<typeof ManifestShape>, ctx: z.RefinementC
             ctx.addIssue({ code: "custom", path: ["contributes", "capabilities"], message: `card "${card.id}" declares \`mcp\`, which only a \`server\` bundle can answer` });
         }
     }
+    servedChecks(manifest, ctx);
+    declaredRoles(manifest, ctx);
+    servedPublicRoutes(manifest, ctx);
     if (tools === undefined) {
         return;
     }
@@ -117,6 +235,13 @@ const servedTools = (manifest: z.infer<typeof ManifestShape>, ctx: z.RefinementC
 
 export const ExtensionManifestSchema = ManifestShape.superRefine(servedTools);
 export type ExtensionManifest = z.infer<typeof ExtensionManifestSchema>;
+
+// (2026-11-26) What a manifest declares its backend may hear, hold, run and be woken by (its `permissions`), and the
+// watch kinds whose checks it answers, as the backend host is told them.
+export const declaredOfBackend = (manifest: Pick<ExtensionManifest, "permissions" | "contributes">) => ({
+    declared: declaredReachOf(manifest.permissions),
+    watchKinds: (manifest.contributes?.watchKinds ?? []).map((kind) => kind.id),
+});
 
 // The extension's identity everywhere (capability entries, /ext routes, settings namespaces); derived, never declared,
 // so it can't contradict the manifest's publisher/name.

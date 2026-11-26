@@ -218,8 +218,8 @@ export const sourceAliases = (): Record<string, string> => ({
     // Dependency-free session-name leaf shared by daemon, app and extensions; off the barrel so a test wanting just
     // this doesn't resolve the whole wire contract.
     "@intentic/sandbox-contract/session-names": fromRoot("_shared/sandbox-contract/src/ids/session-names.ts"),
-    // Chore-verdict logic used by the Maintenance surface, its rail badge and the codebase-health panel; off the
-    // barrel since it derives from wire types without needing the whole contract.
+    // The frozen chore book the extension wire still records until extension API 3.0.0 (the maintenance extension owns
+    // its own copy since 2026-11-26); nothing in the app imports it, and only the surface guard loads it now.
     "@intentic/sandbox-contract/chores": fromRoot("_shared/sandbox-contract/src/chores/index.ts"),
     // Folds a turn's frames into the rows every reader draws; the daemon runs it, the chat applies its patches. Off
     // the barrel since it derives from wire types alone.

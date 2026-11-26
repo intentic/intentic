@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
 import type { CommandContext, Commands } from "./commands.js";
-import { downloadFile, workspaceFile } from "./files.js";
+import { downloadFile } from "./files.js";
 import { type Json, query, segment } from "./graph.js";
 
 // OneDrive and SharePoint document libraries, as the signed-in user sees them: their own site permissions decide what
@@ -23,7 +22,7 @@ const upload = async (ctx: CommandContext): Promise<Json | undefined> => {
         throw new Error("--name is the file's name in the library, without folders: pick the folder with --parent");
     }
     const source = ctx.required("file");
-    const bytes = await readFile(await workspaceFile(ctx.root, source, false));
+    const bytes = await ctx.io.read(source);
     if (bytes.length > UPLOAD_MAX_BYTES) {
         throw new Error("This CLI uploads files up to 4 MiB; a larger one needs an upload session, which it does not do yet");
     }
@@ -37,6 +36,7 @@ const upload = async (ctx: CommandContext): Promise<Json | undefined> => {
         body: bytes.toString("base64"),
         binary: true,
         summary: `Upload ${name} (${Math.max(1, Math.round(bytes.length / 1024))} KB) to ${parent === undefined ? "the top" : "a folder"} of ${drive}`,
+        channel: drive,
         details: [
             `Upload the workspace file ${source} as "${name}".`,
             `Library: ${drive}; folder: ${parent ?? "the library's top level"}.`,
@@ -67,6 +67,6 @@ export const documentCommands: Commands = {
             limit,
         );
     },
-    download: async (ctx) => ({ saved: await downloadFile(ctx.graph, ctx.root, `${driveOf(ctx)}/items/${segment(ctx.id())}`, ctx.required("out")) }),
+    download: async (ctx) => ({ saved: await downloadFile(ctx.graph, ctx.io, `${driveOf(ctx)}/items/${segment(ctx.id())}`, ctx.required("out")) }),
     upload,
 };

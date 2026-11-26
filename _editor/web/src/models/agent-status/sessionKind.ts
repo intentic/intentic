@@ -3,6 +3,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import { isCiFixConversationId, LAND_FIX_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { t } from "@intentic/ui/i18n";
 import { contextPct, originMeta } from "./agentStatus-meta";
+import type { OriginSource } from "./originSources";
 
 // WHAT A SESSION CARD'S TILE SAYS: what kind of session it is, in the glyph, and how full its context window is, in the
 // colour (contextPressure). It replaced a kind-of-work glyph (fix, feat, refactor) read off the title's first verb, which only ever
@@ -40,12 +41,12 @@ const freshKinds = () =>
 // Most particular first: a home and an automation's run are what they are whoever they spawn; a session that started
 // subagents and is none of the rarer kinds is an orchestrator. Its live count of working children rides the tile as a
 // badge for any kind, so a home running three helpers says so too.
-export const sessionKind = (session: SessionFacts | undefined): SessionKind => {
+export const sessionKind = (session: SessionFacts | undefined, listeners?: ReadonlyMap<string, OriginSource>): SessionKind => {
     if (session?.home === true) {
         return { name: `home`, icon: `home`, label: t(`agents.sessionKind.home`) };
     }
     if (session?.origin !== undefined) {
-        const source = originMeta(session.origin);
+        const source = originMeta(session.origin, listeners);
         return { name: `automation`, icon: source.icon, label: t(`agents.sessionKind.automation`, { source: source.label }) };
     }
     if (session !== undefined && (isCiFixConversationId(session.id) || session.id.startsWith(LAND_FIX_PREFIX))) {

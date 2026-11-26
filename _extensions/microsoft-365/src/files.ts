@@ -5,9 +5,22 @@ import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import type { Http } from "./auth.js";
 import { type Graph, segment } from "./graph.js";
 
-// Moving bytes between Microsoft and the workspace, so `fileq` and the agent's other tools can read what arrived. Both
-// directions stay inside the workspace, symlinks included, and nothing that arrives ever overwrites a file already
-// there.
+// Moving bytes between Microsoft and the workspace, so `fileq` and the agent's other tools can read what arrived. The
+// backend that holds the card's sign-in never touches the workspace: the `m365` command reads the files a command names
+// and hands their bytes over, and writes what comes back (CommandIo). Both directions stay inside the workspace,
+// symlinks included, and nothing that arrives ever overwrites a file already there.
+
+// What a command reads and writes, by the workspace path the agent named. In the backend: the files the CLI sent, and
+// what it will save once the answer is back. Paths are the agent's own words, resolved inside the workspace by the CLI.
+export interface CommandIo {
+    // A file the command reads (`--file`, `--attach`, an upload's bytes).
+    readonly read: (path: string) => Promise<Buffer>;
+    // Bytes the command saves (a message's attachments); answers the path it was saved under.
+    readonly write: (path: string, bytes: Uint8Array) => Promise<string>;
+    // A file Microsoft serves from its own storage at a pre-authenticated address, fetched by the CLI without the card's
+    // sign-in; answers the path it was saved under.
+    readonly download: (path: string, url: string) => Promise<string>;
+}
 
 export const workspaceFile = async (root: string, name: string, writing: boolean): Promise<string> => {
     const base = await realpath(root);
@@ -58,7 +71,7 @@ interface Attachment {
 
 // More than any real message carries; a hostile one cannot make this loop forever.
 const ATTACHMENTS_MAX = 250;
-export const saveAttachments = async (graph: Graph, root: string, messageId: string, directory: string): Promise<string[]> => {
+export const saveAttachments = async (graph: Graph, io: CommandIo, messageId: string, directory: string): Promise<string[]> => {
     const path = `/me/messages/${segment(messageId)}/attachments`;
     const attachments = await graph.list<Attachment>(path, ATTACHMENTS_MAX);
     const saved: string[] = [];
@@ -74,25 +87,36 @@ export const saveAttachments = async (graph: Graph, root: string, messageId: str
             item.contentBytes !== undefined
                 ? Buffer.from(item.contentBytes, "base64")
                 : new Uint8Array(await (await graph.response(`${path}/${segment(item.id)}/$value`)).arrayBuffer());
-        saved.push(await saveBytes(root, `${directory}/${prefix}-${safe}`, bytes));
+        saved.push(await io.write(`${directory}/${prefix}-${safe}`, bytes));
     }
     return saved;
 };
 
-// Graph answers a file with a short-lived pre-authenticated storage URL. It is fetched without the bearer, only on
-// Microsoft's own storage domains, and never printed: the card's credential still goes only to sign-in and Graph.
-export const downloadFile = async (graph: Graph, root: string, path: string, output: string, http: Http = fetch): Promise<string> => {
+const STORAGE_SUFFIXES = [".sharepoint.com", ".sharepoint.us", ".sharepoint.cn", ".1drv.com", ".storage.live.com"];
+
+// Graph answers a file with a short-lived pre-authenticated address on Microsoft's own storage. Only such an address is
+// ever fetched, and without the card's sign-in: the credential still goes only to sign-in and Graph.
+export const storageUrl = (raw: string): URL => {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" || url.username || url.password || url.port || !STORAGE_SUFFIXES.some((suffix) => url.hostname.endsWith(suffix))) {
+        throw new Error("Unsupported Microsoft storage download host");
+    }
+    return url;
+};
+
+// The item's download address, checked, handed to the CLI to fetch: the bytes never pass through the backend.
+export const downloadFile = async (graph: Graph, io: CommandIo, path: string, output: string): Promise<string> => {
     const item = await graph.call<{ "@microsoft.graph.downloadUrl"?: string }>(path);
     const raw = item["@microsoft.graph.downloadUrl"];
     if (!raw) {
         throw new Error("This item has no downloadable content");
     }
-    const url = new URL(raw);
-    const suffixes = [".sharepoint.com", ".sharepoint.us", ".sharepoint.cn", ".1drv.com", ".storage.live.com"];
-    if (url.protocol !== "https:" || url.username || url.password || url.port || !suffixes.some((suffix) => url.hostname.endsWith(suffix))) {
-        throw new Error("Unsupported Microsoft storage download host");
-    }
-    const response = await http(url.toString(), { redirect: "error", signal: AbortSignal.timeout(60_000) });
+    return io.download(output, storageUrl(raw).toString());
+};
+
+// The CLI's half of a download: the address checked again, fetched without credentials or redirects, saved.
+export const fetchDownload = async (root: string, output: string, raw: string, http: Http = fetch): Promise<string> => {
+    const response = await http(storageUrl(raw).toString(), { redirect: "error", signal: AbortSignal.timeout(60_000) });
     if (!response.ok) {
         throw new Error(`Microsoft file download failed (${response.status})`);
     }

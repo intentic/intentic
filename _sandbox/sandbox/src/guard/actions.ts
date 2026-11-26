@@ -2,15 +2,19 @@ import type { AdmissionPolicy, AdmissionRule, CommandClass, CommandLocus, WakeSo
 import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract/policy/command-classes";
 import { hardRuleClasses } from "@intentic/sandbox-contract/policy/safety-policy";
 import type { Trigger } from "@intentic/sandbox-contract/schemas/automations";
+import type { ListenerStrangers } from "@intentic/extension-manifest";
 import { ALLOW, DENY, defineGuardedAction, HOLD } from "./guard.js";
 import { taintWords } from "./turn-taint.js";
 
 // Action catalog: every gated decision, defined once and consulted by value. Policy arrives as input rather than being
 // fetched here, so decides stay pure and a consult site can't see a different policy than it logs.
 
-// Maps a trigger to its admission-floor key. `webchat` and `issues` get their own floor since a stranger can reach them
-// without the owner wiring anything; every other listener shares `listener`.
-export const wakeSourceOf = (trigger: Trigger): WakeSource => {
+// Maps a trigger to its admission-floor key. A listener whose source anyone on the internet reaches gets the floor its
+// declaration names (`strangers`, read off the trigger catalogue by the caller: automations/fire/wake-source.ts), since a
+// stranger can wake it without the owner wiring anything; every other listener shares `listener`. (2026-11-26) A table
+// keyed by provider name (`webchat`, `issues`) decided this before, so an extension's public source could not be held
+// to a stranger's floor.
+export const wakeSourceOf = (trigger: Trigger, strangers?: ListenerStrangers): WakeSource => {
     switch (trigger.kind) {
         case "schedule":
         // A clock set both of them off, so a one-time wake answers to the rule the owner wrote for schedules rather
@@ -20,14 +24,14 @@ export const wakeSourceOf = (trigger: Trigger): WakeSource => {
         case "event":
             return "event";
         case "listener":
-            return LISTENER_SOURCES[trigger.provider] ?? "listener";
+            return strangers === undefined ? "listener" : STRANGER_FLOORS[strangers];
         case "workspace":
             return "workspace";
     }
 };
 
-// Listener providers with their own admission floor; a map keeps adding one to a single line here.
-const LISTENER_SOURCES: Readonly<Record<string, WakeSource>> = { webchat: "webchat", issues: "issues" };
+// The owner's floor for each kind of stranger a source declares, under the admission policy's stored keys.
+const STRANGER_FLOORS = { visitor: "webchat", report: "issues" } as const satisfies Readonly<Record<ListenerStrangers, WakeSource>>;
 
 export interface SessionStartInput {
     readonly source: WakeSource;
@@ -60,19 +64,25 @@ export const sessionStart = defineGuardedAction<SessionStartInput>({
 });
 
 export interface OutboundSendInput {
-    // Sniffer's classification of the call (activity/outbound.ts), e.g. `discord` + `message.send`.
+    // The classified action (activity/outbound.ts): the card id its extension declared it under, and the action
+    // (`message.send`).
     readonly provider: string;
     readonly type: string;
     // SandboxSettings.actionRules; an exact `<provider>.<type>` key wins over the `<provider>.*` wildcard.
     readonly rules: Readonly<Record<string, AdmissionRule>>;
+    // What the action comes to while no rule names it: allow, unless its declaration says its tool holds it until the
+    // owner writes a rule (capabilities/broker/outward-door.ts).
+    readonly unruled?: AdmissionRule;
 }
 
-// Consulted before an in-turn provider call runs. A hold can't park an unattended automation turn, so it becomes a
-// refusal pointing at the approvals queue instead.
+// Consulted before a declared outward action runs: an extension's command in a turn, a request through the credential
+// gateway, or an action an extension's backend carries out with a card's credential (the outward-action door). A hold
+// can't park an unattended automation turn, so it becomes a refusal pointing at the approvals queue instead, or, at the
+// backend's door, an approvals-queue item the extension carries out once a person says yes.
 export const outboundSend = defineGuardedAction<OutboundSendInput>({
     action: "outbound.send",
-    decide: ({ provider, type, rules }) => {
-        const rule = rules[`${provider}.${type}`] ?? rules[`${provider}.*`] ?? "allow";
+    decide: ({ provider, type, rules, unruled }) => {
+        const rule = rules[`${provider}.${type}`] ?? rules[`${provider}.*`] ?? unruled ?? "allow";
         if (rule === "deny") {
             return DENY(`${provider} ${type} is refused by the action rules`);
         }

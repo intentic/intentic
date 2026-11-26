@@ -20,6 +20,8 @@ ${accounts}
 - Vote: click the upvote/downvote control on a post or comment.
 - Create a post: subreddit → Create Post (or /submit) → fill title + body → pick the community → Post.
 - Join a community: open the subreddit and click Join.
+- Drafting a post for the owner's approval (the approvals skill): a new post needs a `title`, and a reply to one
+  person sets `target` to that comment's own permalink, not the thread's address, so it nests under them.
 - If www.reddit.com serves a network-security block, old.reddit.com usually works on the same login: plain HTML
   listings, threads, permalinks in the same shape, and working comment forms.
 ${tools}

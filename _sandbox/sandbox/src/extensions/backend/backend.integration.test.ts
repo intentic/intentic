@@ -15,7 +15,7 @@ import { workspacePaths } from "../../workspace/workspace.js";
 import { approveExtension } from "../../capabilities/extension-inventory/extension-approvals.js";
 import { createExtensionBackend, type ExtensionBackend, type ExtensionBackendOptions } from "./backend-supervisor.js";
 import { extensionMcpToolsOf } from "./extension-mcp.js";
-import { performApprovedAction } from "../../approvals/approval-performers.js";
+import { performApprovedAction, publishApprovedPost } from "../../approvals/approval-performers.js";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 
 // Extension backend system end-to-end against a real spawned host process (supervisor, /x proxy, containment rules).
@@ -454,6 +454,7 @@ const performerServer = `export const activateServer = (api) => {
         }
         return { outcome: "done", result: JSON.stringify(action) };
     });
+    api.approvals.publish(async (post) => ({ outcome: "done", result: JSON.stringify(post) }));
 };
 `;
 
@@ -507,4 +508,31 @@ test("an approved action reaches its extension's backend only through the host's
     expect((await app.request("http://sandbox.test/x/acme.performer/approvals/acme.performer", { method: "POST", body: "{}" })).status).toBe(404);
     const target = backend.proxyTarget();
     expect((await fetch(`http://127.0.0.1:${target!.port}/approvals/acme.performer`, { method: "POST", body: JSON.stringify({ action: item }) })).status).toBe(401);
+});
+
+test("an approved post reaches the backend that publishes its platform through the same door, as the person approved it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-publisher-"));
+    await writeExtension(root, "performer", performerServer);
+    await writeExtension(root, "echo", echoServer);
+    const { svc, backend } = harness(root);
+    await backend.start();
+    const post = { id: "launch", kind: "post" as const, platform: "Discord", content: "v2 is out", target: "123456789", status: "running" as const };
+    const yes = { approver: "owner@example.com", approvedAt: 1_760_000_000_000 };
+
+    const done = await publishApprovedPost(svc, "acme.performer", post, yes);
+    expect(done.outcome).toBe("done");
+    expect(JSON.parse(done.outcome === "done" ? done.result : "{}")).toEqual({
+        id: "launch",
+        platform: "discord",
+        content: "v2 is out",
+        target: "123456789",
+        approver: "owner@example.com",
+        approvedAt: 1_760_000_000_000,
+        actionRules: {},
+    });
+    // A backend that publishes nothing refuses before any code of its runs.
+    expect(await publishApprovedPost(svc, "acme.echo", post, yes)).toEqual({
+        outcome: "refused",
+        error: `the extension's backend did not take it (HTTP 404: {"error":"the \\"acme.echo\\" backend publishes no approved posts"})`,
+    });
 });

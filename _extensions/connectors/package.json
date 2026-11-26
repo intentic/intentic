@@ -1,8 +1,30 @@
 {
     "name": "@intentic/ext-connectors",
     "version": "1.0.0",
-    "description": "The first-party CLI connectors (github/gitlab/sentry/redmine/outline/signoz/postgres/mysql) as pure-data intentic extension",
+    "description": "The first-party connection cards (github/gitlab/sentry/redmine/outline/signoz/postgres/mysql and more) and the npm and GitHub release watch kinds, as an intentic extension",
     "license": "MIT",
     "private": true,
-    "type": "module"
+    "type": "module",
+    "scripts": {
+        "build": "vite build --config vite.server.config.ts",
+        "typecheck": "tsc -p tsconfig.json",
+        "test": "suites"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "semver": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@types/semver": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:"
+    }
 }

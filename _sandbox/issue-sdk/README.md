@@ -4,10 +4,11 @@ The bug reporter a website or app embeds to send crashes and user-written report
 
 ```mermaid
 flowchart LR
-    daemon["Sandbox daemon"] -->|"serves /intake/sdk.js"| page["Customer page<br/>script tag or import"]
+    ext["Issues extension's backend"] -->|"serves /door/intentic.issues/sdk.js"| page["Customer page<br/>script tag or import"]
     page --> sdk(["issue-sdk"])
-    sdk -->|"config · challenge · report"| intake["/intake door<br/>origin allowlist"]
-    intake --> agent["Bug reports automation<br/>agent triages"]
+    sdk -->|"config · challenge · report"| door["/door/intentic.issues<br/>the sandbox's protections"]
+    door --> ext
+    ext --> agent["Bug reports automation<br/>agent triages"]
 ```
 
 - Runs in a visitor's browser on someone else's site, so it must never break the page. Every path swallows its own
@@ -19,10 +20,13 @@ flowchart LR
   in a render loop is not a request per frame. A written report is never held back.
 - One entry, two builds (`vite.config.ts`): `sdk.js`, an IIFE that boots from its own `<script data-automation>` tag
   and exposes `window.Intentic`, and `sdk.mjs` for `init()` from a bundler.
-- The daemon serves `sdk.js` itself (`_sandbox/sandbox/src/issues/`), so the SDK and the routes it calls always ship
-  together. Build this package before the daemon can serve it.
+- The issues extension serves `sdk.js` from its own public door, where its backend answers the routes the SDK calls
+  (2026-11-26; the daemon's `/intake/…` before, which it still forwards there for an SDK built against them). The
+  extension vendors this package's built `sdk.js` (its `scripts/sdk.mjs --from`), so a change here reaches a customer's
+  page once the extension's copy is refreshed and published with it.
 - `data-release` names the commit the build came from, so the agent reads the real source at that commit and no
-  sourcemaps are needed. Browsers are admitted by origin; an app with no origin presents an ingest `key`.
+  sourcemaps are needed. Browsers are admitted by origin; an app with no origin presents an ingest `key`, sent as
+  `?key=`, and a written report the intake wants a puzzle for carries its proof in the door's two headers.
 - `dialog.ts` is the only UI: an optional report dialog in a shadow root with no launcher button, opened from the
   host's own link through `openReportDialog`. Its Send label takes whichever of dark ink and white contrasts more with
   the accent, measured the same way as the Visitor chat's.
@@ -33,7 +37,7 @@ flowchart LR
 - [src/client.ts](src/client.ts) — `createClient`: capture, breadcrumbs, proof of work and sending.
 - [src/capture.ts](src/capture.ts) — uncaught errors and unhandled rejections turned into reports.
 - [src/breadcrumbs.ts](src/breadcrumbs.ts) — the bounded trail of what happened before a crash.
-- [src/transport.ts](src/transport.ts) — the calls against the daemon's `/intake` routes.
+- [src/transport.ts](src/transport.ts) — the calls against the issues extension's public door.
 - [src/dialog.ts](src/dialog.ts) — the optional report dialog element.
 
 ## Commands

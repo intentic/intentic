@@ -2,21 +2,24 @@ import { errorMessage } from "@intentic/base/errors";
 import type { ApprovedActionOutcome } from "@intentic/extension-api/runtime";
 import type { ActionApprovalSummary, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
-import { actionTurnPrompt, DIRECT_PUBLISH_PLATFORMS, publishTurnPrompt } from "@intentic/sandbox-contract/policy/approvals-execution";
+import { actionTurnPrompt, publishTurnPrompt } from "@intentic/sandbox-contract/policy/approvals-execution";
 import type { Services } from "../composition.js";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type ApprovalStanding, approvalStandings, type SpentApproval, spendApprovals } from "./approval-decisions.js";
-import { type PerformedAction, performApprovedAction } from "./approval-performers.js";
-import { canPublishDirectly, publishDirectly } from "./direct-publish.js";
+import { type PerformedAction, performApprovedAction, publishApprovedPost, type PublishedPost } from "./approval-performers.js";
+import { type PostChannel, postChannels, postingNotes, publisherOf } from "./post-channels.js";
 import { BUILT_IN_ROLES, NO_ACCOUNTS_ROLE } from "@intentic/sandbox-contract/schemas/roles";
 
 // Sleeps until the exact due moment, one timer at a time, armed from disk (never memory) since both this daemon and the
 // agent write the queue.
-// Dispatched by kind: a Discord post goes out through its gateway, other posts and all actions need an agent turn.
+// Dispatched by kind: a post goes to the extension whose card publishes on its platform (its `channel.publish`, a Discord
+// bot's), when there is one and the post is one it can address; every other post and every action without a performer
+// needs an agent turn.
 // `running` is written before any action starts, so a mid-death daemon leaves a stuck item rather than one done twice.
 // An item's `approved` is only a claim, since the agent writes the file too: it runs when the owner's yes on the history
 // volume (approval-decisions.ts) matches what it says now. An action naming a `performer` never reaches a turn: once its
-// yes is spent, the extension's backend carries it out (approval-performers.ts) and its outcome is written here.
+// yes is spent, the extension's backend carries it out (approval-performers.ts) and its outcome is written here, and so
+// does a post its platform's extension publishes (2026-11-26; before, a Discord-only path in the daemon posted it).
 
 // How long a turn may sit before another pass reconsiders it; else a dead turn leaves `running` forever.
 const RUNNING_STALE_MS = 30 * 60_000;
@@ -83,6 +86,46 @@ const performedError = (outcome: { readonly outcome: `refused` | `uncertain`; re
 const wearable = async (services: Services): Promise<ReadonlySet<string>> =>
     new Set([...(await services.roles.list()).map((card) => card.id), ...BUILT_IN_ROLES.map((builtIn) => builtIn.id)]);
 
+// One item an extension's backend carries out, with what the audit trail records of who did it.
+interface HandedOver {
+    readonly item: ApprovalSummary;
+    readonly yes: SpentApproval;
+    readonly audited: Readonly<Record<string, string>>;
+    readonly hand: () => Promise<ApprovedActionOutcome>;
+}
+
+// The due items an extension's backend carries out, and the posts left for a turn: an action naming its `performer`, and
+// a post whose platform's extension publishes it (post-channels.ts publisherOf). Every other post goes to a turn, the
+// answer for one with an attachment or a target its card's pattern does not address (a channel named, not numbered).
+const handedToExtensions = (
+    services: Services,
+    channels: ReadonlyMap<string, PostChannel>,
+    due: readonly ApprovalSummary[],
+    yeses: ReadonlyMap<string, SpentApproval>,
+) => {
+    const handed: HandedOver[] = [];
+    const forTurn: PostApprovalSummary[] = [];
+    for (const post of due.filter(isPost)) {
+        const publisher = publisherOf(channels, post);
+        const yes = yeses.get(post.id);
+        if (publisher === undefined || yes === undefined || post.target === undefined) {
+            forTurn.push(post);
+            continue;
+        }
+        const published: PublishedPost = { ...post, target: post.target };
+        const extension = publisher.extension.id;
+        handed.push({ item: post, yes, audited: { extension, platform: post.platform.toLowerCase() }, hand: () => publishApprovedPost(services, extension, published, yes) });
+    }
+    for (const item of due.filter(isPerformed)) {
+        const yes = yeses.get(item.id);
+        if (yes !== undefined) {
+            const audited = { extension: item.performer.extension, digest: item.performer.digest };
+            handed.push({ item, yes, audited, hand: () => performApprovedAction(services, item, yes) });
+        }
+    }
+    return { handed, forTurn };
+};
+
 export const createApprovalsExecutor = (services: Services): ApprovalsExecutor => {
     let timer: NodeJS.Timeout | undefined;
     // One pass at a time: two overlapping passes could read `approved` before either writes `running`, twice.
@@ -119,13 +162,13 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
         return { due: cleared.filter((item) => yeses.has(item.id)), yeses };
     };
 
-    // An action its extension carries out itself: `running` first, as for every door, then the backend's own outcome.
+    // An item its extension carries out itself: `running` first, as for every door, then the backend's own outcome.
     // Its yes is already spent, so nothing here can carry it out twice; an uncertain outcome is failed, never redone.
-    const performByExtension = async (item: PerformedAction, yes: SpentApproval): Promise<void> => {
+    const handOver = async ({ item, yes, audited, hand }: HandedOver): Promise<void> => {
         await mark(item, { status: `running`, startedAt: Date.now() });
         let outcome: ApprovedActionOutcome;
         try {
-            outcome = await performApprovedAction(services, item, yes);
+            outcome = await hand();
         } catch (error) {
             // Whatever throws out of it threw before the door was asked (its request is caught inside): nothing went out.
             outcome = { outcome: `refused`, error: errorMessage(error) };
@@ -135,38 +178,14 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
             action: `approvals.performed`,
             target: item.id,
             outcome: outcome.outcome === `done` ? `ok` : outcome.outcome === `refused` ? `refused` : `failed`,
-            details: { extension: item.performer.extension, digest: item.performer.digest, approver: yes.approver ?? null, approvedAt: yes.approvedAt },
+            details: { ...audited, approver: yes.approver ?? null, approvedAt: yes.approvedAt },
         });
         if (outcome.outcome === `done`) {
             await mark(item, { status: `done`, finishedAt: Date.now(), result: outcome.result });
             return;
         }
-        services.logger.warn({ approval: item.id, outcome: outcome.outcome }, `approvals: an extension did not carry out an approved action`);
+        services.logger.warn({ approval: item.id, outcome: outcome.outcome }, `approvals: an extension did not carry out an approved item`);
         await fail(item, performedError(outcome));
-    };
-
-    // Sends one post through the API its platform actually offers; returns whether it's now settled.
-    // False hands it to the turn instead: the answer for a Discord post with an attachment or a channel named rather
-    // than numbered.
-    const sendDirect = async (post: PostApprovalSummary): Promise<boolean> => {
-        if (!DIRECT_PUBLISH_PLATFORMS.has(post.platform.toLowerCase()) || !canPublishDirectly(post)) {
-            return false;
-        }
-        await mark(post, { status: `running`, startedAt: Date.now() });
-        try {
-            const { url } = await publishDirectly(services, post);
-            const done: Partial<PostApprovalSummary> = { status: `done`, finishedAt: Date.now() };
-            // The posted row links to the message when the gateway could name it; without one it is still done.
-            if (url !== undefined) {
-                done.result = url;
-            }
-            await mark(post, done);
-        } catch (error: unknown) {
-            // The message is written for the owner's failed row, kept whole rather than reduced to a code.
-            await fail(post, error instanceof Error ? error.message : `The post did not go through.`);
-            services.logger.error({ err: error, approval: post.id }, `direct publish failed`);
-        }
-        return true;
     };
 
     // The same detached boundary POST /agent uses: registers the run, journals it so a daemon death resumes it, and
@@ -219,18 +238,10 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
             }
             const { due, yeses } = await settleUnapproved(marked);
 
-            const forTurn: PostApprovalSummary[] = [];
-            for (const post of due.filter(isPost)) {
-                if (!(await sendDirect(post))) {
-                    forTurn.push(post);
-                }
-            }
-
-            for (const item of due.filter(isPerformed)) {
-                const yes = yeses.get(item.id);
-                if (yes !== undefined) {
-                    await performByExtension(item, yes);
-                }
+            const channels = await postChannels(services);
+            const { handed, forTurn } = handedToExtensions(services, channels, due, yeses);
+            for (const each of handed) {
+                await handOver(each);
             }
 
             const cast = await wearable(services);
@@ -246,7 +257,7 @@ export const createApprovalsExecutor = (services: Services): ApprovalsExecutor =
 
             for (const [actsAs, wearing] of byRole(posts)) {
                 await startTurn(wearing, {
-                    prompt: publishTurnPrompt(wearing),
+                    prompt: publishTurnPrompt(wearing, postingNotes(channels, wearing.map((post) => post.platform))),
                     conversationId: conversationId(`post`),
                     unattended: true,
                     runRole: `approval-queue`,

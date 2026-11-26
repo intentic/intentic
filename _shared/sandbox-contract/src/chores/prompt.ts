@@ -1,21 +1,6 @@
-// Every generated prompt has four parts, in this order:
-// subject — what is being worked on.
-// why — the measurement's numbers, quoted exactly, then what they mean.
-// goal — a direction to move in, not a prescribed design.
-// done — falsifiable; checkable in the agent's own worktree.
-// Invariants sit between goal and done: constraints on how, restated in full each time.
-
-export interface Ask {
-    readonly subject: string;
-    readonly why: string;
-    readonly diagnosis: string;
-    readonly goal: string;
-    readonly invariants: string;
-    readonly done: string;
-}
-
-export const composeAsk = ({ subject, why, diagnosis, goal, invariants, done }: Ask): string =>
-    [subject, `Why: ${why} ${diagnosis}`, goal, `${invariants} ${done}`].join(`\n\n`);
+// FROZEN (2026-11-26): the maintenance extension owns this; kept unchanged for the extension wire until 3.0.0 (index.ts).
+// A chore prompt's four parts are the shared brief's (briefs/agent-ask.ts, where composeAsk lives since 2026-11-26).
+export { type Ask, composeAsk } from "../briefs/agent-ask.js";
 
 // Findings are claims to verify, not tasks to execute; acting on all of them is worse than acting on none.
 export const TRIAGE_NOTE =

@@ -49,6 +49,8 @@ That intersection decides four things, each where the daemon already enforced it
 
 Deleting a profile that lists a role is refused like one a person or a service holds: taking it away would widen every conversation wearing that role.
 
+A person pressing an extension's button is a person here too (2026-11-26). A request through `/x/<id>` reaches the extension's backend carrying an assertion of who the daemon verified, minted for that extension and good for two minutes ([`caller-assertion.ts`](../../_sandbox/sandbox/src/extensions/backend/caller-assertion.ts)), and a turn the backend starts with it through POST /agent is that person's: the daemon reads them from the roster at that moment, holds them to the route's floor, and the conversation is born inside their areas and latches them among its people, exactly as if they had sent it. Without the assertion a turn an extension starts stays the extension's own, which acts for the owner. Only the extension the assertion was minted for can present it, beside its own token; a panel, an agent or a person's own bearer cannot, so no program borrows a person's name, and no assertion lifts a person above what their row holds. A backend reading the workspace holds a fenced member to the same folders (`api.caller(request).reaches(path)`).
+
 ## Services
 
 A service always acts for its steward, so the oldest rule here still holds for unattended work: an agent never holds more than the person it acts for. A steward is the owner or someone on the roster who runs agents here. The profile narrows that further, and naming one is how unattended work stops reaching everything its steward can.

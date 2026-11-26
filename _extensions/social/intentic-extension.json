@@ -21,7 +21,10 @@
                 "fields": [],
                 "loginUrl": "https://www.reddit.com/login/",
                 "homeUrl": "https://www.reddit.com/",
-                "skill": "skills/reddit/SKILL.md"
+                "skill": "skills/reddit/SKILL.md",
+                "channel": {
+                    "posting": "A target that is one comment's permalink (…/comments/<post>/<slug>/<comment>/) is a reply to that comment: it nests under it, never as a new top-level comment on the thread."
+                }
             },
             {
                 "id": "x",
@@ -36,7 +39,8 @@
                 "fields": [],
                 "loginUrl": "https://x.com/i/flow/login",
                 "homeUrl": "https://x.com/home",
-                "skill": "skills/x/SKILL.md"
+                "skill": "skills/x/SKILL.md",
+                "channel": { "messageLimit": 280 }
             },
             {
                 "id": "youtube",
@@ -51,7 +55,8 @@
                 "fields": [],
                 "loginUrl": "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fwww.youtube.com%2F",
                 "homeUrl": "https://www.youtube.com/",
-                "skill": "skills/youtube/SKILL.md"
+                "skill": "skills/youtube/SKILL.md",
+                "channel": { "messageLimit": 5000 }
             },
             {
                 "id": "facebook",
@@ -66,7 +71,8 @@
                 "fields": [],
                 "loginUrl": "https://www.facebook.com/login/",
                 "homeUrl": "https://www.facebook.com/",
-                "skill": "skills/facebook/SKILL.md"
+                "skill": "skills/facebook/SKILL.md",
+                "channel": { "messageLimit": 63206 }
             },
             {
                 "id": "instagram",
@@ -81,7 +87,8 @@
                 "fields": [],
                 "loginUrl": "https://www.instagram.com/accounts/login/",
                 "homeUrl": "https://www.instagram.com/",
-                "skill": "skills/instagram/SKILL.md"
+                "skill": "skills/instagram/SKILL.md",
+                "channel": { "messageLimit": 2200 }
             },
             {
                 "id": "tiktok",
@@ -96,7 +103,8 @@
                 "fields": [],
                 "loginUrl": "https://www.tiktok.com/login",
                 "homeUrl": "https://www.tiktok.com/",
-                "skill": "skills/tiktok/SKILL.md"
+                "skill": "skills/tiktok/SKILL.md",
+                "channel": { "messageLimit": 4000 }
             }
         ]
     }

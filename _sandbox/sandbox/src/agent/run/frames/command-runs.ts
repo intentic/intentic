@@ -1,7 +1,8 @@
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract/events/requests";
 import { opt } from "../../../opt.js";
-import { agentCommand, commandWords } from "../../providers/agent-installs.js";
+import { agentCommand } from "../../providers/agent-installs.js";
+import { commandWords } from "../../../safety/shell-words.js";
 import { checkOutcome, commandExitCode } from "../../verification/agent-verification.js";
 
 /* WHICH OF A TURN'S COMMANDS FAILED, AND WHAT RAN CLEAN BESIDE THEM.

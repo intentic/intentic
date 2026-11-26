@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { keyedLock } from "@intentic/base/async";
-import type { ProcessContribution } from "@intentic/extension-manifest";
+import { declaredReachOf, type ProcessContribution } from "@intentic/extension-manifest";
 import { EXTENSION_PROCESS_ENV } from "@intentic/sandbox-contract/extension-protocol";
 import type { Services } from "../composition.js";
 import { extensionRuntimeAbsent } from "../capabilities/extension-inventory/extension-readiness.js";
@@ -32,6 +32,8 @@ export const startExtensionProcess = async (services: Services, extension: Insta
             [EXTENSION_PROCESS_ENV.state]: dirs.stateDir,
             [EXTENSION_PROCESS_ENV.cache]: dirs.cacheDir,
             [EXTENSION_PROCESS_ENV.permissions]: JSON.stringify(extension.manifest.permissions?.daemon ?? []),
+            // What it may hear, hold and run besides (2026-11-26): its runtime asks for these and refuses the rest.
+            [EXTENSION_PROCESS_ENV.declared]: JSON.stringify(declaredReachOf(extension.manifest.permissions)),
         },
     });
 };

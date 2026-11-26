@@ -56,6 +56,13 @@ const causes = new Map<string, string>();
 /** What the conversation's turn last showed of itself, live or just ended; undefined when no turn ran since boot. */
 export const turnPulseOf = (conversationId: string): TurnPulse | undefined => pulses.get(conversationId);
 
+/** The turn the conversation's runtime is running right now, undefined between turns: what the credential gateway files a
+ *  request's Activity row under (broker-server.ts). */
+export const runningTurnOf = (conversationId: string): string | undefined => {
+    const pulse = pulses.get(conversationId);
+    return pulse === undefined || pulse.endedAt !== undefined ? undefined : pulse.turnId;
+};
+
 /** Every turn whose runtime is running right now on this provider, one per conversation. */
 export const runningOn = (provider: string): readonly TurnPulse[] =>
     [...pulses.values()].filter((pulse) => pulse.endedAt === undefined && pulse.provider === provider);

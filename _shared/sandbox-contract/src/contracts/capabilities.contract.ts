@@ -17,6 +17,7 @@ import {
     CapabilityStatusSchema,
     SshKeySchema,
 } from "../schemas/capabilities.js";
+import { OutwardActionAskSchema, OutwardActionOutcomeSchema, OutwardActionVerdictSchema } from "../schemas/outward-action.js";
 import { DeviceSignInStartSchema, DeviceSignInWaitInputSchema, DeviceSignInWaitSchema } from "../schemas/device-sign-in.js";
 import { CertificateRequestInputSchema, CertificateRequestSchema } from "../schemas/certificate-request.js";
 import { MarketplaceRequestSchema, MarketplaceSchema } from "../schemas/marketplace.js";
@@ -215,6 +216,29 @@ export const capabilitiesContract = {
         .meta({ agent: true, panel: false })
         .input(CapabilityIdParamSchema)
         .output(CapabilityAccessTokenSchema),
+    // Called by an extension's backend alone, before it carries out an outward action with one of its cards' credentials
+    // (the IMAP and Microsoft 365 senders): the owner's rule is decided here, not in the extension.
+    outwardAction: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/{id}/outward-action",
+            summary: "Ask the action rules about an extension's outward action",
+            description:
+                "For an extension's own backend, before it sends, books or uploads with one of its cards. The daemon reads the owner's action rules for the action the card declares and answers allow, deny with the rule's reason, or hold. A hold with a draft becomes an approvals-queue item the extension carries out itself once a person says yes. Refused, and recorded, are decided here; the extension only carries out what is allowed or approved.",
+        })
+        .meta({ panel: false })
+        .input(OutwardActionAskSchema)
+        .output(OutwardActionVerdictSchema),
+    outwardActionOutcome: capabilityRoute
+        .route({
+            method: "POST",
+            path: "/capabilities/{id}/outward-action/outcome",
+            summary: "Record how an extension's outward action went",
+            description: "The Activity row for an action the rules allowed or a person approved, once the service answered.",
+        })
+        .meta({ panel: false })
+        .input(OutwardActionOutcomeSchema)
+        .output(OkSchema),
     status: capabilityRoute
         .route({
             method: "GET",

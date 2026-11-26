@@ -14,6 +14,9 @@ flowchart LR
 - Three pieces. The capability card takes one token from `@BotFather`, which its Test checks with `getMe`. The skill (`skills/telegram/SKILL.md`)
   teaches the agent to call the Bot API with `curl` and `$TELEGRAM_BOT_TOKEN`. The gateway is a `processes` entry
   the daemon runs while a Telegram card or Telegram automation exists.
+- The card declares what its Bot API methods do (`broker.actions`: the sends, the edits, deleting a message, a reaction,
+  and `getFile`, a read), so the sandbox's credential gateway records each call in Activity with its chat and text, and
+  holds it to the owner's action rules (`telegram.message.send` and the rest) before the token is attached to the path.
 - The gateway long-polls once per bot, and only while an enabled Telegram automation exists. It uses no SDK, since
   the Bot API is HTTPS and JSON, and needs no public URL. It is built on
   [connector-runtime](../../_shared/connector-runtime).
@@ -32,6 +35,8 @@ flowchart LR
   messages, its Markdown rendered as Telegram's HTML ([src/format.ts](src/format.ts)), or as plain text if Telegram
   refuses the markup. The message ends 👌, 😢, 🫡 (stopped), or 🙏 while a hold waits for the owner: Telegram lets a
   bot react with only a fixed set of emoji, one at a time, and ✅ and ❌ are not among them.
+- The card states the one-message limit a reply is split at (`channel.messageLimit`, 4,096, past which `sendMessage`
+  refuses) and where people's data goes for the Data protection page (`processors`: Telegram, outside the EEA).
 - A button's data is capped at 64 bytes, too short for a conversation id, so Stop carries a short token the gateway
   maps back. A reply in the chain while the turn runs goes into that turn. The bot says hello when it is added to a
   group.

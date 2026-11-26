@@ -13,10 +13,22 @@ import { profileTraits } from "../system/boot/profile.js";
 import { reachPosture } from "../system/listeners/reach-posture.js";
 import { privacyProviders } from "../privacy/privacy-trust.js";
 import { isDevBuild } from "../version.js";
+import { publicOfficeActionKeys } from "./preset.js";
+import type { ProcessorFacts, ProcessorFlow } from "@intentic/extension-manifest";
+import { contributionFor, contributionRegistry, type ResolvedContribution } from "../capabilities/contributions.js";
 
 // Everything the data protection page and its documents say about this sandbox, read once from the live services as
 // plain data. The mapping to flows, measures and documents (report.ts, documents.ts) reads only this, so a test hands
 // it a representative sandbox without standing one up.
+
+// One path out a card declares (its `processors`), with the hosts it reaches as this card is filled in.
+export interface ConnectorPath {
+    readonly flow: ProcessorFlow;
+    readonly hosts: readonly string[];
+    readonly operator?: string | undefined;
+    readonly region?: string | undefined;
+    readonly thirdCountry?: boolean | undefined;
+}
 
 export interface ConnectorFact {
     readonly id: string;
@@ -25,10 +37,9 @@ export interface ConnectorFact {
     // The hosts its credential may be spent on, from its host guard; empty when no guard names any.
     readonly hosts: readonly string[];
     readonly guarded: boolean;
-    // For mail: the server, from the card's own field.
-    readonly host: string | undefined;
-    // For a mail card that can also send (the IMAP card's SMTP fields): the outgoing server.
-    readonly smtpHost?: string | undefined;
+    // (2026-11-26) The paths its card declares, read off the manifest of the extension contributing it; undefined when
+    // it declares none, which reads as one generic connector path over `hosts`.
+    readonly paths?: readonly ConnectorPath[] | undefined;
 }
 
 export interface EndpointFact {
@@ -59,6 +70,8 @@ export interface MemberFacts {
 
 export interface ComplianceFacts {
     readonly settings: SandboxSettings;
+    // Every outward action the action rules can hold here (preset.ts publicOfficeActionKeys).
+    readonly actionKeys: readonly string[];
     readonly privacy: PrivacyShieldPolicy;
     readonly readers: { readonly ocr: boolean; readonly model: boolean };
     // Every provider a turn could run on, with whether it is connected now.
@@ -66,8 +79,6 @@ export interface ComplianceFacts {
     // Endpoints and local models by id, with the address they are reached at.
     readonly endpoints: readonly EndpointFact[];
     readonly connectors: readonly ConnectorFact[];
-    // Team-chat connectors that an automation listens on.
-    readonly listening: readonly string[];
     readonly webchats: readonly WebchatFact[];
     readonly browsers: number;
     // The cloud voice provider replies are spoken by, when one is connected.
@@ -100,26 +111,52 @@ export const atRestKeyReadable = (env: NodeJS.ProcessEnv = process.env): boolean
     }
 };
 
-const TEAM_CHAT = new Set(["discord", "slack", "telegram", "whatsapp"]);
+// A connector card's own fields are whatever its connector declares; the provider names the card, and a declared path
+// may name one more as its server (`hostField`), which counts once it holds something.
+const ConnectorFieldsSchema = z.looseObject({ provider: z.string().optional() });
+const FilledFieldSchema = z.string().min(1);
 
-// A connector card's own fields are whatever its connector declares; these two are the ones this page reads.
-const ConnectorFieldsSchema = z.looseObject({ provider: z.string().optional(), host: z.string().optional(), smtpHost: z.string().optional() });
+// The paths a card's declaration (`processors`) opens for this card as filled in: one naming a server field exists only
+// once that field is, and reaches that server; any other reaches its declared hosts and the credential's.
+export const declaredPaths = (processors: readonly ProcessorFacts[] | undefined, config: Capability["config"], guarded: readonly string[]): ConnectorPath[] | undefined =>
+    processors?.flatMap((processor): ConnectorPath[] => {
+        const field = processor.hostField;
+        const server = field === undefined ? undefined : FilledFieldSchema.safeParse(Object.entries(config).find(([key]) => key === field)?.[1]).data;
+        if (field !== undefined && server === undefined) {
+            return [];
+        }
+        const reached = server === undefined ? guarded : [server];
+        return [
+            {
+                flow: processor.flow,
+                hosts: [...new Set([...(processor.hosts ?? []), ...reached])],
+                operator: processor.operator,
+                region: processor.region,
+                thirdCountry: processor.thirdCountry,
+            },
+        ];
+    });
 
-const connectorsOf = (capabilities: readonly Capability[], guards: readonly SecretHostGuard[]): ConnectorFact[] =>
+const connectorsOf = (
+    capabilities: readonly Capability[],
+    guards: readonly SecretHostGuard[],
+    registry: ReadonlyMap<string, ResolvedContribution>,
+): ConnectorFact[] =>
     capabilities.flatMap((capability): ConnectorFact[] => {
         if (capability.kind !== "cli" && capability.kind !== "mcp") {
             return [];
         }
         const guard = guards.find((entry) => entry.subject === capability.id);
         const fields = ConnectorFieldsSchema.safeParse(capability.config);
+        const hosts = guard?.hosts ?? [];
+        const card = contributionFor(registry, capability.kind, capability.config)?.spec;
         return [
             {
                 id: capability.id,
                 provider: (fields.success ? fields.data.provider : undefined) ?? capability.id,
-                hosts: guard?.hosts ?? [],
+                hosts,
                 guarded: guard?.guard ?? false,
-                host: fields.success ? fields.data.host : undefined,
-                smtpHost: fields.success ? fields.data.smtpHost : undefined,
+                paths: declaredPaths(card?.processors, capability.config, hosts),
             },
         ];
     });
@@ -150,11 +187,14 @@ export type FactsServices = Pick<
     | "areas"
     | "agentDomainPolicy"
     | "info"
+    | "outwardActions"
+    | "workspace"
+    | "files"
 > &
     Parameters<typeof providerReadiness>[0];
 
 export const gatherFacts = async (services: FactsServices): Promise<ComplianceFacts> => {
-    const [settings, status, capabilities, guards, gates, automations, channels, members, areas, domain, ready] = await Promise.all([
+    const [settings, status, capabilities, guards, gates, automations, channels, members, areas, domain, ready, outward, registry] = await Promise.all([
         services.sandboxSettings.get(),
         services.privacyShield.status(),
         services.capabilities.list(),
@@ -166,6 +206,8 @@ export const gatherFacts = async (services: FactsServices): Promise<ComplianceFa
         services.areas.list(),
         services.agentDomainPolicy.get(),
         providerReadiness(services),
+        services.outwardActions(),
+        contributionRegistry(services),
     ]);
     const endpointIds = new Set(capabilities.filter((entry) => traitsOf(entry.kind)?.provider === "endpoint").map((entry) => `endpoint/${entry.id}`));
     const readyIds = new Set(Object.entries(ready).flatMap(([id, connected]) => (connected ? [id] : [])));
@@ -177,18 +219,12 @@ export const gatherFacts = async (services: FactsServices): Promise<ComplianceFa
     const config = services.config;
     return {
         settings,
+        actionKeys: publicOfficeActionKeys(outward.offered),
         privacy: status.policy,
         readers: status.readers,
         providers,
         endpoints: endpointsOf(capabilities),
-        connectors: connectorsOf(capabilities, guards),
-        listening: [
-            ...new Set(
-                listeners.flatMap((automation) =>
-                    automation.trigger.kind === "listener" && TEAM_CHAT.has(automation.trigger.provider) ? [automation.trigger.provider] : [],
-                ),
-            ),
-        ],
+        connectors: connectorsOf(capabilities, guards, registry),
         webchats: automations.flatMap((automation): WebchatFact[] =>
             automation.trigger.kind === "listener" && automation.trigger.provider === "webchat"
                 ? [

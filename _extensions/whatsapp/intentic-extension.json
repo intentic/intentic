@@ -56,7 +56,28 @@
                     }
                 ],
                 "env": {},
-                "skill": "skills/whatsapp/SKILL.md"
+                "skill": "skills/whatsapp/SKILL.md",
+                "status": {
+                    "from": "listener",
+                    "pairingSteps": "on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead"
+                },
+                "channel": { "messageLimit": 65536 },
+                "processors": [
+                    {
+                        "flow": "team-chat",
+                        "operator": "WhatsApp Ireland (Meta)",
+                        "region": "EU/US",
+                        "thirdCountry": true,
+                        "hosts": ["web.whatsapp.com", "g.whatsapp.net"]
+                    }
+                ],
+                "commandActions": [
+                    { "action": "message.send", "command": ["whatsapp", "send"], "channel": { "arg": 0 }, "content": { "arg": 1, "rest": true } },
+                    { "action": "message.send", "command": ["whatsapp", "reply"], "channel": { "arg": 0 }, "content": { "arg": 2, "rest": true } },
+                    { "action": "message.send", "command": ["whatsapp", "send-file"], "channel": { "arg": 0 }, "content": { "arg": 1 } },
+                    { "action": "message.send", "command": ["whatsapp", "send-voice"], "channel": { "arg": 0 }, "content": { "arg": 1 } },
+                    { "action": "reaction.add", "command": ["whatsapp", "react"], "channel": { "arg": 0 }, "content": { "arg": 2 } }
+                ]
             }
         ]
     }

@@ -5,6 +5,8 @@
 import type { DaemonRawRouteKey } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import type { Services } from "./composition.js";
 import { mergeRawRoutes, type RawRouteTable } from "./http/raw-route-server.js";
+import { accountSendRawRoutes } from "./account-routing/account-send.routes.js";
+import { accountRawRoutes } from "./account-routing/account.routes.js";
 import { dropRawRoutes } from "./account-routing/drop.routes.js";
 import { inboxRawRoutes } from "./account-routing/inbox.routes.js";
 import { pairingRawRoutes } from "./account-routing/pairing.routes.js";
@@ -32,6 +34,9 @@ import { desktopViewRawRoutes } from "./desktop/desktop-view.routes.js";
 import { enginesRawRoutes } from "./engines/engines.routes.js";
 import { environmentRawRoutes } from "./environment/environment.routes.js";
 import { backendProxyRawRoutes } from "./extensions/backend/backend-proxy.routes.js";
+import { cardToolsRawRoutes } from "./extensions/backend/card-tools.routes.js";
+import { movedDoorRawRoutes } from "./extensions/backend/moved-doors.routes.js";
+import { publicDoorRawRoutes } from "./extensions/backend/public-door.routes.js";
 import { extensionBundleRawRoutes } from "./extensions/extension-bundle.routes.js";
 import { listenerRawRoutes } from "./extensions/listener/listener.routes.js";
 import { extensionOwnRawRoutes } from "./extensions/runtime/own.routes.js";
@@ -41,9 +46,6 @@ import { deviceArtifactRawRoutes } from "./hosts/device-artifacts.routes.js";
 import { deviceDoorRawRoutes } from "./hosts/device-door.routes.js";
 import { deviceFileRawRoutes } from "./hosts/device-files.routes.js";
 import { deviceRunRawRoutes } from "./hosts/runs/device-runs.routes.js";
-import { accountSendRawRoutes } from "./issues/account-send.routes.js";
-import { accountRawRoutes } from "./issues/account.routes.js";
-import { intakeRawRoutes } from "./issues/intake.routes.js";
 import { linkOperateRawRoutes } from "./links/link-operate.js";
 import { linkRecordsRawRoutes } from "./links/link-records.js";
 import { linkRawRoutes } from "./links/links.routes.js";
@@ -67,13 +69,14 @@ import { voiceRawRoutes } from "./speech/voice/voice.routes.js";
 import { healthRawRoutes } from "./system/boot/health.routes.js";
 import { relinkRawRoutes } from "./system/boot/relink.routes.js";
 import { walletRawRoutes } from "./wallet/wallet.routes.js";
-import { webchatRawRoutes } from "./webchat/webchat.routes.js";
 import { webextRawRoutes } from "./webext/webext.routes.js";
 import { gateRawRoutes } from "./workflows/gate.routes.js";
 import { workspaceBytesRawRoutes } from "./workspace/files/workspace-bytes.routes.js";
 
 export const appRawRoutes = (services: Services) =>
     mergeRawRoutes(
+        accountSendRawRoutes(services),
+        accountRawRoutes(services),
         dropRawRoutes(services),
         inboxRawRoutes(services),
         pairingRawRoutes(services),
@@ -101,6 +104,9 @@ export const appRawRoutes = (services: Services) =>
         enginesRawRoutes(services),
         environmentRawRoutes(services),
         backendProxyRawRoutes(services),
+        cardToolsRawRoutes(services),
+        movedDoorRawRoutes(services),
+        publicDoorRawRoutes(services),
         extensionBundleRawRoutes(services),
         listenerRawRoutes(services),
         extensionOwnRawRoutes(services),
@@ -110,9 +116,6 @@ export const appRawRoutes = (services: Services) =>
         deviceDoorRawRoutes(services),
         deviceFileRawRoutes(services),
         deviceRunRawRoutes(services),
-        accountSendRawRoutes(services),
-        accountRawRoutes(services),
-        intakeRawRoutes(services),
         linkOperateRawRoutes(services),
         linkRecordsRawRoutes(services),
         linkRawRoutes(services),
@@ -136,7 +139,6 @@ export const appRawRoutes = (services: Services) =>
         healthRawRoutes(services),
         relinkRawRoutes(services),
         walletRawRoutes(services),
-        webchatRawRoutes(services),
         webextRawRoutes(services),
         gateRawRoutes(services),
         workspaceBytesRawRoutes(services),

@@ -6,8 +6,9 @@
     "category": "connections",
     "logo": "discord",
     "engines": {
-        "intentic": "^2.0.0"
+        "intentic": "^2.54.0"
     },
+    "server": "dist/server.js",
     "permissions": {
         "daemon": ["POST /speech/transcribe", "POST /speech/say"]
     },
@@ -157,9 +158,63 @@
                             "action": "ask",
                             "why": "deletes a server or a channel"
                         }
+                    ],
+                    "actions": [
+                        {
+                            "action": "message.send",
+                            "methods": ["POST"],
+                            "paths": ["/channels/*/messages", "/*/channels/*/messages"],
+                            "channel": { "after": "channels" },
+                            "content": { "field": "content" }
+                        },
+                        {
+                            "action": "message.edit",
+                            "methods": ["PATCH"],
+                            "paths": ["/channels/*/messages/*", "/*/channels/*/messages/*"],
+                            "channel": { "after": "channels" },
+                            "content": { "field": "content" }
+                        },
+                        {
+                            "action": "message.delete",
+                            "methods": ["DELETE"],
+                            "paths": ["/channels/*/messages/*", "/*/channels/*/messages/*"],
+                            "channel": { "after": "channels" }
+                        },
+                        {
+                            "action": "reaction.add",
+                            "methods": ["PUT"],
+                            "paths": ["/channels/*/messages/*/reactions/**", "/*/channels/*/messages/*/reactions/**"],
+                            "channel": { "after": "channels" }
+                        },
+                        {
+                            "action": "reaction.remove",
+                            "methods": ["DELETE"],
+                            "paths": ["/channels/*/messages/*/reactions/**", "/*/channels/*/messages/*/reactions/**"],
+                            "channel": { "after": "channels" }
+                        },
+                        {
+                            "action": "messages.read",
+                            "read": true,
+                            "methods": ["GET"],
+                            "paths": ["/channels/*/messages/**", "/*/channels/*/messages/**"],
+                            "channel": { "after": "channels" }
+                        }
                     ]
                 },
-                "hosts": ["discord.com"]
+                "hosts": ["discord.com"],
+                "channel": {
+                    "messageLimit": 2000,
+                    "publish": { "target": "^\\d{5,}$" }
+                },
+                "processors": [
+                    {
+                        "flow": "team-chat",
+                        "operator": "Discord Inc.",
+                        "region": "US",
+                        "thirdCountry": true,
+                        "hosts": ["discord.com", "gateway.discord.gg", "cdn.discordapp.com"]
+                    }
+                ]
             }
         ],
         "automationTemplates": [

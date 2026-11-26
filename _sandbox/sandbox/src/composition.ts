@@ -19,8 +19,6 @@ import { activityLogDocument, type ActivityStore, fileActivityStore } from "./ac
 import { type AuditService, auditServiceOf } from "./audit/audit-service.js";
 import { cliProxyAuthDir, cliProxyConfigPath, cliProxyManagementUrl, createCliProxyClient, openCodeGeminiReach } from "./agent/providers/translator.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore, workflowRunsDocument, workflowsDocument } from "./workflows/workflows-store.js";
-import { type ChoresStore, fileChoresStore, LEDGER_FILE, PROBES_FILE } from "./chores/chores-store.js";
-import { createProbeRunner, type ProbeRunner } from "./chores/probe-runner.js";
 import { createTrialService, type TrialService } from "./trial/trial.js";
 import { withTrialEndpoint } from "./trial/trial-endpoint.js";
 import { fileRolesStore, rolesDocument, type RolesStore } from "./roles/roles-store.js";
@@ -39,8 +37,6 @@ import { accountUsageDocument, fileAccountUsageStore } from "./usage/account-usa
 import { fileAnswerWatch, providerAnswersDocument } from "./usage/drift/answer-vocabulary.js";
 import { createHeadroomService } from "./usage/headroom.js";
 import { fileUsageParkStore, usageParksDocument } from "./usage/usage-parks.js";
-import { fileIssuesStore, issuesDocument } from "./issues/issues-store.js";
-import { fileInstallsStore, issueInstallsDocument } from "./store/installs.js";
 import { filePeerTools, type PeerToolMemory } from "./peers/peer-tool-memory.js";
 import { askPresentation } from "./system/platform-client.js";
 import { daemonPresentation, type PresentationMirror } from "./system/presentation/presentation-mirror.js";
@@ -68,7 +64,6 @@ import { createPortForwards } from "./ports/port-forwards.js";
 import { cachedScan, listenerFingerprint } from "./ports/port-scan.js";
 import { scanPortsWith } from "./ports/owned-ports.js";
 import { transcriptSearchMetrics } from "./sessions/search/transcript-search.js";
-import { fileWebchatOutbox, outboxStreamFor, webchatOutboxDocument } from "./webchat/webchat-outbox.js";
 import { createSpeech, type Speech } from "@intentic/speech/transcribe";
 import { composeSpokenReply } from "./agent/models/spoken-reply.js";
 import { createVoice, type Voice } from "@intentic/speech/voice/voice";
@@ -119,7 +114,7 @@ import { internalTools } from "./agent/tools/agent-tools.js";
 import { backgroundJobSessions, keptJobDirs } from "./agent/tools/jobs/background-jobs.js";
 import { conversationBusy, turnInFlight } from "./agent/run/turn/turn-liveness.js";
 import { createTurnMounts, TURN_MOUNT_BASE, type TurnMounts } from "./agent/tools/turn-mounts.js";
-import { enabledExtensions, type ExtensionHost } from "./capabilities/extension-inventory/installed-extensions.js";
+import type { ExtensionHost } from "./capabilities/extension-inventory/installed-extensions.js";
 import { workspaceArrivedEmpty } from "./scaffold/starter-site.js";
 
 import { authRootOf, statePath } from "./state-paths.js";
@@ -134,7 +129,7 @@ import { grantsChanged } from "./needs/standing-grants.js";
 import { type ConversationGrants, conversationGrantsDocument, fileConversationGrants } from "./roles/conversation-grants.js";
 import { commandPolicyLines, fileOwnerGrants, type OwnerGrants, ownerGrantsDocument } from "./roles/owner-grants.js";
 import { createExtensionsSlice, type ExtensionsSlice } from "./extensions/extensions-slice.js";
-import { type AutomationsSlice, createAutomationsSlice, type IntakeMembers } from "./automations/automations-slice.js";
+import { type AutomationsSlice, createAutomationsSlice } from "./automations/automations-slice.js";
 import type { LoopsSlice, WorkflowsMembers } from "./loops/loops-slice.js";
 import { type CiSlice, createCiSlice } from "./ci/ci-slice.js";
 import { createDepsSlice, type DepsSlice, type QueueMembers } from "./workspace/deps/deps-slice.js";
@@ -227,10 +222,6 @@ export interface Services
     readonly ownerGrants: OwnerGrants;
     // Named parts of the workspace; every path fence resolves through it, for people and for the turns they start.
     readonly areas: AreasStore;
-    // Maintenance evidence: the probe cache the background runner fills, and the ledger of what was done about it.
-    readonly chores: ChoresStore;
-    // Background sweep keeping the probe cache from expiring; skipped entirely while any turn is live.
-    readonly probeRunner: ProbeRunner;
     // Activity log, outside /work: inbound wakes, sniffed calls, voice sessions, failures.
     readonly activity: ActivityStore;
     // The audit trail (historyRoot/audit/): hash-chained, segmented by month, pruned by `settings.audit`, forwarded to the
@@ -412,7 +403,7 @@ const createReaper = ({ conversations, agents, events, logger, resources }: Pick
 // Slice members a slice builder leaves out, each because the builder importing it would close a cycle between
 // subsystems (daemon-boundaries): the builder's Omit<…> type names them, and this Pick of the same names is checked
 // against it, so leaving one out fails to compile.
-type BridgedMembers = DerivedMembers | PortsMembers | QueueMembers | IntakeMembers | WorkflowsMembers | AgentToolsMember;
+type BridgedMembers = DerivedMembers | PortsMembers | QueueMembers | WorkflowsMembers | AgentToolsMember;
 // The hand-ordered core every leaf slice is built from (bootstrap/slices/slice-registry.ts): the slices built below in the
 // order their dependencies ask for, and the members bridged beside them. A leaf picks what it reads of it, so one that
 // reaches past it fails to compile.
@@ -442,7 +433,6 @@ export interface CompositionCore extends Pick<Services, CoreKeys> {
 
 const createBridgedMembers = (deps: Pick<Services, "config" | "logger" | "workspace" | "heavyCommands">): Pick<Services, BridgedMembers> => {
     const { config, logger, workspace } = deps;
-    const webchatOutbox = fileWebchatOutbox(join(workspace.root, webchatOutboxDocument.path));
     return {
         // WorkspaceSlice: derived/ and scaffold/ import workspace/ back. Read here, once, at composition: the last moment
         // /work still looks the way the user handed it over.
@@ -454,11 +444,6 @@ const createBridgedMembers = (deps: Pick<Services, "config" | "logger" | "worksp
         scanPorts: cachedScan(scanPortsWith(logger), () => listenerFingerprint()),
         // DepsSlice: the heavy queue is agent/'s terminal lane.
         queueHeavy: queueWhole(deps.heavyCommands.read),
-        // AutomationsSlice: issues/ and webchat/ import automations/ back.
-        webchatOutbox,
-        outboxStreamFor: (origin) => outboxStreamFor({ webchatOutbox, logger }, origin),
-        issues: fileIssuesStore(join(workspace.root, issuesDocument.path)),
-        issueInstalls: fileInstallsStore(issueInstallsDocument, join(workspace.root, issueInstallsDocument.path)),
         // LoopsSlice: workflows/ imports loops/ back.
         workflows: fileWorkflowsStore(join(workspace.root, workflowsDocument.path)),
         workflowRuns: fileWorkflowRunsStore(join(workspace.root, workflowRunsDocument.path)),
@@ -478,7 +463,6 @@ const createDaemonMembers = (
         | "workspace"
         | "capabilities"
         | "conversations"
-        | "chores"
         | "runtimeInstalls"
         | "processes"
         | "serviceProcesses"
@@ -488,7 +472,7 @@ const createDaemonMembers = (
         | "orgPolicy"
     > & { readonly manifestHost: ExtensionHost },
 ) => {
-    const { config, logger, workspace, capabilities, conversations, chores, runtimeInstalls, processes, serviceProcesses, ownerGrants } = deps;
+    const { config, logger, workspace, capabilities, conversations, runtimeInstalls, processes, serviceProcesses, ownerGrants } = deps;
     // Born converged: main() closes the gate, so a test or host-internal preview build has nothing to wait for.
     const boot = createBootTracker(logger);
     const presentation = daemonPresentation(config, () => askPresentation(config), logger);
@@ -512,13 +496,6 @@ const createDaemonMembers = (
         turnMounts: createTurnMounts({ baseUrl: () => `http://127.0.0.1:${config.sandbox.port}${TURN_MOUNT_BASE}` }),
         info: sandboxInfoOf(config),
         presentation: presentation.mirror,
-        probeRunner: createProbeRunner({
-            workspace,
-            chores,
-            conversations,
-            wanted: async () => (await enabledExtensions(deps.manifestHost)).some((extension) => extension.id === "intentic.maintenance"),
-            logger,
-        }),
         // The owner's own file, plus the lines they allowed with Always, which live in ownerGrants and never in the file.
         safetyPolicy: fileSafetyPolicyStore(
             statePath(workspace.root, ".intentic/config/safety.md"),
@@ -685,8 +662,6 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
     );
     // Hoisted: the drift sweep and the install-steering hook write the same ledger the /environment route reads.
     const runtimeInstalls = fileRuntimeInstallsStore(join(workspace.root, runtimeInstallsDocument.path));
-    // Hoisted: the background probe runner writes the same cache the /chores route reads.
-    const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Hoisted: the CI fixer files into the same log and reads the same settings the routes do.
     const activity = fileActivityStore(join(config.historyRoot, activityLogDocument.path));
     const sandboxSettings = fileSandboxSettingsStore(join(workspace.root, settingsDocument.path), orgPins.settingsPin, orgPins.warn);
@@ -790,7 +765,6 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
             workspace,
             capabilities,
             conversations,
-            chores,
             runtimeInstalls,
             scanPorts: bridged.scanPorts,
             manifestHost: capabilitiesParts.manifestHost,
@@ -805,7 +779,6 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         conversationGrants,
         ownerGrants,
         areas,
-        chores,
         invariants,
         activity,
         audit,
@@ -847,7 +820,6 @@ export const createServices = (config: Config, logger: Logger, logFiles = openLo
         webextHub: services.webextHub,
         phones: services.phones,
         phoneHub: services.phoneHub,
-        issues: services.issues,
         cursorHooks: services.cursorHooks,
     });
     return services;

@@ -3,7 +3,7 @@
 // trip.
 import "@intentic/testing/dom";
 import { humanizeModelId } from "@intentic/sandbox-contract/models/model-label";
-import { MODEL_ROLES } from "@intentic/sandbox-contract/models/model-roles";
+import { coreModelRoleEntries, type ModelRoleEntry } from "@intentic/sandbox-contract/models/model-roles";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import PrimeVue from "primevue/config";
@@ -13,6 +13,7 @@ import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
 import { IconStub } from "@intentic/ui/testing";
 import * as uiOriginal from "@intentic/ui";
 import * as providerCatalogOriginal from "../../../../models/providers/providerCatalog";
+import { rolesBeforeContributions } from "../../../../models/jobs/modelRoles";
 
 // useDevice reads window.matchMedia at import; environment.ts reads window.env.
 
@@ -24,6 +25,22 @@ const ROUTER = `model-router` as const;
 const RUN = `pipeline-fix` as const;
 
 const entry = (provider: string, model: string, rest: Record<string, unknown> = {}): ModelPin => ({ provider, model, ...rest }) as ModelPin;
+
+// The jobs as the daemon serves them (useModelRoles): the sandbox's own, then the pipeline fixes the Pipelines extension
+// declares (`contributes.modelRoles`).
+const PIPELINE_FIX: ModelRoleEntry = {
+    id: RUN,
+    label: `Pipeline fixes`,
+    blurb: `The agent started by Fix on a failed pipeline.`,
+    kind: `run`,
+    icon: `wave-pulse`,
+    setup: `high`,
+    extension: `intentic.pipelines`,
+    enabled: true,
+};
+const MODEL_ROLES: readonly ModelRoleEntry[] = [...coreModelRoleEntries(), PIPELINE_FIX];
+const served = ref<readonly ModelRoleEntry[] | undefined>(MODEL_ROLES);
+jest.mock(`../../../../models/jobs/useModelRoles`, () => ({ useModelRoles: () => ({ roles: served }) }));
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({ roleSetups: {} }));
 const patch = jest.fn((fields: Partial<SandboxSettings>) => {
@@ -164,6 +181,7 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     settings.value = SandboxSettingsSchema.parse({ roleSetups: {} });
+    served.value = MODEL_ROLES;
     connected.value = [`codex`, `claude`];
     providerModels.value = {};
     opened = undefined;
@@ -289,6 +307,54 @@ test("a setup of the owner's comes after the presets, with the jobs put on it", 
     expect(Object.keys(layoutOf(host))).toEqual([`Low`, `Medium`, `High`, `Reviews`]);
     expect(layoutOf(host)[`Reviews`]).toEqual([labelOf(COMMIT)]);
     expect(jobsOf(tray(host))).not.toContain(labelOf(COMMIT));
+});
+
+/* JOBS EXTENSIONS DECLARE (2026-11-26) */
+
+test("a job an extension declares is drawn beside the sandbox's own, on its declared setup until it is placed", async () => {
+    settings.value = SandboxSettingsSchema.parse({});
+    const host = await mountPage();
+
+    expect(layoutOf(host)[`High`]).toContain(`Pipeline fixes`);
+    await openJob(host, `Pipeline fixes`);
+    expect(document.querySelector(`.job-panel`)?.textContent).toContain(PIPELINE_FIX.blurb);
+    expect(ticked()).toBe(`High (suggested)`);
+});
+
+test("an extension switched off hides its job, keeps the owner's choice for it through other moves, and shows it again", async () => {
+    settings.value = SandboxSettingsSchema.parse({ roleSetups: { ...SUGGESTED_PLACES, [RUN]: `medium` } });
+    served.value = [...coreModelRoleEntries(), { ...PIPELINE_FIX, enabled: false }];
+    const host = await mountPage();
+
+    expect(Object.values(layoutOf(host)).flat()).not.toContain(`Pipeline fixes`);
+    await openJob(host, labelOf(COMMIT));
+    await choose(`High`);
+    expect(patch).toHaveBeenLastCalledWith({ roleSetups: { ...SUGGESTED_PLACES, [RUN]: `medium`, [COMMIT]: `high` } });
+
+    app?.unmount();
+    served.value = MODEL_ROLES;
+    const again = await mountPage();
+    expect(layoutOf(again)[`Medium`]).toContain(`Pipeline fixes`);
+});
+
+test("placing a job in a sandbox that never placed any writes every job where it ran, a switched-off extension's too", async () => {
+    settings.value = SandboxSettingsSchema.parse({});
+    const audit: ModelRoleEntry = { ...PIPELINE_FIX, id: `nightly-audit`, label: `Nightly audits`, setup: `medium`, extension: `acme.audit`, enabled: false };
+    served.value = [...MODEL_ROLES, audit];
+    const host = await mountPage();
+
+    await openJob(host, labelOf(COMMIT));
+    await choose(`High`);
+    expect(patch).toHaveBeenLastCalledWith({ roleSetups: { ...SUGGESTED_PLACES, "nightly-audit": `medium`, [COMMIT]: `high` } });
+});
+
+test("against a daemon that serves no job list, the page places the jobs that daemon knew", async () => {
+    served.value = rolesBeforeContributions();
+    const host = await mountPage();
+
+    const listed = jobsOf(tray(host));
+    expect(listed).toEqual(expect.arrayContaining([`Pipeline fixes`, `Deployment fixes`, `Maintenance chores`, `Refactors`, `Documentation runs`, `Acceptance runs`]));
+    expect(listed.indexOf(`Pipeline fixes`)).toBeLessThan(listed.indexOf(`Approvals queue`));
 });
 
 /* EDITING A SETUP EDITS IT FOR EVERY JOB ON IT */

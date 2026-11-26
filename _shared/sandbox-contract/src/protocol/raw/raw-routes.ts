@@ -81,19 +81,25 @@ export const RAW_ROUTES = {
     "POST /automations/{id}/fire": { auth: "door" },
     // The release gate a pipeline runner waits on, gated by the workflow's minted gate token.
     "POST /workflows/{id}/gate": { auth: "door" },
-    // The Visitor chat, embedded on the owner's sites: gated by its origin allowlist, rate limit and bot check.
+    // The Visitor chat's public paths before 2026-11-26, in customers' pages (the snippet's script) and in a widget loaded
+    // before the update: forwarded, translated, to the visitor-chat extension's own door below
+    // (extensions/backend/moved-doors.routes.ts), whose protections apply as they do there. Which sites loaded the widget
+    // left with it, for the extension's own install panel.
     "GET /webchat/widget.js": { auth: "door", embedded: true },
     "GET /webchat/{id}/config": { auth: "door", embedded: true },
     "GET /webchat/{id}/challenge": { auth: "door", embedded: true },
     "POST /webchat/{id}/message": { auth: "door", embedded: true },
     "GET /webchat/{id}/messages": { auth: "door", embedded: true },
-    // Which sites loaded the widget is the owner's diagnostic, not the visitor's.
-    "GET /webchat/{id}/installs": {},
-    // The bug intake, the other anonymous door: gated by origin allowlist or ingest key, rate window and daily ceiling.
+    // The bug intake's public paths before 2026-11-26, out in customers' pages and apps: forwarded, translated, to the issues
+    // extension's own door below (extensions/backend/moved-doors.routes.ts), whose protections apply as they do there.
     "GET /intake/sdk.js": { auth: "door", embedded: true },
     "GET /intake/{id}/config": { auth: "door", embedded: true },
     "GET /intake/{id}/challenge": { auth: "door", embedded: true },
     "POST /intake/{id}/report": { auth: "door", embedded: true },
+    // (2026-11-26) An extension's public doors (`contributes.publicRoutes`), anyone's to call: gated in the handler by the
+    // route's own declaration (size, rate window, daily ceiling, an automation's allowlist or key, proof of work, a
+    // provider's signature) before the backend hears of it, and embedded, so a page elsewhere may call one.
+    "ALL /door/*": { auth: "door", embedded: true },
     // The roster is for whoever runs people and access (Full access, or the People & access right) to read and change;
     // giving up one's own grant is every tier's. Reading it is floored here as well as in its handler (members.routes.ts),
     // so the editor knows before asking; what someone below Full access may change is the handler's (peopleChangeRefusal).
@@ -229,11 +235,27 @@ export const RAW_ROUTES = {
     // A person in the channel pressing Stop on a turn that channel started; the handler asks the automation's own
     // sender rules whether that person may.
     "POST /listeners/{provider}/stop": { panel: false, control: "never" },
+    // (2026-11-26) Who a stranger who signed in is (a Google ID token verified against a site's own client id, and whether
+    // that address is the owner's or a member's), for a listener anyone on the internet reaches: the extension that owns
+    // it, declaring the route in `permissions.daemon`, checked in the handler too. The Visitor chat's.
+    "POST /listeners/{provider}/identity": { panel: false, control: "never" },
     // What an extension's own code asks about itself (extension-protocol.ts): its settings with their secrets, and its
     // event stream. Every extension token reaches both undeclared, and each answers only about the extension asking, so
     // no other credential reaches them; the handler resolves the caller from its token again.
     "GET /extension/settings": { floor: "maintainer", panel: false, control: "never" },
     "GET /extension/events": { floor: "maintainer", panel: false, control: "never", stream: true },
+    // (2026-11-26) The two doors an extension's declared `permissions` open beside them: holding work in flight for as
+    // long as its stream stays open (`work`), and running one command under a workload class (`exec`). Reached the same
+    // way, by every extension token undeclared in `permissions.daemon`, and each checks its own declaration.
+    "POST /extension/work/hold": { floor: "maintainer", panel: false, control: "never", stream: true },
+    "POST /extension/exec": { floor: "maintainer", panel: false, control: "never" },
+    // (2026-11-26) The doors an agent tool's call opens onto the turn that made it (`permissions.turn`): the turn's own
+    // signed-in browser for an account it holds, the owner's browser it holds, and a background job in its conversation.
+    // Reached the same way, each answering only a ticket the daemon minted for that extension's own call or job.
+    "POST /extension/turn/browser": { floor: "maintainer", panel: false, control: "never" },
+    "POST /extension/turn/owner-browser": { floor: "maintainer", panel: false, control: "never" },
+    "POST /extension/jobs": { floor: "maintainer", panel: false, control: "never", stream: true },
+    "POST /extension/jobs/{id}": { floor: "maintainer", panel: false, control: "never" },
     // The CI webhook receiver, gated by the per-sandbox webhook secret.
     "POST /ci/webhook/{host}": { auth: "door" },
     // (2026-11-25) What the forges said, as it is heard, for a program (schemas/ci.ts CiFeedEventSchema): Server-Sent
@@ -281,6 +303,11 @@ export const RAW_ROUTES = {
     // extension cards' endpoints), by server name: the handler checks the conversation's mount bearer the turn's tool
     // config carries, and that the running turn mounted that name.
     "ALL /mcp/{mount}": { auth: "door", control: "never" },
+    // (2026-11-26) The same server, for the turn's own shell: a card's CLI calling the tools its extension's backend serves
+    // for that card (the IMAP and Microsoft 365 commands, whose credentials stay in the backend). One JSON-RPC message per
+    // request; the conversation it names is believed only with its turn's proof, and must have a live turn that mounted
+    // that card's tools (the extensions' card-tools.routes.ts).
+    "POST /tools/{mount}": { agent: true, control: "never" },
     // A connected browser's credential doors, on its durable token: a sign-in moves in (`session`) or out (`lend`).
     "POST /system/webext/session": { auth: "door", control: "never" },
     "POST /system/webext/lend": { auth: "door", control: "never" },

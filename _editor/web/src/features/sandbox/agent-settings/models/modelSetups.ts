@@ -1,19 +1,15 @@
-import {
-    isPresetSetup,
-    type ModelSetup,
-    presetPins,
-    roleSetupId,
-    type SetupSettings,
-    storedSetup,
-    suggestedSetup,
-} from "@intentic/sandbox-contract/models/model-setups";
-import { MODEL_ROLE_IDS, type ModelRole, PRESET_SETUPS, type PresetSetup } from "@intentic/sandbox-contract/models/model-roles";
+import { isPresetSetup, type ModelSetup, presetPins, roleSetupId, type SetupSettings, storedSetup } from "@intentic/sandbox-contract/models/model-setups";
+import { type ModelRole, type ModelRoleSpec, PRESET_SETUPS, type PresetSetup } from "@intentic/sandbox-contract/models/model-roles";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import type { ModelSource } from "@intentic/sandbox-contract/models/model-pins";
 
 // The Models page as data: every setup in the order the page draws it, the jobs on each, and the writes each press makes.
 // Nothing here is held between visits; it is all read off the two settings (modelSetups, roleSetups) through the
-// contract's own resolver, so the page draws what the daemon will run.
+// contract's own resolver, so the page draws what the daemon will run. The jobs are the daemon's list (useModelRoles.ts):
+// the sandbox's own and its extensions'.
+
+// A job as the page places it: its id and the setup it is suggested.
+export type PlacedJob = Pick<ModelRoleSpec, "id" | "setup">;
 
 export interface SetupView {
     readonly id: string;
@@ -34,10 +30,14 @@ export interface SetupsView {
     readonly unassigned: readonly ModelRole[];
 }
 
-/** The page's whole picture: the presets, cheapest first, then the owner's own in the order they were made. */
-export function setupsView(settings: SetupSettings, sources: readonly ModelSource[]): SetupsView {
-    const placed = new Map(MODEL_ROLE_IDS.map((role) => [role, roleSetupId(settings, role)]));
-    const rolesOn = (id: string): ModelRole[] => MODEL_ROLE_IDS.filter((role) => placed.get(role) === id);
+/**
+ * The page's whole picture: the presets, cheapest first, then the owner's own in the order they were made, each with the
+ * `jobs` on it that the page shows.
+ */
+export function setupsView(settings: SetupSettings, sources: readonly ModelSource[], jobs: readonly PlacedJob[]): SetupsView {
+    const ids = jobs.map((job) => job.id);
+    const placed = new Map(jobs.map((job) => [job.id, roleSetupId(settings, job.id, job.setup)]));
+    const rolesOn = (id: string): ModelRole[] => ids.filter((role) => placed.get(role) === id);
     const presets = PRESET_SETUPS.map<SetupView>((preset) => {
         const stored = storedSetup(settings, preset);
         return {
@@ -57,13 +57,13 @@ export function setupsView(settings: SetupSettings, sources: readonly ModelSourc
         seen.add(setup.id);
         return [{ id: setup.id, preset: undefined, name: setup.name, derived: false, pins: setup.pins ?? [], roles: rolesOn(setup.id) }];
     });
-    return { setups: [...presets, ...own], unassigned: MODEL_ROLE_IDS.filter((role) => placed.get(role) === undefined) };
+    return { setups: [...presets, ...own], unassigned: ids.filter((role) => placed.get(role) === undefined) };
 }
 
 /** A settings write: whole values, since the settings route merges only at the top level. */
 export interface SetupsWrite {
     modelSetups?: ModelSetup[];
-    roleSetups?: SetupSettings["roleSetups"];
+    roleSetups?: Record<string, string>;
 }
 
 /** A setup made by a press, and the write that makes it. */
@@ -125,8 +125,21 @@ export const withNewSetup = (settings: SetupSettings, name: (n: number) => strin
     return { id, write: { modelSetups: [...settings.modelSetups, { id, name: name(n), pins: [...pins] }] } };
 };
 
-const placing = (settings: SetupSettings, roles: readonly ModelRole[], target: (role: ModelRole) => string | undefined): SetupSettings["roleSetups"] => {
-    const next = { ...settings.roleSetups };
+// The map a placement starts from: as stored, or, in a sandbox that never placed its jobs, every job it knows on its
+// suggestion, written down now so placing one job leaves the rest where they ran. `known` is every job, switched-off
+// extensions' included, so their choices are not lost.
+const placedMap = (settings: SetupSettings, known: readonly PlacedJob[]): Record<string, string> =>
+    settings.roleSetups === undefined
+        ? Object.fromEntries(known.map((job) => [job.id, job.setup]))
+        : Object.fromEntries(Object.entries(settings.roleSetups).flatMap(([role, id]) => (id === undefined ? [] : [[role, id]])));
+
+const placing = (
+    settings: SetupSettings,
+    known: readonly PlacedJob[],
+    roles: readonly ModelRole[],
+    target: (role: ModelRole) => string | undefined,
+): Record<string, string> => {
+    const next = placedMap(settings, known);
     for (const role of roles) {
         const id = target(role);
         if (id === undefined) {
@@ -139,23 +152,40 @@ const placing = (settings: SetupSettings, roles: readonly ModelRole[], target: (
 };
 
 /** A job put on another setup, or (undefined) taken off every setup, back to running on nothing. */
-export const withJobOn = (settings: SetupSettings, role: ModelRole, target: string | undefined): SetupsWrite => ({
-    roleSetups: placing(settings, [role], () => target),
+export const withJobOn = (settings: SetupSettings, known: readonly PlacedJob[], role: ModelRole, target: string | undefined): SetupsWrite => ({
+    roleSetups: placing(settings, known, [role], () => target),
 });
 
 /** Each of these jobs put on the preset suggested for it: the one press that sets a fresh sandbox going. */
-export const withSuggestedPlaces = (settings: SetupSettings, roles: readonly ModelRole[]): SetupsWrite => ({
-    roleSetups: placing(settings, roles, suggestedSetup),
+export const withSuggestedPlaces = (settings: SetupSettings, known: readonly PlacedJob[], roles: readonly PlacedJob[]): SetupsWrite => ({
+    roleSetups: placing(
+        settings,
+        known,
+        roles.map((role) => role.id),
+        (id) => roles.find((role) => role.id === id)?.setup,
+    ),
 });
 
 /** A job given a setup of its own, starting as a copy of what it runs on now so nothing changes until it is edited. */
-export const withJobOnNewSetup = (settings: SetupSettings, role: ModelRole, name: (n: number) => string, pins: readonly ModelPin[]): SetupsWrite => {
+export const withJobOnNewSetup = (
+    settings: SetupSettings,
+    known: readonly PlacedJob[],
+    role: ModelRole,
+    name: (n: number) => string,
+    pins: readonly ModelPin[],
+): SetupsWrite => {
     const { id, write } = withNewSetup(settings, name, pins);
-    return { ...write, roleSetups: placing(settings, [role], () => id) };
+    return { ...write, roleSetups: placing(settings, known, [role], () => id) };
 };
 
-/** A setup of the owner's deleted: its jobs are on none again, and listed as such, rather than moved where nobody chose. */
-export const withoutSetup = (settings: SetupSettings, id: string): SetupsWrite => ({
-    modelSetups: settings.modelSetups.filter((setup) => setup.id !== id),
-    roleSetups: Object.fromEntries(Object.entries(settings.roleSetups).filter(([, target]) => target !== id)),
-});
+/**
+ * A setup of the owner's deleted: its jobs are on none again, and listed as such, rather than moved where nobody chose.
+ * A sandbox that never placed its jobs has none on a setup of the owner's, so its map stays unwritten.
+ */
+export const withoutSetup = (settings: SetupSettings, id: string): SetupsWrite => {
+    const modelSetups = settings.modelSetups.filter((setup) => setup.id !== id);
+    if (settings.roleSetups === undefined) {
+        return { modelSetups };
+    }
+    return { modelSetups, roleSetups: Object.fromEntries(Object.entries(placedMap(settings, [])).filter(([, target]) => target !== id)) };
+};

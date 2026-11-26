@@ -111,21 +111,13 @@ export const createClient = async (options: InitOptions): Promise<IssueClient> =
             if (shaped === null) {
                 return undefined;
             }
-            const body: IssueIngest = {
-                report: enrich(shaped, options, crumbs),
-                clientId,
-                ...(options.key !== undefined ? { key: options.key } : {}),
-                // Only a written report needs a proof, never a crash: a crash handler has no second to spend on it.
-                ...(shaped.kind === "report" && config.antiBot === "pow"
-                    ? {
-                          powNonce: await solveProofOfWork(
-                              await quietOffline(fetchChallenge(endpoint, clientId)),
-                              "This page must be served over HTTPS to send a report.",
-                          ),
-                      }
-                    : {}),
-            };
-            return (await quietOffline(send(endpoint, body))).id;
+            const body: IssueIngest = { report: enrich(shaped, options, crumbs), clientId };
+            // Only a written report needs a proof, never a crash: a crash handler has no second to spend on it.
+            const proof =
+                shaped.kind === "report" && config.antiBot === "pow"
+                    ? await solveProofOfWork(await quietOffline(fetchChallenge(endpoint, clientId)), "This page must be served over HTTPS to send a report.")
+                    : undefined;
+            return (await quietOffline(send(endpoint, body, { key: options.key, proof }))).id;
         } catch (error) {
             // A refusal (origin, size, daily limit), an http:// page or a throwing beforeSend is the site owner's to act on.
             if (!(error instanceof OfflineError)) {

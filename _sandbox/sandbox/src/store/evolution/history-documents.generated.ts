@@ -28,6 +28,8 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "engines/<engine>/state.json", portability: "derived" },
     { path: "entitlement-refusals.json", portability: "carry" },
     { path: "extension-approvals.json", portability: "identity", note: "Approve the extensions written in this workspace again from Extensions." },
+    { path: "extension-conversations.json", portability: "carry" },
+    { path: "extension-fires-owed.json", portability: "carry" },
     { path: "hook-approvals.json", portability: "identity", note: "Approve the workspace's Claude Code hooks again from Approvals." },
     { path: "hook-requests.json", portability: "derived" },
     { path: "host-enrollments.json", portability: "identity" },

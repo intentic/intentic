@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { claudeExperimentSettings } from "./settings-experiments.js";
 import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safety-policy.js";
-import { MODEL_ROLES, ModelRoleSchema } from "../models/model-roles.js";
+import { ModelRoleSchema } from "../models/model-roles.js";
 import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema } from "./command-admission.js";
 import { KeepWarmSettingsSchema } from "./keep-warm.js";
@@ -419,14 +419,13 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "The model setups jobs run on: Low, Medium and High, which every sandbox has, and any you make. Each is an ordered list of models, tried in order so one spent account does not take its jobs down. A preset left out of this list, or listed without models, is worked out from the accounts you have connected. A setup runs only the jobs put on it (`roleSetups`).",
         ),
-    // `partialRecord`, not `record`: an exhaustive one would force every settings file to list every role, and adding
-    // one would invalidate them all. A fresh sandbox places every job on its suggested preset; an explicit
-    // map stays as written, including an empty one or a job removed from it.
+    // Any job's id, an extension's too, kept as written while it is off; absent until a job is placed, every job on its
+    // suggestion (2026-11-26: the schema wrote the core table at the first save, leaving later extensions' jobs on none).
     roleSetups: z
-        .partialRecord(ModelRoleSchema, z.string().regex(MODEL_SETUP_ID))
-        .default(() => Object.fromEntries(MODEL_ROLES.map((role) => [role.id, role.setup])))
+        .record(ModelRoleSchema, z.string().regex(MODEL_SETUP_ID))
+        .optional()
         .describe(
-            "Which setup each job runs on: commit messages, session titles, the safety judge, pipeline fixes and every other place this sandbox picks a model for you. Defaults to each job’s suggested Low, Medium or High setup. In a saved map, a job left out, or on a setup with no models, has none, so a one-shot job does not run and a whole session opens on whatever your own chat is set to.",
+            "Which setup each job runs on: commit messages, session titles, the safety judge, the jobs your extensions start runs for (pipeline fixes, maintenance chores) and every other place this sandbox picks a model for you. Left out, every job runs on its suggested Low, Medium or High setup. In a saved map, a job left out, or on a setup with no models, has none, so a one-shot job does not run and a whole session opens on whatever your own chat is set to. A choice for an extension's job is kept while the extension is switched off.",
         ),
     // Folded into the router's prompt (agent/prompt/chat-router.ts), never into a turn's own. Capped small on
     // purpose: the reading runs under a 5s deadline, and this text is paid for on every chat that opens on Auto.

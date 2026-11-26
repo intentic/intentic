@@ -1,0 +1,18 @@
+{
+    "installPanel": {
+        "allow": "Allow",
+        "allowToLoadChat": "Allow {origin} to load this chat",
+        "allowedSites": "Allowed sites",
+        "askedTurnedAway": "asked and was turned away · {lastSeenAt}",
+        "checking": "Checking…",
+        "copyEmbedSnippet": "Copy the embed snippet for {id}",
+        "couldntAddSite": "Could not add that site.",
+        "couldntReadInstalls": "Could not read which sites loaded this widget.",
+        "embedCode": "Embed code",
+        "loadCount": "{count} load | {count} loads",
+        "loaded": "Has it loaded?",
+        "noBrowserLoadedWidget": "No browser has loaded this widget yet. Paste the snippet, open your site, and this updates on its own within a few seconds.",
+        "noSitesAllowed": "No sites are allowed yet, so every visitor is turned away. Add one below or edit the automation.",
+        "pasteIntoSiteBefore": "Paste this into your site, before"
+    }
+}

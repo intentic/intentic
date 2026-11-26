@@ -1,5 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
-import type { ModelRole } from "../models/model-roles.js";
+import { jobFields, type ModelRole } from "../models/model-roles.js";
 
 // One batch run engine for every surface that fans an isolated agent turn out over items and reads results off disk.
 // Backed by files, not a pack's own store, with derived conversation ids that join the fleet via a GET /agents filter,
@@ -102,7 +102,7 @@ export const batchTurnBody = (params: {
     conversationId: params.conversationId,
     isolated: true,
     unattended: true,
-    runRole: params.role,
+    ...jobFields(params.role),
     ...(params.pick === undefined ? {} : runPickFields(params.pick)),
     ...params.extra,
 });

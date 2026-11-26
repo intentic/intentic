@@ -41,6 +41,8 @@ const GRANTS: Readonly<Record<string, ExtensionGrant>> = {
     "slack-token": { id: "intentic.slack", permissions: [], listener: "slack" },
     "impostor-token": { id: "evil.discord-lookalike", permissions: ["GET /listeners/*/state"], listener: "discord" },
     "plain-token": { id: "acme.tool", permissions: ["GET /listeners/*/state", "POST /listeners/*/dispatch"] },
+    // The shipped visitor-chat extension, whose `webchat` listener strangers reach.
+    "visitor-chat-token": { id: "intentic.visitor-chat", permissions: ["GET /automations", "POST /listeners/webchat/identity"], listener: "webchat" },
 };
 
 // The listener routes touch automations/heldWakes/capabilities/activity/workspace/logger; `unstubbed` keeps the
@@ -95,7 +97,8 @@ const appFor = (services: Services, wake: TurnStarter["stream"]): Hono => {
         .get("/listeners/:provider/state", routes.state)
         .post("/listeners/:provider/dispatch", routes.dispatch)
         .post("/listeners/:provider/failure", routes.failure)
-        .post("/listeners/:provider/status", routes.status);
+        .post("/listeners/:provider/status", routes.status)
+        .post("/listeners/:provider/identity", routes.identity);
 };
 
 const postJson = (app: Hono, path: string, body: unknown, token = "discord-token") =>
@@ -282,9 +285,25 @@ test("a wake held for a person's approval tells the channel so, rather than goin
     await services.automations.upsert(listenerAutomation("h-live", { requireApproval: true }));
     const prompts: string[] = [];
     const frames = await framesOf(await postJson(appFor(services, fakeWake(prompts)), "/listeners/discord/dispatch?stream=1", message({ id: "h1", mentioned: true })));
-    expect(frames).toContainEqual({ automationId: "h-live", held: HELD_NOTICE });
+    // Which held wake it is and the conversation it runs in once let (2026-11-26), so the sender can link it now.
+    const held = frames.find((frame) => frame.held !== undefined);
+    expect(held).toEqual({ automationId: "h-live", held: HELD_NOTICE, heldWake: { id: expect.any(String), conversationId: expect.any(String) } });
+    expect((await services.heldWakes.list()).map((wake) => [wake.id, wake.conversationId])).toEqual([[held?.heldWake?.id, held?.heldWake?.conversationId]]);
     expect(frames.at(-1)).toEqual({ automationId: "h-live", end: true });
     expect(prompts).toEqual([]);
+});
+
+test("a message naming its automation wakes that one alone, still held to its filters", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-route-")));
+    await services.automations.upsert(listenerAutomation("intake-a"));
+    await services.automations.upsert(listenerAutomation("intake-b"));
+    const app = appFor(services, fakeWake([]));
+    const named = await framesOf(await postJson(app, "/listeners/discord/dispatch?stream=1", message({ id: "n2", mentioned: true, automationId: "intake-b" })));
+    expect([...new Set(named.map((frame) => frame.automationId))]).toEqual(["intake-b"]);
+    // Naming an automation that is not on this source wakes nothing at all; naming none wakes every one that admits it.
+    expect(await framesOf(await postJson(app, "/listeners/discord/dispatch?stream=1", message({ id: "n3", mentioned: true, automationId: "elsewhere" })))).toEqual([]);
+    const everyone = await framesOf(await postJson(app, "/listeners/discord/dispatch?stream=1", message({ id: "n4", mentioned: true })));
+    expect([...new Set(everyone.map((frame) => frame.automationId))].toSorted()).toEqual(["intake-a", "intake-b"]);
 });
 
 // Stop: who may stop a channel's turn is who the automation answers without the owner's release, on a conversation that
@@ -387,4 +406,17 @@ test("a replayed dispatch asking for a channel answer owes the turn's words to t
         async () => expect((await owedReplies(services)).filter((reply) => reply.text === answer)).toMatchObject([{ provider: "discord", channelId: "c1", thread: "th-1" }]),
         SETTLES,
     );
+});
+
+// (2026-11-26) Who a signed-in stranger is, for the extension whose listener strangers reach: the Visitor chat's, which the
+// daemon verified itself until the chat moved out. A team chat's gateway has no stranger to ask about.
+test("identity answers only the owner of a listener strangers reach, and a token that does not verify is a 401", async () => {
+    const app = appFor(fakeServices(mkdtempSync(join(tmpdir(), "listen-route-"))), fakeWake([]));
+    const ask = { kind: "google", clientId: "site-client", idToken: "not-a-jwt" };
+    expect((await postJson(app, "/listeners/discord/identity", ask)).status).toBe(403);
+    expect((await postJson(app, "/listeners/webchat/identity", ask, "discord-token")).status).toBe(403);
+    expect((await postJson(app, "/listeners/webchat/identity", { kind: "google" }, "visitor-chat-token")).status).toBe(400);
+    const refused = await postJson(app, "/listeners/webchat/identity", ask, "visitor-chat-token");
+    expect(refused.status).toBe(401);
+    expect(await refused.json()).toEqual({ error: "the token did not verify" });
 });

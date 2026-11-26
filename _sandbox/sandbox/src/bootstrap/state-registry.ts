@@ -5,6 +5,7 @@
 // every subsystem, in the boot wiring, on purpose: nothing under a subsystem imports bootstrap/.
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
+import { accountOutboxDocument, accountOutboxOffWorkspaceStep } from "../account-routing/account-outbox.js";
 import { accountPairingsDocument } from "../account-routing/pairings-store.js";
 import { routeSecretsDocument } from "../account-routing/route-secrets.js";
 import { activityLogDocument } from "../activity/activity-store.js";
@@ -50,7 +51,6 @@ import { extensionApprovalsDocument } from "../capabilities/extension-inventory/
 import { extensionDevDocument } from "../capabilities/extension-inventory/extension-dev.js";
 import { extensionEnablementDocument } from "../capabilities/extension-inventory/extension-enablement.js";
 import { dismissalsDocument } from "../capabilities/offers/dismissals-store.js";
-import { choreLedgerDocument, choreProbesDocument } from "../chores/chores-store.js";
 import { ciDocument } from "../ci/ci-store.js";
 import { composerDraftsDocument } from "../conversations/drafts/composer-drafts.js";
 import { projectDeliveriesDocument } from "../conversations/land/project-delivery.js";
@@ -60,16 +60,16 @@ import { definitionDocument } from "../definition/definition.js";
 import { enginePolicyDocument } from "../engines/engine-policy.js";
 import { engineStateDocument } from "../engines/engine-store.js";
 import { runtimeInstallsDocument } from "../environment/runtime-installs.js";
+import { extensionFiresDocument } from "../extensions/backend/extension-fires.js";
 import { extensionSettingsDocument } from "../extensions/extension-settings.js";
 import { extensionUpdatePolicyDocument, extensionUpdatesDocument } from "../extensions/extension-updates.js";
 import { extensionUsageDocument } from "../extensions/extension-usage.js";
 import { listenerOutboxDocument } from "../extensions/listener/listener-outbox.js";
+import { extensionConversationsDocument } from "../extensions/runtime/extension-conversations.js";
 import { memberCommitIdentityDocument } from "../git/attribution/commit-attribution.js";
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { connectionHubDocument } from "../hub/hub-store.js";
-import { accountOutboxDocument, accountOutboxOffWorkspaceStep } from "../issues/account-outbox.js";
-import { issuesDocument } from "../issues/issues-store.js";
 import { inboundLinksDocument } from "../links/inbound-links.js";
 import { linkedChildrenDocument } from "../links/linked-children-store.js";
 import { personTasksDocument } from "../links/person-tasks-store.js";
@@ -126,7 +126,6 @@ import { landCheckLeftoversStep } from "../store/evolution/steps/land-check-left
 import { projectsHostLeftoversStep } from "../store/evolution/steps/projects-host-leftovers.js";
 import { pushChecksLeftoversStep } from "../store/evolution/steps/push-checks-leftovers.js";
 import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
-import { issueInstallsDocument, webchatInstallsDocument } from "../store/installs.js";
 import { newestRunDocument } from "../store/newest-run.js";
 import { skillUsesDocument } from "../store/skills/skill-uses.js";
 import { turnStartsDocument } from "../store/start-window.js";
@@ -150,13 +149,13 @@ import { runOutsDocument } from "../usage/run-outs.js";
 import { usageParksDocument } from "../usage/usage-parks.js";
 import { usageLedgerDocument } from "../usage/usage-store.js";
 import { walletLedgerDocument } from "../wallet/wallet-ledger.js";
-import { webchatOutboxDocument } from "../webchat/webchat-outbox.js";
 import { workflowGateTokensStep, workflowRunsDocument, workflowsDocument } from "../workflows/workflows-store.js";
 import { agentDomainPolicyDocument } from "../workload/domain/agent-domain-policy.js";
 import { heavyCommandsDocument } from "../workload/heavy-commands.js";
 import { dependencyRequestsDocument } from "../workspace/deps/reconcile-deps.js";
 
 const documentsPart1 = (): readonly DocumentSpec[] => [
+    accountOutboxDocument,
     accountPairingsDocument,
     routeSecretsDocument,
     activityLogDocument,
@@ -206,31 +205,29 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     extensionDevDocument,
     extensionEnablementDocument,
     dismissalsDocument,
-    choreLedgerDocument,
-    choreProbesDocument,
     ciDocument,
-    composerDraftsDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
+    composerDraftsDocument,
     projectDeliveriesDocument,
     conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
+    extensionFiresDocument,
     extensionSettingsDocument,
     extensionUpdatePolicyDocument,
     extensionUpdatesDocument,
     extensionUsageDocument,
     listenerOutboxDocument,
+    extensionConversationsDocument,
     memberCommitIdentityDocument,
     hookApprovalsDocument,
     hookRequestsDocument,
     hostSetupSeededDocument,
     connectionHubDocument,
-    accountOutboxDocument,
-    issuesDocument,
     inboundLinksDocument,
     linkedChildrenDocument,
     personTasksDocument,
@@ -263,12 +260,12 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     rolesDocument,
     ruleFiringsDocument,
     runnerIdentityDocument,
-    safetyLogDocument,
-    autostartDocument,
-    credentialGatesDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    safetyLogDocument,
+    autostartDocument,
+    credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
     keyringNeedsDocument,
@@ -288,8 +285,6 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
     settingsDocument,
     sharesDocument,
     conversionsDocument,
-    issueInstallsDocument,
-    webchatInstallsDocument,
     newestRunDocument,
     skillUsesDocument,
     turnStartsDocument,
@@ -314,7 +309,6 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
     usageParksDocument,
     usageLedgerDocument,
     walletLedgerDocument,
-    webchatOutboxDocument,
     workflowRunsDocument,
     workflowsDocument,
     agentDomainPolicyDocument,
@@ -331,12 +325,12 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
 // By id, not by the order modules happened to load in: the plan must not depend on an import graph.
 export const stateSteps = (): readonly StructuralStep[] =>
     [
+        accountOutboxOffWorkspaceStep,
         identityOffWorkspaceStep,
         passkeysOffWorkspaceStep,
         automationsRelocationStep,
         heldWakesOffWorkspaceStep,
         pre1308ImportStep,
-        accountOutboxOffWorkspaceStep,
         roleAccessStep,
         roleKitsFolderStep,
         safetyCardLinesStep,

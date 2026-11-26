@@ -61,6 +61,11 @@ const harness = () => {
             return { decision: "allow", sentence: "Fine." };
         },
         logger: unstubbed<Logger>("logger", { warn: (...args: unknown[]) => void warned.push(args) }),
+        // What an enabled WhatsApp extension declares of its tool: the commands the owner's action rules are read against.
+        outwardActions: async () => ({
+            offered: [{ key: "whatsapp.message.send", extension: "intentic.whatsapp" }],
+            commands: [{ provider: "whatsapp", action: "message.send", command: ["whatsapp", "send"] }],
+        }),
         ownerGrants,
         runtimeInstalls: unstubbed("runtimeInstalls", { record: async () => undefined }),
         safetyLog: unstubbed("safetyLog", { record: async () => undefined, answered: async () => undefined }),
@@ -85,6 +90,14 @@ test("every runtime's base carries the owner's policy, judge mode, outside wake 
     expect(executions).toEqual([base.execution]);
     expect(executions[0]).toBe(base.execution);
     expect(await base.tools.heavyCommands?.()).toMatchObject({ queue: true });
+});
+
+test("the owner's action rules ride with the outward commands the enabled extensions declare, which they are read against", async () => {
+    const { deps } = harness();
+    const settings = SandboxSettingsSchema.parse({ actionRules: { "whatsapp.message.send": "hold" } });
+    const base = await withTurnSafety(deps, { conversationId: "c1" }, baseOf(), settings);
+    expect(base.policy.actionRules).toEqual({ "whatsapp.message.send": "hold" });
+    expect(base.policy.outwardCommands).toEqual([{ provider: "whatsapp", action: "message.send", command: ["whatsapp", "send"] }]);
 });
 
 test("an isolated turn's install rule says it writes to its own copy, and a role without the power is carried as such", async () => {

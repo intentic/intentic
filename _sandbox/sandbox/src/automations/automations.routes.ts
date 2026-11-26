@@ -5,6 +5,7 @@ import type { Zone } from "@intentic/sandbox-contract/time/zone";
 import { implement, ORPCError } from "@orpc/server";
 import { rm } from "node:fs/promises";
 import { doorChange, listedDoorToken } from "../auth/tokens/door-tokens.js";
+import { keyedDoorProviders } from "../extensions/backend/public-door-keys.js";
 import { operatorHere } from "../auth/operator.js";
 import { requireMaintainer } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
@@ -12,6 +13,7 @@ import type { OrpcContext } from "../app-env.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
 import { automationCatalog } from "./catalog.js";
 import { doorOf, refuseInvalidAutomation, refusePastEnd, refusePastMoment, saveAutomation, switchedAutomation } from "./automation-save.js";
+import { callingExtensionIdentity } from "../extensions/runtime/calling-extension.js";
 import type { AutomationRecord } from "./automations-store.js";
 import { nextRunOf, sandboxZone } from "./schedule-zone.js";
 import { declineHeldWake, withdrawApprovalPush } from "./held-wake-answers.js";
@@ -19,16 +21,17 @@ import { HeldWakeNotApproved } from "./held-wakes-store.js";
 import { fireAutomation, recordHeldWake, runHeldWake } from "./fire/automation-fire.js";
 import { forgetHeldWake } from "./durable/fire-admission.js";
 import { ManifestUnreadableError } from "../store/json-file.js";
-import { guardStateFile, sourceEnv } from "./watch/watch-condition.js";
-import { checkSource, sourceProblem } from "./watch/watch-sources.js";
+import { checkWatchSource } from "./watch/contributed-check.js";
+import { guardStateFile } from "./watch/watch-condition.js";
+import { watchSourceProblem } from "./watch/watch-kinds.js";
 
 // The listed record, with its door's credential attached for an operator only; a viewer or a `read` control token sees
 // the list but never the firing string.
 // Minted here if the door has none yet, so an automation declared before the store existed gets its URL the first time
 // an operator looks.
-const listed = async (services: Services, automation: AutomationRecord, operator: boolean, sandbox: Zone): Promise<AutomationSummary> => {
+const listed = async (services: Services, automation: AutomationRecord, operator: boolean, sandbox: Zone, keyed: ReadonlySet<string>): Promise<AutomationSummary> => {
     const nextRun = nextRunOf(automation, sandbox);
-    const door = doorOf(automation);
+    const door = doorOf(automation, keyed);
     const summary: AutomationSummary = { ...automation, ...(nextRun !== undefined ? { nextRun } : {}) };
     if (!operator || door === undefined) {
         return summary;
@@ -55,25 +58,25 @@ export const createAutomationsRoutes = (services: Services) => {
             const operator = operatorHere(services, context);
             // One read for the whole list, so every row's countdown is measured against the same clock.
             const sandbox = await sandboxZone(services);
-            return { automations: await Promise.all((await services.automations.list()).map((automation) => listed(services, automation, operator, sandbox))) };
+            const keyed = await keyedDoorProviders(services);
+            return { automations: await Promise.all((await services.automations.list()).map((automation) => listed(services, automation, operator, sandbox, keyed))) };
         }),
         catalog: i.catalog.handler(async () => await automationCatalog(services)),
         check: i.check.handler(async ({ input }) => {
-            const problem = sourceProblem(input.source);
+            const problem = await watchSourceProblem(services, input.source);
             if (problem !== undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: problem });
             }
-            const checked = await checkSource(input.source, {
-                fetch: (url, init) => fetch(url, init),
-                env: await sourceEnv(services, { id: "check" }),
-            });
+            const checked = await checkWatchSource(services, input.source);
             return checked.pass ? { pass: true, saw: checked.output } : { pass: false, saw: checked.detail };
         }),
         // Who has written to a source, admitted or not; the picker offers these by name and stores the id.
         senders: i.senders.handler(async ({ input }) => ({ senders: await services.senders.list(input.provider) })),
         upsert: i.upsert.handler(async ({ input, context }) => {
-            await refuseInvalidAutomation(services, input);
-            await saveAutomation(services, input, context.identity?.email);
+            // An extension's own token saves as that extension (automation-save.ts, its own target), never a person.
+            const extension = await callingExtensionIdentity(services, (name) => context.headers.get(name));
+            await refuseInvalidAutomation(services, input, { extension });
+            await saveAutomation(services, input, extension === undefined ? context.identity?.email : `extension:${extension}`);
             return { ok: true } as const;
         }),
         setEnabled: i.setEnabled.handler(async ({ input }) => {
@@ -105,7 +108,7 @@ export const createAutomationsRoutes = (services: Services) => {
             if (automation === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no automation with that id" });
             }
-            const door = doorOf(automation);
+            const door = doorOf(automation, await keyedDoorProviders(services));
             if (door === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "this automation opens no door: nothing outside the sandbox reaches it, so there is no token to rotate" });
             }

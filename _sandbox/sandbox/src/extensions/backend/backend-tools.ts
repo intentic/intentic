@@ -1,9 +1,11 @@
 import { TimeoutError, withDeadline } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
-import type { ToolCard, ToolContent, ToolDefinition, ToolResult } from "@intentic/extension-api";
+import type { ToolCallContext, ToolCard, ToolContent, ToolDefinition, ToolResult } from "@intentic/extension-api";
+import type { ToolCallGrants } from "@intentic/sandbox-contract/extension-protocol";
 import type { ToolSource } from "@intentic/extension-api/runtime";
 import type { RpcMessage } from "../../agent/tools/turn-mounts.js";
+import { opt } from "../../opt.js";
 
 // The MCP server the backend host runs for an extension's `api.tools.serve`: the extension says which tools a card
 // gets and what each does; this owns everything else, the handshake, the tool list, each call's deadline, turning an
@@ -34,15 +36,20 @@ export const toToolResult = (value: unknown): ToolResult => {
 
 const failure = (text: string): ToolResult => ({ content: [{ type: "text", text }], isError: true });
 
+// What a call is told besides its arguments: its conversation, and (2026-11-26) its turn's grants and its ticket onto
+// that turn (the daemon's tool-grants.ts), which `api.browser`, `api.ownerBrowser` and `api.jobs` hand back.
+const contextOf = (signal: AbortSignal, request: ToolRequest): ToolCallContext => ({
+    signal,
+    ...opt("conversationId", request.conversationId),
+    ...opt("grants", request.turn?.grants),
+    ...opt("ticket", request.turn?.ticket),
+});
+
 // Runs one call under the host's deadline and the client's own signal, whichever ends first; either aborts the call's
 // signal and answers at once, whether or not the tool heeds it.
-const runCall = async (tool: ToolDefinition, args: Readonly<Record<string, unknown>>, signal: AbortSignal, conversationId?: string): Promise<ToolResult> => {
+const runCall = async (tool: ToolDefinition, args: Readonly<Record<string, unknown>>, signal: AbortSignal, request: ToolRequest): Promise<ToolResult> => {
     try {
-        const answer = await withDeadline(
-            async (both) => tool.call(args, { signal: both, ...(conversationId === undefined ? {} : { conversationId }) }),
-            TOOL_CALL_DEADLINE_MS,
-            { signal },
-        );
+        const answer = await withDeadline(async (both) => tool.call(args, contextOf(both, request)), TOOL_CALL_DEADLINE_MS, { signal });
         return toToolResult(answer);
     } catch (error) {
         if (error instanceof TimeoutError) {
@@ -65,6 +72,8 @@ export interface ToolRequest {
     readonly card?: ToolCard;
     readonly conversationId?: string;
     readonly message: RpcMessage;
+    // (2026-11-26) A tools/call's standing on its turn: what the turn holds, and the ticket minted for this call.
+    readonly turn?: { readonly ticket: string; readonly grants: ToolCallGrants };
 }
 
 // Answers one JSON-RPC message for one card; undefined for a notification, which expects none.
@@ -119,5 +128,5 @@ export const answerToolMessage = async (
         return { jsonrpc: "2.0", id: message.id, result: failure(`no tool "${String(name)}" is offered to this card right now`) };
     }
     const args = (message.params?.["arguments"] ?? {}) as Readonly<Record<string, unknown>>;
-    return { jsonrpc: "2.0", id: message.id, result: await runCall(tool, args, signal, request.conversationId) };
+    return { jsonrpc: "2.0", id: message.id, result: await runCall(tool, args, signal, request) };
 };

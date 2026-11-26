@@ -11,12 +11,17 @@ flowchart LR
 ```
 
 - Holds no code. The manifest declares six `kind: browser` capabilities, each with a login URL, a home URL and a
-  skill. The directory is copied into the sandbox image whole; the browser machinery that acts on the cards is core.
+  skill, and the facts about its site below. The directory is copied into the sandbox image whole; the browser machinery that acts on the cards is core.
 - The signed-in browser profile is the credential, so the cards have no fields. One site can be connected more than
   once, and each skill is rendered with every connected account on one roster (`${accounts}`).
 - YouTube signs in at Google, which refuses automated logins, and TikTok puts a puzzle in front of them, so on those
   two the owner signs in by hand in the live window.
 - Automating an account may break the site's terms; each card's hint says so.
+- Each card states its site's one-message limit (`channel.messageLimit`: X 280, YouTube 5,000, Facebook 63,206,
+  Instagram 2,200, TikTok 4,000), which the approvals inbox counts a drafted post against; Reddit's is past anything
+  written, so it declares none. Reddit's card adds what a turn publishing an approved post there must know
+  (`channel.posting`): a comment's permalink nests the reply under that comment. None publishes posts itself, so every
+  approved post on these sites goes to an agent turn driving the signed-in browser.
 
 ## Key files
 

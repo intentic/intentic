@@ -1,7 +1,7 @@
 // Pins when the form offers an agent's read of an extension (only once a commit is pinned), when that read is of what
 // changed rather than the whole tree (an edit moving the pin), and the brief each one hands the agent.
 import type { CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { updateBrief } from "@intentic/sandbox-contract/chores";
+import { updateBrief } from "@intentic/sandbox-contract/briefs/extension-update-brief";
 import { auditBrief } from "../../../models/sandbox/extensionBrief";
 import { auditOffered, auditPrompt, replacedPin } from "./audit";
 

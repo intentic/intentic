@@ -2,7 +2,7 @@ import { TurnErrandSchema } from "./speaker.js";
 import { z } from "zod";
 import { CONVERSATION_ID, CONVERSATION_TITLE_MAX } from "../ids/conversation-ids.js";
 import { canonicalHarness } from "../models/agent-catalog.js";
-import { ModelRoleSchema } from "../models/model-roles.js";
+import { ModelRoleSchema, RunRoleSchema } from "../models/model-roles.js";
 import { NATIVE_PROVIDERS } from "../models/provider-specs.js";
 import { AgentPlacementSchema } from "../protocol/doors/runner-protocol.js";
 import { MENTION_LIMIT } from "../text/mentions.js";
@@ -198,8 +198,13 @@ const AgentTurnFieldsSchema = z.object({
         ),
     // Which per-job model list answers when nobody named a model or provider (turn-resume.ts); names the job, not a
     // tier, and never overrides an explicit pick.
-    runRole: ModelRoleSchema.optional().describe(
-        "What started this turn, when it was not a person typing: which of the sandbox's per-job model lists answers for it. Only used when the turn names no model of its own.",
+    runRole: RunRoleSchema.optional().describe(
+        "What started this turn, when it was not a person typing: which of the sandbox's per-job model lists answers for it, one of the jobs every sandbox has known (`pipeline-fix`, `loop-iteration`). A job an extension declares goes in `job`. Only used when the turn names no model of its own.",
+    ),
+    // (2026-11-26) Any job's id, an extension's (`contributes.modelRoles`) included; `runRole` beside it keeps the closed
+    // list every daemon and the far ends of the field read, so it never shrinks (model-roles.ts RunRoleSchema).
+    job: ModelRoleSchema.optional().describe(
+        "The same as `runRole` for any job, one an enabled extension declares included (`nightly-audit`); wins over `runRole`. A sandbox from before 2026-11-26 ignores it.",
     ),
     // Set only by the daemon's own dispatchers, never a client; requires conversationId to record it on.
     origin: AgentOriginSchema.optional().describe(
@@ -387,7 +392,7 @@ export const withRuntimeDefaults = <T extends { readonly agent?: AgentProvider |
     return { ...turn, agent, harness: canonicalHarness(agent, turn.harness) };
 };
 // Which turn this is, as opposed to what it says: who serves it and how (agent, harness, account, model and its knobs),
-// as whom (actsAs), where (isolated), whether anyone watches (unattended) and for which job (runRole). A turn that
+// as whom (actsAs), where (isolated), whether anyone watches (unattended) and for which job (job, runRole). A turn that
 // continues another (a resume, a wake, a nudge, a child's follow-up) carries this whole, never a hand-picked part.
 export const TurnProfileSchema = AgentTurnFieldsSchema.pick({
     agent: true,
@@ -401,6 +406,7 @@ export const TurnProfileSchema = AgentTurnFieldsSchema.pick({
     isolated: true,
     unattended: true,
     runRole: true,
+    job: true,
 });
 export type TurnProfile = z.infer<typeof TurnProfileSchema>;
 const PROFILE_KEYS = Object.keys(TurnProfileSchema.shape) as readonly (keyof TurnProfile)[];

@@ -6,11 +6,11 @@
         "codeChores": "Corvées de code",
         "copyWebhookUrl": "Copier l'URL du webhook de {id}",
         "done": "Terminé",
-        "visitorChatCreatedDrop": "Accueil créé : déposez ceci dans votre site :",
         "integrations": "Intégrations",
         "onAnyPageListed": "sur chaque page que vous avez listée ci-dessus. Le lanceur apparaît dans le coin ; les conversations de visiteurs arrivent sur votre tableau d'agents, où vous pouvez regarder et prendre le relais.",
         "pasteBefore": "Collez-le avant",
-        "copyEmbedSnippet": "Copier l'extrait d'intégration de {id}"
+        "showEmbedCode": "Afficher le code d'intégration",
+        "visitorChatCreatedDrop": "Accueil créé : déposez ceci dans votre site :"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Environ une seconde du temps navigateur de chaque visiteur. Aucune clé.",
@@ -160,28 +160,13 @@
         "whatHasToBeTrue": "Ce qui doit être vrai d'abord. Aucun modèle ne tourne pour le vérifier.",
         "conditionNone": "Toujours",
         "conditionGuard": "Commande",
-        "conditionNpm": "Paquet npm",
-        "conditionGithub": "Release GitHub",
         "conditionUrl": "Page web",
         "conditionCaption": {
             "none": "Rien n'est vérifié : chaque déclenchement a lieu.",
             "guard": "Une commande shell exécutée d'abord dans l'espace de travail. Le code de sortie 0 laisse passer, et ce qu'elle affiche accompagne le réveil ; tout autre code est enregistré comme ignoré. $AUTOMATION_STATE désigne un fichier qu'elle peut conserver d'une exécution à l'autre, et $AUTOMATION_LAST contient ce qu'elle a affiché la dernière fois qu'elle a réussi.",
-            "npm": "Un paquet du registre npm, vérifié par le sandbox lui-même : ni shell, ni jeton.",
-            "github": "La release la plus récente d'un dépôt GitHub public, vérifiée par le sandbox lui-même.",
             "url": "Le texte d'une page web, ou la partie qu'un motif en extrait."
         },
         "guardCommand": "Commande qui décide si elle se déclenche",
-        "waitForVersion": "Attendre une version",
-        "followTag": "Suivre un tag",
-        "package": "Paquet",
-        "versionRange": "Plage de versions",
-        "distTag": "Tag",
-        "npmCaption": {
-            "range": "Passe dès qu'une version publiée satisfait la plage ; ce qu'elle voit, c'est cette version.",
-            "tag": "Voit la version sous ce tag, latest si vide. Associez-le à « Seulement un changement » pour être prévenu de chaque nouvelle version."
-        },
-        "repository": "Dépôt",
-        "prereleasesToo": "Compter aussi les préversions",
         "page": "Page",
         "onlyWhatMatches": "Seulement ce qui correspond (facultatif)",
         "pageCaption": "Vide, elle surveille tout le texte de la page. Une expression régulière la restreint à ce qui correspond, ou à son premier groupe s'il y en a un.",
@@ -204,7 +189,8 @@
         "targetCaption": {
             "agent": "Un nouvel agent démarre avec la consigne ci-dessous et ce que la vérification a vu.",
             "conversation": "La conversation reprend là où elle s'était arrêtée, avec ce que la vérification a vu et la consigne ci-dessous. Elle tourne sur son propre modèle.",
-            "notify": "Aucun modèle ne tourne : vos appareils reçoivent une notification avec ce que la vérification a vu, ou le texte ci-dessous si elle n'a rien vu."
+            "notify": "Aucun modèle ne tourne : vos appareils reçoivent une notification avec ce que la vérification a vu, ou le texte ci-dessous si elle n'a rien vu.",
+            "extension": "Aucun modèle ne tourne : le code de l'extension est réveillé par le gestionnaire qu'elle a enregistré. Seule cette extension peut diriger une automatisation vers elle-même."
         },
         "pickConversation": "Choisir une conversation",
         "conversationToContinue": "Conversation à poursuivre",
@@ -213,11 +199,12 @@
         "whatNotificationSays": "Ce que dit la notification.",
         "notifyPlaceholder": "La page que vous surveilliez a changé.",
         "guardPlaceholder": "test -n \"$(git status --porcelain)\"",
-        "tagPlaceholder": "latest",
         "aiDisclosure": "Informer les visiteurs que l’IA répond",
         "aiDisclosureText": "Mention personnalisée (facultative)",
         "aiDisclosureDefault": "Les réponses sont rédigées par un assistant IA et peuvent contenir des erreurs.",
-        "roleGoneHint": "Ce rôle n'existe plus, donc ses réveils tourneraient sans outils ni comptes. Choisissez-en un autre."
+        "roleGoneHint": "Ce rôle n'existe plus, donc ses réveils tourneraient sans outils ni comptes. Choisissez-en un autre.",
+        "whatExtensionIsHanded": "Ce que reçoit le gestionnaire de l'extension",
+        "kindOff": "{extension}, qui vérifie ces surveillances, est désactivée : cette surveillance échoue à chaque vérification jusqu'à sa réactivation."
     },
     "automationRow": {
         "alreadyFired": "Déjà déclenchée",
@@ -299,7 +286,8 @@
         "roleMissing": "Rôle disparu",
         "roleMissingNote": "{ids} n'existe plus, donc ses réveils tournent sans outils ni comptes. Choisissez un autre rôle.",
         "noAccounts": "Aucun compte",
-        "noAccountsNote": "Ses réveils n'atteignent aucun de vos comptes connectés. Choisissez Tous les comptes ou un rôle s'il doit publier ou naviguer en votre nom."
+        "noAccountsNote": "Ses réveils n'atteignent aucun de vos comptes connectés. Choisissez Tous les comptes ou un rôle s'il doit publier ou naviguer en votre nom.",
+        "wakesExtension": "Réveille {extension} ({handler})"
     },
     "automationsView": {
         "addAutomation": "Ajouter une automatisation",
@@ -326,7 +314,8 @@
         "readingAutomations": "Lecture de vos automatisations…",
         "runHistoryCantUndone": "et son historique d'exécutions ? C'est irréversible.",
         "showAll": "Afficher les {count}",
-        "takeOneOffersBelow": "Prenez l'une des offres ci-dessous, ou construisez la vôtre avec"
+        "takeOneOffersBelow": "Prenez l'une des offres ci-dessous, ou construisez la vôtre avec",
+        "visitorChatOff": "L'extension Chat visiteurs n'est pas activée dans cette sandbox : son code d'intégration ne peut pas s'afficher. Activez-la dans Extensions."
     },
     "catalog": {
         "allChannels": "tous les canaux",
@@ -341,22 +330,6 @@
     },
     "extension": {
         "automations": "Automatisations"
-    },
-    "visitorChatInstallDialog": {
-        "allow": "Autoriser",
-        "allowToLoadChat": "Autoriser {origin} à charger ce chat",
-        "allowedSites": "Sites autorisés",
-        "askedTurnedAway": "a demandé et a été refusé · {lastSeenAt}",
-        "checking": "Vérification…",
-        "copyEmbedSnippet": "Copier l'extrait d'intégration de {id}",
-        "couldntAddSite": "Impossible d'ajouter ce site.",
-        "done": "Terminé",
-        "install": "Installer",
-        "loadCount": "{count} chargement | {count} chargements",
-        "loaded": "Est-ce chargé ?",
-        "noBrowserLoadedWidget": "Aucun navigateur n'a encore chargé ce widget. Collez l'extrait, ouvrez votre site, et ceci se met à jour tout seul en quelques secondes.",
-        "noSitesAllowed": "Aucun site n'est encore autorisé : chaque visiteur est donc refusé. Ajoutez-en un ci-dessous ou modifiez l'automatisation.",
-        "pasteIntoSiteBefore": "Collez ceci dans votre site, avant"
     },
     "useCiDelivery": {
         "allPolled": "Les webhooks ne sont pas configurés, les pipelines sont donc interrogées à la place : ceci se déclenche en moins de {minutes} minutes plutôt qu'instantanément.",
@@ -385,14 +358,12 @@
         "pickModel": "Choisissez au moins un modèle : une automatisation tourne sans que personne ne regarde, donc rien n'est choisi pour elle.",
         "promptRequired": "La consigne est obligatoire.",
         "guardRequired": "Écrivez la commande, ou choisissez une autre condition.",
-        "packageRequired": "Nommez le paquet, comme bun ou {'@'}scope/name.",
-        "rangeRequired": "Indiquez une plage de versions, comme >=1.4.3, ou suivez plutôt un tag.",
-        "repoFormat": "Nommez le dépôt sous la forme propriétaire/nom, comme oven-sh/bun.",
         "pageUrl": "Donnez l'adresse complète de la page, commençant par http:// ou https://.",
         "selectInvalid": "Ce motif ne compile pas : {problem}",
         "pickEndDate": "Choisissez la date et l'heure de fin, ou effacez-les.",
         "endPassed": "Cette date de fin est déjà passée.",
-        "pickConversation": "Choisissez la conversation à poursuivre."
+        "pickConversation": "Choisissez la conversation à poursuivre.",
+        "kindUnknown": "Aucune extension ici ne vérifie plus les surveillances {kind} : installez ou activez celle qui le fait, ou choisissez une autre condition."
     },
     "cronSchedule": {
         "afterSessions": "{label} · après {count} session | {label} · après {count} sessions",
@@ -450,9 +421,6 @@
         }
     },
     "watch": {
-        "npm": "npm {spec}",
-        "releases": "Releases de {repo}",
-        "releasesWithPre": "Releases de {repo}, préversions comprises",
         "pageMatching": "{url}, correspondant à {select}",
         "checked": "Vérifié {when}",
         "notChecked": "Pas encore vérifié",

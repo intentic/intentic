@@ -1,0 +1,18 @@
+{
+    "installPanel": {
+        "allow": "Zezwól",
+        "allowToLoadChat": "Zezwól {origin} na wczytanie tego czatu",
+        "allowedSites": "Dozwolone witryny",
+        "askedTurnedAway": "pytał i został odprawiony · {lastSeenAt}",
+        "checking": "Sprawdzanie…",
+        "copyEmbedSnippet": "Kopiuj fragment osadzenia dla {id}",
+        "couldntAddSite": "Nie udało się dodać tej witryny.",
+        "couldntReadInstalls": "Nie udało się odczytać, które witryny wczytały ten widżet.",
+        "embedCode": "Kod osadzenia",
+        "loadCount": "{count} wczytanie | {count} wczytania | {count} wczytań",
+        "loaded": "Czy się wczytało?",
+        "noBrowserLoadedWidget": "Żadna przeglądarka nie wczytała jeszcze tego widżetu. Wklej fragment, otwórz swoją stronę, a to zaktualizuje się samo w ciągu kilku sekund.",
+        "noSitesAllowed": "Nie ma jeszcze dozwolonych witryn, więc każdy odwiedzający zostaje odprawiony. Dodaj jedną poniżej albo edytuj automatyzację.",
+        "pasteIntoSiteBefore": "Wklej to na swojej stronie, przed"
+    }
+}

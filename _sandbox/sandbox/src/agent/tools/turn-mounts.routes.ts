@@ -4,7 +4,7 @@ import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { bearerFrom } from "../../auth/auth.js";
 import { opt } from "../../opt.js";
-import type { MountTarget, RpcMessage, TurnHold, TurnMounts } from "./turn-mounts.js";
+import type { MountTarget, RpcMessage, TurnHold, TurnHolding, TurnMounts } from "./turn-mounts.js";
 
 // The one door every daemon-hosted MCP server is reached through, `ALL /mcp/<name>`: the bearer names one live turn (and
 // its conversation), that turn's lease maps the name to a target, and the target's endpoint answers. Streamable HTTP, answered as plain
@@ -24,6 +24,9 @@ export interface MountCall {
     // The turn's watchdog hold, for an endpoint that forwards the exchange whole and may wait on a person on the way (a
     // remote server's call whose secret reference asks first, mcp-remote.ts).
     readonly hold?: TurnHold;
+    // (2026-11-26) What the calling turn holds, for an endpoint that tells a call its turn's grants (an extension's
+    // tools, extensions/turn/tool-grants.ts).
+    readonly turn?: TurnHolding;
 }
 
 type TargetOf<K extends MountTarget["kind"]> = Extract<MountTarget, { readonly kind: K }>;
@@ -152,7 +155,13 @@ export const createTurnMountRoute =
                 : // Whatever the path names, a bearer reaches only what its own turn mounted, and nothing once it ends.
                   c.json({ error: `"${name}" is not a server this turn mounted` }, 403);
         }
-        const call: MountCall = { name, conversationId: reach.conversationId, signal: c.req.raw.signal, ...opt("clientCeilingMs", reach.clientCeilingMs) };
+        const call: MountCall = {
+            name,
+            conversationId: reach.conversationId,
+            signal: c.req.raw.signal,
+            ...opt("clientCeilingMs", reach.clientCeilingMs),
+            ...opt("turn", reach.turn),
+        };
         const { target } = reach;
         if (target.kind === "extension") {
             return endpoints.extension(target, c, call);

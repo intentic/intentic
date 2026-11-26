@@ -84,6 +84,9 @@ export class VisitorChatElement extends HTMLElement {
     private idToken: string | undefined;
     // The anti-bot answer, held until the first message spends it.
     private antiBotToken: { kind: "turnstile" | "pow"; value: string } | undefined;
+    // Whether the token above was spent on a message the sandbox took: the thread then needs no check until the sandbox
+    // says it does (a 403 once the thread has expired), and a proof past its window must not be sent again.
+    private antiBotSpent = false;
     private open = false;
     private sending = false;
 
@@ -280,11 +283,13 @@ export class VisitorChatElement extends HTMLElement {
             }
             this.showGate("One quick check before we start.");
             this.antiBotToken = { kind: "turnstile", value: await solveTurnstile(this.gateSlotTarget, this.config.turnstileSiteKey) };
+            this.antiBotSpent = false;
             return;
         }
         this.showGate("Checking your browser…");
         const challenge = await fetchChallenge(this.endpoint, this.conversationId);
         this.antiBotToken = { kind: "pow", value: await solveProofOfWork(challenge, "This page must be served over HTTPS to start a chat.") };
+        this.antiBotSpent = false;
     }
 
     private showGate(note: string): void {
@@ -387,8 +392,8 @@ export class VisitorChatElement extends HTMLElement {
             content,
             ...(this.displayName !== undefined ? { displayName: this.displayName } : {}),
             ...(this.idToken !== undefined ? { idToken: this.idToken } : {}),
-            ...(this.antiBotToken?.kind === "turnstile" ? { turnstileToken: this.antiBotToken.value } : {}),
-            ...(this.antiBotToken?.kind === "pow" ? { powNonce: this.antiBotToken.value } : {}),
+            ...(this.antiBotToken?.kind === "turnstile" && !this.antiBotSpent ? { turnstileToken: this.antiBotToken.value } : {}),
+            ...(this.antiBotToken?.kind === "pow" && !this.antiBotSpent ? { powNonce: this.antiBotToken.value } : {}),
             // Every message after the first carries the recent transcript: the widget cannot tell whether the daemon
             // still holds the thread, and the daemon ignores it while the conversation resumes. The first has nothing
             // before it but the greeting.
@@ -418,6 +423,7 @@ export class VisitorChatElement extends HTMLElement {
             // Accepted, however it was answered: from here the thread can be owed a reply written after this stream
             // closed, which is what earns it a poll.
             this.spoke = true;
+            this.antiBotSpent = this.antiBotToken !== undefined;
             storeSpoke(this.config.automationId);
             this.schedulePoll();
             if (reply.text === "") {

@@ -117,13 +117,16 @@ on, not an instruction in the prompt. It is a default, though, and a model chose
 - Which models each job runs on is set on Sandbox ▸ Agent ▸ Jobs, as **setups**: named, ordered lists of models
   (`modelSetups` in settings) that any number of jobs share. **Low**, **Medium** and **High** are always there,
   worked out from the connected accounts (each provider's newest model at that level) until someone edits one;
-  the owner can make more. A fresh sandbox places every job on its suggested Low, Medium or High setup
-  (`roleSetups`) by default. Saved assignments stay as written, including jobs taken off a setup. Drag a job
-  onto a setup, or press it and pick one; "Place on suggested setups" restores unplaced jobs to their suggestions. The jobs are helpers
-  (**Commit messages**, **Session titles**, **Safety judge**, **Loop verdicts**, **Hand-off summaries**,
-  **New chat routing**) and runs (**Pipeline fixes**, **Deployment fixes**, **Maintenance chores**,
-  **Refactors**, **Documentation runs**, **Acceptance runs**, **Approvals queue**, **Extension update reviews**,
-  **Loop iterations**). A helper with no models does not run; a run with no models opens on a connected provider.
+  the owner can make more. A sandbox that never placed its jobs runs every job on its suggested Low, Medium or
+  High setup; once a job is placed, the assignments (`roleSetups`) stay as written, including jobs taken off a
+  setup. Drag a job onto a setup, or press it and pick one; "Place on suggested setups" restores unplaced jobs to
+  their suggestions. The sandbox's own jobs are helpers (**Commit messages**, **Session titles**, **Safety judge**,
+  **Loop verdicts**, **Hand-off summaries**, **Spoken replies**, **New chat routing**, **Subagent sizing**) and runs
+  (**Workflow fixes**, **Approvals queue**, **Extension update reviews**, **Loop iterations**). Each extension adds
+  the jobs it starts runs for (`contributes.modelRoles`): **Pipeline fixes** (Pipelines), **Deployment fixes**,
+  **Maintenance chores**, **Documentation runs** and **Acceptance runs**, shown while the extension is on, its
+  choice kept while it is off. A helper with no models does not run; a run with no models opens on a connected
+  provider.
 - What is connected at all is Sandbox ▸ Models (`/sandbox/models`): every account, subscription, model on this
   machine and endpoint the sandbox can run on, what needs a person (sign in again, verify, an admin's seat), and the
   one place a model is connected. `/connect` is an old address for it. Connecting is the owner's (a maintainer's);

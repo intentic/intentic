@@ -38,8 +38,10 @@ flowchart LR
   between slashes and matches one whole path segment, never a `.` or `..` the URL would resolve away. A malformed entry
   (`**`, a `*` inside a segment, an unknown method, a relative path) fails the manifest parse rather than the first
   call it gates.
-- `extensionRouteReach` is the whole rule for an extension's own token: the two routes every extension reaches about
-  itself (`EXTENSION_OWN_ROUTES`: its settings and its event stream), its own listener provider's routes, and whatever
+- `extensionRouteReach` is the whole rule for an extension's own token: the routes every extension reaches about
+  itself (`EXTENSION_OWN_ROUTES`: its settings and its event stream, the doors its other `permissions` open, and since
+  2026-11-26 the turn doors its tools' calls open, each judged by the daemon on its own declaration and the call's
+  ticket), its own listener provider's routes, and whatever
   `permissions.daemon` declares. The daemon's grant and the SDK's test fake both judge by it, and `./permissions` exports
   the rule alone, for a process that should not load the manifest schema.
 - What a field MEANS to the host is declared on the field, with `.meta({ power, effect, mintsServer })`
@@ -47,6 +49,41 @@ flowchart LR
   when it adds one), the effects a card discloses in the capability catalog, and the capability kinds whose ids
   become `mcp__<id>__` servers in the contract's reserved-name check. A new field is either given a meaning where it
   is defined or has none.
+- `automationTemplates` takes every field the daemon's own templates carry (a `once` or webhook trigger's fields, `tz`,
+  `afterSessions`, a watch's `source`, `fireOn`, `until` and `target`), shaped loosely here and parsed by the daemon's
+  own template schema when it builds the catalogue, which drops what would not save (2026-11-26).
+- `watchKinds` (`points/watch-kinds.ts`, 2026-11-26) declares a ready-made check the extension's backend answers: its
+  id, label, the sentence a source of it reads as, and its parameters as fields. `watchSentence` and
+  `watchParamsProblem` are the one reading of a declaration, which the daemon, the Automations view and the approval
+  card share; the `automations` command repeats the sentence rule in plain JavaScript. A `superRefine` on the envelope
+  holds a kind to a `server` bundle and to the extension's own cards.
+- `modelRoles` (`points/model-roles.ts`, 2026-11-26) declares the jobs the extension starts agent runs for, which the
+  owner puts on model setups beside the sandbox's own: an id (`MODEL_ROLE_ID`, the key a stored choice and a run's
+  `job` name), a label, an explanation, an icon and the setup it is suggested. The contract serves a declaration as
+  a job (`contributedModelRole`), always a whole session, suggested `medium` unless it says otherwise. An id declared
+  twice in one manifest fails its parse.
+- `publicRoutes` (`points/public-routes.ts`, 2026-11-26) declares routes anyone on the internet may call at
+  `/door/<id>/<path>`, each a power whose sentence names the route and the secret a signed one is checked against: a
+  path of lowercase words and lone `*`s, its methods, and which of the core's protections apply (`automation` reads an
+  automation of the extension's own listener from the first `*`, `origins: "listed"` holds a browser to its allowed
+  origins and `key` lets a caller with no Origin present its door key instead, `signature` names a scheme and a sandbox
+  secret, `turnstile` names the sandbox secret a Cloudflare Turnstile token is verified with, `keyFromBrowsers` lets an
+  automation that opts in admit an unlisted browser with its key, `proofOfWork`, `rate`, `dailyMax` (a number, or
+  `"none"` on a GET-only route), `bodyMax`). `publicRouteFor` is the one reading of which declared route a
+  request lands on, which the daemon's door and the SDK's fake share; a `superRefine` holds the routes to a `server`
+  bundle and an automation's route to the extension's own `contributes.listener`.
+- `listener.strangers` (`visitor` or `report`, 2026-11-26) says anyone on the internet reaches the source, which holds
+  its wakes to the owner's admission floor for a website visitor or a bug report instead of a team chat's; the daemon
+  reads it in place of a table of provider names. It is a power of its own.
+- A card states facts about its platform (`points/channel-facts.ts`, 2026-11-26), which the core reads in place of its
+  own tables keyed by provider name: `channel.messageLimit`, `channel.publish.target` (a pattern of the targets its
+  backend publishes an approved post to, which must compile), `channel.posting`, `processors` (one entry per path its
+  data takes: a flow the Data protection page words, operator, region, third country, hosts, a `hostField`), and on a
+  cli card `status: { from: "listener" }`. Each only describes, so none is a power.
+- A cli card's `commandActions` entry says who decides its rule (`gatedBy`: `sandbox`, the command guard, or `backend`,
+  the card's backend asking the outward-action door) and what it comes to while no rule names it (`unruled`: `allow` or
+  `hold`). `commandActionGate` is the one reading, `selfGated: true`, deprecated since 2.52.0, counting as `backend`
+  and `hold`.
 - `toolServersOf` is the one reading of which MCP servers a manifest serves the agent: `contributes.tools`, or a cli
   card's `mcp`, its alias for one release. A `superRefine` on the envelope says what no single field can: tools need
   a `server` bundle or a declared process to serve them.

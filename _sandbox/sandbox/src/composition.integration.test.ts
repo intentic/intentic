@@ -72,7 +72,6 @@ test("the late seams answer once composing has returned", async () => {
     expect(await services.hostReach([])).toBeUndefined();
     expect(await services.webextReach([])).toBeUndefined();
     expect(await services.phoneReach([])).toBeUndefined();
-    expect(services.outboxStreamFor(undefined)).toBeUndefined();
     expect(services.reach.status()).toEqual({ state: "off" });
 });
 

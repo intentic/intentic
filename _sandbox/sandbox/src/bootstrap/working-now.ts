@@ -5,13 +5,14 @@ import type { Services } from "../composition.js";
 import { liveRunOf } from "../conversations/actor/conversation-holdings.js";
 import { runningWorkflows } from "../workflows/workflow-runner.js";
 import { subagentRunning } from "../conversations/actor/subagent-roster.js";
+import { extensionHolds, holdName } from "../extensions/runtime/extension-holds.js";
 
 // IS THE SANDBOX BUSY? ONE ANSWER, ASKED FOR A PURPOSE (2026-10-05). Four places each kept their own: the automatic
 // update waited for turns, lands, running subagents and workflows; idle-stop for turns, live subagents and armed
 // watches; the device rebuild for turns only, so it could cut a land or a workflow step the update waited out; the
 // host's keeper signal counted live sessions. What differs now is the purpose, and each difference is stated below.
 
-export type WorkKind = "turn" | "land" | "subagent" | "parked-subagent" | "workflow" | "watch";
+export type WorkKind = "turn" | "land" | "subagent" | "parked-subagent" | "workflow" | "watch" | "extension";
 
 export interface WorkItem {
     readonly kind: WorkKind;
@@ -20,7 +21,8 @@ export interface WorkItem {
 }
 
 // - restart: this container restarts (an automatic update, a device rebuild, the host's keeper mending a broken
-//   tunnel). It cuts a turn, a land, a running subagent and a workflow's step. A parked subagent (pending, blocked on a
+//   tunnel). It cuts a turn, a land, a running subagent, a workflow's step and the work an extension holds in flight
+//   (`api.work.hold`, extensions/runtime/extension-holds.ts, 2026-11-26). A parked subagent (pending, blocked on a
 //   question, paused on a spent allowance) waits across a restart as it waits anyway, and an armed watch is journalled
 //   and restored at boot (restoreWatchers), so neither holds it.
 // - idle-stop: the machine stops until somebody visits. Everything a restart cuts, plus what only this daemon's own
@@ -28,7 +30,7 @@ export interface WorkItem {
 //   Stopping under either is how it silently never happens.
 export type WorkPurpose = "restart" | "idle-stop";
 
-const RESTART: ReadonlySet<WorkKind> = new Set<WorkKind>(["turn", "land", "subagent", "workflow"]);
+const RESTART: ReadonlySet<WorkKind> = new Set<WorkKind>(["turn", "land", "subagent", "workflow", "extension"]);
 const WAITS_FOR: Readonly<Record<WorkPurpose, ReadonlySet<WorkKind>>> = {
     restart: RESTART,
     "idle-stop": new Set<WorkKind>([...RESTART, "parked-subagent", "watch"]),
@@ -48,6 +50,8 @@ export interface WorkSnapshot {
     readonly subagents: readonly { readonly status: SubagentStatus; readonly name: string }[];
     readonly workflows: readonly string[];
     readonly watches: number;
+    // What extensions hold in flight, each by its extension and label.
+    readonly holds: readonly string[];
 }
 
 // `except` leaves out one conversation's own work: its turn, and its record if it is itself a spawned subagent. A caller
@@ -66,6 +70,7 @@ export const snapshotOf = ({ agents, conversations }: WorkingNowDeps, except?: s
             })),
         workflows: runningWorkflows().map((run) => run.name),
         watches: armedWatcherCount(),
+        holds: extensionHolds().map(holdName),
     };
 };
 
@@ -82,6 +87,7 @@ export const workOf = (snapshot: WorkSnapshot, purpose: WorkPurpose): WorkItem[]
         }),
         ...snapshot.workflows.map((name) => ({ kind: "workflow" as const, name })),
         ...Array.from({ length: snapshot.watches }, () => ({ kind: "watch" as const, name: "an armed watch" })),
+        ...snapshot.holds.map((name) => ({ kind: "extension" as const, name })),
     ];
     const waits = WAITS_FOR[purpose];
     return items.filter((item) => waits.has(item.kind));

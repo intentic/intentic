@@ -1,5 +1,5 @@
 import type { CapabilityKind, CapabilitySummary } from "@intentic/sandbox-contract/schemas/capabilities";
-import { updateBrief } from "@intentic/sandbox-contract/chores";
+import { updateBrief } from "@intentic/sandbox-contract/briefs/extension-update-brief";
 import { auditBrief } from "../../../models/sandbox/extensionBrief";
 import { type FormValues, isCommitSha } from "../../../models/capabilities/form";
 

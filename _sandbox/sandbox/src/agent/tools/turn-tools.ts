@@ -58,6 +58,8 @@ export const turnToolsOf = async (
 ): Promise<TurnRemoteTools> => {
     const lease = services.turnMounts.lease(turn.conversationId, {
         warmSession: turn.warmSession === true,
+        // What the turn holds, told to an extension tool's call (extensions/turn/tool-grants.ts).
+        granted: granted.map((capability) => capability.id),
         ...opt("cleanOutput", turn.cleanOutput),
         ...opt("clientCeilingMs", turn.clientCeilingMs),
     });

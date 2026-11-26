@@ -3,13 +3,13 @@ import { type ModelPin, ModelPinSchema } from "../schemas/agent.js";
 import { isEndpointProvider } from "./agent-catalog.js";
 import { compareModelIds, modelRungOf } from "./model-order.js";
 import type { ModelSource } from "./model-pins.js";
-import { MODEL_ROLE_IDS, MODEL_ROLES, type ModelRole, PRESET_SETUPS, type PresetSetup } from "./model-roles.js";
+import { coreModelRole, type ModelRole, type ModelRoleSpec, PRESET_SETUPS, type PresetSetup, ROLES_BEFORE_CONTRIBUTIONS } from "./model-roles.js";
 
 // A setup is a named, ordered list of models that any number of jobs run on: edited once, used by every job put there.
 // Every sandbox has three, Low, Medium and High, worked out from the accounts it has connected until the owner edits
-// one; the owner adds any others. New settings place every job on its catalog preset (model-roles.ts `setup`).
-// Saved assignments stay as written: a job left out runs on nothing. Every reader resolves a job through here,
-// daemon and browser alike, so the settings page shows what will run.
+// one; the owner adds any others. Until a job is placed, every job runs on its suggested preset (model-roles.ts `setup`,
+// or its extension's declaration). Saved assignments stay as written: a job left out runs on nothing. Every reader
+// resolves a job through here, daemon and browser alike, so the settings page shows what will run.
 
 export const MODEL_SETUP_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
@@ -28,24 +28,32 @@ export type ModelSetup = z.infer<typeof ModelSetupSchema>;
 
 export const isPresetSetup = (id: string): id is PresetSetup => PRESET_SETUPS.some((preset) => preset === id);
 
-// The settings a job's models are read from; a slice, so a caller holding only these two can resolve.
+// The settings a job's models are read from; a slice, so a caller holding only these two can resolve. `roleSetups` absent
+// is a sandbox that never placed its jobs: each runs on its suggested preset. (2026-11-26) Until then the schema wrote
+// the suggestions down at the first save of any setting, so an extension installed later found its jobs on none.
 export interface SetupSettings {
     readonly modelSetups: readonly ModelSetup[];
-    readonly roleSetups: Partial<Record<ModelRole, string>>;
+    readonly roleSetups?: Readonly<Partial<Record<ModelRole, string>>> | undefined;
 }
 
-const SUGGESTED = new Map<ModelRole, PresetSetup>(MODEL_ROLES.map((role) => [role.id, role.setup]));
+// What a job is suggested, which resolution reads when the sandbox never placed its jobs: the sandbox's own job's from its
+// table by id; an extension's from its declaration, which a caller holding the job list passes (`suggested`). An id
+// nobody declares is suggested nothing, so such a sandbox runs it on none.
+const coreSuggestion = (role: ModelRole): PresetSetup | undefined => coreModelRole(role)?.setup;
 
-/** The preset suggested for a job when it is placed. */
-export const suggestedSetup = (role: ModelRole): PresetSetup => SUGGESTED.get(role) ?? `medium`;
+/** The preset suggested for one of the sandbox's own jobs when it is placed; an extension's says its own (`setup`). */
+export const suggestedSetup = (role: ModelRole): PresetSetup => coreSuggestion(role) ?? `medium`;
 
 // First entry wins: a hand-edited file holding one id twice means the earlier, as everywhere else a list is read.
 export const storedSetup = (settings: Pick<SetupSettings, "modelSetups">, id: string): ModelSetup | undefined =>
     settings.modelSetups.find((setup) => setup.id === id);
 
-/** The setup a job runs on, or undefined while it is on none (never placed, or placed on a setup that is gone). */
-export const roleSetupId = (settings: SetupSettings, role: ModelRole): string | undefined => {
-    const assigned = settings.roleSetups[role];
+/**
+ * The setup a job runs on, or undefined while it is on none (left out of a saved map, placed on a setup that is gone, or
+ * never placed and suggested nothing).
+ */
+export const roleSetupId = (settings: SetupSettings, role: ModelRole, suggested: PresetSetup | undefined = coreSuggestion(role)): string | undefined => {
+    const assigned = settings.roleSetups === undefined ? suggested : settings.roleSetups[role];
     return assigned !== undefined && (isPresetSetup(assigned) || storedSetup(settings, assigned) !== undefined) ? assigned : undefined;
 };
 
@@ -66,7 +74,8 @@ export const setupLadder = (settings: Pick<SetupSettings, "modelSetups">, id: st
     return isPresetSetup(id) ? { kind: `preset`, preset: id } : NO_MODELS;
 };
 
-export const roleLadder = (settings: SetupSettings, role: ModelRole): SetupLadder => setupLadder(settings, roleSetupId(settings, role));
+export const roleLadder = (settings: SetupSettings, role: ModelRole, suggested: PresetSetup | undefined = coreSuggestion(role)): SetupLadder =>
+    setupLadder(settings, roleSetupId(settings, role, suggested));
 
 /** True only for a ladder that can never name a model, whatever is connected: a written list left empty. */
 export const ladderIsEmpty = (ladder: SetupLadder): boolean => ladder.kind === `pins` && ladder.pins.length === 0;
@@ -116,37 +125,51 @@ export const ladderPins = (ladder: SetupLadder, sources: readonly ModelSource[])
     ladder.kind === `pins` ? ladder.pins : presetPins(ladder.preset, sources);
 
 /** The models a job runs on, in try order, before readiness filters them (model-pins.ts `readyChain`). */
-export const rolePins = (settings: SetupSettings, role: ModelRole, sources: readonly ModelSource[]): readonly ModelPin[] =>
-    ladderPins(roleLadder(settings, role), sources);
+export const rolePins = (
+    settings: SetupSettings,
+    role: ModelRole,
+    sources: readonly ModelSource[],
+    suggested: PresetSetup | undefined = coreSuggestion(role),
+): readonly ModelPin[] => ladderPins(roleLadder(settings, role, suggested), sources);
+
+// Setups made from per-job lists: every job that held a list is placed, so the map holds a setup for each it names.
+export interface RoleListSetups {
+    readonly modelSetups: ModelSetup[];
+    readonly roleSetups: Record<ModelRole, string>;
+}
 
 /**
  * Setups for a set of per-job lists, the shape settings had before setups (2026-10-12): jobs holding the same list share
  * one setup, a list most of whose jobs are suggested one preset becomes that preset while it is free, and the rest are
  * new setups. A job with no list, or an empty one, ran on nothing and is left on none. Exported for the settings
- * history and for tests that want a job on exact models.
+ * history and for tests that want a job on exact models. `roles` is the jobs it reads, in order: by default every job the
+ * table held until 2026-11-26, the conversion's own.
  */
-export const setupsFromRoleLists = (lists: Partial<Record<ModelRole, readonly ModelPin[]>>): SetupSettings & { modelSetups: ModelSetup[] } => {
+export const setupsFromRoleLists = (
+    lists: Partial<Record<ModelRole, readonly ModelPin[]>>,
+    roles: readonly Pick<ModelRoleSpec, "id" | "setup">[] = ROLES_BEFORE_CONTRIBUTIONS,
+): RoleListSetups => {
     const modelSetups: ModelSetup[] = [];
-    const roleSetups: Partial<Record<ModelRole, string>> = {};
-    const groups = new Map<string, ModelRole[]>();
-    for (const role of MODEL_ROLE_IDS) {
-        const list = lists[role];
+    const roleSetups: Record<ModelRole, string> = {};
+    const groups = new Map<string, Pick<ModelRoleSpec, "id" | "setup">[]>();
+    for (const role of roles) {
+        const list = lists[role.id];
         if (list !== undefined && list.length > 0) {
             const key = JSON.stringify(list);
             groups.set(key, [...(groups.get(key) ?? []), role]);
         }
     }
     let made = 0;
-    for (const roles of groups.values()) {
-        const pins = lists[roles[0]!] ?? [];
+    for (const group of groups.values()) {
+        const pins = lists[group[0]!.id] ?? [];
         // The preset most of these jobs are suggested; a tie goes to the first job's, the table's own order.
-        const votes = roles.map(suggestedSetup);
+        const votes = group.map((role) => role.setup);
         const preset = votes.toSorted((a, b) => votes.filter((vote) => vote === b).length - votes.filter((vote) => vote === a).length)[0]!;
         const free = storedSetup({ modelSetups }, preset) === undefined;
         const id = free ? preset : `setup-${++made}`;
         modelSetups.push(free ? { id, pins: [...pins] } : { id, name: `Setup ${made}`, pins: [...pins] });
-        for (const role of roles) {
-            roleSetups[role] = id;
+        for (const role of group) {
+            roleSetups[role.id] = id;
         }
     }
     return { modelSetups, roleSetups };

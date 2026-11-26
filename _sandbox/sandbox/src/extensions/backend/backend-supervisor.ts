@@ -12,7 +12,7 @@ import { anySignal, createBackoff, Delayer, Latest, pollUntil } from "@intentic/
 import { errorMessage } from "@intentic/base/errors";
 import { freePort } from "@intentic/base/fs";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
-import { backendToolPathsOf } from "@intentic/extension-manifest";
+import { backendToolPathsOf, declaredOfBackend } from "@intentic/extension-manifest";
 import type { Logger } from "pino";
 import { tokenEquals } from "../../auth/auth.js";
 import { invalidateContributions } from "../../capabilities/contributions.js";
@@ -141,8 +141,8 @@ const bundleDigest = async (dir: string, server: string): Promise<string> =>
     );
 
 // What one backend is handed at activation and the code it runs; tokens are minted once per daemon and so never move it.
-const extensionKeyOf = ({ id, dir, server, daemonPermissions, bundle, stateDir, cacheDir }: BackendHostExtension): string =>
-    JSON.stringify({ id, dir, server, daemonPermissions: [...daemonPermissions].toSorted(), bundle, stateDir, cacheDir });
+const extensionKeyOf = ({ id, dir, server, daemonPermissions, declared, bundle, stateDir, cacheDir }: BackendHostExtension): string =>
+    JSON.stringify({ id, dir, server, daemonPermissions: [...daemonPermissions].toSorted(), declared, bundle, stateDir, cacheDir });
 
 // Everything the host process is handed that it cannot re-read at request time: which backends, from where, their code,
 // and what each is told at activation.
@@ -291,9 +291,9 @@ export const createExtensionBackend = (
                 server,
                 daemonToken: tokenFor(extension.id),
                 daemonPermissions: grant.permissions,
+                ...declaredOfBackend(extension.manifest),
                 bundle: await bundleDigest(extension.dir, server),
-                stateDir: dirs.stateDir,
-                cacheDir: dirs.cacheDir,
+                ...dirs,
             });
         }
         return { runnable, reported, tokenReach, tools, owners: ownership.owners };

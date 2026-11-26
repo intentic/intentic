@@ -1,5 +1,7 @@
 import type { Account } from "./accounts.js";
+import type { Outward, Verdict } from "./actions.js";
 import type { Http } from "./auth.js";
+import { type CollectingIo, collectingIo } from "./tools.js";
 
 // Graph and Microsoft's sign-in, mocked: each answer is served in order, and an unexpected extra call fails the test.
 
@@ -44,3 +46,32 @@ export const httpQueue = (answers: MockAnswer[]): MockHttp => {
 
 // The headers a mocked call carried; every client here passes them as a plain record.
 export const headersOf = (call: MockCall | undefined): Headers => new Headers(call?.init?.headers);
+
+// The daemon's outward-action door, stood in for: each ask answered by `verdict`, every ask and outcome kept.
+export interface FakeOutward {
+    readonly outward: Outward;
+    readonly asks: Parameters<Outward["ask"]>[0][];
+    readonly outcomes: Parameters<Outward["outcome"]>[0][];
+}
+
+export const fakeOutward = (verdict: (ask: Parameters<Outward["ask"]>[0]) => Verdict): FakeOutward => {
+    const asks: Parameters<Outward["ask"]>[0][] = [];
+    const outcomes: Parameters<Outward["outcome"]>[0][] = [];
+    return {
+        asks,
+        outcomes,
+        outward: {
+            ask: async (call) => {
+                asks.push(call);
+                return verdict(call);
+            },
+            outcome: async (call) => {
+                outcomes.push(call);
+            },
+        },
+    };
+};
+
+// A command's files, kept in memory: what the CLI would have sent, and what it would save and fetch.
+export const memoryIo = (sent: Record<string, string | Uint8Array> = {}): CollectingIo =>
+    collectingIo(new Map(Object.entries(sent).map(([path, bytes]) => [path, Buffer.from(bytes)])));

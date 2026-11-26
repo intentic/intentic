@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { MODEL_ROLES, type ModelRole } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
-import { suggestedSetup } from "@intentic/sandbox-contract/models/model-setups";
 import { Button, SectionHeader } from "@intentic/ui";
-import { computed } from "vue";
+import { computed, inject } from "vue";
 import { RouterLink } from "vue-router";
 import { modelLabelFor } from "../../../../models/providers/providerCatalog";
+import { JOB_STATE } from "./jobState";
 import { pinKnobSummary } from "./modelPinList";
 import type { SetupsView } from "./modelSetups";
 import { roleBlurb, roleLabel, setupName } from "./roleWords";
@@ -30,7 +30,9 @@ const { role, view, judgeOff, guidanceSet } = defineProps<{
 
 const emit = defineEmits<{ move: [DropTarget]; guidance: [] }>();
 
-const kind = computed(() => MODEL_ROLES.find((spec) => spec.id === role)?.kind ?? `run`);
+const jobs = inject(JOB_STATE);
+const spec = computed(() => jobs?.spec(role));
+const kind = computed(() => spec.value?.kind ?? `run`);
 
 // A setup is told apart by its first model and how it is run; the rest is a count, since the page beside this panel
 // shows them all.
@@ -56,7 +58,7 @@ const choices = computed<readonly Choice[]>(() => [
     ...view.setups.map<Choice>((setup) => ({
         key: setup.id,
         // The preset suggested for this job says so, which is what a reader placing it for the first time looks for.
-        label: setup.id === suggestedSetup(role) ? t(`sandbox.agentModels.suggestedFor`, { name: setupName(setup) }) : setupName(setup),
+        label: setup.id === spec.value?.setup ? t(`sandbox.agentModels.suggestedFor`, { name: setupName(setup) }) : setupName(setup),
         detail: modelsOf(setup.pins),
         target: { kind: `setup`, id: setup.id },
         on: setup.roles.includes(role),
@@ -82,8 +84,8 @@ const choices = computed<readonly Choice[]>(() => [
 <template>
     <div class="flex flex-col gap-3 p-3">
         <div class="flex flex-col gap-0.5">
-            <p class="text-sm font-medium text-content">{{ roleLabel({ id: role }) }}</p>
-            <p class="text-2xs text-muted">{{ roleBlurb({ id: role }) }}</p>
+            <p class="text-sm font-medium text-content">{{ spec === undefined ? role : roleLabel(spec) }}</p>
+            <p v-if="spec !== undefined" class="text-2xs text-muted">{{ roleBlurb(spec) }}</p>
         </div>
 
         <!-- The judge reads untrusted text, and can be switched off elsewhere: both are said where its setup is picked. -->

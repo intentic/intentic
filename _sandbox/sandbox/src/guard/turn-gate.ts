@@ -32,8 +32,9 @@ export interface TurnGateInput {
     readonly conversationId?: string;
     // This runtime's rulebook capability; the gate's shape derives from it, absent defaulting to "hooks".
     readonly rulebook?: AgentCapabilities["rulebook"];
-    // The owner's action rules, checked on every command (command-guard.ts).
+    // The owner's action rules, checked on every command (command-guard.ts), against the declared outward commands.
     readonly actionRules?: CommandGuardOptions["actionRules"];
+    readonly outwardCommands?: CommandGuardOptions["outwardCommands"];
     // Where this turn's commands run, so the gate can check a credential-shaped path against the real file.
     readonly cwd?: string;
     // Whether that cwd is a copy of this conversation's own. Absent reads as the owner's shared tree, the fail-safe
@@ -77,6 +78,7 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
             steered: turn.steered,
             ...(canParkFor(turn.rulebook) ? {} : { canPark: false }),
             actionRules: turn.actionRules,
+            outwardCommands: turn.outwardCommands,
             ...(turn.cwd === undefined ? {} : { cwd: turn.cwd }),
             ...(turn.ownCheckout === true ? { ownCheckout: true } : {}),
             signal: turn.signal,

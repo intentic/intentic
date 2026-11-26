@@ -33,13 +33,13 @@ import { deployNeed } from "./kinds/deploy-need.js";
 import { pairedDevice } from "../secrets/stack-grants/stack-grants.js";
 import { routeNeedOf } from "./kinds/route-need.js";
 import { redirectNeedOf } from "./kinds/redirect-need.js";
-import { projectOfRemote } from "../issues/account-outbox.js";
-import { claimedHere, holderOf } from "../issues/project-claims.js";
+import { projectOfRemote } from "../account-routing/account-outbox.js";
+import { claimedHere, holderOf } from "../account-routing/project-claims.js";
 import { resolveRealWithin } from "../workspace/files/workspace-files-paths.js";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { refuseInvalidAutomation, saveAutomation } from "../automations/automation-save.js";
-import { checkSource } from "../automations/watch/watch-sources.js";
-import { sourceEnv } from "../automations/watch/watch-condition.js";
+import { checkWatchSource } from "../automations/watch/contributed-check.js";
+import { catalogWatchKinds } from "../automations/watch/watch-kinds.js";
 import { grantNeed } from "./kinds/grant-need.js";
 import { hostPowerNeed } from "./kinds/host-power-need.js";
 import { runDeviceAgentFlow } from "../hosts/device-reports.js";
@@ -48,6 +48,7 @@ import { keepOnDevice } from "./kinds/secret-keep-on.js";
 import { type GuardStart, secretNeed } from "./kinds/secret-need.js";
 import { startGuard } from "../secrets/guards/host-guards.js";
 import { needChannelOf, needChannelText } from "./need-channel.js";
+import { strangersOf } from "../automations/fire/wake-source.js";
 import { createNeeds, type Needs, type NeedsDeps } from "./needs.js";
 import { fileNeedsStore, needsDocument } from "./needs-store.js";
 
@@ -172,12 +173,15 @@ const notifyNeed =
             return;
         }
         void services.pushSender.notifyIfAway(raised, askedAudience((id) => services.agents.entry(id), need.conversationId));
-        const channel = needChannelOf(entry?.identity.origin);
-        if (channel !== undefined) {
-            void oweToListenerChannel(services, channel, needChannelText(need)).catch((error: unknown) =>
-                logger.warn({ err: error, conversationId: need.conversationId, provider: channel.provider }, "needs: the ask could not be journalled for its channel"),
-            );
-        }
+        const origin = entry?.identity.origin;
+        void (async () => {
+            const channel = needChannelOf(origin, origin === undefined ? undefined : await strangersOf(services, origin.provider));
+            if (channel !== undefined) {
+                await oweToListenerChannel(services, channel, needChannelText(need));
+            }
+        })().catch((error: unknown) =>
+            logger.warn({ err: error, conversationId: need.conversationId, provider: origin?.provider }, "needs: the ask could not be journalled for its channel"),
+        );
     };
 
 // A settled need's lock-screen ask is replaced on the devices it showed on (push.ts `withdraw`).
@@ -290,12 +294,10 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
                     if (automation.source === undefined) {
                         return undefined;
                     }
-                    const checked = await checkSource(automation.source, {
-                        fetch: (url, init) => fetch(url, init),
-                        env: await sourceEnv(whole(), automation),
-                    });
+                    const checked = await checkWatchSource(whole(), automation.source, { automation });
                     return { pass: checked.pass, saw: checked.pass ? checked.output : checked.detail, at: Date.now() };
                 },
+                watchKind: async (source) => (await catalogWatchKinds(whole())).find((kind) => kind.id === source.kind),
             }),
             // On the main tree, the owner's own copy, never a conversation's checkout.
             instruction: instructionNeed(mainTreeFiles(workspaceRoot, whole)),

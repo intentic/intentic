@@ -4,15 +4,14 @@ import { z } from "zod";
 import { cachedEnabledExtensions } from "../../capabilities/contributions.js";
 import type { Services } from "../../composition.js";
 import { opt } from "../../opt.js";
-import { outboxKeyOf } from "../../webchat/webchat-outbox.js";
 import { listenerOwnership } from "./listener-state.js";
 import { extensionProcessKey } from "../../capabilities/extension-dirs.js";
 import { errorMessage } from "@intentic/base/errors";
 import { parseJsonOr } from "@intentic/base/json";
 
-// Daemon's outbound leg of "speak as the agent": delivers to the origin the conversation came from.
-// A Visitor chat is answered in the daemon itself (the visitor's browser polls for it); every other provider goes over
-// loopback /deliver, since the gateway holds the provider connection and the daemon does not.
+// Daemon's outbound leg of "speak as the agent": delivers to the origin the conversation came from, over loopback
+// /deliver, since the gateway holds the provider connection and the daemon does not. (2026-11-26) The Visitor chat's
+// is its extension's gateway too, which keeps the visitor's outbox; the daemon answered it itself until then.
 // "no-gateway" is valid (no listener extension); a broken or stopped one throws instead of silently dropping it.
 // This is the one-try leg, for a person placing words who is told at once if they did not go; what nobody waits on (a
 // held wake's answer, a decline, a need's ask) is owed through listener-outbox.ts instead, which keeps trying.
@@ -25,13 +24,6 @@ export type ListenerDeliverOutcome = "delivered" | "no-gateway";
 export const deliverToListenerChannel = async (services: Services, origin: AgentOrigin, text: string): Promise<ListenerDeliverOutcome> => {
     if (origin.channelId === undefined) {
         return "no-gateway";
-    }
-    // Checked before the extension walk: a Visitor chat has no gateway and never will, so falling through to one would
-    // report "nothing is listening" about the one provider the daemon answers itself.
-    const outbox = outboxKeyOf(origin);
-    if (outbox !== undefined) {
-        await services.webchatOutbox.append(outbox, text, Date.now());
-        return "delivered";
     }
     return (await deliverThroughGateway(services, origin.provider, origin.channelId, text, origin.threadId)) === undefined ? "no-gateway" : "delivered";
 };

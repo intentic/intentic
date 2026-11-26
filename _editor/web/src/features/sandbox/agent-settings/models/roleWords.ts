@@ -1,11 +1,22 @@
-import type { ModelRole, ModelRoleSpec, PresetSetup } from "@intentic/sandbox-contract/models/model-roles";
+import {
+    type CoreModelRole,
+    CORE_MODEL_ROLES,
+    EXTENSION_ROLES_BEFORE_CONTRIBUTIONS,
+    type ModelRoleSpec,
+    type PresetSetup,
+} from "@intentic/sandbox-contract/models/model-roles";
 import { t } from "@intentic/ui/i18n";
 
-// MODEL_ROLES names each job in English, for the daemon and the settings file as much as for the
-// screen. These are the settings page's words for them, keyed by the wire-stable id; roleWords.test.ts holds the
-// English copy equal to the contract's, so a renamed job cannot go on being shown under its old translation.
+// The contract names each of the sandbox's own jobs in English, for the daemon and the settings file as much as for the
+// screen, and an extension names its own in its manifest (`contributes.modelRoles`). These are the settings page's words
+// for the sandbox's jobs, keyed by the wire-stable id; roleWords.test.ts holds the English copy equal to the contract's,
+// so a renamed job cannot go on being shown under its old translation. (2026-11-26) The six jobs that moved to their
+// extensions' manifests keep their translations while the words they are served with are still the ones translated: an
+// extension that renames its job is shown in its own words.
 
-const LABELS: Readonly<Record<ModelRole, () => string>> = {
+type TranslatedRole = CoreModelRole | (typeof EXTENSION_ROLES_BEFORE_CONTRIBUTIONS)[number]["id"];
+
+const LABELS: Readonly<Record<TranslatedRole, () => string>> = {
     "commit-message": () => t(`sandbox.modelRoles.commitMessage.label`),
     "session-title": () => t(`sandbox.modelRoles.sessionTitle.label`),
     "handoff-summary": () => t(`sandbox.modelRoles.handoffSummary.label`),
@@ -26,7 +37,7 @@ const LABELS: Readonly<Record<ModelRole, () => string>> = {
     "spoken-reply": () => t(`sandbox.modelRoles.spokenReply.label`),
 };
 
-const BLURBS: Readonly<Record<ModelRole, () => string>> = {
+const BLURBS: Readonly<Record<TranslatedRole, () => string>> = {
     "commit-message": () => t(`sandbox.modelRoles.commitMessage.blurb`),
     "session-title": () => t(`sandbox.modelRoles.sessionTitle.blurb`),
     "handoff-summary": () => t(`sandbox.modelRoles.handoffSummary.blurb`),
@@ -47,11 +58,17 @@ const BLURBS: Readonly<Record<ModelRole, () => string>> = {
     "spoken-reply": () => t(`sandbox.modelRoles.spokenReply.blurb`),
 };
 
-/** The job's name, as its row and every sentence about it say it. */
-export const roleLabel = (role: Pick<ModelRoleSpec, `id`>): string => LABELS[role.id]();
+// The English each translation is of, by id.
+const ENGLISH = new Map<string, Pick<ModelRoleSpec, `label` | `blurb`>>([...CORE_MODEL_ROLES, ...EXTENSION_ROLES_BEFORE_CONTRIBUTIONS].map((role) => [role.id, role]));
+const translatedRole = (id: string): id is TranslatedRole => Object.hasOwn(LABELS, id);
+
+/** The job's name, as its row and every sentence about it say it: translated while it reads as the translation's English. */
+export const roleLabel = (role: Pick<ModelRoleSpec, `id` | `label`>): string =>
+    translatedRole(role.id) && ENGLISH.get(role.id)?.label === role.label ? LABELS[role.id]() : role.label;
 
 /** The line under the job's name. */
-export const roleBlurb = (role: Pick<ModelRoleSpec, `id`>): string => BLURBS[role.id]();
+export const roleBlurb = (role: Pick<ModelRoleSpec, `id` | `blurb`>): string =>
+    translatedRole(role.id) && ENGLISH.get(role.id)?.blurb === role.blurb ? BLURBS[role.id]() : role.blurb;
 
 
 const PRESET_NAMES = {

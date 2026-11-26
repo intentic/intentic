@@ -43,8 +43,9 @@ flowchart LR
   `joinedThreads` and `stopFromChat` are the memory and the Stop button every such gateway needs around it.
 - `paintReply` dispatches a message that addressed us and sends each automation's answer back through that painter,
   posting a failed turn's notice and retiring the typing indicator; `deliverChunked` is the `/deliver` door's
-  chunk loop, trying the next bot only while nothing has posted. Each platform's one-message ceiling is the contract's
-  `MESSAGE_LIMITS`, re-exported here; how a platform decides a message is addressed to us stays in its gateway.
+  chunk loop, trying the next bot only while nothing has posted. Each platform's one-message ceiling is what the
+  gateway's own card declares (`channel.messageLimit`), read from its manifest with `declaredMessageLimit`; how a
+  platform decides a message is addressed to us stays in its gateway.
 - Nothing heard is lost to a daemon that is down. Every dispatch goes through the spool ([src/durable/dispatch-spool.ts](src/durable/dispatch-spool.ts)):
   the message is written under the extension's state directory before the daemon is asked, and stays there, retried
   with backoff and across a gateway restart, until the daemon admits it, which today's daemon says only once the

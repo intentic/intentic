@@ -30,4 +30,4 @@ The acp-bridge in the diagram runs on the user's device, so it lives in [_device
 | [output-cleaners](output-cleaners) | Trims agent Bash output, keeps the raw text retrievable, and ledgers each cleaner's saving |
 | [sandbox](sandbox) | The daemon: runs agents in worktrees, serves the workspace, lands their work |
 | [scaffold](scaffold) | App monorepo scaffolding from a template source, for the CLI and the daemon |
-| [webchat-widget](webchat-widget) | Visitor chat widget a site embeds to talk to a sandbox agent |
+| [webchat-widget](webchat-widget) | Visitor chat widget a site embeds to talk to a sandbox agent, served by the visitor-chat extension |

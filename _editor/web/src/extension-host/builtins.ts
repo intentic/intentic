@@ -10,6 +10,7 @@ import * as onlyoffice from "@intentic/ext-onlyoffice";
 import * as pipelines from "@intentic/ext-pipelines";
 import * as preview from "@intentic/ext-preview";
 import * as viewers from "@intentic/ext-viewers";
+import * as visitorChat from "@intentic/ext-visitor-chat";
 
 // First-party extensions whose code is compiled into this bundle, keyed by the id the daemon lists them under. Each
 // activates through the same manifest-gated createExtensionApi path as a git-installed bundle; only its module is
@@ -34,6 +35,7 @@ const modules: readonly BuiltinModule[] = [
     onlyoffice,
     preview,
     viewers,
+    visitorChat,
 ];
 
 export const builtinModules: ReadonlyMap<string, BuiltinModule> = new Map(modules.map((module) => [extensionIdOf(module.manifest), module]));

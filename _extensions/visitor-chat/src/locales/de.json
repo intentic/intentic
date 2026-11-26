@@ -1,0 +1,18 @@
+{
+    "installPanel": {
+        "allow": "Erlauben",
+        "allowToLoadChat": "{origin} erlauben, diesen Chat zu laden",
+        "allowedSites": "Erlaubte Websites",
+        "askedTurnedAway": "hat gefragt und wurde abgewiesen · {lastSeenAt}",
+        "checking": "Wird geprüft…",
+        "copyEmbedSnippet": "Einbettungs-Schnipsel für {id} kopieren",
+        "couldntAddSite": "Diese Website ließ sich nicht hinzufügen.",
+        "couldntReadInstalls": "Es ließ sich nicht lesen, welche Websites dieses Widget geladen haben.",
+        "embedCode": "Einbettungscode",
+        "loadCount": "{count} Aufruf | {count} Aufrufe",
+        "loaded": "Ist es geladen?",
+        "noBrowserLoadedWidget": "Noch hat kein Browser dieses Widget geladen. Fügen Sie den Schnipsel ein, öffnen Sie Ihre Website, dann aktualisiert sich das hier innerhalb weniger Sekunden von selbst.",
+        "noSitesAllowed": "Noch ist keine Website erlaubt, daher wird jeder Besucher abgewiesen. Fügen Sie unten eine hinzu oder bearbeiten Sie die Automation.",
+        "pasteIntoSiteBefore": "Fügen Sie das in Ihre Website ein, vor"
+    }
+}

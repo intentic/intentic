@@ -61,6 +61,7 @@ import KeepWarmPanel from "../../../../parts/fleet/KeepWarmPanel.vue";
 // Not an emit: the destination is the same for every host this card has, and the review panel's own ladder sends the
 // user to exactly this place for exactly this refusal.
 import type { MatchSnippet } from "@intentic/sandbox-contract/schemas/agent-search";
+import { useOriginSources } from "../../../../models/agent-status/originSources";
 import { sessionKind, sessionModule } from "../../../../models/agent-status/sessionKind";
 import { useChildCount } from "../../../../parts/fleet/childCount";
 import { blockersOf, settingsPagesOf, userBlockers } from "../../../../models/conversations/review/conflictResolution";
@@ -146,7 +147,8 @@ const parent = computed(() => parentOf(props.agent.startedBy));
 // opposite of the line under it (cardLine).
 const meta = computed(() => (failure.value?.moved === true ? agentStatusMeta(`idle`) : agentStandingMeta(props.agent)));
 // What the identity tile draws, read here too since the tooltip over it is this card's.
-const kind = computed(() => sessionKind(props.agent));
+const originSources = useOriginSources();
+const kind = computed(() => sessionKind(props.agent, originSources.value));
 const lane = computed(() => props.placed ?? laneOf(props.agent));
 // The corner's word and tint, from the projection the rails read too (agentStatus.standingChip): why it needs you,
 // else why the agents it started do (their mark rides along, so their ask never reads as this card's own), else that it

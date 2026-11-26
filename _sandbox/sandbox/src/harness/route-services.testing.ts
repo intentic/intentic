@@ -50,7 +50,6 @@ import { createReachReporter } from "../system/listeners/reach-report.js";
 import { resourcesSliceFake } from "../system/resources/resources-slice.testing.js";
 import { testConfig } from "../env.config.testing.js";
 import { testTurnMounts } from "../agent/tools/turn-mounts.testing.js";
-import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { webextSliceFake } from "../webext/webext-slice.testing.js";
 import { phonesSliceFake } from "../phones/phone-slice.testing.js";
 import { depsSliceFake } from "../workspace/deps/deps-slice.testing.js";
@@ -236,11 +235,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         sshKeys: memorySshKeyStore(),
         // Leased by every planned turn: its browsers, peers and extension cards mount here.
         ...testTurnMounts(),
-        // Three slice members composed here, each because its module already reaches the slice's subsystem, so the
+        // Two slice members composed here, each because its module already reaches the slice's subsystem, so the
         // slice's own fake may not import it (daemon-boundaries).
-        // The automations slice's, exactly as composition.ts composes it, over this suite's own stores, so a suite
-        // exercises the real queue rather than a second description of it.
-        outboxStreamFor: (origin) => outboxStreamFor(context.self(), origin),
         // The processes slice's: a real slot table with a no-dial probe.
         portForwards: createPortForwards(portSlotsFromToken("tok"), async () => "http"),
         // The workspace slice's: the real readers, since a shadow is read off disk and a fake would only test the fake.

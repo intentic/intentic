@@ -145,12 +145,22 @@ describe("command.run", () => {
 });
 
 describe("wakeSourceOf", () => {
-    test("maps each trigger to its admission key, splitting webchat off the listener family", () => {
+    test("maps each trigger to its admission key, splitting a stranger-reachable source off the listener family", () => {
         expect(wakeSourceOf({ kind: "schedule", cron: "0 9 * * *" })).toBe("schedule");
         expect(wakeSourceOf({ kind: "event" })).toBe("event");
         expect(wakeSourceOf({ kind: "listener", provider: "discord" })).toBe("listener");
-        expect(wakeSourceOf({ kind: "listener", provider: "webchat" })).toBe("webchat");
+        expect(wakeSourceOf({ kind: "listener", provider: "webchat" }, "visitor")).toBe("webchat");
         expect(wakeSourceOf({ kind: "workspace", event: "agent.landed" })).toBe("workspace");
+    });
+
+    test("reads a stranger's floor off the source's declaration, never off its provider's name", () => {
+        // A provider named like a core one floors as a team chat unless its source says strangers reach it.
+        expect(wakeSourceOf({ kind: "listener", provider: "webchat" })).toBe("listener");
+        expect(wakeSourceOf({ kind: "listener", provider: "issues" })).toBe("listener");
+        expect(wakeSourceOf({ kind: "listener", provider: "acme-chat" }, "visitor")).toBe("webchat");
+        expect(wakeSourceOf({ kind: "listener", provider: "acme-crashes" }, "report")).toBe("issues");
+        // A declaration means nothing on a trigger that is not a listener.
+        expect(wakeSourceOf({ kind: "event" }, "report")).toBe("event");
     });
 });
 

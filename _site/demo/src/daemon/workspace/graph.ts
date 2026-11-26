@@ -1,11 +1,12 @@
-import { refuse } from "@intentic/contract-serve";
+import { type RawContext, refuse } from "@intentic/contract-serve";
 import type { PackageModules, WorkspaceDepEdge, WorkspaceDepUsage, WorkspaceGraph, WorkspacePackage } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 import type { WorkspaceModules } from "@intentic/sandbox-contract/schemas/git/git";
 import { fileBody, workspaceEntries } from "../../fixture/workspace";
+import { json } from "../../transport";
 import { type PackageManifest, readManifest } from "./manifests";
 import { monorepoOf, workspaceRepos } from "./repos";
 
-// A monorepo's architecture read from its files, the way the daemon's readers do: the packages pnpm-workspace.yaml's
+// A monorepo's architecture read from its files, the way the repo-apps extension's backend does: the packages pnpm-workspace.yaml's
 // globs reach, the siblings each declares and what its own files do with them, and inside one package the imports
 // between its source folders, placed in the layers its layers.json declares. Nothing here is recorded: an app added to
 // the repo shows up because its package.json does.
@@ -63,8 +64,8 @@ const usageOf = (sources: readonly [string, string][], name: string): WorkspaceD
     return usage;
 };
 
-/** GET /workspace/repos/{repo}/graph */
-export const packageGraph = (repo: string): WorkspaceGraph => {
+/** GET /x/intentic.repo-apps/graph?repo= */
+const packageGraph = (repo: string): WorkspaceGraph => {
     monorepoOf(repo);
     const found = packagesOf(repo);
     const names = new Set(found.map((pkg) => pkg.manifest.name));
@@ -125,8 +126,8 @@ const resolveRelative = (from: string, spec: string): string => {
     return parts.join(`/`);
 };
 
-/** GET /workspace/repos/{repo}/layers */
-export const packageModules = (repo: string, name: string): PackageModules => {
+/** GET /x/intentic.repo-apps/layers?repo=&package= */
+const packageModules = (repo: string, name: string): PackageModules => {
     monorepoOf(repo);
     const found = packagesOf(repo).find((pkg) => pkg.manifest.name === name) ?? refuse(`no workspace package "${name}" in ${repo}`, 404);
     const { layers, invalid } = readLayers(`${repo}/${found.dir}/layers.json`);
@@ -184,3 +185,11 @@ export const workspaceModules = (): WorkspaceModules => ({
         }),
     ],
 });
+
+// The repo-apps extension's backend namespace (its src/backendRoutes.ts), which its Dependencies view reads.
+const REPO_APPS = `/x/intentic.repo-apps`;
+export const repoAppsBackend = {
+    [`GET ${REPO_APPS}/graph`]: ({ url }: RawContext): Response => json(packageGraph(url.searchParams.get(`repo`) ?? ``)),
+    [`GET ${REPO_APPS}/layers`]: ({ url }: RawContext): Response =>
+        json(packageModules(url.searchParams.get(`repo`) ?? ``, url.searchParams.get(`package`) ?? ``)),
+};

@@ -10,7 +10,7 @@ import {
 } from "@intentic/sandbox-contract/schemas/automations";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { z } from "zod";
-import { drop, fold, isJsonObject, type JsonObject, nested } from "../store/evolution/conversions.js";
+import { drop, fold, isJsonObject, type JsonObject, nested, transform } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument, openEntries } from "../store/open-document.js";
 import { defineStep } from "../store/evolution/state-steps.js";
@@ -49,13 +49,33 @@ const modelLadder = fold("folds agent, harness and model into a one-rung models 
     ],
 });
 
+// (2026-11-26) The bug intake's `issues.keyFromBrowsers` moved onto the listener trigger beside `allowedOrigins`, where
+// any extension's public door reads it (a route declaring `keyFromBrowsers`); on any other trigger it means nothing, and
+// goes.
+export interface CarriesKeyFromBrowsers extends JsonObject {
+    readonly issues: JsonObject & { readonly keyFromBrowsers?: unknown };
+}
+export const keyFromBrowsersOnTrigger = transform(
+    "moves issues.keyFromBrowsers onto the listener trigger",
+    (entry): entry is CarriesKeyFromBrowsers => isJsonObject(entry["issues"]) && Object.hasOwn(entry["issues"], "keyFromBrowsers"),
+    (entry) => {
+        const { keyFromBrowsers, ...issues } = entry.issues;
+        const trigger = entry["trigger"];
+        const moved: JsonObject = { ...entry, issues };
+        if (isJsonObject(trigger) && trigger["kind"] === "listener" && keyFromBrowsers === true) {
+            moved["trigger"] = { ...trigger, keyFromBrowsers: true };
+        }
+        return moved;
+    },
+);
+
 export const automationsDocument = defineDocument({
     path: stateRelPath(".intentic/config/automations.json"),
     schema: AutomationSchema,
     granularity: "entries",
     // `issues.ingestKey` was withdrawn on 2026-09-06 (control tokens replaced it); a credential with no reader left in a
     // tracked file, so it goes.
-    history: [modelLadder, ...nested("issues", [drop("ingestKey")])],
+    history: [modelLadder, ...nested("issues", [drop("ingestKey")]), keyFromBrowsersOnTrigger, ...nested("issues", [drop("keyFromBrowsers")])],
     // The relocation step below moves a webhook token into the door store.
     movedByStep: ["trigger.token"],
 });

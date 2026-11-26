@@ -1,6 +1,6 @@
 <!-- An automation need's own answer: what would be saved and switched on, said in plain words, then approved whole. -->
 <script setup lang="ts">
-import type { Automation, Trigger, WatchSource } from "@intentic/sandbox-contract/schemas/automations";
+import { type Automation, BUILT_IN_WATCH_KINDS, isUrlSource, type Trigger, type WatchSource, watchSentence } from "@intentic/sandbox-contract/schemas/automations";
 import type { AutomationNeed, Need } from "@intentic/sandbox-contract/schemas/needs";
 import { Code, Icon, Notice, ui } from "@intentic/ui";
 import { formatDateTime } from "@intentic/ui/format";
@@ -65,22 +65,16 @@ const triggerWords = (trigger: Trigger): string => {
     }
 };
 
-// What a ready-made source looks at, as the person approving it would say it.
+// What a ready-made source looks at, as the person approving it would say it: a page in the app's own words, any other
+// kind in the words of its declaration, which came with the proposal (`watchKind`), or, from a daemon before kinds were
+// contributed (2026-11-26), the record of the ones it checked itself.
 const sourceWords = (source: WatchSource): string => {
-    switch (source.kind) {
-        case `npm`: {
-            const spec = source.range ?? source.tag;
-            return t(`needs.automation.source.npm`, { spec: spec === undefined ? source.package : `${source.package}@${spec}` });
-        }
-        case `github-release`:
-            return source.prereleases === true
-                ? t(`needs.automation.source.githubPre`, { repo: source.repo })
-                : t(`needs.automation.source.github`, { repo: source.repo });
-        case `url`:
-            return source.select === undefined
-                ? t(`needs.automation.source.url`, { url: source.url })
-                : t(`needs.automation.source.urlSelect`, { url: source.url, select: source.select });
+    if (isUrlSource(source)) {
+        return source.select === undefined
+            ? t(`needs.automation.source.url`, { url: source.url })
+            : t(`needs.automation.source.urlSelect`, { url: source.url, select: source.select });
     }
+    return watchSentence(props.subject.watchKind ?? BUILT_IN_WATCH_KINDS.find((kind) => kind.id === source.kind), source);
 };
 
 // What a passing check sets off; a new agent names the models it would spend, best first.

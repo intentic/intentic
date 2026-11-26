@@ -9,8 +9,11 @@ import type {
     ShieldCover,
 } from "@intentic/sandbox-contract/schemas/compliance";
 import { KEY_PROVIDERS } from "@intentic/sandbox-contract/models/key-providers";
+import { effectiveActionRule } from "@intentic/sandbox-contract/schemas/data-protection";
+import type { ProcessorFlow } from "@intentic/extension-manifest";
+import { opt } from "../opt.js";
 import type { ComplianceFacts, ConnectorFact } from "./facts.js";
-import { PUBLIC_OFFICE_ACTION_KEYS, PUBLIC_OFFICE_ADMISSION_KEYS } from "./preset.js";
+import { PUBLIC_OFFICE_ADMISSION_KEYS } from "./preset.js";
 
 // Facts → the data-flow list and the measures checklist. Pure, so the page, the documents and the tests all read the
 // same mapping. Hosts and operators are what the code calls (each table names the file it was read from); a region is
@@ -49,24 +52,12 @@ const KEY_OPERATORS = new Map<string, Operator>([
     ["moonshot", { operator: "Moonshot AI", region: "CN", thirdCountry: true }],
 ]);
 
-// Team-chat gateways (_extensions/{discord,slack,telegram,whatsapp}).
-const TEAM_CHAT_DESTINATIONS = new Map<string, Destination>([
-    ["discord", { hosts: ["discord.com", "gateway.discord.gg", "cdn.discordapp.com"], operator: "Discord Inc.", region: "US", thirdCountry: true }],
-    ["slack", { hosts: ["slack.com", "wss-primary.slack.com", "files.slack.com"], operator: "Slack Technologies (Salesforce)", region: "US", thirdCountry: true }],
-    ["telegram", { hosts: ["api.telegram.org"], operator: "Telegram", thirdCountry: true }],
-    ["whatsapp", { hosts: ["web.whatsapp.com", "g.whatsapp.net"], operator: "WhatsApp Ireland (Meta)", region: "EU/US", thirdCountry: true }],
-]);
-
 // Cloud voices (@intentic/speech voice/cloud-voices.ts). Speech recognition is always local, so it has no row.
 const SPEECH_DESTINATIONS = new Map<string, Destination>([
     ["elevenlabs", { hosts: ["api.elevenlabs.io"], operator: "ElevenLabs", region: "US", thirdCountry: true }],
     ["cartesia", { hosts: ["api.cartesia.ai"], operator: "Cartesia", region: "US", thirdCountry: true }],
     ["deepgram", { hosts: ["api.deepgram.com"], operator: "Deepgram", region: "US", thirdCountry: true }],
 ]);
-
-const MAIL_IN = new Set(["imap"]);
-// Lane-neutral: whichever connector sends mail names itself one of these.
-const MAIL_OUT = new Set(["smtp", "email", "email-send"]);
 
 // The edge the Intentic tunnel ends at (_platform/ingress); where TLS for a tunnelled sandbox terminates.
 const INTENTIC_EDGE_ZONE = "sbx.intentic.dev";
@@ -141,85 +132,47 @@ const modelFlows = (facts: ComplianceFacts): DataFlow[] =>
             };
         });
 
-// The IMAP card sends too once its SMTP host is filled in (each send held for approval unless the owner allows it),
-// which is a second way out with a server of its own.
-const sendingFlow = (connector: ConnectorFact): DataFlow[] =>
-    MAIL_IN.has(connector.provider) && connector.smtpHost !== undefined && connector.smtpHost !== ""
-        ? [
-              {
-                  id: `email-smtp:${connector.id}`,
-                  group: "messaging",
-                  kind: "email-smtp",
-                  name: connector.id,
-                  hosts: [connector.smtpHost],
-                  active: true,
-                  personalData: "yes",
-                  shield: "none",
-                  switch: "actionRules",
-                  question: "mail-operator",
-              },
-          ]
-        : [];
+// How the page words each kind of path a card declares (its `processors` in its extension's manifest): the group it is
+// drawn in, whether people's own words ride it, what opens or closes it, and what the office answers when the card names
+// no operator. Keyed by the contract's flow kind, never by a provider: the chat and mail tables that stood here until
+// 2026-11-26 moved into the cards of the extensions that own those providers.
+interface PathTraits {
+    readonly group: DataFlow["group"];
+    readonly personalData: PersonalDataReach;
+    readonly switch: string;
+    // What the row is called: the card's own id (a mailbox someone named), or its provider's name.
+    readonly named: "id" | "provider";
+    readonly question?: string;
+}
 
-const connectorFlow = (connector: ConnectorFact): DataFlow => {
-    const chat = TEAM_CHAT_DESTINATIONS.get(connector.provider);
-    if (chat !== undefined) {
+const PATH_TRAITS = {
+    "team-chat": { group: "messaging", personalData: "yes", switch: "actionRules", named: "provider" },
+    "email-imap": { group: "messaging", personalData: "yes", switch: "capabilities", named: "id", question: "mail-operator" },
+    "email-smtp": { group: "messaging", personalData: "yes", switch: "actionRules", named: "id", question: "mail-operator" },
+    connector: { group: "connectors", personalData: "possible", switch: "capabilities", named: "provider" },
+} as const satisfies Readonly<Record<ProcessorFlow, PathTraits>>;
+
+// A card's paths out: each one its card declares, or one generic connector path over the hosts its credential is meant
+// for when it declares none.
+const connectorFlows = (connector: ConnectorFact): DataFlow[] =>
+    (connector.paths ?? [{ flow: "connector" as const, hosts: connector.hosts }]).map((path): DataFlow => {
+        const traits: PathTraits = PATH_TRAITS[path.flow];
         return {
-            id: `team-chat:${connector.id}`,
-            group: "messaging",
-            kind: "team-chat",
-            name: connector.provider,
-            hosts: [...chat.hosts],
-            operator: chat.operator,
-            region: chat.region,
-            thirdCountry: chat.thirdCountry,
+            id: `${path.flow}:${connector.id}`,
+            group: traits.group,
+            kind: path.flow,
+            name: traits.named === "id" ? connector.id : connector.provider,
+            hosts: [...path.hosts],
             active: true,
-            personalData: "yes",
+            personalData: traits.personalData,
             shield: "none",
-            switch: "actionRules",
+            switch: traits.switch,
+            ...opt("operator", path.operator),
+            ...opt("region", path.region),
+            ...opt("thirdCountry", path.thirdCountry),
+            ...opt("question", path.operator === undefined ? traits.question : undefined),
         };
-    }
-    const mailHost = connector.host === undefined || connector.host === "" ? [] : [connector.host];
-    if (MAIL_IN.has(connector.provider)) {
-        return {
-            id: `email-imap:${connector.id}`,
-            group: "messaging",
-            kind: "email-imap",
-            name: connector.id,
-            hosts: mailHost,
-            active: true,
-            personalData: "yes",
-            shield: "none",
-            switch: "capabilities",
-            question: "mail-operator",
-        };
-    }
-    if (MAIL_OUT.has(connector.provider)) {
-        return {
-            id: `email-smtp:${connector.id}`,
-            group: "messaging",
-            kind: "email-smtp",
-            name: connector.id,
-            hosts: mailHost,
-            active: true,
-            personalData: "yes",
-            shield: "none",
-            switch: "actionRules",
-            question: "mail-operator",
-        };
-    }
-    return {
-        id: `connector:${connector.id}`,
-        group: "connectors",
-        kind: "connector",
-        name: connector.provider,
-        hosts: [...connector.hosts],
-        active: true,
-        personalData: "possible",
-        shield: "none",
-        switch: "capabilities",
-    };
-};
+    });
 
 // Through the tunnel the open question is where Intentic's edge runs; with neither a tunnel nor an address of the
 // office's own, it is how the sandbox is reached at all.
@@ -264,7 +217,7 @@ export const flowsOf = (facts: ComplianceFacts): DataFlow[] => {
     const webPersonal: PersonalDataReach = "possible";
     return [
         ...modelFlows(facts),
-        ...facts.connectors.flatMap((connector) => [connectorFlow(connector), ...sendingFlow(connector)]),
+        ...facts.connectors.flatMap(connectorFlows),
         {
             id: "webchat",
             group: "messaging",
@@ -440,9 +393,9 @@ const accessMeasures = (facts: ComplianceFacts): Measure[] => [
 ];
 
 const controlMeasures = (facts: ComplianceFacts): Measure[] => {
-    const { settings } = facts;
-    const actionHeld = PUBLIC_OFFICE_ACTION_KEYS.filter((key) => {
-        const rule = settings.actionRules[key] ?? settings.actionRules[`${key.split(".")[0] ?? key}.*`];
+    const { settings, actionKeys } = facts;
+    const actionHeld = actionKeys.filter((key) => {
+        const rule = effectiveActionRule(settings.actionRules, key);
         return rule === "hold" || rule === "deny";
     }).length;
     const admissionHeld = PUBLIC_OFFICE_ADMISSION_KEYS.filter((key) => settings.admission[key] !== "allow").length;
@@ -450,8 +403,8 @@ const controlMeasures = (facts: ComplianceFacts): Measure[] => {
         {
             id: "action-rules",
             category: "integrity",
-            status: coverage(actionHeld, PUBLIC_OFFICE_ACTION_KEYS.length),
-            facts: { held: actionHeld, of: PUBLIC_OFFICE_ACTION_KEYS.length },
+            status: coverage(actionHeld, actionKeys.length),
+            facts: { held: actionHeld, of: actionKeys.length },
             preset: true,
         },
         {

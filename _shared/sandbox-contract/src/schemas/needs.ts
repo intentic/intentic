@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { KeyringShareModeSchema } from "./keyring.js";
 import { NeedKindSchema } from "./need-kinds.js";
-import { AutomationSchema } from "./automations.js";
+import { AutomationSchema, WatchKindSchema } from "./automations.js";
 import { DeployNeedAskSchema, DeployNeedSchema } from "./stack-grants.js";
 import { HostPowerFindingSchema } from "./host-power.js";
 import { entryId } from "./internal.js";
@@ -181,6 +181,9 @@ export const AutomationNeedSchema = z.object({
     automation: AutomationSchema.describe("The automation as it would be saved, switched on, the moment a person approves it."),
     replaces: z.boolean().optional().describe("An automation of this id already exists, and approving replaces it."),
     firstCheck: AutomationFirstCheckSchema.optional(),
+    // (2026-11-26) The declaration of the kind its source names, when an extension declares it, so the card says what the
+    // watch looks at in that kind's own words. Absent for a page, a guard, and from a daemon before contributed kinds.
+    watchKind: WatchKindSchema.optional(),
 });
 export type AutomationNeed = z.infer<typeof AutomationNeedSchema>;
 

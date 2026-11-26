@@ -1,5 +1,6 @@
 import { isOpenNeed, type Need, NeedSchema, type NeedsFile } from "@intentic/sandbox-contract/schemas/needs";
-import { at, rename } from "../store/evolution/conversions.js";
+import { keyFromBrowsersOnTrigger } from "../automations/automations-store.js";
+import { at, drop, rename } from "../store/evolution/conversions.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openDocument } from "../store/open-document.js";
 import { stateRelPath } from "../state-paths.js";
@@ -13,7 +14,13 @@ export const needsDocument = defineDocument({
     schema: NeedSchema,
     granularity: "record",
     // 2026-11-18: personas were renamed roles; a grant need named the one withholding it as `persona`.
-    history: [at("subject", rename("persona", "role"))],
+    // 2026-11-26: an automation need's proposed bug intake moves `issues.keyFromBrowsers` onto its listener trigger, as
+    // the automations file does (automations-store.ts), so a proposal answered after the update keeps it.
+    history: [
+        at("subject", rename("persona", "role")),
+        at("subject.automation", keyFromBrowsersOnTrigger),
+        at("subject.automation.issues", drop("keyFromBrowsers")),
+    ],
 });
 
 // Closed needs kept, newest first: enough for a card reopened days later to still say how it ended, bounded so a busy

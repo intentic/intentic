@@ -1,7 +1,12 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { ListenerDeliverSchema } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { AgentTurn } from "@intentic/sandbox-contract/schemas/agent";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
+import { readWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import { unstubbed } from "@intentic/testing";
 import { type RestartResume, restartResume } from "../../agent/run/turn/recovery/restart-resume-policy.js";
 import { fileCapabilitiesStore } from "../../capabilities/capabilities-store.js";
@@ -11,7 +16,6 @@ import { drivenBy } from "../../seams/turn-starter.testing.js";
 import { fileThreadSessionsStore } from "../../sessions/thread-sessions.js";
 import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
 import { type JournalledFire, sqliteTurnJournal } from "../../store/journals/turn-journal.js";
-import { fileWebchatOutbox, outboxStreamFor } from "../../webchat/webchat-outbox.js";
 import { fileAutomationsStore } from "../automations-store.js";
 import { automationInboxesInFlight, interruptedFiresInFlight, recoverCutFires } from "../fire-resume.js";
 import { settingsResume } from "../../agent/run/turn/recovery/cut-turns.testing.js";
@@ -30,7 +34,56 @@ import { createDomainEvents } from "../../seams/domain-events.js";
 export interface TestDaemon {
     readonly services: Services;
     readonly crash: () => void;
+    // What reached the `webchat` channel's gateway (`/deliver`): an answer no live stream carried, as the visitor gets it.
+    readonly delivered: () => readonly { readonly channelId: string; readonly text: string }[];
 }
+
+// The chat channel's gateway, as the extension that owns a listener runs one: a manifest baked where the inventory reads
+// it, and a loopback /deliver that keeps what it was sent. Unref'd, so a suite that ends leaves nothing running.
+interface ChatGateway {
+    readonly extensionsDir: string;
+    readonly port: () => number | undefined;
+    readonly delivered: () => { channelId: string; text: string }[];
+}
+
+const chatGateway = (root: string): ChatGateway => {
+    const extensionsDir = join(root, "baked");
+    mkdirSync(join(extensionsDir, "chat"), { recursive: true });
+    writeFileSync(
+        join(extensionsDir, "chat", "intentic-extension.json"),
+        JSON.stringify({
+            publisher: "test",
+            name: "chat",
+            version: "1.0.0",
+            engines: { intentic: "^2.0.0" },
+            contributes: {
+                listener: {
+                    provider: "webchat",
+                    events: [{ type: "message", label: "Messages" }],
+                    automation: { label: "Chat", channel: { label: "Thread", placeholder: "every thread" }, starterPrompt: "A message arrived." },
+                },
+                processes: [{ name: "gateway", command: "true" }],
+            },
+        }),
+    );
+    const delivered: { channelId: string; text: string }[] = [];
+    const server = createServer((request, response) => {
+        let body = "";
+        request.on("data", (chunk: Buffer) => {
+            body += chunk.toString("utf8");
+        });
+        request.on("end", () => {
+            const deliver = ListenerDeliverSchema.parse(JSON.parse(body));
+            delivered.push({ channelId: deliver.channelId, text: deliver.text });
+            response.writeHead(200, { "content-type": "application/json" });
+            response.end("{}");
+        });
+    });
+    server.listen(0, "127.0.0.1");
+    server.unref();
+    // SAFETY: a server listening on a TCP port answers its address as an AddressInfo.
+    return { extensionsDir, port: () => (server.address() as AddressInfo | null)?.port, delivered: () => [...delivered] };
+};
 
 const never = new Promise<never>(() => undefined);
 
@@ -39,6 +92,7 @@ export type CrashPoint = (method: keyof Services["automations"], phase: "before"
 
 export const daemonOn = (root: string, wake: TurnStarter["stream"], crashAt: CrashPoint = () => false): TestDaemon => {
     let crashed = false;
+    const gateway = chatGateway(root);
     const store = fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json"));
     // Every method of the manifest hangs once crashed; built once, since the daemon's memory is keyed on this object.
     const alive = async <T>(method: keyof Services["automations"], call: () => Promise<T>): Promise<T> => {
@@ -60,7 +114,6 @@ export const daemonOn = (root: string, wake: TurnStarter["stream"], crashAt: Cra
         recordWatch: (id, next) => alive("recordWatch", () => store.recordWatch(id, next)),
         onSaved: (listener) => store.onSaved(listener),
     };
-    const webchatOutbox = fileWebchatOutbox(join(root, "history", "webchat-outbox.json"));
     const logger = unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} });
     const services = unstubbed<Services>("services", {
         // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
@@ -74,7 +127,10 @@ export const daemonOn = (root: string, wake: TurnStarter["stream"], crashAt: Cra
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json"), () => false),
         senders: fileSendersStore(join(root, "senders.json")),
         heldWakes: fileHeldWakesStore(join(root, "history")),
-        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
+        // The one extension installed is the chat's, whose gateway takes the answers no live stream carried.
+        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history"), extensionsDir: gateway.extensionsDir }),
+        files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
+        serviceProcesses: unstubbed<Services["serviceProcesses"]>("serviceProcesses", { portOf: () => gateway.port() }),
         scheduleCoverage: fileScheduleCoverageStore(join(root, "automation-schedule.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
@@ -82,10 +138,6 @@ export const daemonOn = (root: string, wake: TurnStarter["stream"], crashAt: Cra
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger,
-        // The real Visitor chat outbox and resolver: an answer a restart re-fire sends lands where the visitor's next
-        // poll reads it, which is what the tests assert.
-        webchatOutbox,
-        outboxStreamFor: (origin) => outboxStreamFor({ webchatOutbox, logger }, origin),
     });
     const driven = drivenBy(services, wake);
     // A message steered into a running turn is refused, so it waits for a fire of its own like one the turn cannot take.
@@ -95,6 +147,7 @@ export const daemonOn = (root: string, wake: TurnStarter["stream"], crashAt: Cra
         crash: () => {
             crashed = true;
         },
+        delivered: gateway.delivered,
     };
 };
 

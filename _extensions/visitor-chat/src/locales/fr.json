@@ -1,0 +1,18 @@
+{
+    "installPanel": {
+        "allow": "Autoriser",
+        "allowToLoadChat": "Autoriser {origin} à charger ce chat",
+        "allowedSites": "Sites autorisés",
+        "askedTurnedAway": "a demandé et a été refusé · {lastSeenAt}",
+        "checking": "Vérification…",
+        "copyEmbedSnippet": "Copier l'extrait d'intégration de {id}",
+        "couldntAddSite": "Impossible d'ajouter ce site.",
+        "couldntReadInstalls": "Impossible de lire quels sites ont chargé ce widget.",
+        "embedCode": "Code d'intégration",
+        "loadCount": "{count} chargement | {count} chargements",
+        "loaded": "Est-ce chargé ?",
+        "noBrowserLoadedWidget": "Aucun navigateur n'a encore chargé ce widget. Collez l'extrait, ouvrez votre site, et ceci se met à jour tout seul en quelques secondes.",
+        "noSitesAllowed": "Aucun site n'est encore autorisé : chaque visiteur est donc refusé. Ajoutez-en un ci-dessous ou modifiez l'automatisation.",
+        "pasteIntoSiteBefore": "Collez ceci dans votre site, avant"
+    }
+}

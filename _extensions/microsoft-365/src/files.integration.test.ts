@@ -1,11 +1,11 @@
 import { mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { downloadFile, saveAttachments, saveBytes, workspaceFile } from "./files.js";
+import { fetchDownload, saveAttachments, saveBytes, workspaceFile } from "./files.js";
 import { Graph } from "./graph.js";
-import { account, httpQueue } from "./testing.js";
+import { account, httpQueue, memoryIo } from "./testing.js";
 
-test("attachments save decoded bytes inside workspace, flatten hostile names and refuse overwrites", async () => {
+test("attachments come back decoded under flattened names, and the CLI saves them inside the workspace, never over a file", async () => {
     const root = await mkdtemp(join(tmpdir(), "m365-files-"));
     try {
         const { http } = httpQueue([
@@ -25,11 +25,14 @@ test("attachments save decoded bytes inside workspace, flatten hostile names and
             { body: { value: [{ id: "b", name: "attached-message", "@odata.type": "#microsoft.graph.itemAttachment" }] } },
             { bytes: Buffer.from("MIME mail") },
         ]);
-        const files = await saveAttachments(new Graph(account, async () => "token", http), root, "msg", "mail");
-        expect(files).toEqual([join(root, "mail/ca978112ca1bbdcafac2-wniosek.docx"), join(root, "mail/3e23e8160039594a3389-attached-message")]);
-        expect(await readFile(files[0]!, "utf8")).toBe("office document");
-        expect(await readFile(files[1]!, "utf8")).toBe("MIME mail");
-        await expect(saveBytes(root, "mail/ca978112ca1bbdcafac2-wniosek.docx", Buffer.from("overwrite"))).rejects.toThrow("EEXIST");
+        const io = memoryIo();
+        const names = await saveAttachments(new Graph(account, async () => "token", http), io.io, "msg", "mail");
+        expect(names).toEqual(["mail/ca978112ca1bbdcafac2-wniosek.docx", "mail/3e23e8160039594a3389-attached-message"]);
+        expect(io.files.map((file) => Buffer.from(file.data, "base64").toString())).toEqual(["office document", "MIME mail"]);
+        const saved = await saveBytes(root, names[0]!, Buffer.from(io.files[0]!.data, "base64"));
+        expect(saved).toBe(join(root, "mail/ca978112ca1bbdcafac2-wniosek.docx"));
+        expect(await readFile(saved, "utf8")).toBe("office document");
+        await expect(saveBytes(root, names[0]!, Buffer.from("overwrite"))).rejects.toThrow("EEXIST");
         await expect(workspaceFile(root, "../escape", true)).rejects.toThrow("inside the workspace");
         await symlink(tmpdir(), join(root, "escape"));
         await expect(workspaceFile(root, "escape/file", true)).rejects.toThrow("leaves the workspace");
@@ -38,25 +41,15 @@ test("attachments save decoded bytes inside workspace, flatten hostile names and
     }
 });
 
-test("document downloads use Microsoft storage without authorization and refuse a foreign host", async () => {
+test("the CLI fetches a download from Microsoft storage without authorization and refuses a foreign host", async () => {
     const root = await mkdtemp(join(tmpdir(), "m365-download-"));
     try {
-        const graphHttp = httpQueue([{ body: { "@microsoft.graph.downloadUrl": "https://office.sharepoint.com/download?ticket=opaque" } }]);
         const storage = httpQueue([{ bytes: Buffer.from("report bytes") }]);
-        const saved = await downloadFile(
-            new Graph(account, async () => "graph-secret", graphHttp.http),
-            root,
-            "/me/drive/items/item",
-            "files/report.docx",
-            storage.http,
-        );
+        const saved = await fetchDownload(root, "files/report.docx", "https://office.sharepoint.com/download?ticket=opaque", storage.http);
         expect(await readFile(saved, "utf8")).toBe("report bytes");
         expect(storage.calls[0]!.init?.headers).toBeUndefined();
         expect(storage.calls[0]!.init?.redirect).toBe("error");
-        const bad = httpQueue([{ body: { "@microsoft.graph.downloadUrl": "https://evil.example/file" } }]);
-        await expect(
-            downloadFile(new Graph(account, async () => "token", bad.http), root, "/me/drive/items/item", "files/bad", storage.http),
-        ).rejects.toThrow("Unsupported");
+        await expect(fetchDownload(root, "files/bad", "https://evil.example/file", storage.http)).rejects.toThrow("Unsupported");
         expect(storage.calls).toHaveLength(1);
     } finally {
         await rm(root, { recursive: true, force: true });

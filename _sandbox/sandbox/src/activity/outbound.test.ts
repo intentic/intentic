@@ -1,9 +1,28 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
+import { repoRoot } from "@intentic/constants/node";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import type { ActivityEvent } from "@intentic/sandbox-contract/schemas/activity";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { createOutboundSniffer } from "./outbound.js";
+import { classifyCommand, createOutboundSniffer, type DeclaredCommand } from "./outbound.js";
+
+// An extension's own command-line tool that acts outward (`whatsapp send`) is recognised by what its manifest declares
+// (`commandActions`), never by a pattern of the daemon's; a request through the credential gateway is recorded there
+// instead (capabilities/broker/broker-actions.test.ts).
+
+// The commands an in-repo extension's cli card declares, under its card id, as the daemon reads them.
+const declaredBy = (extension: string): DeclaredCommand[] => {
+    const manifest = ExtensionManifestSchema.parse(
+        JSON.parse(readFileSync(join(repoRoot(import.meta.url), "_extensions", extension, "intentic-extension.json"), "utf8")),
+    );
+    return (manifest.contributes?.capabilities ?? []).flatMap((card) =>
+        card.kind === "cli" ? (card.commandActions ?? []).map((action) => ({ ...action, provider: card.id })) : [],
+    );
+};
+const WHATSAPP = declaredBy("whatsapp");
 
 // Only stubs activity/logger, which is all the sniffer touches; append pushes synchronously so assertions can follow
 // observe() directly.
@@ -34,27 +53,23 @@ const result = (output: string, id = "t1", isError?: boolean): AgentEvent => ({
     content: [{ type: "text", text: output }],
 });
 
-// Exact command shapes DISCORD_SKILL teaches (capabilities/cli/providers.ts); what real turns produce.
-const SEND = `curl -s -X POST -H "Authorization: Bot $DISCORD_BOT_TOKEN" -H "Content-Type: application/json" -d '{"content":"hello"}' https://discord.com/api/v10/channels/123/messages`;
-const REACT = `curl -s -X PUT -H "Authorization: Bot $DISCORD_BOT_TOKEN" "https://discord.com/api/v10/channels/123/messages/456/reactions/%F0%9F%91%8D/@me"`;
-const READ = `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" "https://discord.com/api/v10/channels/123/messages?limit=20" | jq '.[] | {id, content}'`;
-const GUILDS = `curl -s -H "Authorization: Bot $DISCORD_BOT_TOKEN" https://discord.com/api/v10/users/@me/guilds | jq '.[] | {id, name}'`;
+const SEND = `whatsapp send 4915112345678@s.whatsapp.net deploy is out, all checks pass`;
 
-test("the skill's send command records message.send with channel, content, turn, session, and ok outcome", () => {
+test("a declared send records its action, chat, text, turn, session and ok outcome", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
+    const sniffer = createOutboundSniffer(services, TURN, WHATSAPP);
     sniffer.observe({ kind: "session", sessionId: "s1" });
     sniffer.observe(tool(SEND));
-    sniffer.observe(result(`{"id":"999","content":"hello"}`));
+    sniffer.observe(result("Sent to 4915112345678@s.whatsapp.net."));
     expect(appended).toEqual([
         {
-            provider: "discord",
+            provider: "whatsapp",
             direction: "out",
             type: "message.send",
             method: "POST",
-            endpoint: "/channels/123/messages",
-            channelId: "123",
-            content: "hello",
+            endpoint: "/send",
+            channelId: "4915112345678@s.whatsapp.net",
+            content: "deploy is out, all checks pass",
             turnId: TURN,
             sessionId: "s1",
             outcome: "ok",
@@ -62,55 +77,69 @@ test("the skill's send command records message.send with channel, content, turn,
     ]);
 });
 
-test("react and read classify as reaction.add and messages.read; guild listing falls through to api.call", () => {
+test("each declared command reads its chat and content off the arguments it names, whatever the quoting", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(REACT, "t1"));
-    sniffer.observe(result("", "t1"));
-    sniffer.observe(tool(READ, "t2"));
-    sniffer.observe(result("[]", "t2"));
-    sniffer.observe(tool(GUILDS, "t3"));
-    sniffer.observe(result("[]", "t3"));
-    expect(appended.map(({ type, method, endpoint, channelId }) => ({ type, method, endpoint, channelId }))).toEqual([
-        { type: "reaction.add", method: "PUT", endpoint: "/channels/123/messages/456/reactions/%F0%9F%91%8D/@me", channelId: "123" },
-        { type: "messages.read", method: "GET", endpoint: "/channels/123/messages", channelId: "123" },
-        { type: "api.call", method: "GET", endpoint: "/users/@me/guilds", channelId: undefined },
+    const sniffer = createOutboundSniffer(services, TURN, WHATSAPP);
+    const commands = [
+        `whatsapp send-file "1203630000000000@g.us" ${WORKSPACE_ROOT}/report.pdf`,
+        `whatsapp reply 'Vicheta Samnang' 3EB0ABC on it`,
+        `cd /tmp && whatsapp react 4915112345678 3EB0ABC 👍`,
+    ];
+    for (const [index, command] of commands.entries()) {
+        sniffer.observe(tool(command, `t${String(index)}`));
+        sniffer.observe(result("Sent.", `t${String(index)}`));
+    }
+    expect(appended.map(({ provider, type, endpoint, channelId, content }) => ({ provider, type, endpoint, channelId, content }))).toEqual([
+        { provider: "whatsapp", type: "message.send", endpoint: "/send-file", channelId: "1203630000000000@g.us", content: `${WORKSPACE_ROOT}/report.pdf` },
+        { provider: "whatsapp", type: "message.send", endpoint: "/reply", channelId: "Vicheta Samnang", content: "on it" },
+        { provider: "whatsapp", type: "reaction.add", endpoint: "/react", channelId: "4915112345678", content: "👍" },
     ]);
 });
 
-test("non-discord commands and non-Bash tools record nothing", () => {
+test("an undeclared command, a read, the words in ordinary text and a non-Bash tool record nothing", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(`curl -s https://api.github.com/user | jq .login`));
-    sniffer.observe({
-        kind: "tool_call",
-        id: "t9",
-        name: "Read",
-        category: "read",
-        status: "in_progress",
-        target: "https://discord.com/api/v10/users/@me",
-    });
+    const sniffer = createOutboundSniffer(services, TURN, WHATSAPP);
+    sniffer.observe(tool(`whatsapp chats`, "t1"));
+    sniffer.observe(result("...", "t1"));
+    sniffer.observe(tool(`whatsapp download ABC123`, "t2"));
+    sniffer.observe(result(`${WORKSPACE_ROOT}/${STATE_DIR}/local/runtime/extensions/whatsapp/media/ABC123-voice.ogg`, "t2"));
+    sniffer.observe(tool(`grep -r "whatsapp send" _extensions/`, "t3"));
+    sniffer.observe(result("", "t3"));
+    sniffer.observe(tool(`curl -s https://api.github.com/user | jq .login`, "t4"));
+    sniffer.observe(result("{}", "t4"));
+    sniffer.observe({ kind: "tool_call", id: "t9", name: "Read", category: "read", status: "in_progress", target: "whatsapp send 1 hi" });
     sniffer.observe(result("{}", "t9"));
     sniffer.flush();
-    expect(appended.filter((event) => event.direction === "out")).toEqual([]);
+    expect(appended).toEqual([]);
 });
 
-test("a Discord error envelope and an isError result both record outcome error", () => {
+test("nothing is recognised when no enabled extension declares the command", () => {
+    expect(classifyCommand([], SEND)).toBeUndefined();
+});
+
+test("a command whose tool gates itself is neither recognised nor recorded", () => {
+    const m365 = declaredBy("microsoft-365");
+    expect(m365.length).toBeGreaterThan(0);
+    expect(classifyCommand(m365, `m365 mail send --file /work/message.json`)).toBeUndefined();
+    expect(classifyCommand(declaredBy("imap"), `imap send /work/draft.json`)).toBeUndefined();
+});
+
+test("a failed call records its own words as the error, and a JSON refusal in a success reads as one too", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(SEND, "t1"));
-    sniffer.observe(result(`{"message": "Missing Access", "code": 50001}`, "t1"));
-    sniffer.observe(tool(SEND, "t2"));
-    sniffer.observe(result("curl: (6) Could not resolve host", "t2", true));
+    const sniffer = createOutboundSniffer(services, TURN, WHATSAPP);
+    sniffer.observe(tool(`whatsapp send 4915112345678 hello there`, "t1"));
+    sniffer.observe(result("WhatsApp is not connected, pair the device from the capability card first.", "t1", true));
+    sniffer.observe(tool(`whatsapp send 4915112345678 hello there`, "t2"));
+    sniffer.observe(result(`{"ok":false,"description":"Bad Request: chat not found"}`, "t2"));
     expect(appended.map(({ outcome, error }) => ({ outcome, error }))).toEqual([
-        { outcome: "error", error: "Missing Access" },
-        { outcome: "error", error: "curl: (6) Could not resolve host" },
+        { outcome: "error", error: "WhatsApp is not connected, pair the device from the capability card first." },
+        { outcome: "error", error: "Bad Request: chat not found" },
     ]);
 });
 
 test("flush records calls whose results never arrived, without an outcome", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
+    const sniffer = createOutboundSniffer(services, TURN, WHATSAPP);
     sniffer.observe(tool(SEND));
     expect(appended).toEqual([]);
     sniffer.flush();
@@ -118,125 +147,12 @@ test("flush records calls whose results never arrived, without an outcome", () =
     expect(appended[0]?.outcome).toBeUndefined();
 });
 
-// Exact shapes the telegram skill teaches; the method rides in the path, behind the bot token, hence asserting on the
-// endpoint too.
-const TG_SEND = `curl -s -X POST -H "Content-Type: application/json" -d '{"chat_id":-100123,"text":"on it"}' "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage"`;
-const TG_FILE = `curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getFile?file_id=abc"`;
-const TG_DOWNLOAD = `curl -s -o /work/incoming "https://api.telegram.org/file/bot$TELEGRAM_BOT_TOKEN/voice/file_1.oga"`;
-const TG_UPLOAD = `curl -s -F chat_id=-100123 -F document=@/work/report.pdf "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendDocument"`;
-
-test("a telegram send records the method as the endpoint, with the chat and text off the JSON body", () => {
-    const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(TG_SEND));
-    sniffer.observe(result(`{"ok":true,"result":{"message_id":9}}`));
-    expect(appended).toEqual([
-        {
-            provider: "telegram",
-            direction: "out",
-            type: "message.send",
-            method: "POST",
-            endpoint: "/sendMessage",
-            channelId: "-100123",
-            content: "on it",
-            turnId: TURN,
-            outcome: "ok",
-        },
-    ]);
-});
-
-// A bot token must never reach the activity feed; Telegram puts it in the URL path, so recording only the method drops
-// even a hand-typed token.
-test("a literally-pasted bot token does not survive into the recorded call", () => {
-    const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    const token = "8123456789:AAH-Fake-Token-Value";
-    sniffer.observe(tool(`curl -s -X POST -d '{"chat_id":42,"text":"hi"}' "https://api.telegram.org/bot${token}/sendMessage"`));
-    sniffer.observe(result(`{"ok":true}`));
-    expect(appended[0]).toMatchObject({ provider: "telegram", endpoint: "/sendMessage", channelId: "42" });
-    expect(JSON.stringify(appended)).not.toContain(token);
-});
-
-test("file reads, uploads and downloads each classify without a token in the endpoint", () => {
-    const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(TG_FILE, "t1"));
-    sniffer.observe(result(`{"ok":true,"result":{"file_path":"voice/file_1.oga"}}`, "t1"));
-    sniffer.observe(tool(TG_DOWNLOAD, "t2"));
-    sniffer.observe(result("", "t2"));
-    sniffer.observe(tool(TG_UPLOAD, "t3"));
-    sniffer.observe(result(`{"ok":true}`, "t3"));
-    expect(appended.map(({ type, method, endpoint, channelId }) => ({ type, method, endpoint, channelId }))).toEqual([
-        { type: "file.read", method: "GET", endpoint: "/getFile", channelId: undefined },
-        { type: "api.call", method: "GET", endpoint: "/file", channelId: undefined },
-        // A multipart upload carries the chat as a form field, not JSON.
-        { type: "message.send", method: "POST", endpoint: "/sendDocument", channelId: "-100123" },
-    ]);
-});
-
-test("telegram reports a refusal in `description` where slack uses `error`: both read as a failed call", () => {
-    const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(TG_SEND));
-    sniffer.observe(result(`{"ok":false,"error_code":400,"description":"Bad Request: chat not found"}`));
-    expect(appended.map(({ outcome, error }) => ({ outcome, error }))).toEqual([{ outcome: "error", error: "Bad Request: chat not found" }]);
-});
-
-// WhatsApp's skill drives a CLI (`whatsapp send …`), not curl; the matcher parses that command shape directly.
-test("a whatsapp CLI send records message.send with the chat and text, whatever the quoting", () => {
-    const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(`whatsapp send 4915112345678@s.whatsapp.net deploy is out, all checks pass`, "t1"));
-    sniffer.observe(result("Sent to 4915112345678@s.whatsapp.net.", "t1"));
-    sniffer.observe(tool(`whatsapp send-file "1203630000000000@g.us" /work/report.pdf`, "t2"));
-    sniffer.observe(result("Sent /work/report.pdf to 1203630000000000@g.us.", "t2"));
-    expect(appended.map(({ provider, type, endpoint, channelId, content }) => ({ provider, type, endpoint, channelId, content }))).toEqual([
-        {
-            provider: "whatsapp",
-            type: "message.send",
-            endpoint: "/send",
-            channelId: "4915112345678@s.whatsapp.net",
-            content: "deploy is out, all checks pass",
-        },
-        {
-            provider: "whatsapp",
-            type: "message.send",
-            endpoint: "/send-file",
-            channelId: "1203630000000000@g.us",
-            content: `${WORKSPACE_ROOT}/report.pdf`,
-        },
-    ]);
-});
-
-test("whatsapp reads record nothing, and the word whatsapp in ordinary text is not a send", () => {
-    const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(`whatsapp chats`, "t1"));
-    sniffer.observe(result("...", "t1"));
-    sniffer.observe(tool(`whatsapp download ABC123`, "t2"));
-    sniffer.observe(result(`${WORKSPACE_ROOT}/${STATE_DIR}/local/runtime/extensions/whatsapp/media/ABC123-voice.ogg`, "t2"));
-    sniffer.observe(tool(`grep -r "whatsapp send" _extensions/`, "t3"));
-    sniffer.observe(result("", "t3"));
-    sniffer.flush();
-    expect(appended.filter((event) => event.direction === "out")).toEqual([]);
-});
-
-test("a failed whatsapp CLI call records the gateway's sentence as the error", () => {
-    const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
-    sniffer.observe(tool(`whatsapp send 4915112345678 hello there`, "t1"));
-    sniffer.observe(result("WhatsApp is not connected, pair the device from the capability card first.", "t1", true));
-    expect(appended.map(({ outcome, error }) => ({ outcome, error }))).toEqual([
-        { outcome: "error", error: "WhatsApp is not connected, pair the device from the capability card first." },
-    ]);
-});
-
 test("an interim update (live output snapshot, no status) keeps the call pending", () => {
     const { appended, services } = capture();
-    const sniffer = createOutboundSniffer(services, TURN);
+    const sniffer = createOutboundSniffer(services, TURN, WHATSAPP);
     sniffer.observe(tool(SEND));
     sniffer.observe({ kind: "tool_call_update", id: "t1", content: [{ type: "text", text: "partial" }] });
     expect(appended).toEqual([]);
-    sniffer.observe(result(`{"id":"999","content":"hello"}`));
+    sniffer.observe(result("Sent."));
     expect(appended).toEqual([expect.objectContaining({ type: "message.send", outcome: "ok" })]);
 });

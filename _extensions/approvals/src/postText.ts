@@ -5,10 +5,14 @@
 import { formatElapsed } from "@intentic/extension-ui/format";
 import { messageLimitOf } from "@intentic/sandbox-contract/message-limits";
 import { t } from "./i18n";
+import type { PlatformCatalogEntry } from "./usePlatformCatalog";
 
-// Over the limit, a post doesn't post at all; absent means no known cap, so it just shows a plain count. The limits are
-// the contract's one table, the same numbers the gateways spill a reply at and the daemon refuses a direct post past.
-export const limitOf = (platform: string): number | undefined => messageLimitOf(platform);
+// Over the limit, a post doesn't post at all; absent means no known cap, so it just shows a plain count. The limit is the
+// one the card naming the platform declares (`channel.messageLimit`), the same number its gateway spills a reply at and
+// its backend refuses a published post past. A catalog in which no card declares one at all came from a daemon before
+// extension API 2.54.0 (2026-11-26), whose cards carried none: the frozen table that daemon counted by answers then.
+export const limitOf = (platform: string, catalog: ReadonlyMap<string, PlatformCatalogEntry>): number | undefined =>
+    [...catalog.values()].some((entry) => entry.messageLimit !== undefined) ? catalog.get(platform.toLowerCase())?.messageLimit : messageLimitOf(platform);
 
 // On a titled platform, `title` is the headline; elsewhere, or on any reply, it's the agent's own note.
 const TITLED = new Set([`blog`, `devto`, `ghost`, `hackernews`, `linkedin`, `medium`, `reddit`, `substack`, `wordpress`, `youtube`]);

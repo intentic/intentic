@@ -1,8 +1,10 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
 import type { ApprovedActionOutcome } from "@intentic/extension-api/runtime";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import {
     type ActionApprovalSummary,
     ActionApprovalSummarySchema,
@@ -10,17 +12,25 @@ import {
     type PostApprovalSummary,
 } from "@intentic/sandbox-contract/schemas/approvals";
 import type { Services } from "../composition.js";
+import type { InstalledExtension } from "../capabilities/extension-inventory/installed-extensions.js";
 import { recordApproval, type SpentApproval } from "./approval-decisions.js";
+import type { PublishedPost } from "./approval-performers.js";
 
 // Tests when the executor wakes and which door each item goes through, both decided from the queue on disk, and that
 // an item runs only on the owner's yes as the approve route records it. The fake store below behaves like the real one
-// (read, write, read back), the ledger of yeses is the real one on a temp history volume; only the two doors themselves
-// are stubbed.
+// (read, write, read back), the ledger of yeses is the real one on a temp history volume, and who publishes a post is read
+// off the in-repo extensions' real manifests; only the doors themselves are stubbed.
 
 const startTurn = jest.fn(async () => undefined);
-// The gateway's /deliver door: the one network hop a direct post makes. Whether a post can go the fast way, and what
-// the daemon refuses before asking, are themselves under test.
-const sendDiscord = jest.fn(async (..._args: unknown[]): Promise<{ url?: string } | undefined> => ({ url: "https://discord.com/channels/1/2/3" }));
+// The publishing extension's backend door: what a post on a platform whose card declares `channel.publish` is handed to
+// once its yes is spent (the Discord bot's, from the discord manifest). Whether a post goes there at all, how often and
+// with which yes, is under test; what the backend does with it is the discord extension's own suite.
+const publishByExtension = jest.fn(
+    async (_services: Services, _extension: string, _post: PublishedPost, _yes: SpentApproval): Promise<ApprovedActionOutcome> => ({
+        outcome: "done",
+        result: "https://discord.com/channels/1/2/3",
+    }),
+);
 
 // The extension's backend door: what an action naming a `performer` is handed to once its yes is spent. Whether it is
 // asked at all, how often, and with which yes, is what the performer tests below are about.
@@ -29,11 +39,18 @@ const performByExtension = jest.fn(
 );
 
 jest.mock("../seams/runtime-feed.js", () => ({ publishRuntimeChange: jest.fn() }));
-jest.mock("../extensions/listener/listener-deliver.js", () => ({
-    deliverThroughGateway: (...args: unknown[]) => sendDiscord(...args),
-}));
+// The enabled extensions as the daemon lists them: the in-repo discord and social extensions, as their manifests are.
+const inRepo = (name: string): InstalledExtension => {
+    const dir = join(repoRoot(import.meta.url), "_extensions", name);
+    const manifest = ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(dir, "intentic-extension.json"), "utf8")));
+    // SAFETY: the fields the executor's post channels read (id, manifest, enabled); the rest of an inventory row is not read.
+    return { id: `intentic.${name}`, dir, manifest, source: "builtin", enabled: true } as InstalledExtension;
+};
+const enabled = { extensions: [inRepo("discord"), inRepo("social")] };
+jest.mock("../capabilities/contributions.js", () => ({ cachedEnabledExtensions: async () => enabled.extensions }));
 jest.mock("./approval-performers.js", () => ({
     performApprovedAction: (services: Services, item: ActionApprovalSummary, yes: SpentApproval) => performByExtension(services, item, yes),
+    publishApprovedPost: (services: Services, extension: string, item: PublishedPost, yes: SpentApproval) => publishByExtension(services, extension, item, yes),
 }));
 
 const { createApprovalsExecutor, nextDueAt } = await import("./approvals-executor.js");
@@ -108,12 +125,13 @@ const servicesWith = async (...seed: ApprovalSummary[]) => {
     };
 };
 
-// What this suite's services sent through the Discord gateway, whatever another test's executor sends meanwhile.
-const sentBy = (services: object): unknown[][] => sendDiscord.mock.calls.filter(([via]) => via === services);
+// What this suite's services handed the publishing backend, whatever another test's executor hands meanwhile.
+const sentBy = (services: object): unknown[][] => publishByExtension.mock.calls.filter(([via]) => via === services);
 
 beforeEach(() => {
     startTurn.mockClear();
-    sendDiscord.mockClear();
+    publishByExtension.mockClear();
+    enabled.extensions = [inRepo("discord"), inRepo("social")];
     performByExtension.mockClear();
 });
 
@@ -131,12 +149,26 @@ test("the next wake is the soonest approved item, and there is none when nothing
     expect(nextDueAt([action({ id: "act", scheduledAt: NOW + 2_000 })], NOW)).toBe(NOW + 2_000);
 });
 
-test("a due Discord post is sent by code, and never reaches an agent turn", async () => {
+test("a due Discord post is published by the discord extension's backend after the yes, and never reaches an agent turn", async () => {
     const services = await servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(sendDiscord).toHaveBeenCalledTimes(1);
+    expect(publishByExtension.mock.calls).toEqual([
+        [services, "intentic.discord", expect.objectContaining({ id: "d", target: "123456789" }), { approver: "owner@example.com", approvedAt: expect.any(Number) }],
+    ]);
     expect(startTurn).not.toHaveBeenCalled();
     expect(services.rows.get("d")).toMatchObject({ status: "done", result: "https://discord.com/channels/1/2/3" });
+    expect(services.audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: "approvals.performed", target: "d", outcome: "ok", details: expect.objectContaining({ extension: "intentic.discord", platform: "discord" }) }),
+    );
+});
+
+test("a post nobody approved never reaches the publishing backend", async () => {
+    const services = await servicesWith(post({ id: "draft", platform: "discord", target: "123456789", status: "proposed" }));
+    // Marked approved in the file only, as a turn can write it: no yes was recorded, so nothing is spent or handed over.
+    services.rows.set("draft", post({ id: "draft", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
+    await createApprovalsExecutor(services).runDue(NOW);
+    expect(sentBy(services)).toEqual([]);
+    expect(services.rows.get("draft")).toMatchObject({ status: "failed" });
 });
 
 test("a browser-only platform gets one turn for the whole batch", async () => {
@@ -192,70 +224,80 @@ test("two faces are two turns, each carrying only its own posts", async () => {
     expect(turnOf(0).conversationId).not.toBe(turnOf(1).conversationId);
 });
 
-test("a Discord post needs no role: the daemon sends it through the gateway's bot, not a browser", async () => {
+test("a Discord post needs no role: the extension's bot publishes it, not a browser", async () => {
     const services = await servicesWith(
         post({ id: "d", platform: "discord", actsAs: undefined, target: "123456789", status: "approved", scheduledAt: NOW - 1 }),
     );
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(sendDiscord).toHaveBeenCalledTimes(1);
+    expect(sentBy(services)).toHaveLength(1);
     expect(services.rows.get("d")?.status).toBe("done");
 });
 
-test("a Discord post the fast path cannot carry falls back to the turn instead of failing", async () => {
+test("a Discord post its card's target pattern does not address, or with an attachment, falls back to the turn instead of failing", async () => {
     const services = await servicesWith(
-        // An attachment needs a multipart upload; a named (not numbered) channel needs a lookup: turn-only work.
+        // An attachment is uploaded from the workspace; a named (not numbered) channel needs a lookup: turn-only work.
         post({ id: "media", platform: "discord", target: "123456789", media: ["a.png"], status: "approved", scheduledAt: NOW - 1 }),
         post({ id: "named", platform: "discord", target: "#releases", status: "approved", scheduledAt: NOW - 1 }),
+        // A whole-target match: a channel id with words around it is not one.
+        post({ id: "padded", platform: "discord", target: "#releases 123456789", status: "approved", scheduledAt: NOW - 1 }),
     );
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(sendDiscord).not.toHaveBeenCalled();
+    expect(sentBy(services)).toEqual([]);
     expect(startTurn).toHaveBeenCalledTimes(1);
+    expect(turnOf(0).prompt).toContain("padded.json");
 });
 
-test("a refused Discord post lands as a failure the owner can read, not a silent drop", async () => {
-    sendDiscord.mockRejectedValueOnce(new Error("Discord refused the message (HTTP 403): Missing Access"));
-    const services = await servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
+test("a platform whose extension publishes nothing itself still gets its turn, and with the discord extension off so does Discord", async () => {
+    enabled.extensions = [inRepo("social")];
+    const services = await servicesWith(
+        post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }),
+        post({ id: "x", platform: "x", status: "approved", scheduledAt: NOW - 1 }),
+    );
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(services.rows.get("d")).toMatchObject({ status: "failed", error: "Discord refused the message (HTTP 403): Missing Access" });
+    expect(sentBy(services)).toEqual([]);
+    expect(startTurn).toHaveBeenCalledTimes(1);
+    expect(turnOf(0).prompt).toContain("d.json (discord)");
+    expect(turnOf(0).prompt).toContain("x.json (x)");
 });
 
-test("a Discord post goes to the discord gateway's channel as written, and its link is what the posted row shows", async () => {
+test("a turn's brief carries what the platform's own extension says about posting there, and only for its platforms", async () => {
+    const services = await servicesWith(
+        post({ id: "r", platform: "reddit", target: "https://www.reddit.com/r/webdev/comments/abc/slug/def/", status: "approved", scheduledAt: NOW - 1 }),
+    );
+    await createApprovalsExecutor(services).runDue(NOW);
+    expect(turnOf(0).prompt).toContain("- Reddit: A target that is one comment's permalink");
+    startTurn.mockClear();
+    const plain = await servicesWith(post({ id: "y", platform: "youtube", status: "approved", scheduledAt: NOW - 1 }));
+    await createApprovalsExecutor(plain).runDue(NOW);
+    expect(turnOf(0).prompt).not.toContain("What each platform's own extension adds");
+});
+
+test("a refused post lands as a failure the owner can read, saying nothing was done; an uncertain one says it may have posted", async () => {
+    publishByExtension.mockResolvedValueOnce({ outcome: "refused", error: "Discord refused the post (403: Missing Access)" });
+    publishByExtension.mockResolvedValueOnce({ outcome: "uncertain", error: "Discord answered 502 while taking the post" });
+    const services = await servicesWith(
+        post({ id: "a", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }),
+        post({ id: "b", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }),
+    );
+    await createApprovalsExecutor(services).runDue(NOW);
+    expect(services.rows.get("a")).toMatchObject({ status: "failed", error: "Nothing was done: Discord refused the post (403: Missing Access)" });
+    expect(services.rows.get("b")?.error).toContain("This may already have happened: Discord answered 502 while taking the post.");
+    expect(startTurn).not.toHaveBeenCalled();
+});
+
+test("a Discord post goes to the backend as written, and its link is what the posted row shows", async () => {
     const services = await servicesWith(
         post({ id: "d", platform: "Discord", target: "123456789", content: "v2 is out", status: "approved", scheduledAt: NOW - 1 }),
     );
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(sendDiscord.mock.calls[0]?.slice(1)).toEqual(["discord", "123456789", "v2 is out"]);
+    expect(sentBy(services)[0]?.[2]).toMatchObject({ platform: "Discord", target: "123456789", content: "v2 is out" });
     expect(services.rows.get("d")).toMatchObject({ status: "done", result: "https://discord.com/channels/1/2/3" });
-});
-
-test("with no Discord gateway listening, the post fails saying there is no bot to post as", async () => {
-    sendDiscord.mockResolvedValueOnce(undefined);
-    const services = await servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
-    await createApprovalsExecutor(services).runDue(NOW);
-    expect(services.rows.get("d")).toMatchObject({ status: "failed", error: "Discord isn't connected in this workspace, so there is no bot to post as." });
-});
-
-test("a post past Discord's ceiling is refused before it is sent, not split into several messages", async () => {
-    const services = await servicesWith(
-        post({ id: "d", platform: "discord", target: "123456789", content: "a".repeat(2_001), status: "approved", scheduledAt: NOW - 1 }),
-    );
-    await createApprovalsExecutor(services).runDue(NOW);
-    expect(sendDiscord).not.toHaveBeenCalled();
-    expect(services.rows.get("d")).toMatchObject({ status: "failed", error: "Discord caps a message at 2,000 characters and this one is 2,001." });
-});
-
-test("a gateway that posted but named no link still settles the post as done", async () => {
-    sendDiscord.mockResolvedValueOnce({});
-    const services = await servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
-    await createApprovalsExecutor(services).runDue(NOW);
-    expect(services.rows.get("d")?.status).toBe("done");
-    expect(services.rows.get("d")).not.toHaveProperty("result");
 });
 
 test("an approved action is a turn of its own, briefed from the file and wearing the face it named", async () => {
     const services = await servicesWith(action({ id: "hotel", actsAs: "travel" }));
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(sendDiscord).not.toHaveBeenCalled();
+    expect(sentBy(services)).toEqual([]);
     expect(startTurn).toHaveBeenCalledTimes(1);
     expect(turnOf(0).prompt).toContain("hotel.json");
     expect(turnOf(0).prompt).toContain("Book the hotel");
@@ -307,7 +349,7 @@ test("two passes at once cannot do the same thing twice", async () => {
     const services = await servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
     const executor = createApprovalsExecutor(services);
     await Promise.all([executor.runDue(NOW), executor.runDue(NOW)]);
-    expect(sendDiscord).toHaveBeenCalledTimes(1);
+    expect(sentBy(services)).toHaveLength(1);
 });
 
 test("an item a turn marked approved itself is failed unsent, saying the yes is the owner's to give", async () => {

@@ -1,8 +1,10 @@
 import type { Context } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
+import { EXTENSION_CALLER_HEADER } from "@intentic/sandbox-contract/extension-protocol";
 import { BACKEND_HOST_HEADER } from "./backend-host-config.js";
 import { forwardToBackend, stall } from "./backend-proxy.js";
+import { callerOfRequest, mintCallerAssertion } from "./caller-assertion.js";
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 
 // The browser multiplexes every daemon call onto one HTTP/2 connection, so requests still waiting for their first byte
@@ -31,10 +33,11 @@ const stalledCount = (calls: ReadonlySet<WaitingCall>, now: number): number => {
 };
 
 // Proxies /x/<id>/* verbatim to the backend host; the request already passed the boot gate, CORS and bearer tier floor.
-// Credentials are stripped before forwarding, the backend authenticates only with its own scoped token; 503 during a
-// restart is the client's retry cue. An extension's declared MCP endpoint is refused here: it is reached only through the
+// Credentials are stripped before forwarding, the backend authenticates only with its own scoped token, and the caller
+// the middleware verified rides in their place as an assertion minted for this extension (caller-assertion.ts); 503
+// during a restart is the client's retry cue. An extension's declared MCP endpoint is refused here: it is reached only through the
 // daemon's MCP door, which checks that the calling turn was granted the card, never by a panel's or a member's bearer.
-const createBackendProxyRoute = (services: Pick<Services, "extensionBackend">) => {
+const createBackendProxyRoute = (services: Pick<Services, "extensionBackend" | "areas" | "auth" | "config">) => {
     // Per route, not per request: the cap is only a cap if every call in flight counts against the same set.
     const waiting = new Map<string, Set<WaitingCall>>();
     return async (c: Context<AppEnv>): Promise<Response> => {
@@ -58,7 +61,9 @@ const createBackendProxyRoute = (services: Pick<Services, "extensionBackend">) =
         calls.add(call);
         waiting.set(extension, calls);
         try {
-            return await forwardToBackend(c, { port: target.port, headers: { [BACKEND_HOST_HEADER]: target.hostToken } }, url, extension);
+            const { caller, proof } = await callerOfRequest(services, c);
+            const assertion = mintCallerAssertion(services, extension, caller, proof);
+            return await forwardToBackend(c, { port: target.port, headers: { [BACKEND_HOST_HEADER]: target.hostToken, [EXTENSION_CALLER_HEADER]: assertion } }, url, extension);
         } finally {
             calls.delete(call);
             if (calls.size === 0) {
@@ -69,4 +74,6 @@ const createBackendProxyRoute = (services: Pick<Services, "extensionBackend">) =
 };
 
 // The backend namespace /x/<id>/* proxied verbatim to the backend host.
-export const backendProxyRawRoutes = defineRawRoutes((services: Pick<Services, "extensionBackend">) => ({ "ALL /x/*": createBackendProxyRoute(services) }));
+export const backendProxyRawRoutes = defineRawRoutes((services: Pick<Services, "extensionBackend" | "areas" | "auth" | "config">) => ({
+    "ALL /x/*": createBackendProxyRoute(services),
+}));

@@ -1,9 +1,9 @@
 import {
+    declaredMessageLimit,
     type GatewayCtx,
     HISTORY_LIMIT,
     type ListenerHistoryEntry,
     type ListenerMessage,
-    MESSAGE_LIMITS,
     paintReply,
     recentKeys,
     typingHeartbeat,
@@ -14,7 +14,7 @@ import type { MessageRow } from "./store.js";
 import type { WaMessageContent, WaRawMessage } from "./types.js";
 
 // WhatsApp's one-message ceiling; a reply that long is rare enough that this is a safety net, not pagination.
-export const WHATSAPP_MAX = MESSAGE_LIMITS.whatsapp;
+export const WHATSAPP_MAX = declaredMessageLimit(new URL("../intentic-extension.json", import.meta.url), "whatsapp");
 
 // Normalizes each live message into a dispatch to the daemon; a mention holds a typing indicator until the reply lands
 // complete. Context comes from the session's store: what WhatsApp synced at pairing, what the phone sent on request,

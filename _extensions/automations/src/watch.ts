@@ -1,4 +1,4 @@
-import type { AutomationSummary, WatchSource } from "@intentic/sandbox-contract/schemas/automations";
+import { type AutomationSummary, isUrlSource, type WatchKind, type WatchSource, watchSentence } from "@intentic/sandbox-contract/schemas/automations";
 import { formatDateTime } from "@intentic/extension-ui/format";
 import { since } from "./cronSchedule";
 import { t } from "./i18n.js";
@@ -6,18 +6,19 @@ import { t } from "./i18n.js";
 // How a watch reads in the list: what it looks at, and one line on where it stands. The daemon words its own run
 // details; these are the screen's words for the same facts, in the reader's language.
 
-/** The source in a few words: "npm bun@>=1.4.3", "Releases of oven-sh/bun", a page's address. */
-export const sourceLabel = (source: WatchSource): string => {
-    switch (source.kind) {
-        case `npm`: {
-            const spec = source.range ?? source.tag;
-            return t(`watch.npm`, { spec: spec === undefined ? source.package : `${source.package}@${spec}` });
-        }
-        case `github-release`:
-            return source.prereleases === true ? t(`watch.releasesWithPre`, { repo: source.repo }) : t(`watch.releases`, { repo: source.repo });
-        case `url`:
-            return source.select === undefined ? source.url : t(`watch.pageMatching`, { url: source.url, select: source.select });
+/**
+ * The source in a few words: a page's address, or a contributed kind's own sentence ("npm bun@>=1.4.3", "GitHub releases
+ * of oven-sh/bun"), as the extension that checks it declares it. A kind no extension here declares any more reads as its
+ * id and its parameters, so the row still says what it watched.
+ */
+export const sourceLabel = (source: WatchSource, kinds: readonly WatchKind[]): string => {
+    if (isUrlSource(source)) {
+        return source.select === undefined ? source.url : t(`watch.pageMatching`, { url: source.url, select: source.select });
     }
+    return watchSentence(
+        kinds.find((kind) => kind.id === source.kind),
+        source,
+    );
 };
 
 // What a check saw can be a release's name and its address on two lines, or a whole page; the line keeps the first.
@@ -35,7 +36,8 @@ export const isWatch = (automation: Watched): boolean =>
     automation.fireOn === `change` ||
     automation.until === `first-fire` ||
     automation.expiresAt !== undefined ||
-    (automation.target !== undefined && automation.target.kind !== `agent`);
+    // An extension's own clock (`kind: extension`) is that extension's chore, not something a person waits to hear of.
+    (automation.target !== undefined && automation.target.kind !== `agent` && automation.target.kind !== `extension`);
 
 /**
  * One line on where a watch stands: "Checked 2h ago · saw bun@1.4.2 · fired 5m ago · ends 12 Oct, 09:00". A failing

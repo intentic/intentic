@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-repo-apps",
     "version": "1.0.0",
-    "description": "Apps, a monorepo's apps and their tests, as a first-party intentic extension",
+    "description": "Apps, a monorepo's apps, tests and package graph, as a first-party intentic extension",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -14,21 +14,27 @@
         }
     },
     "scripts": {
+        "build": "vite build --config vite.server.config.ts",
         "typecheck": "vue-tsc --noEmit",
         "test": "suites"
     },
     "dependencies": {
+        "@intentic/base": "workspace:*",
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
-        "@tanstack/vue-query": "catalog:"
+        "@tanstack/vue-query": "catalog:",
+        "yaml": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
+        "@types/node": "catalog:",
         "typescript": "catalog:typescript6",
+        "vite": "catalog:",
         "vue": "catalog:",
         "vue-tsc": "catalog:"
     },

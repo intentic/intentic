@@ -1,9 +1,11 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { STATE_DIR } from "@intentic/constants";
+import { repoRoot } from "@intentic/constants/node";
 import { extensionGatewayUrlFile } from "@intentic/sandbox-contract/workspace-state";
-import { findWorkspaceRoot, readGatewayUrl } from "./workspace.js";
+import { declaredMessageLimit, findWorkspaceRoot, readGatewayUrl } from "./workspace.js";
 
 // A temp tree standing in for /work: the workspace's own .intentic, a repository inside it carrying an .intentic of
 // its own (as this repository does), and a directory deep in that repository where the agent stands.
@@ -36,4 +38,21 @@ test("a gateway's address is found from inside a repository that has an .intenti
 
 test("no published address reads as a gateway not running yet", async () => {
     expect(await readGatewayUrl("discord", { WORKSPACE_ROOT: root }, repoDir)).toBeUndefined();
+});
+
+// A gateway's ceiling is its own card's declaration, read from the manifest beside it; one that declares none cannot run.
+describe("declaredMessageLimit", () => {
+    const manifestOf = (extension: string): URL => pathToFileURL(join(repoRoot(import.meta.url), "_extensions", extension, "intentic-extension.json"));
+
+    test("reads the limit each chat card declares", () => {
+        expect(declaredMessageLimit(manifestOf("discord"), "discord")).toBe(2_000);
+        expect(declaredMessageLimit(manifestOf("slack"), "slack")).toBe(4_000);
+        expect(declaredMessageLimit(manifestOf("telegram"), "telegram")).toBe(4_096);
+        expect(declaredMessageLimit(manifestOf("whatsapp"), "whatsapp")).toBe(65_536);
+    });
+
+    test("refuses a card that declares none, or one the manifest does not have, naming it", () => {
+        expect(() => declaredMessageLimit(manifestOf("imap"), "imap")).toThrow(`the "imap" card in`);
+        expect(() => declaredMessageLimit(manifestOf("discord"), "slack")).toThrow("declares no channel.messageLimit");
+    });
 });

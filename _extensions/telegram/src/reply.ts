@@ -4,8 +4,8 @@ import {
     type ChatReplyDeps,
     type ChatSurface,
     createChatReply,
+    declaredMessageLimit,
     type Logger,
-    MESSAGE_LIMITS,
     type ProgressDetail,
     type ReplyMark,
     type ReplyRegistry,
@@ -24,7 +24,7 @@ import type { TelegramRoute } from "./threads.js";
 // the answer's Markdown rendered as Telegram's HTML. In a group every message points at the one it answers, and stays in
 // its forum topic.
 
-const TELEGRAM_MAX = MESSAGE_LIMITS.telegram;
+const TELEGRAM_MAX = declaredMessageLimit(new URL("../intentic-extension.json", import.meta.url), "telegram");
 // Telegram drops "typing…" after about five seconds.
 const TYPING_EVERY_MS = 4_000;
 // A 429 is Telegram asking us to slow down, not to stop: worth one patient retry, but not past this, since a late reply

@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 // The subpath, not the package root: the root loads every schema in the contract, which `m365` never needs.
 import { envSuffix } from "@intentic/sandbox-contract/capability-env";
 
-// One connected Microsoft 365 card, as the per-instance env vars (or the listener's state route) carry it.
+// One connected Microsoft 365 card: as the backend is handed it with a tool call or reads it from the daemon, sign-in
+// included, or as the agent's environment names it, without (accountsFrom).
 export interface Account {
     id: string;
     tenantId: string;
@@ -81,6 +82,21 @@ export const signInKey = (account: Account): string =>
         .digest("hex")
         .slice(0, 16);
 
+// The card as the daemon holds it (a tool call's card, the connection read): its settings by field key.
+export const accountOf = (id: string, config: Readonly<Record<string, string>>): Account => {
+    const account: Account = { id, tenantId: config["tenantId"] ?? "", clientId: config["clientId"] ?? "" };
+    for (const key of ["clientSecret", "refreshToken", "authority", "access", "signedInAt"] as const) {
+        const value = config[key];
+        if (value !== undefined && value !== "") {
+            account[key] = value;
+        }
+    }
+    return account;
+};
+
+// The cards the agent's environment names, by the card manifest's `env`: which cards there are and which tenant and
+// app each signs in with. Never the sign-in itself: the client secret and refresh token stay in the daemon and reach
+// only the extension's backend (2026-11-26; until then they were in every turn's environment).
 const PREFIX = "M365_TENANT_ID_";
 export const accountsFrom = (env: NodeJS.ProcessEnv): Account[] =>
     Object.keys(env)
@@ -92,8 +108,6 @@ export const accountsFrom = (env: NodeJS.ProcessEnv): Account[] =>
                 id: suffix.toLowerCase(),
                 tenantId: get("TENANT_ID"),
                 clientId: get("CLIENT_ID"),
-                clientSecret: get("CLIENT_SECRET"),
-                refreshToken: get("REFRESH_TOKEN"),
                 authority: get("AUTHORITY"),
                 access: get("ACCESS"),
             };

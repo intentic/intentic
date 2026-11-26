@@ -112,6 +112,8 @@ export const DETACHED_KINDS = [
     "link-operate",
     // A repository's approved checkout setup or archive hook (conversations/worktrees/lifecycle/checkout-hooks.ts).
     "checkout-hook",
+    // A command an extension's code runs under a workload class (`api.exec`, extensions/runtime/extension-exec.ts).
+    "extension-exec",
 ] as const;
 export type DetachedKind = (typeof DETACHED_KINDS)[number];
 

@@ -4,9 +4,9 @@ import { pathToFileURL } from "node:url";
 import { errorMessage } from "@intentic/base/errors";
 import type { ExtensionServerModule, ServerActivation } from "@intentic/extension-api";
 import { activateServerModule, createServerApi, deactivateWithin, healthWithin, type ServerApiSlots } from "@intentic/extension-api/runtime";
+import { PUBLIC_DOOR_HEADER, readPublicDoorVerification } from "@intentic/sandbox-contract/extension-protocol";
 import { tokenEquals } from "../../auth/token-equals.js";
-import { approvedActionIn } from "./backend-approvals.js";
-import { answerToolMessage, type ToolRequest } from "./backend-tools.js";
+import { answerHostDoor } from "./backend-host-doors.js";
 import {
     BACKEND_HOST_HEADER,
     type BackendDeviceConfig,
@@ -42,6 +42,8 @@ const activationKeyOf = (extension: BackendHostExtension): string =>
         cacheDir: extension.cacheDir,
         daemonToken: extension.daemonToken,
         daemonPermissions: [...extension.daemonPermissions].toSorted(),
+        declared: extension.declared,
+        watchKinds: extension.watchKinds,
     });
 
 const loadOne = async (config: BackendDeviceConfig, extension: BackendHostExtension): Promise<LoadedExtension> => {
@@ -54,6 +56,8 @@ const loadOne = async (config: BackendDeviceConfig, extension: BackendHostExtens
         extensionDir: extension.dir,
         stateDir: extension.stateDir,
         cacheDir: extension.cacheDir,
+        declared: extension.declared,
+        watchKinds: extension.watchKinds,
     });
     try {
         // A reload must import the new code, and the two runtimes cache a module differently: Node by its whole URL, so
@@ -83,10 +87,10 @@ const unload = async (loaded: LoadedExtension): Promise<void> => {
 const json = (body: unknown, status: number): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-// Splits /x/<id>/<suffix> into the extension id and its own path ("" becomes "/"); the query string stays on the
-// suffix.
-const splitNamespace = (pathname: string): { id: string; suffix: string } | undefined => {
-    const match = /^\/x\/([^/]+)(\/.*)?$/.exec(pathname);
+// Splits /x/<id>/<suffix> (or /door/<id>/<suffix>, a public route's) into the extension id and its own path ("" becomes
+// "/"); the query string stays on the suffix.
+const splitNamespace = (pathname: string, prefix: "x" | "door" = "x"): { id: string; suffix: string } | undefined => {
+    const match = new RegExp(`^/${prefix}/([^/]+)(/.*)?$`, "u").exec(pathname);
     if (match === null || match[1] === undefined) {
         return undefined;
     }
@@ -179,48 +183,6 @@ export const createBackendHostApp = async (config: BackendDeviceConfig): Promise
         return loaded.get(id) ?? json({ error: `no backend for extension "${id}"` }, 404);
     };
 
-    // POST /tools/<id>: an extension's tools, reached only from the daemon's MCP door with the card it resolved: one
-    // JSON-RPC message in, its answer out. Never under /x, which is reachable with a person's or a panel's bearer.
-    const answerTools = async (id: string, request: Request): Promise<Response> => {
-        const extension = loadedOr(id);
-        if (extension instanceof Response) {
-            return extension;
-        }
-        // SAFETY: a JSON body or undefined, from the daemon's MCP door; its one required field is checked just below.
-        // allow(silent-catch): a body that is not JSON is answered as the 400 just below
-        const body = (await request.json().catch(() => undefined)) as ToolRequest | undefined;
-        if (body?.message === undefined) {
-            return json({ error: "a tools request carries { card?, conversationId?, message }" }, 400);
-        }
-        const answer = await answerToolMessage({ id, source: extension.slots?.tools() }, body, request.signal);
-        return json({ answer: answer ?? null }, 200);
-    };
-
-    // POST /approvals/<id>: an approved action the extension carries out itself (`api.approvals.perform`), reached only
-    // from the daemon's approvals executor after it matched and spent the person's yes (approvals/approval-performers.ts).
-    // Never under /x, which a person's or a panel's bearer reaches: what arrives here is already authorised. 404 and 400
-    // mean the handler never ran; a handler that throws answers 500, which the executor reads as an outcome it cannot
-    // know, since the handler may have reached the outside world before it threw.
-    const answerApproval = async (id: string, request: Request): Promise<Response> => {
-        const extension = loadedOr(id);
-        if (extension instanceof Response) {
-            return extension;
-        }
-        const performer = extension.slots?.performer();
-        if (performer === undefined) {
-            return json({ error: `the "${id}" backend carries out no approved actions` }, 404);
-        }
-        const action = await approvedActionIn(request);
-        if (action === undefined) {
-            return json({ error: "an approval request carries { action: { id, digest, summary, details, approvedAt, actionRules } }" }, 400);
-        }
-        try {
-            return json(await performer(action, { signal: request.signal }), 200);
-        } catch (error) {
-            return json({ error: errorMessage(error) }, 500);
-        }
-    };
-
     // /x/<id>/<suffix>: the extension's own namespace, rebased onto its own synthetic origin with owner credentials and
     // the host token already stripped.
     const answerNamespace = async (target: { readonly id: string; readonly suffix: string }, url: URL, request: Request): Promise<Response> => {
@@ -248,6 +210,38 @@ export const createBackendHostApp = async (config: BackendDeviceConfig): Promise
         }
     };
 
+    // (2026-11-26) /door/<id>/<suffix>: a call through one of the extension's public routes, which the daemon's door
+    // (public-door.routes.ts) let through and says what it checked of (PUBLIC_DOOR_HEADER). Only its public handler hears
+    // it, never the /x one, which answers people signed in; a call without the daemon's verification answers 400.
+    const answerPublic = async (target: { readonly id: string; readonly suffix: string }, url: URL, request: Request): Promise<Response> => {
+        const extension = loadedOr(target.id);
+        if (extension instanceof Response) {
+            return extension;
+        }
+        const handler = extension.slots?.publicHandler();
+        if (handler === undefined) {
+            return json({ error: `the "${target.id}" backend serves no public routes` }, 404);
+        }
+        const verified = readPublicDoorVerification(request.headers.get(PUBLIC_DOOR_HEADER));
+        if (verified === undefined) {
+            return json({ error: "a public route's call carries what the daemon's door checked of it" }, 400);
+        }
+        const headers = new Headers(request.headers);
+        headers.delete(BACKEND_HOST_HEADER);
+        headers.delete(PUBLIC_DOOR_HEADER);
+        const init: RequestInit & { duplex?: "half" } = { method: request.method, headers };
+        if (request.method !== "GET" && request.method !== "HEAD" && request.body !== null) {
+            init.body = request.body;
+            init.duplex = "half";
+        }
+        try {
+            const answer = await handler(new Request(new URL(`${target.suffix}${url.search}`, "http://extension.internal"), init), verified);
+            return answer ?? json({ error: "not found" }, 404);
+        } catch (error) {
+            return json({ error: errorMessage(error) }, 500);
+        }
+    };
+
     return {
         get statuses() {
             return statuses();
@@ -270,13 +264,14 @@ export const createBackendHostApp = async (config: BackendDeviceConfig): Promise
             if (request.method === "POST" && url.pathname === "/reload") {
                 return answerReload(request);
             }
-            const toolsOf = /^\/tools\/([^/]+)$/.exec(url.pathname)?.[1];
-            if (request.method === "POST" && toolsOf !== undefined) {
-                return answerTools(decodeURIComponent(toolsOf), request);
+            // The daemon's own doors into one extension's code (backend-host-doors.ts), never under /x.
+            const door = answerHostDoor(request, url.pathname, loadedOr);
+            if (door !== undefined) {
+                return door;
             }
-            const approvalOf = /^\/approvals\/([^/]+)$/.exec(url.pathname)?.[1];
-            if (request.method === "POST" && approvalOf !== undefined) {
-                return answerApproval(decodeURIComponent(approvalOf), request);
+            const publicRoute = splitNamespace(url.pathname, "door");
+            if (publicRoute !== undefined) {
+                return answerPublic(publicRoute, url, request);
             }
             const target = splitNamespace(url.pathname);
             return target === undefined ? json({ error: "not found" }, 404) : answerNamespace(target, url, request);

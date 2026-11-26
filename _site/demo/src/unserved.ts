@@ -9,8 +9,7 @@ import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
 
 // Out of the demo by design: nothing the editor does reaches these, or they need something a browser tab can't fake.
 const NOT_THE_EDITORS = `Not an editor call: the ic CLI, an agent's tools, a paired machine, a listener process, a webhook sender or a CI job makes it.`;
-const OFF_SITE = `Answers a visitor's browser on the owner's own site (the web-chat widget, the bug-report intake), never the editor.`;
-const ISSUES_INBOX = `An issue's own actions: the inbox the vendored issues extension reads is answered, and empty, so there is no issue to act on.`;
+const OFF_SITE = `Answers a visitor's browser on the owner's own site (the web-chat widget, the bug-report intake's old paths), never the editor.`;
 
 // No gap a visitor can reach is listed (2026-10-27): every route the editor calls is answered, a machine's and a sign-in's
 // included, so a new route the editor reaches is served rather than given a reason here.
@@ -171,10 +170,6 @@ export const UNSERVED = {
     "git.stashPush": NOT_THE_EDITORS,
     "git.status": NOT_THE_EDITORS,
     "git.writeFile": NOT_THE_EDITORS,
-    "issues.installs": ISSUES_INBOX,
-    "issues.investigate": ISSUES_INBOX,
-    "issues.remove": ISSUES_INBOX,
-    "issues.status": ISSUES_INBOX,
     "logs.list": NOT_THE_EDITORS,
     "logs.read": NOT_THE_EDITORS,
     "loops.list": NOT_THE_EDITORS,

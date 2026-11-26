@@ -1,8 +1,9 @@
 import {
     AUDIT_RETENTION_DAYS_PUBLIC_OFFICE,
     effectiveActionRule,
-    OUTWARD_ACTION_KEYS,
+    type OutwardAction,
     type RetentionSettings,
+    SPAWN_ACTION_KEY,
 } from "@intentic/sandbox-contract/schemas/data-protection";
 import { type AdmissionPolicy, type AdmissionRule, AdmissionRuleSchema } from "@intentic/sandbox-contract/schemas/command-admission";
 import type { PresetApplyResult, PresetGroup, PresetItem, PresetValue } from "@intentic/sandbox-contract/schemas/compliance";
@@ -22,6 +23,8 @@ export interface PresetState {
     readonly privacy: PrivacyShieldPolicy;
     // Whether a local named-entity model is installed; `names: model` without one is the dictionary alone.
     readonly nameModel: boolean;
+    // Every outward action the action rules can hold here (publicOfficeActionKeys): one preset item each.
+    readonly actionKeys: readonly string[];
 }
 
 // What a retention of zero means (keep forever) makes "shorter" the wrong comparison for it: zero is the longest.
@@ -33,9 +36,9 @@ export const PUBLIC_OFFICE_RETENTION: RetentionSettings = {
     rawOutputDays: 30,
 };
 
-// Every outward action the action rules gate (the contract's OUTWARD_ACTION_KEYS, which says which gate consults each).
-// All of them hold by default.
-export const PUBLIC_OFFICE_ACTION_KEYS = OUTWARD_ACTION_KEYS;
+// Every outward action the action rules gate: the ones the enabled extensions declare (capabilities/broker/outward-actions.ts),
+// then starting a subagent, the sandbox's own. The preset holds all of them.
+export const publicOfficeActionKeys = (offered: readonly OutwardAction[]): string[] => [...offered.map((action) => action.key), SPAWN_ACTION_KEY];
 
 // Work started from outside the sandbox: a webhook, a team-chat message, a visitor's web chat, a bug report. A clock
 // (`schedule`) and the workspace's own files are the office's own doing, and `workflow` takes no hold (a CI runner
@@ -97,7 +100,8 @@ const admissionEntry = (key: (typeof PUBLIC_OFFICE_ADMISSION_KEYS)[number]): Pre
     },
 });
 
-const ENTRIES: readonly PresetEntry[] = [
+// The items before the action rules, which are one per declared action; ADMISSION_AND_JUDGE follows them.
+const LEADING: readonly PresetEntry[] = [
     // The shield first: it is what keeps a citizen's data from a provider outside the EEA.
     {
         id: "privacy.mode",
@@ -177,7 +181,9 @@ const ENTRIES: readonly PresetEntry[] = [
             draft.settings = { ...draft.settings, aiNotice: { ...draft.settings.aiNotice, show: true } };
         },
     },
-    ...PUBLIC_OFFICE_ACTION_KEYS.map(actionEntry),
+];
+
+const ADMISSION_AND_JUDGE: readonly PresetEntry[] = [
     ...PUBLIC_OFFICE_ADMISSION_KEYS.map(admissionEntry),
     {
         id: "commandJudge",
@@ -191,7 +197,10 @@ const ENTRIES: readonly PresetEntry[] = [
     },
 ];
 
-export const PRESET_ITEM_IDS: readonly string[] = ENTRIES.map((entry) => entry.id);
+// Every item, in preset order, for the outward actions in force.
+const entriesOf = (actionKeys: readonly string[]): readonly PresetEntry[] => [...LEADING, ...actionKeys.map(actionEntry), ...ADMISSION_AND_JUDGE];
+
+export const presetItemIds = (actionKeys: readonly string[]): readonly string[] => entriesOf(actionKeys).map((entry) => entry.id);
 
 // The items an organisation pins by naming their groups (compliance/org-pins.ts), in preset order: the privacy shield's apart
 // from the rest, since the two live in different files and are read through different stores.
@@ -199,8 +208,8 @@ export interface PinnedPresetItems {
     readonly settings: readonly string[];
     readonly privacy: readonly string[];
 }
-export const presetItemsOfGroups = (groups: readonly PresetGroup[]): PinnedPresetItems => {
-    const named = ENTRIES.filter((entry) => groups.includes(entry.group));
+export const presetItemsOfGroups = (groups: readonly PresetGroup[], actionKeys: readonly string[]): PinnedPresetItems => {
+    const named = entriesOf(actionKeys).filter((entry) => groups.includes(entry.group));
     return {
         settings: named.filter((entry) => entry.group !== "privacy").map((entry) => entry.id),
         privacy: named.filter((entry) => entry.group === "privacy").map((entry) => entry.id),
@@ -221,7 +230,7 @@ const itemOf = (entry: PresetEntry, state: PresetState): PresetItem => {
     };
 };
 
-export const presetPreview = (state: PresetState): PresetItem[] => ENTRIES.map((entry) => itemOf(entry, state));
+export const presetPreview = (state: PresetState): PresetItem[] => entriesOf(state.actionKeys).map((entry) => itemOf(entry, state));
 
 export interface PresetOutcome extends PresetApplyResult {
     readonly settings: SandboxSettings;
@@ -238,8 +247,9 @@ export const applyPreset = (state: PresetState, ids: readonly string[], owner: b
     const skipped: PresetApplyResult["skipped"] = [];
     let settingsChanged = false;
     let privacyChanged = false;
+    const entries = entriesOf(state.actionKeys);
     for (const id of new Set(ids)) {
-        const entry = ENTRIES.find((candidate) => candidate.id === id);
+        const entry = entries.find((candidate) => candidate.id === id);
         if (entry === undefined) {
             skipped.push({ id, reason: "unknown" });
             continue;

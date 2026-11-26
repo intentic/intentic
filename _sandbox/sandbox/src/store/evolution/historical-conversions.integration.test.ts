@@ -196,6 +196,23 @@ test("an automation that named a model gets a one-rung ladder; its runs and webh
     ]);
 });
 
+test("a bug intake's keyFromBrowsers moves onto its listener trigger, where any extension's public door reads it", async () => {
+    const roots = await volumes();
+    const manifest = join(roots.workspace, automationsDocument.path);
+    const base = { prompt: "fix it", enabled: true, models: [{ provider: "claude", model: "claude-sonnet-4-6" }] };
+    await put(manifest, [
+        { id: "open", ...base, trigger: { kind: "listener", provider: "issues", allowedOrigins: ["https://a.example"] }, issues: { keyFromBrowsers: true, dailyReportMax: 9 } },
+        { id: "closed", ...base, trigger: { kind: "listener", provider: "issues" }, issues: { keyFromBrowsers: false } },
+        { id: "untouched", ...base, trigger: { kind: "listener", provider: "issues" }, issues: { dailyReportMax: 5 } },
+    ]);
+    const listed = await fileAutomationsStore(manifest, join(roots.workspace, stateRelPath(".intentic/records/automation-runs.json"))).list();
+    expect(listed.map(({ id, trigger, issues }) => ({ id, trigger, issues }))).toEqual([
+        { id: "open", trigger: { kind: "listener", provider: "issues", allowedOrigins: ["https://a.example"], keyFromBrowsers: true }, issues: { dailyReportMax: 9 } },
+        { id: "closed", trigger: { kind: "listener", provider: "issues" }, issues: {} },
+        { id: "untouched", trigger: { kind: "listener", provider: "issues" }, issues: { dailyReportMax: 5 } },
+    ]);
+});
+
 test("a release gate's token moves out of the tracked design into the door store", async () => {
     const roots = await volumes();
     const designs = join(roots.workspace, workflowsDocument.path);

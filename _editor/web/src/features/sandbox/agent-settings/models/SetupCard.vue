@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { MODEL_ROLES, type ModelRole, type ModelRoleSpec } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import { type ActionItem, InlineRename, OverflowActions, StatusBadge } from "@intentic/ui";
-import { computed, onMounted, useTemplateRef, watch } from "vue";
+import { computed, inject, onMounted, useTemplateRef, watch } from "vue";
 import AddModelButton from "./AddModelButton.vue";
 import JobChip from "./JobChip.vue";
+import { JOB_STATE } from "./jobState";
 import { type PinnedList, pinKnobSummary, pinnedList } from "./modelPinList";
 import ModelPinList from "./ModelPinList.vue";
 import type { SetupView } from "./modelSetups";
@@ -50,8 +51,8 @@ const emit = defineEmits<{
     grab: [PointerEvent, ModelRole, HTMLElement];
 }>();
 
-const SPECS = new Map<ModelRole, ModelRoleSpec>(MODEL_ROLES.map((role) => [role.id, role]));
-const kindOf = (role: ModelRole): string => SPECS.get(role)?.kind ?? `run`;
+const jobs = inject(JOB_STATE);
+const kindOf = (role: ModelRole): string => jobs?.spec(role)?.kind ?? `run`;
 
 const name = computed(() => setupName(setup));
 

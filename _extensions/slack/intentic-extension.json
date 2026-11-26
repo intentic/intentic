@@ -146,9 +146,48 @@
                                 "authorization": "Bearer ${botToken}"
                             }
                         }
+                    ],
+                    "actions": [
+                        {
+                            "action": "message.send",
+                            "paths": ["/chat.postMessage", "/chat.postEphemeral", "/chat.scheduleMessage", "/chat.meMessage"],
+                            "channel": { "field": "channel" },
+                            "content": { "field": "text" }
+                        },
+                        {
+                            "action": "message.send",
+                            "paths": ["/files.completeUploadExternal"],
+                            "channel": { "field": "channel_id" },
+                            "content": { "field": "initial_comment" }
+                        },
+                        { "action": "message.edit", "paths": ["/chat.update"], "channel": { "field": "channel" }, "content": { "field": "text" } },
+                        { "action": "message.delete", "paths": ["/chat.delete", "/chat.deleteScheduledMessage"], "channel": { "field": "channel" } },
+                        { "action": "reaction.add", "paths": ["/reactions.add"], "channel": { "field": "channel" }, "content": { "field": "name" } },
+                        {
+                            "action": "reaction.remove",
+                            "paths": ["/reactions.remove"],
+                            "channel": { "field": "channel" },
+                            "content": { "field": "name" }
+                        },
+                        {
+                            "action": "messages.read",
+                            "read": true,
+                            "paths": ["/conversations.history", "/conversations.replies"],
+                            "channel": { "field": "channel" }
+                        }
                     ]
                 },
-                "hosts": ["slack.com", "files.slack.com"]
+                "hosts": ["slack.com", "files.slack.com"],
+                "channel": { "messageLimit": 4000 },
+                "processors": [
+                    {
+                        "flow": "team-chat",
+                        "operator": "Slack Technologies (Salesforce)",
+                        "region": "US",
+                        "thirdCountry": true,
+                        "hosts": ["slack.com", "wss-primary.slack.com", "files.slack.com"]
+                    }
+                ]
             }
         ],
         "automationTemplates": [

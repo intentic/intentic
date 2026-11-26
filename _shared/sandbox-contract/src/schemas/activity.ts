@@ -18,7 +18,8 @@ export const ActivityEventSchema = z.object({
         .describe("Which account handled it. Absent for the sandbox's own events and for work run on a provider's default."),
     direction: z.enum(["in", "out", "system"]).describe("Whether something arrived, something went out, or the sandbox did it to itself."),
     // in: message.received, voice_utterance.received, voice_transcript.received
-    // out: message.send, reaction.add, messages.read, api.call (unclassified endpoint)
+    // out: an outward action an extension declares (message.send, reaction.add, messages.read…), or api.call for a
+    // request through the credential gateway no declaration covers
     // system: gateway.login_failed, dispatch.failed, voice.session_started, voice.session_ended, automation.run,
     // turn.started, turn.plan, turn.error, turn.completed, rule.held_work, land.unhidden, extension.landed_on,
     // deps.verify_green, deps.verify_red, deps.breakage_routed, deps.breakage_fixup, deps.breakage_waiting,

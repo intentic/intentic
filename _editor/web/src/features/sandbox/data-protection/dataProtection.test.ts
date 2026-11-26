@@ -1,7 +1,12 @@
 import type { DataFlow, Measure, PresetItem } from "@intentic/sandbox-contract/schemas/compliance";
-import { OUTWARD_ACTION_KEYS } from "@intentic/sandbox-contract/schemas/data-protection";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
+import { legacyOutwardActions } from "../guardrails/outwardActions";
 import { page } from "@intentic/sandbox-contract/app-routes";
 import {
+    actionLabel,
     documentLanguageFor,
     flowFacts,
     flowTitle,
@@ -184,9 +189,38 @@ it(`sends each measure to where it is set: the box-wide ones to this page's sibl
     expect(MEASURE_LINKS.get(`areas`)).toEqual(page.sandboxSettings(`access`, { query: { section: `areas` } }));
 });
 
+// Every action more than a read that an extension in this repository declares, as `<card id>.<action>`: what a daemon of
+// this release serves to Guardrails and the preset.
+const declaredActionKeys = (): string[] => {
+    const extensions = join(repoRoot(import.meta.url), `_extensions`);
+    return readdirSync(extensions).flatMap((name) => {
+        let text: string;
+        try {
+            text = readFileSync(join(extensions, name, `intentic-extension.json`), `utf8`);
+        } catch {
+            return [];
+        }
+        const cards = ExtensionManifestSchema.parse(JSON.parse(text)).contributes?.capabilities ?? [];
+        return cards.flatMap((card) =>
+            card.kind === `cli`
+                ? [...(card.broker?.actions ?? []), ...(card.commandActions ?? [])].filter((action) => action.read !== true).map((action) => `${card.id}.${action.action}`)
+                : [],
+        );
+    });
+};
+
 it(`names every outward action the preset holds in words, not as a key`, () => {
-    for (const key of OUTWARD_ACTION_KEYS) {
+    const older = legacyOutwardActions(new Set([`intentic.e-urzad`, `intentic.discord`, `intentic.slack`])).map((action) => action.key);
+    const keys = [...new Set([...declaredActionKeys(), ...older, `agents.spawn`])];
+    expect(keys).toEqual(expect.arrayContaining([`slack.message.send`, `whatsapp.message.send`, `imap.message.send`, `microsoft365.mail.send`]));
+    for (const key of keys) {
         expect(presetLabel(item(`actionRules.${key}`, `actions`))).not.toMatch(/sandbox\.|imap|microsoft365|ezdrp|edoreczenia/u);
     }
+    // An action this editor has no words for would read as its own key: every one declared here has them.
+    for (const action of keys.filter((key) => key !== `agents.spawn`).map((key) => key.split(`.`).slice(1).join(`.`))) {
+        expect(actionLabel(action)).not.toBe(action);
+    }
+    expect(actionLabel(`ticket.close`)).toBe(`ticket.close`);
+    expect(actionLabel(`*`)).toBe(`Every action`);
     expect(presetLabel(item(`actionRules.imap.message.send`, `actions`))).toBe(`Sending messages on e-mail`);
 });

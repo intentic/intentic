@@ -1,3 +1,4 @@
+import { commandActionGate } from "@intentic/extension-manifest";
 import { roleLadder, type SetupLadder } from "@intentic/sandbox-contract/models/model-setups";
 import type { SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
 import type { Services } from "../../../composition.js";
@@ -17,7 +18,7 @@ import { installGrantsOf, installPlacementOf, PROJECT_INSTALL_RULE } from "../..
 
 export type TurnSafetyDeps = Pick<
     Services,
-    "secretRegistry" | "hostGuards" | "credentialGates" | "keyringLink" | "conversationGrants" | "heavyCommands" | "judgeCommand" | "logger" | "ownerGrants" | "runtimeInstalls" | "safetyLog" | "safetyPolicy" | "workspace" | "config"
+    "secretRegistry" | "hostGuards" | "credentialGates" | "keyringLink" | "conversationGrants" | "heavyCommands" | "judgeCommand" | "logger" | "outwardActions" | "ownerGrants" | "runtimeInstalls" | "safetyLog" | "safetyPolicy" | "workspace" | "config"
 >;
 
 // A closure over the judge, the policy text and the judge's setup rather than any of them directly, because the seam it
@@ -41,6 +42,14 @@ export const withTurnSafety = async (deps: TurnSafetyDeps, input: TurnSafetyInpu
     // policy someone is mid-edit on.
     const safetyPolicy = await deps.safetyPolicy.text();
     const { conversationId } = input;
+    // The owner's action rules, which every runtime's command guard checks before a command runs, read against the outward
+    // commands the enabled extensions declare. Neither is carried when there is no rule to apply: no rule written, and no
+    // command the shell gates that holds while unruled (`unruled: "hold"`).
+    const declared = (await deps.outwardActions()).commands;
+    const ruled =
+        Object.keys(settings.actionRules).length > 0 ||
+        declared.some((entry) => commandActionGate(entry).gatedBy === "sandbox" && commandActionGate(entry).unruled === "hold");
+    const outwardCommands = ruled ? declared : undefined;
     return {
         ...base,
         policy: {
@@ -49,8 +58,8 @@ export const withTurnSafety = async (deps: TurnSafetyDeps, input: TurnSafetyInpu
             judging: settings.commandJudge,
             // Whether outside content caused this turn, the same distinction the admission floor draws, read for the taint.
             ...opt("outsideWake", input.outsideWake),
-            // The owner's action rules, which every runtime's command guard checks before a command runs.
-            ...opt("actionRules", Object.keys(settings.actionRules).length > 0 ? settings.actionRules : undefined),
+            ...opt("actionRules", ruled ? settings.actionRules : undefined),
+            ...opt("outwardCommands", outwardCommands),
         },
         tools: {
             ...base.tools,

@@ -1,4 +1,6 @@
 import { mkdtempSync } from "node:fs";
+import { copyFile, mkdir } from "node:fs/promises";
+import { repoRoot } from "@intentic/constants/node";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
@@ -6,7 +8,7 @@ import type { AgentOrigin, AgentTurn } from "@intentic/sandbox-contract/schemas/
 import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { UTC } from "@intentic/sandbox-contract/time/zone";
-import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
+import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/policy/shell/workspace-root-exclude";
 import { unstubbed } from "@intentic/testing";
 import { advanceTimersByTimeAsync, SETTLES, waitFor } from "@intentic/testing/bun";
 import type { z } from "zod";
@@ -15,13 +17,13 @@ import { conversationsDbPath, openConversationsDb } from "../store/conversations
 import type { PersistedAgent } from "../conversations/registry/agents-store.js";
 import type { Services } from "../composition.js";
 import { automationConfig, automationRecord } from "../harness/route-stores.testing.js";
-import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { interruptedFiresInFlight } from "./fire-resume.js";
 import { recoverKinds } from "../seams/restart/in-flight.testing.js";
 import { restartResume } from "../agent/run/turn/recovery/restart-resume-policy.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { fileScheduleCoverageStore } from "./schedule-coverage.js";
+import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { nextDueAfter } from "./schedule-zone.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
 import { automationIdle, fireAutomation } from "./fire/automation-fire.js";
@@ -42,6 +44,8 @@ const fakeServices = (
     settings: z.input<typeof SandboxSettingsSchema> = {},
     live: string[] = [],
     registry: readonly PersistedAgent[] = [],
+    // Where the image's extensions are baked; none unless a test bakes one.
+    extensionsDir = "",
 ): Services => {
     const services: Services = unstubbed<Services>("services", {
         agents: unstubbed<Services["agents"]>("agents", {
@@ -62,7 +66,11 @@ const fakeServices = (
         }),
         heldWakes: fileHeldWakesStore(join(root, "history")),
         // The automation inboxes (durable/inbox-store.ts) live beside the holds.
-        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
+        // No extension installed unless a test bakes one: a listener wake's admission floor reads its declaration off the
+        // inventory (wake-source.ts).
+        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history"), extensionsDir }),
+        files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
         scheduleCoverage: fileScheduleCoverageStore(join(root, "automation-schedule.json")),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         activity: { append: async () => {}, list: async () => [] },
@@ -73,9 +81,6 @@ const fakeServices = (
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
         // Heard by nobody: what reacts to a wake's settled run is composition's to subscribe.
         events: createDomainEvents(() => {}),
-        // The real resolver, which answers undefined for every origin that is not a Visitor chat visitor's — what these
-        // fires are. Wired rather than stubbed so it stays the production answer if that rule changes.
-        outboxStreamFor: (origin) => outboxStreamFor(services, origin),
     });
     return services;
 };
@@ -1016,8 +1021,17 @@ test("a deny refuses even an approved replay: approve-then-tighten does not exec
     expect((await services.automations.get("revoked"))?.runs[0]?.outcome).toBe("skipped");
 });
 
-test("the webchat floor keys off its own source: a listener rule does not reach the Visitor chat, nor vice versa", async () => {
-    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { listener: "hold" } });
+// The Visitor chat as the image bakes it: its extension's own manifest, whose listener declares `strangers: "visitor"`.
+const bakedVisitorChat = async (): Promise<string> => {
+    const baked = mkdtempSync(join(tmpdir(), "sched-baked-"));
+    await mkdir(join(baked, "visitor-chat"), { recursive: true });
+    await copyFile(join(repoRoot(import.meta.url), "_extensions/visitor-chat/intentic-extension.json"), join(baked, "visitor-chat", "intentic-extension.json"));
+    return baked;
+};
+
+test("the website visitor's floor keys off the Visitor chat's declared source: a listener rule does not reach it, nor vice versa", async () => {
+    const baked = await bakedVisitorChat();
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { listener: "hold" } }, [], [], baked);
     await services.automations.upsert(
         automationConfig("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),
     );
@@ -1029,7 +1043,7 @@ test("the webchat floor keys off its own source: a listener rule does not reach 
         /^wake:door\n\n--- Event payload ---\n<untrusted-content source="webchat" id="([0-9a-f]{16})">\nhi\n<\/untrusted-content id="\1">$/,
     );
 
-    const heldServices = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { webchat: "hold" } });
+    const heldServices = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { webchat: "hold" } }, [], [], baked);
     await heldServices.automations.upsert(
         automationConfig("door", { trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://a.example"] } }),
     );

@@ -6,6 +6,7 @@ import { credentialRequest } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
 import { REQUEST_REFRAMED, RESPONSE_REFRAMED, forwardHeaders } from "../../http/forward-headers.js";
 import type { CredentialGate } from "../../secrets/gates/credential-gate.js";
+import { outwardRequest, type OutwardDeps } from "./broker-actions.js";
 import { brokerRoutes, type ExpandedRoute, GATEWAY_PLACEHOLDER } from "./broker-routes.js";
 import { effectiveRules, evaluateRules, ruleIdentity } from "./broker-rules.js";
 import type { BrokerSessions } from "./broker-session.js";
@@ -24,6 +25,8 @@ export interface GatewayCard {
     readonly broker: Broker;
     // What the card is called, for the cards and refusals a person reads.
     readonly name: string;
+    // The connector's id, which its declared actions are keyed under (`<id>.message.send`).
+    readonly provider: string;
 }
 
 export interface RuleAsk {
@@ -59,7 +62,9 @@ export interface GatewayUse {
     readonly approvedBy?: string;
 }
 
-export interface GatewayDeps {
+// The owner's action rules and the Activity record ride OutwardDeps (broker-actions.ts): a card declaring the outward
+// actions its requests perform is held to those rules here, and its requests recorded.
+export interface GatewayDeps extends OutwardDeps {
     readonly sessions: Pick<BrokerSessions, "verify">;
     // The card behind a capability id, undefined when it is gone or its connector declares no broker.
     readonly card: (capability: string) => Promise<GatewayCard | undefined>;
@@ -201,16 +206,32 @@ export const createGateway = (deps: GatewayDeps): ((request: Request) => Promise
     };
 };
 
+type GatewaySession = NonNullable<Awaited<ReturnType<BrokerSessions["verify"]>>>;
+
+// One request past its address checks, on its way through the rules to the service.
+interface Admitted {
+    readonly request: Request;
+    // The request's own, joined with the gateway's cut of the call.
+    readonly signal: AbortSignal;
+    readonly url: URL;
+    readonly token: string;
+    readonly rest: string;
+    readonly session: GatewaySession;
+    readonly card: GatewayCard;
+    readonly route: ExpandedRoute;
+    // What to forward as the body: the request's own, or the branch of it outwardRequest left to forward.
+    readonly body: ReadableStream<Uint8Array> | null;
+}
+
 const serveGateway = (deps: GatewayDeps) => {
-    const fetchImpl = deps.fetch ?? fetch;
+    const forward = checkAndForward(deps);
     return async (
         request: Request,
-        // The request's own, joined with the gateway's cut of the call.
         signal: AbortSignal,
         url: URL,
         token: string,
         rest: string,
-        session: NonNullable<Awaited<ReturnType<BrokerSessions["verify"]>>>,
+        session: GatewaySession,
         card: GatewayCard,
     ): Promise<Response> => {
         const { capability, conversationId } = session;
@@ -223,9 +244,6 @@ const serveGateway = (deps: GatewayDeps) => {
                 `This gateway address for "${capability}" is out of date: the card's settings changed since it was issued. The next turn's environment has the current one.`,
             );
         }
-        const method = request.method.toUpperCase();
-        const where = `${route.upstream.host}${basePath(route)}${rest}`;
-        const detail = oneLine(`${method} ${where}`, DETAIL_MAX);
 
         // Where: the owner's host guard for the card, which may have narrowed what its connector declared.
         let guards: readonly SecretHostGuard[];
@@ -244,6 +262,38 @@ const serveGateway = (deps: GatewayDeps) => {
                 `${card.name}'s host guard does not list ${route.upstream.hostname}, so its credential was not attached. Only the owner can add it, on the Secrets view.`,
             );
         }
+
+        // Which outward action, where the card declares its actions: held to the owner's action rules, and recorded
+        // once answered, whatever the checks below make of it.
+        const outward = await outwardRequest(deps, {
+            provider: card.provider,
+            actions: card.broker.actions,
+            request,
+            method: request.method.toUpperCase(),
+            path: rest,
+            query: url.searchParams,
+            conversationId,
+            bodyTaken: Object.keys(route.form).length > 0,
+        });
+        const admitted: Admitted = { request, signal, url, token, rest, session, card, route, body: outward?.body ?? request.body };
+        if (outward === undefined) {
+            return forward(admitted);
+        }
+        if (outward.refusal !== undefined) {
+            return outward.settle(refused(403, `${card.name}: ${outward.refusal}`));
+        }
+        return outward.settle(await forward(admitted));
+    };
+};
+
+// What a card's rules and approvers make of one request, then the request itself, with the credential attached.
+const checkAndForward = (deps: GatewayDeps) => {
+    const fetchImpl = deps.fetch ?? fetch;
+    return async ({ request, signal, url, token, rest, session, card, route, body: requestBody }: Admitted): Promise<Response> => {
+        const { capability, conversationId } = session;
+        const method = request.method.toUpperCase();
+        const where = `${route.upstream.host}${basePath(route)}${rest}`;
+        const detail = oneLine(`${method} ${where}`, DETAIL_MAX);
 
         // What: the card's method and path rules.
         let rules: readonly BrokerRule[];
@@ -317,7 +367,7 @@ const serveGateway = (deps: GatewayDeps) => {
             headers.set(name, value);
         }
         const hasBody = method !== "GET" && method !== "HEAD";
-        let body: BodyInit | null = hasBody ? request.body : null;
+        let body: BodyInit | null = hasBody ? requestBody : null;
         if (Object.keys(route.form).length > 0) {
             const form = hasBody ? await formBody(request, route.form) : undefined;
             if (form === undefined) {

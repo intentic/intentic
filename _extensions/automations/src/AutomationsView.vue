@@ -20,10 +20,9 @@ import AutomationCalendar from "./calendar/AutomationCalendar.vue";
 import AutomationDraft from "./draft/AutomationDraft.vue";
 import AutomationRail, { type RailShelf } from "./shelves/AutomationRail.vue";
 import AutomationRow from "./AutomationRow.vue";
-import VisitorChatInstallDialog from "./VisitorChatInstallDialog.vue";
 import { host } from "./host";
 import { availableTemplates, glyph, useCatalog, withAvailability } from "./catalog";
-import { useAutomations } from "./useAutomations";
+import { openVisitorChatInstall, useAutomations } from "./useAutomations";
 import { gistOf, isFailing } from "./shelves/grouping";
 import { useShelves } from "./shelves/useShelves";
 import { t } from "./i18n.js";
@@ -55,9 +54,13 @@ const createOpen = ref(false);
 const actionError = ref<string | undefined>(undefined);
 // Rows with their detail unfolded.
 const expanded = reactive(new Set<string>());
-// By id, not object, so it survives the list refetching under it (a save inside the panel does invalidate).
-const installId = ref<string | undefined>(undefined);
-const installing = computed(() => automations.value.find((automation) => automation.id === installId.value));
+// A Visitor chat's embed code opens in the visitor-chat extension's own panel; without that extension on, the row says so.
+const openInstall = (id: string): void => {
+    actionError.value = undefined;
+    openVisitorChatInstall(id).catch(() => {
+        actionError.value = t(`automationsView.visitorChatOff`);
+    });
+};
 // The chore pill mid-create, so its pill alone shows the wait.
 const enabling = ref<string | undefined>(undefined);
 // Awaiting a confirmed delete: its whole run history goes too, and nothing restores it.
@@ -328,7 +331,7 @@ const toggleDetail = (id: string): void => {
                             @expand="openedId = undefined"
                             @remove="confirmRemoveId = openedAutomation.id"
                             @run="runNow(openedAutomation)"
-                            @install="installId = openedAutomation.id"
+                            @install="openInstall(openedAutomation.id)"
                         />
                     </RowGroup>
                 </div>
@@ -420,7 +423,7 @@ const toggleDetail = (id: string): void => {
                                 @expand="toggleDetail(automation.id)"
                                 @remove="confirmRemoveId = automation.id"
                                 @run="runNow(automation)"
-                                @install="installId = automation.id"
+                                @install="openInstall(automation.id)"
                             />
                         </RowGroup>
                     </div>
@@ -451,15 +454,6 @@ const toggleDetail = (id: string): void => {
                         </button>
                     </div>
                 </section>
-
-                <!-- Keyed on the row, so opening a different Visitor chat remounts instead of showing the previous one's probes mid-flight. -->
-                <VisitorChatInstallDialog
-                    v-if="installing"
-                    :key="installing.id"
-                    :automation="installing"
-                    :visible="true"
-                    @update:visible="installId = undefined"
-                />
 
                 <!-- Deleting takes the run history with it and the daemon keeps no copy: the one action here with no undo. -->
                 <ConfirmDialog

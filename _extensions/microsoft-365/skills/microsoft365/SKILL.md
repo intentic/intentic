@@ -21,11 +21,13 @@ To sign in from this chat instead:
 1. Run `m365 --account ${id} auth login` **with `run_in_background`** (it waits up to 15 minutes for the person).
 2. It prints a Microsoft address and a short code. Give both to the owner: they open the page in their own browser,
    type the code and sign in as the office user. Nothing else from that output goes in the chat.
-3. When it says `Signed in`, the sign-in is already stored on the card. Commands in the **next** turn use it;
+3. When it says `Signed in`, the sign-in is already stored on the card and the next command uses it;
    `m365 whoami` then answers who is signed in.
 
-Never print, copy or ask for a token, and never paste one into a file or the chat. `Nobody has signed in` or
-`no longer accepts this sign-in` means: sign in again as above, in a turn the owner is watching.
+The sign-in never reaches this shell: `m365` hands each command to the connection, which holds it. Never ask for a
+token, and never paste one into a file or the chat. `Nobody has signed in` or `no longer accepts this sign-in` means:
+sign in again as above, in a turn the owner is watching. A refusal saying this turn has no tools for the card means
+this conversation was not given the Microsoft 365 card.
 
 ## Mail
 
@@ -99,13 +101,17 @@ Downloads never overwrite a workspace file. Uploads take files up to 4 MiB and r
 ## What waits for the owner
 
 Sending, replying and forwarding (`microsoft365.mail.send`), every calendar change (`microsoft365.calendar.write`)
-and uploads (`microsoft365.files.upload`) are **held** unless the owner's action rules say otherwise. A held command
-answers `{"held": true, "approvalId": "m365-…"}`: nothing was sent. Tell the owner what is waiting, in a sentence.
+and uploads (`microsoft365.files.upload`) are **held** unless the owner's action rules say otherwise; the sandbox
+decides, not `m365`. A held command answers `{"held": true, "approvalId": "microsoft365-…"}`: nothing was sent, and
+the exact request is in the owner's approval queue. Tell the owner what is waiting, in a sentence. Once they approve
+it, the connection sends exactly that request itself, once: there is nothing for you to run, and no approval file to
+write or edit. A rule that refuses it answers `m365: … is refused by the action rules`; say so rather than trying
+another way.
 
-Only when the owner has set that approval **running** (its turn tells you so) run
-`m365 --account ${id} action run <approval-id>`: it sends exactly the request that was approved, once. Never write
-or edit an approval file yourself. If the answer is lost, look in Outlook (`mail search`, `calendar events`) before
-proposing it again; never retry a send blind. Read only refuses every write, held or not.
+An approval an older `m365` drafted (its instructions say `m365 … action run …`) is not run any more: `action run`
+tells you to propose it again with the original command, and to mark the item failed with that reason. If an answer
+is lost, look in Outlook (`mail search`, `calendar events`) before proposing it again; never retry a send blind. Read
+only refuses every write, held or not.
 
 ## Automations
 

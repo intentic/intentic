@@ -42,7 +42,8 @@ test(`every contribution point file is registered`, () => {
     // everywhere (schema, generated doc, SDK surface).
     // Points are discovered from the directory, not listed here, so a new one is checked automatically.
     const pointsDir = join(manifestPackage, `src/points`);
-    const files = readdirSync(pointsDir).filter((entry) => entry.endsWith(`.ts`) && entry !== `index.ts`);
+    // A point's own tests sit beside it (watch-kinds.test.ts) and name manifests of their own, so they are not points.
+    const files = readdirSync(pointsDir).filter((entry) => entry.endsWith(`.ts`) && !entry.endsWith(`.test.ts`) && entry !== `index.ts`);
     const declared = files.map((file) => /name:\s*"([^"]+)"/u.exec(readFileSync(resolve(pointsDir, file), `utf8`))?.[1]);
     expect(declared.filter((name) => name !== undefined).toSorted()).toEqual(CONTRIBUTION_POINTS.map((point) => point.name).toSorted());
 });

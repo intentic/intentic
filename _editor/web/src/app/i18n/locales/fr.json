@@ -424,7 +424,6 @@
             "earlierChat": "Chat antérieur",
             "edits": "Vos modifications",
             "unsavedSettings": "Réglages non enregistrés",
-            "email": "E-mail",
             "error": "Erreur",
             "finishing": "Finalisation…",
             "firstWakesChat": "Le premier le réveille",
@@ -6656,9 +6655,6 @@
                 "everyMinutes": "Toutes les {count} minutes"
             },
             "source": {
-                "npm": "Le paquet npm {spec}",
-                "github": "Nouvelles versions de {repo}",
-                "githubPre": "Nouvelles versions de {repo}, préversions comprises",
                 "url": "La page {url}",
                 "urlSelect": "La page {url}, la partie correspondant à {select}"
             },
@@ -11380,6 +11376,7 @@
             "action": {
                 "messageSend": "Envoi de messages",
                 "messageEdit": "Modification de messages",
+                "messageDelete": "Suppression de messages",
                 "reactionAdd": "Ajout de réactions",
                 "reactionRemove": "Retrait de réactions",
                 "mailSend": "Envoi de courriels",
@@ -11389,7 +11386,8 @@
                 "documentRegisterOutgoing": "Enregistrement du courrier sortant",
                 "caseAttachDraft": "Ajout d'un brouillon à un dossier",
                 "deliverySend": "Envoi d'un recommandé électronique",
-                "deliveryOpen": "Ouverture d'un recommandé électronique"
+                "deliveryOpen": "Ouverture d'un recommandé électronique",
+                "all": "Toutes les actions"
             },
             "value": {
                 "allow": "autorisé",

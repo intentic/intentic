@@ -8,18 +8,26 @@ rules say otherwise.
 ```mermaid
 flowchart LR
     form["Card form<br/>Sign in with Microsoft"] -->|"device-code sign-in, then Save"| daemon
-    card["Microsoft 365 card<br/>tenant · app · sign-in"] -->|"env per card"| m365(["m365 CLI<br/>bin/m365"])
-    agent["Agent"] --> m365
-    daemon -->|"code, then asks until signed in"| entra["Microsoft sign-in<br/>login.microsoftonline.com"]
-    m365 -->|"m365 auth login, refresh"| entra
-    m365 --> graph["Microsoft Graph"]
-    m365 -->|"held send, meeting change, upload"| approvals["Approvals queue"]
-    m365 -->|"new sign-in, rotated token"| daemon["Daemon<br/>device sign-in, oauth-token route"]
-    daemon --> card
+    agent["Agent"] --> m365(["m365 CLI<br/>bin/m365"])
+    m365 -->|"command, workspace files<br/>POST /tools/card"| daemon["Daemon<br/>tool door, action rules, approvals"]
+    daemon -->|"call with the card's sign-in"| backend(["backend<br/>dist/server.js"])
+    backend -->|"refresh, rotate"| entra["Microsoft sign-in<br/>login.microsoftonline.com"]
+    backend --> graph["Microsoft Graph"]
+    backend -->|"send, meeting change, upload: allow, deny or hold?"| daemon
+    daemon -->|"a person's yes, spent"| backend
+    backend -->|"new sign-in, rotated token"| daemon
     watcher["watcher process<br/>node dist/gateway.js"] -->|"inbox delta, every minute"| graph
     watcher -->|"mail"| automations["Daemon<br/>automations"]
 ```
 
+- **Where the sign-in lives.** The card's refresh token (and a confidential app's client secret) stays in the daemon
+  and reaches only this extension's own backend, which the daemon hands the card's settings with each call. It is not
+  in the agent's environment: the card's `env` names only its tenant, app, cloud and access level. Every `m365` command
+  runs in the backend (`contributes.tools`, one server per card). `m365` itself reads the workspace files a command
+  names, sends their bytes through the daemon's door for the turn's own shell (`POST /tools/<card>`, refused unless
+  that turn was given the card), and saves what comes back. The same tools are listed to the model too; `m365` is the
+  easy way to call them. 2026-11-26: before, the token sat in every turn's environment, so the agent could reach Graph
+  without `m365` and its approvals.
 - **Signing in.** The office registers its own app in its own Entra ID tenant and types the tenant and app ids on the
   card. Then **Sign in with Microsoft** on the card's form runs Microsoft's device-code sign-in: the form shows a short
   code and Microsoft's own page, the person types the code there and signs in, with their tenant's MFA and Conditional
@@ -28,24 +36,34 @@ flowchart LR
   form waits, whether the person has finished. The refresh token stays in the daemon: the form saves a marker for it,
   and Save installs the token on the card, refused if the tenant, app, cloud or access level changed since the sign-in.
   The card's manifest declares all of it as data (`refreshToken.deviceCode`: the endpoints, the client, the scopes for
-  read only and for read & write). `m365 auth login` runs the same sign-in for an agent and stores its token through
-  the daemon's write-only `POST /capabilities/{id}/oauth-token` route, never into the chat, a file or a log; that route
-  refuses a token for a card whose bound settings changed, or from a caller not holding the card's current token.
-- **Keeping signed in.** Microsoft hands out a new refresh token with every access token. The CLI and the watcher store
-  each new one the same way; the older one stays valid, so two processes rotating at once do no harm. The one-hour
-  access token is cached `0600` under the extension's runtime directory, keyed by a hash of the credential, so a run of
-  commands does not sign in again each time.
-- **Read only is real.** A read-only card asks Microsoft for read permissions only, and `m365` refuses every write
-  before it has a token, approved or not.
+  read only and for read & write). `m365 auth login` runs the same sign-in in the backend, which stores the token
+  through the daemon's write-only `POST /capabilities/{id}/oauth-token` route, never into the chat, a file or a log;
+  that route refuses a token for a card whose bound settings changed, or from a caller not holding the card's current
+  token.
+- **Keeping signed in.** Microsoft hands out a new refresh token with every access token. The backend and the watcher
+  store each new one the same way; the older one stays valid, so two processes rotating at once do no harm. The backend
+  keeps each card's one-hour access token in memory while the card signs in as it did, so a run of commands does not
+  sign in again each time.
+- **Read only is real.** A read-only card asks Microsoft for read permissions only, and the backend refuses every
+  write before it has a token, approved or not.
 - **What waits.** `microsoft365.mail.send` (send, reply, reply all, forward), `microsoft365.calendar.write` (create,
-  change, cancel a meeting) and `microsoft365.files.upload` hold by default: the exact request, attachments and file
-  bytes included, is frozen into the approvals queue with a plain description for the owner. `m365 action run` sends
-  only that request, only once the owner set it running, and only once. `allow` or `deny` in the action rules (also
-  as `microsoft365.*`) change that; the public-office preset sets all three to hold. Saving a draft in Outlook is not
-  held, since it sends nothing.
-- **Files.** Attachments and downloads are saved inside the workspace, for `fileq` to read, and never over an existing
-  file. Downloads come from Microsoft's pre-authenticated storage address, fetched without the sign-in token. Uploads
-  are up to 4 MiB (no upload sessions yet).
+  change, cancel a meeting) and `microsoft365.files.upload` are decided by the owner's action rules in the daemon,
+  which the backend asks before anything goes to Graph: allowed, it goes out and Activity records how it went; denied,
+  the command fails with the rule's reason; held (the default while no rule names it, as before), the exact request,
+  attachments and file bytes included, stays frozen in the backend's state directory under its SHA-256, and the daemon
+  puts it in the approvals queue with a plain description for the owner. Once a person approves it, the daemon's
+  approvals executor hands it to the backend (`api.approvals.perform`), which sends it only if what it holds still has
+  that hash, on the same card, and no rule denies it by then. Nothing needs running for it. `allow`, `hold` or `deny`
+  in the action rules (also as `microsoft365.*`) change that; the public-office preset sets all three to hold. Saving
+  a draft in Outlook is not held, since it sends nothing. The card declares the commands behind the three keys
+  (`commandActions`), which is how Guardrails and the preset know them. Each says `gatedBy: "backend"`, so the shell's
+  command guard leaves it to the backend's door, where the daemon both decides and drafts the approval, rather than
+  refusing a held command before it reaches the door, and `unruled: "hold"`, the default Guardrails shows while no rule
+  names it (2026-11-26, extension API 2.52.0; until then one `selfGated` flag said both). An approval the older `m365` drafted (an `action run` in its
+  instructions) is not carried out: `m365 action run` says to propose it again with the original command.
+- **Files.** Attachments and downloads are saved inside the workspace by `m365`, for `fileq` to read, and never over an
+  existing file. A download comes from Microsoft's pre-authenticated storage address, which the backend hands `m365`
+  to fetch without the sign-in token. Uploads are up to 4 MiB (no upload sessions yet).
 - **The watcher** polls the inbox's delta query once a minute (Graph's push needs a public address the sandbox lacks),
   only while an automation listens to `microsoft365`. The first poll records where the inbox stands, so connecting
   replays nothing; the cursor is saved only after a batch reached the daemon, so a crash can deliver a message twice
@@ -58,8 +76,8 @@ flowchart LR
   or calendar. Use this card for a member of staff's own mail, calendar, OneDrive and the SharePoint libraries they can
   open.
 
-The card is baked into the core image; the CLI and the watcher ship in the `messaging` image pack, next to Google
-Workspace. Nothing talks to Microsoft until someone signs in.
+The card is baked into the core image; the CLI, the backend and the watcher ship in the `messaging` image pack, next
+to Google Workspace. Nothing talks to Microsoft until someone signs in.
 
 ## Connecting an office (for the Microsoft 365 administrator)
 
@@ -90,14 +108,13 @@ card's own sign-in and `m365 auth login` are then not used.
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json) — the card and its guide, the listener, the watcher process.
-- [src/auth.ts](src/auth.ts) — device-code sign-in, token refresh and rotation, storage on the card.
+- [intentic-extension.json](intentic-extension.json) — the card and its guide, the backend and its tools, the listener, the watcher process.
+- [src/server.ts](src/server.ts) — the backend that holds the card's sign-in: its tools, and approved actions carried out.
 - [src/commands.ts](src/commands.ts) — the command line: which flags each command reads, then [mail](src/mail.ts),
   [calendar](src/calendar.ts) and [documents](src/documents.ts).
-- [src/actions.ts](src/actions.ts) — action rules, the frozen approval and its single run.
-- [src/graph.ts](src/graph.ts) — Graph calls pinned to the card's cloud, bounded pagination, read-only refusal.
-- [src/watch.ts](src/watch.ts) and [src/gateway.ts](src/gateway.ts) — the inbox watcher.
-- [skills/microsoft365/SKILL.md](skills/microsoft365/SKILL.md) — what the agent is taught, with Polish office examples.
+- [src/actions.ts](src/actions.ts) — asking the daemon's action rules, the frozen request and its single run once approved.
+- [src/cli.ts](src/cli.ts) — `m365`: the workspace files a command reads and writes, the backend called through the turn's door.
+- [src/auth.ts](src/auth.ts) — device-code sign-in, token refresh and rotation.
 
 ## Commands
 

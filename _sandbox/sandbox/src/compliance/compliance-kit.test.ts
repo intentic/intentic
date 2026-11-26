@@ -1,11 +1,16 @@
 import { inflateRawSync } from "node:zlib";
 import { DEFAULT_PRIVACY_SHIELD, type PrivacyShieldPolicy } from "@intentic/sandbox-contract/schemas/privacy";
 import type { Measure } from "@intentic/sandbox-contract/schemas/compliance";
+import type { CliConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
 import { documentFilename, renderDocument } from "./drafts.js";
 import { markdownToDocx } from "./docx.js";
-import type { ComplianceFacts } from "./facts.js";
-import { applyPreset, PRESET_ITEM_IDS, type PresetState, presetPreview, PUBLIC_OFFICE_ACTION_KEYS } from "./preset.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "@intentic/constants/node";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
+import { type ComplianceFacts, type ConnectorFact, declaredPaths } from "./facts.js";
+import { applyPreset, type PresetState, presetItemIds, presetPreview, publicOfficeActionKeys } from "./preset.js";
 import { flowsOf, measuresOf, reportOf } from "./report.js";
 
 // Pins the data protection page's mapping: what a default sandbox and a preset-applied one report, that the preset
@@ -14,10 +19,26 @@ import { flowsOf, measuresOf, reportOf } from "./report.js";
 
 const defaults = (): SandboxSettings => SandboxSettingsSchema.parse({});
 
+// A card of an in-repo extension, filled in as `config`, with the paths its manifest declares (`processors`) as the
+// daemon reads them: where data goes is the extension's declaration, never a table here.
+const connectorOf = (extension: string, id: string, config: CliConfig, hosts: readonly string[] = []): ConnectorFact => {
+    const manifest = ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(repoRoot(import.meta.url), "_extensions", extension, "intentic-extension.json"), "utf8")));
+    const card = (manifest.contributes?.capabilities ?? []).find((entry) => entry.id === config.provider);
+    return { id, provider: config.provider, hosts, guarded: false, paths: declaredPaths(card?.processors, config, hosts) };
+};
+
+// What the daemon serves a sandbox with its Discord and IMAP extensions on (capabilities/broker/outward-actions.ts), and the
+// sandbox's own subagent key after them: the preset holds one item per key.
+const ACTION_KEYS = publicOfficeActionKeys(
+    ["discord.message.send", "discord.reaction.add", "imap.message.send"].map((key) => ({ key, extension: `intentic.${key.split(".")[0] ?? ""}` })),
+);
+const PRESET_ITEM_IDS = presetItemIds(ACTION_KEYS);
+
 // A representative self-hosted sandbox: Claude connected, a local model, a Discord bot an automation listens on, an
 // IMAP mailbox, a GitHub connector, one web chat, reached through Intentic's tunnel.
 const factsWith = (settings: SandboxSettings, privacy: PrivacyShieldPolicy = DEFAULT_PRIVACY_SHIELD): ComplianceFacts => ({
     settings,
+    actionKeys: ACTION_KEYS,
     privacy,
     readers: { ocr: true, model: false },
     providers: [
@@ -27,11 +48,10 @@ const factsWith = (settings: SandboxSettings, privacy: PrivacyShieldPolicy = DEF
     ],
     endpoints: [{ id: "llama", kind: "localmodel", baseUrl: undefined, model: "bielik" }],
     connectors: [
-        { id: "discord", provider: "discord", hosts: [], guarded: false, host: undefined },
-        { id: "mail", provider: "imap", hosts: [], guarded: false, host: "imap.urzad.gov.pl" },
-        { id: "github", provider: "github", hosts: ["api.github.com"], guarded: true, host: undefined },
+        connectorOf("discord", "discord", { provider: "discord", botToken: "t" }, ["discord.com"]),
+        connectorOf("imap", "mail", { provider: "imap", host: "imap.urzad.gov.pl", smtpHost: "" }, ["imap.urzad.gov.pl", "login.microsoftonline.com"]),
+        { id: "github", provider: "github", hosts: ["api.github.com"], guarded: true },
     ],
-    listening: ["discord"],
     webchats: [{ id: "chat", enabled: true, aiDisclosure: true, turnstile: false, googleSignIn: false }],
     browsers: 0,
     speechCloud: undefined,
@@ -52,6 +72,7 @@ const state = (settings: SandboxSettings = defaults(), privacy: PrivacyShieldPol
     settings,
     privacy,
     nameModel,
+    actionKeys: ACTION_KEYS,
 });
 
 const statusOf = (measures: readonly Measure[], id: Measure["id"]): Measure["status"] | undefined => measures.find((measure) => measure.id === id)?.status;
@@ -85,8 +106,22 @@ describe("flows", () => {
         // Not connected, so not a path.
         expect(flows.some((flow) => flow.id === "model-provider:codex")).toBe(false);
         expect(flows.find((flow) => flow.id === "local-model:llama")).toMatchObject({ shield: "local", thirdCountry: false });
-        expect(flows.find((flow) => flow.kind === "team-chat")).toMatchObject({ hosts: expect.arrayContaining(["discord.com"]), shield: "none" });
-        expect(flows.find((flow) => flow.kind === "email-imap")).toMatchObject({ hosts: ["imap.urzad.gov.pl"] });
+        expect(flows.find((flow) => flow.kind === "team-chat")).toEqual({
+            id: "team-chat:discord",
+            group: "messaging",
+            kind: "team-chat",
+            name: "discord",
+            hosts: ["discord.com", "gateway.discord.gg", "cdn.discordapp.com"],
+            operator: "Discord Inc.",
+            region: "US",
+            thirdCountry: true,
+            active: true,
+            personalData: "yes",
+            shield: "none",
+            switch: "actionRules",
+        });
+        // The server the card names, not every host its credential may reach (the sign-in hosts of an OAuth2 card).
+        expect(flows.find((flow) => flow.kind === "email-imap")).toMatchObject({ id: "email-imap:mail", name: "mail", hosts: ["imap.urzad.gov.pl"], question: "mail-operator" });
         // No SMTP host on the card: it reads mail and sends none.
         expect(flows.find((flow) => flow.kind === "email-smtp")).toBeUndefined();
         expect(flows.find((flow) => flow.kind === "connector")).toMatchObject({ name: "github", hosts: ["api.github.com"] });
@@ -160,7 +195,12 @@ describe("preset", () => {
         expect(items.find((item) => item.id === "admission.webchat")).toMatchObject({ current: "allow", proposed: "hold" });
         // Already hold by default.
         expect(items.find((item) => item.id === "admission.issues")).toMatchObject({ changes: false });
-        expect(items.filter((item) => item.id.startsWith("actionRules."))).toHaveLength(PUBLIC_OFFICE_ACTION_KEYS.length);
+        expect(items.filter((item) => item.id.startsWith("actionRules.")).map((item) => item.id)).toEqual([
+            "actionRules.discord.message.send",
+            "actionRules.discord.reaction.add",
+            "actionRules.imap.message.send",
+            "actionRules.agents.spawn",
+        ]);
         expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
     });
 
@@ -277,29 +317,19 @@ describe("a mailbox that can also send", () => {
     it("adds the SMTP server as a way out of its own, gated by the action rules", () => {
         const facts = factsWith(defaults());
         const connectors = facts.connectors.map((connector) =>
-            connector.provider === "imap" ? { ...connector, smtpHost: "smtp.urzad.gov.pl" } : connector,
+            connector.provider === "imap" ? connectorOf("imap", "mail", { provider: "imap", host: "imap.urzad.gov.pl", smtpHost: "smtp.urzad.gov.pl" }) : connector,
         );
         const smtp = flowsOf({ ...facts, connectors }).find((flow) => flow.kind === "email-smtp");
-        expect(smtp).toMatchObject({ hosts: ["smtp.urzad.gov.pl"], switch: "actionRules", personalData: "yes" });
+        expect(smtp).toMatchObject({ id: "email-smtp:mail", hosts: ["smtp.urzad.gov.pl"], switch: "actionRules", personalData: "yes", question: "mail-operator" });
     });
 
-    it("holds the e-mail send key the IMAP sender reads", () => {
-        expect(PUBLIC_OFFICE_ACTION_KEYS).toContain("imap.message.send");
-    });
-
-    it("holds every outward action key the Microsoft 365 CLI reads", () => {
-        expect(PUBLIC_OFFICE_ACTION_KEYS).toEqual(expect.arrayContaining(["microsoft365.mail.send", "microsoft365.calendar.write", "microsoft365.files.upload"]));
-    });
-
-    it("holds every office act the e-urzad gate reads", () => {
-        expect(PUBLIC_OFFICE_ACTION_KEYS).toEqual(
-            expect.arrayContaining([
-                "ezdrp.document.register-incoming",
-                "ezdrp.document.register-outgoing",
-                "ezdrp.case.attach-draft",
-                "edoreczenia.delivery.send",
-                "edoreczenia.delivery.open",
-            ]),
-        );
+    it("holds one item per outward action it is handed, whichever extension declared it", () => {
+        const keys = publicOfficeActionKeys([{ key: "ticketing.ticket.close", extension: "someone.ticketing" }]);
+        expect(keys).toEqual(["ticketing.ticket.close", "agents.spawn"]);
+        const items = presetPreview({ ...state(), actionKeys: keys }).filter((item) => item.group === "actions");
+        expect(items.map((item) => [item.id, item.proposed])).toEqual([
+            ["actionRules.ticketing.ticket.close", "hold"],
+            ["actionRules.agents.spawn", "hold"],
+        ]);
     });
 });

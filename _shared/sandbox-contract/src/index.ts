@@ -16,7 +16,6 @@ import { basesContract } from "./contracts/bases.contract.js";
 import { bookmarksContract } from "./contracts/bookmarks.contract.js";
 import { browserContract } from "./contracts/browser.contract.js";
 import { capabilitiesContract } from "./contracts/capabilities.contract.js";
-import { choresContract } from "./contracts/chores.contract.js";
 import { ciContract } from "./contracts/ci.contract.js";
 import { complianceContract } from "./contracts/compliance.contract.js";
 import { diffContract } from "./contracts/diff.contract.js";
@@ -26,7 +25,6 @@ import { extensionsContract } from "./contracts/extensions.contract.js";
 import { gitContract } from "./contracts/git.contract.js";
 import { historyContract } from "./contracts/history.contract.js";
 import { hubContract } from "./contracts/hub.contract.js";
-import { issuesContract } from "./contracts/issues.contract.js";
 import { logsContract } from "./contracts/logs.contract.js";
 import { loopsContract } from "./contracts/loops.contract.js";
 import { needsContract } from "./contracts/needs.contract.js";
@@ -79,7 +77,6 @@ export const sandboxContract: {
     bookmarks: typeof bookmarksContract;
     browser: typeof browserContract;
     capabilities: typeof capabilitiesContract;
-    chores: typeof choresContract;
     ci: typeof ciContract;
     compliance: typeof complianceContract;
     diff: typeof diffContract;
@@ -89,7 +86,6 @@ export const sandboxContract: {
     git: typeof gitContract;
     history: typeof historyContract;
     hub: typeof hubContract;
-    issues: typeof issuesContract;
     logs: typeof logsContract;
     loops: typeof loopsContract;
     needs: typeof needsContract;
@@ -136,7 +132,6 @@ export const sandboxContract: {
     bookmarks: bookmarksContract,
     browser: browserContract,
     capabilities: capabilitiesContract,
-    chores: choresContract,
     ci: ciContract,
     compliance: complianceContract,
     diff: diffContract,
@@ -146,7 +141,6 @@ export const sandboxContract: {
     git: gitContract,
     history: historyContract,
     hub: hubContract,
-    issues: issuesContract,
     logs: logsContract,
     loops: loopsContract,
     needs: needsContract,

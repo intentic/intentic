@@ -3,13 +3,18 @@ import { cleanMcpResult } from "../guard/mcp-output.js";
 import { maskDeep, maskJson, maskTargets } from "../agent/tools/agent-redaction.js";
 import { turnSecretAccess } from "../agent/run/harness/harness-servers.js";
 import { daemonEndpoint, createTurnMountRoute } from "../agent/tools/turn-mounts.routes.js";
-import { chatgptImagesInBackground, imageJobSeeds } from "../agent/tools/jobs/daemon/chatgpt-image-jobs.js";
+import { chatgptImagesInBackground } from "../agent/tools/jobs/daemon/chatgpt-image-jobs.js";
+import { conversationJobSeeds, startDaemonJob } from "../agent/tools/jobs/daemon/daemon-jobs.js";
+import { createJobLanes } from "../agent/tools/jobs/daemon/job-lanes.js";
 import { judgeIndependentCommand } from "../agent/tools/command-judge.js";
 import { workingNames } from "../bootstrap/working-now.js";
 import type { Services } from "../composition.js";
 import { cardDeps } from "../conversations/actor/card-deps.js";
 import { turnRunOf } from "../conversations/actor/conversation-holdings.js";
 import { createExtensionMcpEndpoint, createExtensionToolsEndpoint } from "../extensions/backend/extension-mcp.js";
+import { turnTickets } from "../extensions/turn/tool-grants.js";
+import { createTurnDoors } from "../extensions/turn/tool-turn-doors.js";
+import { ownCaller } from "../extensions/runtime/own.routes.js";
 import { createMcpRemoteEndpoint } from "../capabilities/mcp-oauth/mcp-remote.js";
 import { reachAllows } from "../secrets/credential-reach.js";
 import { HOST_PEER, hostPeerRoutes } from "../hosts/host-peer.js";
@@ -40,6 +45,9 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
     });
     const webextRoutes = webextPeerRoutes(services);
     const phoneRoutes = phonePeerRoutes(services);
+    const seedOf = conversationJobSeeds({ conversations: services.conversations, agents: services.agents, historyRoot: services.config.historyRoot });
+    // SAFETY: maskDeep keeps a value's shape and changes only its strings.
+    const mask = async <T>(value: T): Promise<T> => maskDeep(value, maskTargets(await services.secretRegistry())) as T;
     return {
         // What a device or sync command's short code is redeemed for: public, a device's first contact.
         "POST /system/redeem/{code}": createRedeemRoute({ codes: services.redeemCodes, sandboxUrl: () => services.config.sandbox.publicUrl }),
@@ -62,10 +70,7 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
                 device: hostRoutes.mcp,
                 devices: createDevicesEndpoint(hostDevicesDeps(services, hostRoutes.mcp)),
                 // chatgpt_image answered with a job id at once, its picture collected with `wait` (chatgpt-image-jobs.ts).
-                webext: chatgptImagesInBackground(
-                    { seedOf: imageJobSeeds({ conversations: services.conversations, agents: services.agents, historyRoot: services.config.historyRoot }) },
-                    webextRoutes.mcp,
-                ),
+                webext: chatgptImagesInBackground({ seedOf }, webextRoutes.mcp),
                 phone: phoneRoutes.mcp,
                 tools: createExtensionToolsEndpoint(services),
                 extension: createExtensionMcpEndpoint(services),
@@ -91,8 +96,7 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
                     conversationId,
                 });
             },
-            // SAFETY: maskDeep keeps a value's shape and changes only its strings, so a tool result stays a tool result.
-            async (result) => maskDeep(result, maskTargets(await services.secretRegistry())) as typeof result,
+            mask,
             ({ server, kind, conversationId, result }) => {
                 const listing = ToolListingSchema.safeParse(result);
                 if (listing.success) {
@@ -101,5 +105,18 @@ export const peerDoorRawRoutes = defineRawRoutes((services: Services) => {
                 }
             },
         ),
+        // (2026-11-26) The doors an extension tool's call opens onto its turn (extensions/turn/tool-turn-doors.ts): the
+        // turn's signed-in browser for an account it holds, the owner's browser it holds through the same peer door as
+        // the agent's own calls (before the ChatGPT image jobs above), and a background job in its conversation.
+        ...createTurnDoors({
+            tickets: turnTickets,
+            caller: (c) => ownCaller(services, c),
+            capabilities: services.capabilities,
+            mask,
+            ownerBrowser: webextRoutes.mcp,
+            seedOf,
+            startJob: startDaemonJob,
+            jobLanes: createJobLanes,
+        }),
     };
 });

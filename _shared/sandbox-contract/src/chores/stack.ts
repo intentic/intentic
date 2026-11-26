@@ -1,3 +1,4 @@
+// FROZEN (2026-11-26): the maintenance extension owns this; kept unchanged for the extension wire until 3.0.0 (index.ts).
 // Table of UI frameworks and idiom-migration rules that probes.ts sweeps and chores.ts turns into findings; kept apart
 // so neither duplicates the other's patterns.
 // Patterns are Rust-regex via ripgrep: no literal apostrophe (match quotes as `[\x22\x27]`; the scan shell-quotes each

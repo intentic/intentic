@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { at, drop, dropAll, fold, isJsonObject, type JsonObject, mapValue, rename, retype, transform } from "../documents/conversions.js";
-import { type ModelRole, ModelRoleSchema } from "../models/model-roles.js";
+import { type ModelRole, ROLES_BEFORE_CONTRIBUTIONS } from "../models/model-roles.js";
 import { setupsFromRoleLists } from "../models/model-setups.js";
 import { ModelPinSchema, type ModelPin } from "./agent.js";
 import { RESTORE_POINT_KEEP_DAYS_DEFAULT } from "./data-protection.js";
@@ -84,18 +84,20 @@ const refactorsFromChores = transform(
 // (`modelDefault`); it runs on a named setup it shares with other jobs. Jobs that held the same list share one setup, a
 // list most of whose jobs are suggested a preset becomes that preset, and a job that held none, or an empty one, is on
 // none, which runs it exactly as before: not at all. A list that does not read (a role this version does not know, a malformed pin) is left out rather than refusing
-// the whole file, the same reading the schema gave it.
+// the whole file, the same reading the schema gave it. The jobs it reads are the table's of 2026-11-26, frozen
+// (ROLES_BEFORE_CONTRIBUTIONS): six of them moved to their extensions' manifests that day, and a file this converts still
+// names them.
 const PinList = z.array(ModelPinSchema);
 const holdsRoleLists = (settings: JsonObject): settings is JsonObject => Object.hasOwn(settings, "modelRoles") || Object.hasOwn(settings, "modelDefault");
 const roleListsIntoSetups = transform("folds modelRoles and modelDefault into setups (modelSetups, roleSetups)", holdsRoleLists, (settings): JsonObject => {
     const { modelRoles, modelDefault, ...rest } = settings;
     const fallback = PinList.safeParse(modelDefault);
     const lists: Partial<Record<ModelRole, ModelPin[]>> = {};
-    for (const role of ModelRoleSchema.options) {
-        const own = isJsonObject(modelRoles) ? PinList.safeParse(modelRoles[role]) : undefined;
+    for (const { id } of ROLES_BEFORE_CONTRIBUTIONS) {
+        const own = isJsonObject(modelRoles) ? PinList.safeParse(modelRoles[id]) : undefined;
         const list = own?.success === true ? own.data : fallback.success && fallback.data.length > 0 ? fallback.data : undefined;
         if (list !== undefined) {
-            lists[role] = list;
+            lists[id] = list;
         }
     }
     const { modelSetups, roleSetups } = setupsFromRoleLists(lists);

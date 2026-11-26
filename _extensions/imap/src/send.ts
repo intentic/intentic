@@ -1,26 +1,36 @@
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-// The subpath, not the package root: the root loads every schema in the contract, which a send never needs.
-import { STATE_GROUP_DIR } from "@intentic/sandbox-contract/workspace-state";
+import { z } from "zod";
 
-// Where the approvals queue reads items from: one JSON file per approval, written by the agent and administered by the
-// daemon (schemas/approvals.ts in the contract), and where this extension's settings are read.
-export const approvalsDir = (root: string): string => join(root, STATE_GROUP_DIR.config, "approvals");
-export const settingsFile = (root: string): string => join(root, STATE_GROUP_DIR.config, "settings.json");
+// A mail as it goes out: composed into MIME and handed to the card's SMTP server by curl, with the login in a 0600 file.
+// Runs in the extension's backend (server.ts), the only place the card's credential is; the agent's `imap send` reads
+// its draft and attachments from the workspace and hands them over (cli.ts).
 
-export interface MailDraft {
-    readonly to: string[];
-    readonly cc?: string[];
-    readonly subject: string;
-    readonly text: string;
-    readonly html?: string;
-    readonly inReplyTo?: string;
-    readonly references?: string[];
-    readonly attachments?: readonly { path: string; name?: string; contentType?: string }[];
-}
+const Addresses = z.array(z.string().min(1).max(320)).max(500);
+
+// One attachment, its bytes carried along rather than its path: the backend cannot see the agent's checkout, and a held
+// send must go out exactly as it was when the owner read it.
+export const OutgoingAttachmentSchema = z.object({
+    name: z.string().min(1).max(255),
+    contentType: z.string().min(1).max(255).optional(),
+    data: z.base64(),
+});
+export type OutgoingAttachment = z.infer<typeof OutgoingAttachmentSchema>;
+
+export const OutgoingMailSchema = z.object({
+    to: Addresses.min(1),
+    cc: Addresses.optional(),
+    subject: z.string().max(998),
+    text: z.string(),
+    html: z.string().optional(),
+    inReplyTo: z.string().max(998).optional(),
+    references: z.array(z.string().max(998)).max(100).optional(),
+    attachments: z.array(OutgoingAttachmentSchema).max(100).optional(),
+});
+export type OutgoingMail = z.infer<typeof OutgoingMailSchema>;
 
 const header = (value: string): string => {
     if (/[\r\n]/.test(value)) {throw new Error("newline in mail header");}
@@ -34,69 +44,58 @@ const address = (value: string): string => {
 const encoded = (value: string): string => /[^\x20-\x7e]/.test(value) ? `=?UTF-8?B?${Buffer.from(value).toString("base64")}?=` : header(value);
 const lines = (value: Buffer): string => value.toString("base64").replace(/.{1,76}/g, "$&\r\n").trimEnd();
 
-export const buildMessage = async (from: string, draft: MailDraft): Promise<Buffer> => {
+export const buildMessage = (from: string, mail: OutgoingMail): Buffer => {
     address(from);
-    if (draft.to.length === 0) {throw new Error("at least one recipient is required");}
+    if (mail.to.length === 0) {throw new Error("at least one recipient is required");}
     const headers = [
         `From: ${from}`,
-        `To: ${draft.to.map(address).join(", ")}`,
-        ...(draft.cc?.length ? [`Cc: ${draft.cc.map(address).join(", ")}`] : []),
-        `Subject: ${encoded(draft.subject)}`,
+        `To: ${mail.to.map(address).join(", ")}`,
+        ...(mail.cc?.length ? [`Cc: ${mail.cc.map(address).join(", ")}`] : []),
+        `Subject: ${encoded(mail.subject)}`,
         `Date: ${new Date().toUTCString()}`,
         `Message-ID: <${randomUUID()}@${from.split("@")[1]}>`,
-        ...(draft.inReplyTo ? [`In-Reply-To: ${header(draft.inReplyTo)}`] : []),
-        ...(draft.references?.length ? [`References: ${draft.references.map(header).join(" ")}`] : []),
+        ...(mail.inReplyTo ? [`In-Reply-To: ${header(mail.inReplyTo)}`] : []),
+        ...(mail.references?.length ? [`References: ${mail.references.map(header).join(" ")}`] : []),
         "MIME-Version: 1.0",
     ];
-    const textPart = ["Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "", lines(Buffer.from(draft.text))];
+    const textPart = ["Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: base64", "", lines(Buffer.from(mail.text))];
     const alternative = `intentic-alternative-${randomUUID()}`;
-    const body = draft.html === undefined ? textPart : [
+    const body = mail.html === undefined ? textPart : [
         `Content-Type: multipart/alternative; boundary="${alternative}"`, "",
         `--${alternative}`, ...textPart, `--${alternative}`, "Content-Type: text/html; charset=utf-8",
-        "Content-Transfer-Encoding: base64", "", lines(Buffer.from(draft.html)), `--${alternative}--`, "",
+        "Content-Transfer-Encoding: base64", "", lines(Buffer.from(mail.html)), `--${alternative}--`, "",
     ];
-    const attachments = draft.attachments ?? [];
+    const attachments = mail.attachments ?? [];
     if (attachments.length === 0) {return Buffer.from([...headers, ...body, ""].join("\r\n"));}
     const boundary = `intentic-${randomUUID()}`;
     const parts = [...headers, `Content-Type: multipart/mixed; boundary="${boundary}"`, "", `--${boundary}`, ...body];
     for (const attachment of attachments) {
-        const name = header(attachment.name ?? attachment.path.split("/").at(-1) ?? "attachment");
+        const name = header(attachment.name);
         if (!/^[\x20-\x7e]+$/.test(name) || /["\\]/.test(name)) {throw new Error("attachment name must be printable ASCII without quotes");}
         const contentType = header(attachment.contentType ?? "application/octet-stream");
-        parts.push(`--${boundary}`, `Content-Type: ${contentType}; name="${name}"`, `Content-Disposition: attachment; filename="${name}"`, "Content-Transfer-Encoding: base64", "", lines(await readFile(attachment.path)));
+        parts.push(`--${boundary}`, `Content-Type: ${contentType}; name="${name}"`, `Content-Disposition: attachment; filename="${name}"`, "Content-Transfer-Encoding: base64", "", lines(Buffer.from(attachment.data, "base64")));
     }
     parts.push(`--${boundary}--`, "");
     return Buffer.from(parts.join("\r\n"));
 };
 
-export const sendRule = (rules: Record<string, string> | undefined): "allow" | "hold" | "deny" => {
-    const value = rules?.["imap.message.send"] ?? rules?.["imap.*"];
-    return value === "allow" || value === "deny" ? value : "hold";
-};
+/** Who it goes to, as the approval and the Activity row name them. */
+export const recipientsOf = (mail: OutgoingMail): string => [...mail.to, ...(mail.cc ?? [])].join(", ");
 
-export const draftDigest = async (draft: MailDraft): Promise<string> => {
-    const hash = createHash("sha256").update(JSON.stringify(draft));
-    for (const attachment of draft.attachments ?? []) {hash.update(await readFile(attachment.path));}
-    return hash.digest("hex");
-};
-
-export const prepareApproval = async (root: string, draft: MailDraft, account?: string): Promise<string> => {
-    const id = `imap-send-${randomUUID()}`;
-    const dir = approvalsDir(root);
-    const media = join(dir, "media");
-    await mkdir(media, { recursive: true, mode: 0o700 });
-    const draftPath = join(media, `${id}.json`);
-    await writeFile(draftPath, JSON.stringify(draft, null, 2), { mode: 0o600, flag: "wx" });
-    const recipients = [...draft.to, ...(draft.cc ?? [])].join(", ");
-    const item = {
-        kind: "action", summary: `Send email to ${recipients}: ${draft.subject}`,
-        details: `To: ${draft.to.join(", ")}\nCc: ${(draft.cc ?? []).join(", ")}\nSubject: ${draft.subject}\n\n${draft.text}\n\nHTML: ${draft.html ?? "none"}\n\nAttachments: ${(draft.attachments ?? []).map((a) => a.path).join(", ") || "none"}`,
-        instructions: `Send only the draft in ${draftPath}: run \`imap${account === undefined ? "" : ` --account ${account}`} send ${draftPath} --approval-id ${id}\`. It checks the SHA-256 draft and attachment digest ${await draftDigest(draft)} before sending. Report the SMTP result; never retry an uncertain send blind.`,
-        status: "proposed", createdAt: Date.now(),
-    };
-    await writeFile(join(dir, `${id}.json`), JSON.stringify(item, null, 2), { mode: 0o600, flag: "wx" });
-    return id;
-};
+/** What the owner reads before saying yes: everything that goes out, both bodies and every attachment by name and size. */
+export const mailDetails = (from: string, mail: OutgoingMail): string =>
+    [
+        `From: ${from}`,
+        `To: ${mail.to.join(", ")}`,
+        `Cc: ${(mail.cc ?? []).join(", ")}`,
+        `Subject: ${mail.subject}`,
+        "",
+        mail.text,
+        "",
+        `HTML: ${mail.html ?? "none"}`,
+        "",
+        `Attachments: ${(mail.attachments ?? []).map((each) => `${each.name} (${Buffer.from(each.data, "base64").length} bytes)`).join(", ") || "none"}`,
+    ].join("\n");
 
 // How a login proves itself: the password, or an OAuth2 access token (SASL XOAUTH2).
 export type MailCredential = { readonly password: string } | { readonly accessToken: string };
@@ -130,6 +129,20 @@ export const withCurlLogin = async <T>(login: string, run: (configPath: string) 
     }
 };
 
+// curl's exit codes for a send that never reached the server's acceptance of the message: no such host, no connection,
+// no TLS, the login refused. Anything else may have been accepted before the answer was lost.
+const NOT_SENT_CODES = new Set([6, 7, 35, 60, 67]);
+
+// A failed delivery, with whether the message may still have gone.
+export class DeliveryError extends Error {
+    constructor(
+        message: string,
+        readonly maybeSent: boolean,
+    ) {
+        super(message);
+    }
+}
+
 const runCurl = async (args: string[], mime: Buffer): Promise<void> => {
     await new Promise<void>((resolve, reject) => {
         const child = spawn("curl", args, { stdio: ["pipe", "ignore", "pipe"] });
@@ -137,8 +150,10 @@ const runCurl = async (args: string[], mime: Buffer): Promise<void> => {
         child.stderr?.on("data", (chunk: Buffer) => {
             error += chunk.toString().slice(0, 300);
         });
-        child.on("error", reject);
-        child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`SMTP delivery failed (${code}): ${error}`))));
+        child.on("error", (failure) => reject(new DeliveryError(`SMTP delivery could not start: ${failure.message}`, false)));
+        child.on("close", (code) =>
+            code === 0 ? resolve() : reject(new DeliveryError(`SMTP delivery failed (${code}): ${error}`, !NOT_SENT_CODES.has(code ?? -1))),
+        );
         child.stdin?.end(mime);
     });
 };
@@ -146,17 +161,15 @@ const runCurl = async (args: string[], mime: Buffer): Promise<void> => {
 const curlTransport = (args: string[], mime: Buffer, login: string): Promise<void> =>
     withCurlLogin(login, (config) => runCurl([...args, "--config", config], mime));
 
-export const deliver = async (
-    config: SmtpConfig,
-    from: string,
-    draft: MailDraft,
-    transport: (args: string[], mime: Buffer, login: string) => Promise<void> = curlTransport,
-): Promise<void> => {
+// What hands a composed message to the SMTP server: curl, with the login in a file beside its arguments.
+export type Transport = (args: string[], mime: Buffer, login: string) => Promise<void>;
+
+export const deliver = async (config: SmtpConfig, from: string, mail: OutgoingMail, transport: Transport = curlTransport): Promise<void> => {
     if (!config.host || !config.username || credentialMissing(config.credential)) {
-        throw new Error("SMTP connection is incomplete: set the SMTP host on the IMAP card");
+        throw new DeliveryError("SMTP connection is incomplete: set the SMTP host on the IMAP card", false);
     }
-    const recipients = [...draft.to, ...(draft.cc ?? [])].map(address);
-    const mime = await buildMessage(from, draft);
+    const recipients = [...mail.to, ...(mail.cc ?? [])].map(address);
+    const mime = buildMessage(from, mail);
     const url = `${config.security === "tls" ? "smtps" : "smtp"}://${config.host}:${config.port}`;
     const args = ["--fail", "--silent", "--show-error", "--ssl-reqd", "--url", url, "--mail-from", address(from), ...recipients.flatMap((r) => ["--mail-rcpt", r]), "--upload-file", "-"];
     await transport(args, mime, curlLogin(config.username, config.credential));

@@ -1,13 +1,13 @@
 import {
-    chatRings,
     type ChatReply,
+    chatRings,
+    declaredMessageLimit,
     deliverChunked,
     type GatewayCtx,
     GatewayRefusal,
     HISTORY_LIMIT,
     type ListenerHistoryEntry,
     type ListenerMessage,
-    MESSAGE_LIMITS,
     progressDetailOf,
     recentKeys,
     type ReplyTiming,
@@ -34,7 +34,7 @@ export { addressesUs } from "./threads.js";
 // WhatsApp's store already hold ours.
 
 // Telegram rejects sendMessage over its limit outright; a longer reply spills into follow-up messages.
-const TELEGRAM_MAX = MESSAGE_LIMITS.telegram;
+const TELEGRAM_MAX = declaredMessageLimit(new URL("../intentic-extension.json", import.meta.url), "telegram");
 // How many chats we keep history rings for.
 const HISTORY_CHATS_MAX = 200;
 // Stop buttons whose conversation the gateway still remembers; older ones answer that the work already finished.

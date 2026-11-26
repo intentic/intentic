@@ -5,12 +5,14 @@ import type { Automation, AutomationSummary } from "@intentic/sandbox-contract/s
 import { CodeField, CopyButton, formatDateTime, Section } from "@intentic/extension-ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useAutomationPatch } from "../properties/useAutomationPatch";
+import { useWatchKinds } from "../catalog";
 import { sourceLabel, watchLine } from "../watch";
 import { t } from "../i18n.js";
 
 const props = defineProps<{ automation: AutomationSummary }>();
 
 const watched = computed(() => watchLine(props.automation));
+const kinds = useWatchKinds();
 const stored = computed(() => props.automation.guard ?? ``);
 
 // The command on screen: seeded from what is stored, and following a change made elsewhere only while it holds nothing of
@@ -93,7 +95,7 @@ const foot = computed<{ text: string; tone: string } | undefined>(() => {
         </template>
 
         <div class="flex flex-col gap-1.5">
-            <span v-if="automation.source" class="text-sm text-content">{{ sourceLabel(automation.source) }}</span>
+            <span v-if="automation.source" class="text-sm text-content">{{ sourceLabel(automation.source, kinds) }}</span>
             <template v-else>
                 <!-- The block a command is read in, with a caret: the same ground and rim as a code block at rest, the field's
                      own rim colour under a pointer or a caret. -->

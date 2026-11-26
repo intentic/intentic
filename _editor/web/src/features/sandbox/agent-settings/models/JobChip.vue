@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MODEL_ROLES, type ModelRole } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import { type IconName, ui } from "@intentic/ui";
 import { isIconName } from "@intentic/ui/icons";
 import { computed, inject } from "vue";
@@ -17,10 +17,14 @@ const emit = defineEmits<{ grab: [PointerEvent, HTMLElement]; open: [HTMLElement
 
 const state = inject(JOB_STATE);
 const icon = computed<IconName>(() => {
-    const named = MODEL_ROLES.find((spec) => spec.id === role)?.icon ?? ``;
+    const named = state?.spec(role)?.icon ?? ``;
     return isIconName(named) ? named : `sparkles`;
 });
 const note = computed(() => state?.note(role));
+const label = computed(() => {
+    const spec = state?.spec(role);
+    return spec === undefined ? role : roleLabel(spec);
+});
 </script>
 
 <template>
@@ -35,7 +39,7 @@ const note = computed(() => state?.note(role));
         @click="emit(`open`, $event.currentTarget as HTMLElement)"
     >
         <Icon :name="icon" class="text-2xs" aria-hidden="true" />
-        <span>{{ roleLabel({ id: role }) }}</span>
+        <span>{{ label }}</span>
         <span v-if="note !== undefined" class="text-subtle">· {{ note.text }}</span>
     </button>
 </template>

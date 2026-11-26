@@ -152,7 +152,7 @@ export interface CiFixRequest {
     readonly run?: PipelineRun | undefined;
     readonly evidence: CiFailureEvidence;
     // What the turn carries besides its words: the pick, who pressed, the resume verb.
-    readonly turn?: Omit<TurnInput, "prompt" | "conversationId" | "title" | "isolated" | "runRole">;
+    readonly turn?: Omit<TurnInput, "prompt" | "conversationId" | "title" | "isolated" | "runRole" | "job">;
     // Somebody pressed Fix, rather than main's fix agent starting by itself: the door a person's words come through, so an
     // archived attempt it continues reopens.
     readonly pressed?: boolean;

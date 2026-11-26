@@ -1,5 +1,5 @@
 import { ExtensionManifestSchema } from "./manifest.js";
-import { extensionRouteReach, permissionProblem, sandboxRouteAllowed } from "./permissions.js";
+import { declaredReachOf, extensionRouteReach, permissionProblem, sandboxRouteAllowed } from "./permissions.js";
 
 // The glob grammar: each segment of the declared path is literal or a lone `*`, and a `*` matches one whole segment
 // that the URL layer would route rather than resolve away.
@@ -103,6 +103,10 @@ describe("extensionRouteReach", () => {
         ["its own settings, undeclared", "GET", "/extension/settings", true],
         ["its own event stream, undeclared", "GET", "/extension/events", true],
         ["no write through its own routes", "POST", "/extension/settings", false],
+        // Reached by the token; each door then checks its own declaration (`permissions.work`, `permissions.exec`).
+        ["the work-hold door, judged by the daemon against `work`", "POST", "/extension/work/hold", true],
+        ["the exec door, judged by the daemon against `exec`", "POST", "/extension/exec", true],
+        ["no read through a door", "GET", "/extension/exec", false],
         ["what it declared", "GET", "/ports", true],
         ["what it did not declare", "GET", "/agents", false],
         ["its own provider's listener route", "GET", "/listeners/slack/state", true],
@@ -114,5 +118,39 @@ describe("extensionRouteReach", () => {
 
     test("an extension without a listener reaches no listener route, even one it globbed", () => {
         expect(extensionRouteReach({ permissions: ["GET /listeners/*/state"] }, "GET", "/listeners/slack/state")).toBe(false);
+    });
+});
+
+describe("declaredReachOf", () => {
+    test("nothing declared reaches nothing", () => {
+        expect(declaredReachOf(undefined)).toEqual({ events: [], work: false, exec: [], fires: [], turn: [] });
+    });
+
+    test("reads each declaration off a parsed manifest's permissions", () => {
+        const manifest = ExtensionManifestSchema.parse({
+            publisher: "acme",
+            name: "demo",
+            version: "1.0.0",
+            engines: { intentic: "^2.50.0" },
+            server: "dist/server.js",
+            permissions: { events: ["run", "activity"], work: true, exec: ["toolchain"], fires: ["sweep", "nightly-report"], turn: ["browser", "jobs"] },
+        });
+        expect(declaredReachOf(manifest.permissions)).toEqual({
+            events: ["run", "activity"],
+            work: true,
+            exec: ["toolchain"],
+            fires: ["sweep", "nightly-report"],
+            turn: ["browser", "jobs"],
+        });
+    });
+
+    test.each([
+        ["an event kind nobody serves", { events: ["ci"] }],
+        ["a class outside the two", { exec: ["service"] }],
+        ["a handler that is not a lowercase word", { fires: ["Sweep Now"] }],
+        ["a turn power nobody serves", { turn: ["devices"] }],
+    ])("the manifest refuses %s", (_name, permissions) => {
+        const parsed = ExtensionManifestSchema.safeParse({ publisher: "acme", name: "demo", version: "1.0.0", engines: { intentic: "^2.50.0" }, permissions });
+        expect(parsed.success).toBe(false);
     });
 });

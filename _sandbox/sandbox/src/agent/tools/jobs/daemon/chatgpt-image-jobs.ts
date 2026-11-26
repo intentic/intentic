@@ -2,12 +2,10 @@ import { whenAborted, within } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import { oneLine } from "@intentic/base/one-line";
 import { z } from "zod";
-import type { ConversationActors } from "../../../../conversations/actor/conversation-actors.js";
-import { conversationProfile, type PersistedAgent } from "../../../../conversations/registry/agents-store.js";
 import type { RpcMessage } from "../../turn-mounts.js";
 import type { MountCall, MountEndpoints } from "../../turn-mounts.routes.js";
 import type { BackgroundJobSeed } from "../background-jobs.js";
-import { type DaemonJobEnd, type RunningDaemonJob, startDaemonJob } from "./daemon-jobs.js";
+import { conversationJobSeeds, type DaemonJobEnd, type JobSeedDeps, type RunningDaemonJob, startDaemonJob } from "./daemon-jobs.js";
 import { createJobLanes, type JobLanes } from "./job-lanes.js";
 
 /* CHATGPT IMAGES IN THE OWNER'S BROWSER, WITHOUT HOLDING THE TURN (2026-11-17, the shinobi-society audit). chatgpt_image
@@ -39,19 +37,10 @@ export interface ImageJobDeps {
     readonly quickMs?: number;
 }
 
-export interface ImageJobSeedDeps {
-    readonly conversations: Pick<ConversationActors, "holdings" | "send">;
-    readonly agents: { readonly entry: (id: string) => PersistedAgent | undefined };
-    readonly historyRoot: string;
-}
+export type ImageJobSeedDeps = JobSeedDeps;
 
-/** A conversation's job seed, woken as the conversation's own profile, as a child's report wakes its parent. */
-export const imageJobSeeds =
-    (deps: ImageJobSeedDeps) =>
-    (conversationId: string): BackgroundJobSeed | undefined => {
-        const entry = deps.agents.entry(conversationId);
-        return entry === undefined ? undefined : { conversationId, profile: conversationProfile(entry), conversations: deps.conversations, historyRoot: deps.historyRoot };
-    };
+/** A conversation's job seed (daemon-jobs.ts conversationJobSeeds), under the name this door has always used. */
+export const imageJobSeeds = conversationJobSeeds;
 
 // What the listing says chatgpt_image does at this door, in place of the extension's own words for one blocking call: the
 // extension is whatever build the person installed, and this door is what makes the call a job.

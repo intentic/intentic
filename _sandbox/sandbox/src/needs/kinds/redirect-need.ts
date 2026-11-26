@@ -5,8 +5,8 @@ import { type RouteAnswer, type RouteRequest, routeClientOf } from "../../accoun
 import { supervisorFor } from "../../agent/subagents/children.js";
 import type { Services } from "../../composition.js";
 import { turnStandingOf } from "../../conversations/actor/turn-standing.js";
-import { projectOfRemote } from "../../issues/account-outbox.js";
-import { claimedHere } from "../../issues/project-claims.js";
+import { projectOfRemote } from "../../account-routing/account-outbox.js";
+import { claimedHere } from "../../account-routing/project-claims.js";
 import { opt } from "../../opt.js";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 

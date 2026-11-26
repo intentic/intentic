@@ -20,6 +20,7 @@ export const vendorTurnGate = (
         ...opt("outsideWake", policy.outsideWake),
         ...opt("rulebook", policy.rulebook),
         ...opt("actionRules", policy.actionRules),
+        ...opt("outwardCommands", policy.outwardCommands),
         ...opt("judge", hooks.judge),
         ...opt("log", hooks.logSafety),
         ...opt("answered", hooks.safetyAnswered),

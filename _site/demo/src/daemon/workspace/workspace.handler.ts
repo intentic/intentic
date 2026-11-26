@@ -3,7 +3,7 @@ import { pictureDimensions, readFile, resolveReference, restoreEntry, searchWork
 import { addApps, appsList, startApp, stopApp, templates } from "./apps";
 import { derive, readDerived } from "./derived";
 import { copyEntry, deleteAny, editedChildren, editedTree, extractArchive, makeFolder, moveEntry, noteWritten } from "./edits";
-import { packageGraph, packageModules, workspaceModules } from "./graph";
+import { workspaceModules } from "./graph";
 import { cloneRepo, createRepo, workspaceRepos } from "./repos";
 import { streamSearch } from "./searchStream";
 import { seedPages } from "./seed";
@@ -56,8 +56,6 @@ export const workspaceDoors = {
     startApp: ({ repo, app }) => okAfter(() => startApp(repo, app)),
     stopApp: ({ repo, app }) => okAfter(() => stopApp(repo, app)),
     runTests: ({ repo, session, dirs }) => okAfter(() => runTests(repo, session, dirs)),
-    packageGraph: ({ repo }) => packageGraph(repo),
-    packageModules: ({ repo, package: name }) => packageModules(repo, name),
     // The tickets an element spends where it cannot send a bearer (daemon/workspace/tickets.ts).
     mediaTicket: ({ path }) => mintMediaTicket(path),
     downloadTicket: ({ paths }) => mintDownloadTicket(paths),

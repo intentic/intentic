@@ -1,4 +1,5 @@
 import { settingsContract } from "@intentic/sandbox-contract/contracts/settings.contract";
+import { declaredModelRoles } from "../agent/models/declared-roles.js";
 import { settingsDiff } from "../audit/settings-diff.js";
 import { noteAudit } from "../audit/audit-http.js";
 import { requireMaintainer } from "../auth/owner-gates.js";
@@ -22,7 +23,7 @@ import { versionedSettingsWrite } from "../seams/config-commits/settings-version
 import { reconcileBakedSkills } from "./skills.js";
 import { requireAgentDomainRollout } from "../workload/domain/agent-domain-rollout.js";
 import { errorMessage } from "@intentic/base/errors";
-import { settingsPinRefusal } from "../compliance/org-pins.js";
+import { outwardActionKeys, settingsPinRefusal } from "../compliance/org-pins.js";
 
 // `get` applies defaults when the manifest is absent, `set` overwrites it. `savings` reads whichever backend's ledger
 // is currently compressing: the setting picking the cleaner also picks the ledger read here.
@@ -54,10 +55,14 @@ export const createSettingsRoutes = (services: Services) => {
         }),
         ...createAiLiteracyRoutes(services),
         get: i.get.handler(() => services.sandboxSettings.get()),
+        // What the action rules can be written for: the enabled extensions' own declarations (capabilities/broker/outward-actions.ts).
+        outwardActions: i.outwardActions.handler(async () => ({ actions: [...(await services.outwardActions()).offered] })),
+        // The jobs a setup can be chosen for: the sandbox's own and each installed extension's (agent/models/declared-roles.ts).
+        modelRoles: i.modelRoles.handler(async () => ({ roles: await declaredModelRoles(services) })),
         set: i.set.handler(async ({ input }) => {
             // A save that would undo what the sandbox's organisation pinned is refused with the items named, rather than
             // stored pinned and leaving the page showing a value that did not stick (compliance/org-pins.ts).
-            const pinned = await settingsPinRefusal(services.orgPolicy, input);
+            const pinned = await settingsPinRefusal(services.orgPolicy, input, outwardActionKeys(() => services));
             if (pinned !== undefined) {
                 throw new ORPCError("FORBIDDEN", { message: pinned.error, data: pinned });
             }

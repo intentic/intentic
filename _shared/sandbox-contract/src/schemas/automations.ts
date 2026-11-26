@@ -5,6 +5,7 @@ import { entryId } from "./internal.js";
 import { IssuesConfigSchema } from "./issues.js";
 import { ZoneSchema } from "../time/zone.js";
 import { WorkspaceEventKindSchema } from "./automation-events.js";
+import { WatchKindSchema, WatchSourceSchema } from "./watch-sources.js";
 export { WorkspaceEventKindSchema, WorkspaceEventSchema, type WorkspaceEventKind, type WorkspaceEvent } from "./automation-events.js";
 // An automation wakes the agent: the daemon fires each enabled one on its trigger, runs the optional guard command
 // (non-zero exit skips the wake), then runs one turn with the prompt. The manifest is user config; run history is
@@ -105,6 +106,12 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
             .array(z.string())
             .optional()
             .describe("Which websites may reach the public endpoint, the chat widget's or the bug reporter's. Absent or empty admits nobody."),
+        // (2026-11-26) Read by an extension's public door whose route declares `keyFromBrowsers`; until then the bug
+        // intake's own setting (`issues.keyFromBrowsers`), moved here by the automations file's conversion.
+        keyFromBrowsers: z
+            .boolean()
+            .optional()
+            .describe("Let a browser on a site you did not list in with this automation's key, rather than only from a site you listed. Off unless you need it."),
     }),
     // `repo` narrows to events whose span touches one workspace repo ("root" or a repo id); absent ⇒ any.
     z.object({
@@ -114,48 +121,14 @@ export const TriggerSchema = z.discriminatedUnion("kind", [
     }),
 ]);
 export type Trigger = z.infer<typeof TriggerSchema>;
-// A watch is an automation whose check decides, without a model, whether anything happened: either its `guard` command
-// or one of these ready-made sources, which the daemon checks itself (automations/watch/watch-sources.ts). Only once the check
-// says so does anything run, and what it saw goes with the wake. No source needs an extension, a token or a shell.
-// npm: the registry's view of one package. With `range`, the check passes once a published version satisfies it, and
-// what it saw is that version; without, what it saw is the version under `tag` (latest by default), for `fireOn: change`.
-// github-release: a public repository's newest release (prereleases only when asked), for `fireOn: change`.
-// url: one page, its text or the first `select` match, for `fireOn: change`.
-export const WatchSourceSchema = z.discriminatedUnion("kind", [
-    z.object({
-        kind: z.literal("npm").describe("A package on the npm registry."),
-        package: z.string().min(1).max(214).describe("The package name, scoped or not, like bun or @scope/name."),
-        range: z
-            .string()
-            .min(1)
-            .max(200)
-            .optional()
-            .describe("A semver range, like >=1.4.3. Passes once a published version satisfies it. Prereleases count only when the range names one."),
-        tag: z.string().min(1).max(100).optional().describe("Which dist-tag to read without a range. Absent means latest."),
-    }),
-    z.object({
-        kind: z.literal("github-release").describe("The newest release of a public GitHub repository."),
-        repo: z
-            .string()
-            .regex(/^[\w.-]+\/[\w.-]+$/, "repo must look like owner/name")
-            .describe("The repository, as owner/name."),
-        prereleases: z.boolean().optional().describe("Count prereleases too. Absent means only full releases."),
-    }),
-    z.object({
-        kind: z.literal("url").describe("One web page."),
-        url: z.string().url().describe("The page, http or https."),
-        select: z
-            .string()
-            .min(1)
-            .max(500)
-            .optional()
-            .describe("A regular expression; what it matches (its first group, if it has one) is what is watched rather than the whole page's text."),
-    }),
-]);
-export type WatchSource = z.infer<typeof WatchSourceSchema>;
+export * from "./watch-sources.js";
 // What a passing check sets off. `agent` (the default) is a new agent with the prompt, as every automation always did;
 // `conversation` continues one that already exists, the way a watch wakes the conversation that armed it, so a plan
 // made weeks ago resumes where it stopped; `notify` runs no model at all, and only tells the owner what the check saw.
+// (2026-11-26) `extension` runs no model either: it hands the fire to a handler an extension's backend registered
+// (`api.automations.onFire`) and its manifest declares (`permissions.fires`), through a backend-host door no person's,
+// panel's or agent's token reaches. Only that extension saves one naming itself; a fire made while its backend is down
+// is kept and handed over once it is back. An older daemon skips such an entry and keeps it in the file.
 export const AutomationTargetSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("agent").describe("A new agent, told the prompt and what the check saw.") }),
     z.object({
@@ -163,6 +136,11 @@ export const AutomationTargetSchema = z.discriminatedUnion("kind", [
         conversationId: z.string().min(1).describe("Which conversation."),
     }),
     z.object({ kind: z.literal("notify").describe("No agent: a notification to the owner with what the check saw.") }),
+    z.object({
+        kind: z.literal("extension").describe("No agent: an extension's own code, woken through a handler its backend registered."),
+        extension: z.string().min(1).describe("The extension, as publisher.name."),
+        handler: z.string().min(1).describe("Which of its handlers, as its manifest's `permissions.fires` names them."),
+    }),
 ]);
 export type AutomationTarget = z.infer<typeof AutomationTargetSchema>;
 // `pass` (the default): every check that passes fires. `change`: a check fires only when what it saw differs from what
@@ -362,7 +340,7 @@ export const AutomationSchema = z.object({
     // The guard's alternative: a condition the daemon checks itself. Refused at upsert beside a guard, since two checks
     // would leave "what the check saw" meaning two things.
     source: WatchSourceSchema.optional().describe(
-        "A ready-made check instead of a guard command: an npm package's version, a GitHub repository's newest release, or a web page.",
+        "A ready-made check instead of a guard command: a web page, or a kind an enabled extension declares, like an npm package's version or a GitHub repository's newest release.",
     ),
     fireOn: FireOnSchema.optional().describe(
         "Fire on every passing check, or only when what the check saw changed since the last one. Absent means every passing check.",
@@ -465,7 +443,7 @@ export const AutomationSchema = z.object({
         .string()
         .optional()
         .describe(
-            "Who made it, as the sandbox recorded it: a member's email, or agent:<conversation id> for one an agent proposed and a person approved. Its notices (a watch firing or ending, a one-time wake done) go to them. Set by the sandbox; a value sent with a save is ignored. Absent on one made before it was kept, whose notices go to the sandbox's owner and maintainers.",
+            "Who made it, as the sandbox recorded it: a member's email, agent:<conversation id> for one an agent proposed and a person approved, or extension:<publisher.name> for one an extension saved with its own token. Its notices (a watch firing or ending, a one-time wake done) go to them. Set by the sandbox; a value sent with a save is ignored. Absent on one made before it was kept, whose notices go to the sandbox's owner and maintainers.",
         ),
 });
 export type Automation = z.infer<typeof AutomationSchema>;
@@ -607,6 +585,10 @@ export const TriggerSourceSchema = z.object({
     mentionLabel: z.string().min(1).optional(),
     // The provider owns the payload vocabulary, so it owns the first prompt that explains that payload.
     starterPrompt: z.string().min(1).optional(),
+    // (2026-11-26) Set on a source anyone on the internet reaches (a listener's `strangers`), naming which of the owner's
+    // admission floors its wakes answer to: `visitor` (a website visitor's), `report` (a bug report's). Absent: a source
+    // whose senders the owner connected, held to the team chat floor.
+    strangers: z.enum(["visitor", "report"]).optional(),
     // Any one connected capability is enough; computed client-side, since capability facts are pushed live and a served
     // boolean would go stale between polls.
     requires: z.array(z.string().min(1)).default([]),
@@ -655,5 +637,7 @@ export type AutomationTemplate = z.infer<typeof AutomationTemplateSchema>;
 export const AutomationCatalogSchema = z.object({
     sources: z.array(TriggerSourceSchema),
     templates: z.array(AutomationTemplateSchema),
+    // (2026-11-26) Each installed extension's watch kinds; absent from an older daemon (BUILT_IN_WATCH_KINDS).
+    watchKinds: z.array(WatchKindSchema).optional(),
 });
 export type AutomationCatalog = z.infer<typeof AutomationCatalogSchema>;

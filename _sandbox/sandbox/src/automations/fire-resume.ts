@@ -68,12 +68,12 @@ const recordInterrupted = async (services: Services, entry: JournalledFire, now:
         .catch((error: Error) => services.logger.warn({ err: error, automation: entry.automationId }, "interrupted run not recorded"));
 };
 
-// Fires it again on the thread it belonged to, its answer going where the original's would have: a Visitor chat's outbox
-// or the gateway channel's thread (the requester's live stream died with the daemon). Answers once the fire is admitted,
+// Fires it again on the thread it belonged to, its answer going where the original's would have: the gateway channel's
+// thread (the requester's live stream died with the daemon), a Visitor chat's outbox through its extension's gateway. Answers once the fire is admitted,
 // so the next entry is admitted behind it and queued fires keep their order; the run itself is not waited for.
 const refire = (services: Services, automation: Parameters<typeof fireOnThread>[1], entry: JournalledFire): Promise<void> => {
     // Only a message from a place (a Visitor chat, a channel) has somewhere to be answered.
-    const sink = entry.origin?.channelId === undefined ? undefined : (services.outboxStreamFor(entry.origin) ?? channelAnswerSink(services, entry.origin));
+    const sink = entry.origin?.channelId === undefined ? undefined : channelAnswerSink(services, entry.origin);
     return new Promise<void>((resolve) => {
         void fireOnThread(services, automation, refirePlace(entry), { ...refireOptions(entry), ...opt("stream", sink?.stream), accepted: async () => resolve() })
             .then(async () => {

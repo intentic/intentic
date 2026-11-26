@@ -3,25 +3,24 @@ import type { AdmissionRule } from "@intentic/sandbox-contract/schemas/command-a
 import { InfoHint, Notice, Picker, Row, RowGroup, RowNote } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { computed } from "vue";
-import { useExtensions } from "../../../models/extensions/useExtensions";
 import { actionLabel, serviceName } from "../data-protection/dataProtection";
 import { useSandboxSettings } from "../../../models/sandbox/useSandboxSettings";
 import { actionRules, ruleOptions, type ServiceRow, serviceRows, withServiceRule } from "./outwardActions";
+import { useOutwardActions } from "./useOutwardActions";
 import { type Posture, postureOf, postures, withPosture } from "./spawnPosture";
 
-// What the agent may do out in the world without a person saying yes: start more agents, then one row per service whose
-// extension is on (send a Discord message, register a letter in EZD RP). Ask first parks the action in Approvals. A
-// service's actions are set together, and when they were set apart (the preset holds each on its own key) the row says
-// how each stands rather than picking one. Starting subagents sat in Agent ▸ Tools, the rest had no control outside the
-// preset, until 2026-10-16.
+// What the agent may do out in the world without a person saying yes: start more agents, then one row per service an
+// enabled extension declares outward actions for (send a Discord message, upload to OneDrive). Ask first parks the
+// action in Approvals. A service's actions are set together, and when they were set apart (the preset holds each on its
+// own key) the row says how each stands rather than picking one. Starting subagents sat in Agent ▸ Tools, the rest had no
+// control outside the preset, until 2026-10-16.
 
 const t = useT();
 const { settings, patch, refusal } = useSandboxSettings();
-const { enabled: enabledExtensions } = useExtensions();
+const offered = useOutwardActions();
 
 const rules = computed(() => settings.value?.actionRules ?? {});
-const switchedOn = computed(() => new Set(enabledExtensions.value.map((extension) => extension.id)));
-const rows = computed(() => serviceRows(rules.value, switchedOn.value));
+const rows = computed(() => serviceRows(rules.value, offered.value));
 
 const posture = computed<Posture>(() => postureOf(rules.value));
 const setPosture = (next: Posture): void => patch({ actionRules: withPosture(rules.value, next) });
@@ -31,7 +30,7 @@ const actionOf = (key: string): string => actionLabel(key.split(`.`).slice(1).jo
 const covers = (row: ServiceRow): string => row.keys.map(actionOf).join(` · `);
 // The line under a row whose actions differ, each with how it stands, in the words Data protection uses for the same rules.
 const mixedLine = (row: ServiceRow): string =>
-    actionRules(rules.value, row)
+    actionRules(rules.value, row, offered.value)
         .map(({ key, rule }) => `${actionOf(key)}: ${t(`sandbox.dataProtection.value.${rule}`)}`)
         .join(` · `);
 </script>

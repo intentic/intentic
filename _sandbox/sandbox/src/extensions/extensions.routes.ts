@@ -52,6 +52,34 @@ const workspaceRevisionOf = async (extension: InstalledExtension): Promise<strin
 
 // Installed extensions (git-installed ∪ image-baked) resolved to manifests and settings; boots the web extension host.
 // A checkout whose manifest no longer parses is skipped here; its capability row still shows status until re-added.
+// (2026-11-26) The automations an extension's listener fires say why they went quiet once it is switched off, as an off
+// watch kind's do on each check: a listener has no check to fail, so it is said now, once, on each of them. The Visitor
+// chat's chats are the case: anyone may switch that extension off, and its chats would otherwise just stop answering.
+// Read before the switch moves, since only the extension that owns a provider's listener fires its automations; undefined
+// for one that owns none.
+const sourceOffSayer = async (services: Services, extension: InstalledExtension): Promise<(() => Promise<void>) | undefined> => {
+    const listener = extension.manifest.contributes?.listener;
+    if (listener === undefined || (await listenerOwnership(services)).owners.get(listener.provider) !== extension.id) {
+        return undefined;
+    }
+    return () => saySourceOff(services, extension, listener);
+};
+
+const saySourceOff = async (
+    services: Pick<Services, "automations" | "logger">,
+    extension: InstalledExtension,
+    listener: NonNullable<NonNullable<InstalledExtension["manifest"]["contributes"]>["listener"]>,
+): Promise<void> => {
+    const detail = `${listener.automation.label} is switched off: its extension (${extension.id}) is off in Extensions, so nothing reaches this automation until it is switched back on.`;
+    for (const automation of await services.automations.list()) {
+        if (automation.enabled && automation.trigger.kind === "listener" && automation.trigger.provider === listener.provider) {
+            await services.automations
+                .recordRun(automation.id, { at: Date.now(), outcome: "error", detail })
+                .catch((error: Error) => services.logger.warn({ err: error, automation: automation.id }, "an off source's automation could not be told"));
+        }
+    }
+};
+
 export const createExtensionsRoutes = (services: Services) => {
     const i = implement(extensionsContract).$context<OrpcContext>();
     const root = services.workspace.root;
@@ -361,7 +389,9 @@ export const createExtensionsRoutes = (services: Services) => {
                     message: `${extensionIdOf(extension.manifest)} is the control surface for an engine that runs regardless, it cannot be switched off`,
                 });
             }
+            const sayOff = input.enabled ? undefined : await sourceOffSayer(services, extension);
             await writeExtensionEnablement(root, extensionIdOf(extension.manifest), input.enabled);
+            await sayOff?.();
             // Only declared processes land now; everything else the switch reaches rebuilds on its own cadence.
             // The tab states which of those an extension has, rather than leave the delay to be discovered.
             if (input.enabled) {

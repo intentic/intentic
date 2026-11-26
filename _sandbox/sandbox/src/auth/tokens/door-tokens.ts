@@ -11,7 +11,9 @@ import { bearerFrom, tokenEquals } from "../auth.js";
 // token.
 // - automation POST /automations/{id}/fire
 // - gate POST /workflows/{id}/gate
-// - intake POST /intake/{id}/report
+// - intake an extension's public door that takes a key (`contributes.publicRoutes`, `key: true`), per automation: the
+//   bug intake's POST /door/intentic.issues/{id}/report since 2026-11-26, POST /intake/{id}/report before, which the
+//   daemon still forwards there, so a key out in the field keeps working
 // Stored plaintext in the secrets class, since a maintainer must be able to re-display a taught URL; locked from the
 // file API to bound exposure.
 // `ensure` mints on first look and returns the same value until rotated; `rotate` invalidates a leaked URL without

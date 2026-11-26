@@ -3,8 +3,9 @@ import { envSuffix } from "@intentic/sandbox-contract/capability-env";
 import type { OAuthSettings } from "./oauth.js";
 import type { MailCredential, SmtpConfig } from "./send.js";
 
-// One connected IMAP card as the agent's CLI sees it: the per-instance env vars its manifest's `env` declares, each
-// suffixed with the card's id (IMAP_HOST_OFFICE for the card `office`).
+// One connected IMAP card. The agent's CLI knows a card only by the settings its manifest's `env` puts in the turn's
+// environment, none of them a credential (IMAP_HOST_OFFICE for the card `office`); the extension's backend reads the
+// whole card, credentials included, from the daemon with each call (server.ts).
 
 export interface ImapCard extends OAuthSettings {
     readonly id: string;
@@ -21,43 +22,49 @@ export interface ImapCard extends OAuthSettings {
 
 const PREFIX = "IMAP_HOST_";
 
-export const cardsFrom = (env: NodeJS.ProcessEnv): ImapCard[] =>
+/** The cards this turn's environment names, by the id their env suffix spells (`office` for IMAP_HOST_OFFICE). */
+export const cardIdsFrom = (env: NodeJS.ProcessEnv): string[] =>
     Object.keys(env)
         .filter((key) => key.startsWith(PREFIX))
-        .map((key) => {
-            const suffix = key.slice(PREFIX.length);
-            const get = (name: string): string => env[`${name}_${suffix}`] ?? "";
-            return {
-                id: suffix.toLowerCase(),
-                host: get("IMAP_HOST"),
-                port: get("IMAP_PORT") || "993",
-                username: get("IMAP_USERNAME"),
-                password: get("IMAP_PASSWORD"),
-                authMode: get("IMAP_AUTH_MODE") || "password",
-                oauthProvider: get("IMAP_OAUTH_PROVIDER"),
-                oauthTenant: get("IMAP_OAUTH_TENANT"),
-                oauthClientId: get("IMAP_OAUTH_CLIENT_ID"),
-                oauthClientSecret: get("IMAP_OAUTH_CLIENT_SECRET"),
-                oauthRefreshToken: get("IMAP_OAUTH_REFRESH_TOKEN"),
-                accessToken: get("IMAP_ACCESS_TOKEN"),
-                smtpHost: get("SMTP_HOST"),
-                smtpPort: get("SMTP_PORT"),
-                smtpSecurity: get("SMTP_SECURITY"),
-                smtpUsername: get("SMTP_USERNAME"),
-                smtpPassword: get("SMTP_PASSWORD"),
-            };
-        });
+        .map((key) => key.slice(PREFIX.length).toLowerCase());
 
-export const selectCard = (cards: readonly ImapCard[], wanted: string | undefined): ImapCard => {
-    const found = wanted === undefined ? (cards.length === 1 ? cards[0] : undefined) : cards.find((card) => envSuffix(card.id) === envSuffix(wanted));
+export const selectCard = (ids: readonly string[], wanted: string | undefined): string => {
+    const found = wanted === undefined ? (ids.length === 1 ? ids[0] : undefined) : ids.find((id) => envSuffix(id) === envSuffix(wanted));
     if (found === undefined) {
         throw new Error(
-            cards.length === 0
+            ids.length === 0
                 ? "No IMAP mailbox is connected: add the IMAP card under Capabilities"
-                : `Several IMAP mailboxes are connected: pass --account with one of ${cards.map((card) => card.id).join(", ")}`,
+                : `Several IMAP mailboxes are connected: pass --account with one of ${ids.join(", ")}`,
         );
     }
     return found;
+};
+
+/**
+ * The card as the daemon holds it (a tool call's card, or the connection read), with the defaults its manifest gives a
+ * field left at its default, which is stored empty or not at all.
+ */
+export const cardFromConfig = (id: string, config: Readonly<Record<string, string>>): ImapCard => {
+    const get = (key: string, fallback = ""): string => config[key] || fallback;
+    return {
+        id,
+        host: get("host"),
+        port: get("port", "993"),
+        username: get("username"),
+        password: get("password"),
+        authMode: get("authMode", "password"),
+        oauthProvider: get("oauthProvider", "microsoft"),
+        oauthTenant: get("oauthTenant"),
+        oauthClientId: get("oauthClientId"),
+        oauthClientSecret: get("oauthClientSecret"),
+        oauthRefreshToken: get("oauthRefreshToken"),
+        accessToken: get("accessToken"),
+        smtpHost: get("smtpHost"),
+        smtpPort: get("smtpPort", "587"),
+        smtpSecurity: get("smtpSecurity", "starttls"),
+        smtpUsername: get("smtpUsername"),
+        smtpPassword: get("smtpPassword"),
+    };
 };
 
 export const usesOAuth = (card: ImapCard): boolean => card.authMode === "oauth2";

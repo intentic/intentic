@@ -19,5 +19,7 @@ export const memorySshKeyStore = (initial: Readonly<Record<string, string>> = {}
     };
 };
 
-// The broker slice as a fresh sandbox has it: no ssh key held, so a turn binds no ssh agent socket (agent/run/harness/turn-env.ts).
-export const brokerSliceFake = () => ({ sshKeys: memorySshKeyStore() }) satisfies Partial<BrokerSlice>;
+// The broker slice as a fresh sandbox has it: no ssh key held, so a turn binds no ssh agent socket (agent/run/harness/turn-env.ts),
+// and no extension declaring an outward action, so no command is recognised as one.
+export const brokerSliceFake = () =>
+    ({ sshKeys: memorySshKeyStore(), outwardActions: async () => ({ offered: [], commands: [] }) }) satisfies Partial<BrokerSlice>;

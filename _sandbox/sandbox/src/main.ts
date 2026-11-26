@@ -25,6 +25,7 @@ import { startDaemonMetrics } from "./bootstrap/daemon-metrics.js";
 import { wireDependencyCoordinator } from "./bootstrap/deps-coordination.js";
 import { requireNetdSockets, startNetdDoor } from "./bootstrap/netd-door.js";
 import { startCredentialGateway } from "./capabilities/broker/broker-server.js";
+import { runningTurnOf } from "./agent/run/turn/turn-pulse.js";
 import { type PlatformSleep, quietProbes, startPlatformPresence, startPlatformSleep } from "./bootstrap/platform-presence.js";
 import { commitStateAtBoot, convergeStateAtBoot } from "./bootstrap/state-boot.js";
 import { startVersionWatches } from "./bootstrap/version-watches.js";
@@ -202,7 +203,7 @@ const bootToGate = async (attempt: BootAttempt, fault: BootFault | undefined): P
     }
     // The credential gateway, on loopback beside netd rather than behind it, up before any turn can be handed one of its
     // addresses (broker/broker-server.ts).
-    const credentialGateway = await startCredentialGateway(services, logger);
+    const credentialGateway = await startCredentialGateway(services, logger, runningTurnOf);
     shutdown.push(() => credentialGateway.stop());
     // The audit trail's minute: retention, a changed audit setting nobody saved through a route, and the forwarder.
     services.audit.start();

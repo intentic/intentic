@@ -61,6 +61,10 @@ export const ListenerMessageSchema = z.object({
     // Prior channel messages fetched when tagged; top-level so it reaches the model but skips the activity feed.
     history: z.array(ListenerHistoryEntrySchema).optional(),
     timestamp: z.string(),
+    // (2026-11-26) Only the automation with this id hears it (still held to its own filters, sender rules and the
+    // owner's floor): a source with one automation per door (an intake) names the one the message came through, so
+    // another listening to everything is not woken too. Absent, every automation whose filters admit it.
+    automationId: z.string().min(1).optional(),
     // Provider-specific fields, for example:
     // - discord message: guildId, attachments
     // - slack message: threadTs, teamId, attachments
@@ -75,6 +79,13 @@ export type ListenerMessage = z.infer<typeof ListenerMessageSchema>;
 // The turn a message started or continued: the conversation it runs in, and where a person opens it in the app.
 export interface ListenerTurnOpened {
     readonly conversationId: string;
+    readonly link?: string;
+}
+
+// A wake held for a person: which one, the conversation it will run in, and where a person opens that in the app.
+export interface ListenerHeldWake {
+    readonly id: string;
+    readonly conversationId?: string;
     readonly link?: string;
 }
 
@@ -111,6 +122,9 @@ export interface ListenerDispatchFrame {
     readonly plan?: readonly ListenerPlanItem[];
     // The wake waits for a person's approval before anything runs; the sentence to say where the message came from.
     readonly held?: string;
+    // (2026-11-26) Beside `held`: the held wake's id, and the conversation it runs in once a person lets it, so the
+    // sender can link it now (a later message on its thread continues that conversation too).
+    readonly heldWake?: ListenerHeldWake;
     // The wake waits for other turns of this automation to finish first; the sentence to say why.
     readonly queued?: string;
     // The message went into the turn already running in its thread instead of starting one; that turn answers it.

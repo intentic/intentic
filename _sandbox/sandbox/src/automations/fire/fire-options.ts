@@ -1,5 +1,5 @@
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
-import type { ListenerPlanItem, ListenerStep, ListenerTurnOpened } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
+import type { ListenerHeldWake, ListenerPlanItem, ListenerStep, ListenerTurnOpened } from "@intentic/sandbox-contract/protocol/doors/listener-protocol";
 import type { SenderLane } from "../senders.js";
 import type { JournalledFire } from "../../store/journals/turn-journal.js";
 
@@ -14,7 +14,8 @@ export interface TurnStream {
     readonly opened?: (turn: ListenerTurnOpened) => void;
     readonly step?: (step: ListenerStep) => void;
     readonly plan?: (items: readonly ListenerPlanItem[]) => void;
-    readonly held?: (reason: string) => void;
+    // `wake` (2026-11-26): the held wake's id and the conversation it runs in once a person lets it.
+    readonly held?: (reason: string, wake?: ListenerHeldWake) => void;
     readonly queued?: (reason: string) => void;
     // The message went into a turn already running in its thread; that turn's own sink carries the answer.
     readonly steered?: () => void;

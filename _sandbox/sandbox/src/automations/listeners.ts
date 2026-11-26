@@ -8,11 +8,13 @@ import type { Trigger } from "@intentic/sandbox-contract/schemas/automations";
 import { Delayer } from "@intentic/base/async";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import type { Services } from "../composition.js";
+import type { ExtensionHost } from "../capabilities/extension-inventory/installed-extensions.js";
 import { opt } from "../opt.js";
 import { CHANNEL_SESSION_TTL_MS, THREAD_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 import { threadKey } from "../seams/thread-key.js";
 import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
-import { sessionStart, wakeSourceOf } from "../guard/actions.js";
+import { sessionStart } from "../guard/actions.js";
+import { wakeSourceFor } from "./fire/wake-source.js";
 import { guard } from "../guard/guard.js";
 import { doorAdmission } from "./door-admission.js";
 import { mintConversationId } from "./fire/fire-sessions.js";
@@ -241,14 +243,14 @@ const listenerBatcher = (services: Services, id: string, provider: ListenerMessa
 // Whether a message from this lane would start a turn with nobody's release: the session-start rule every fire is held
 // to (the sandbox's admission floor, the automation's own approval and countdown, the lane's hold). Only such a message
 // may go into a turn already running; anything a person would have had to release waits for its own fire, and its hold.
-export const admittedUnheld = async (services: Pick<Services, "automations" | "sandboxSettings">, automationId: string, lane: SenderLane): Promise<boolean> => {
+export const admittedUnheld = async (services: Pick<Services, "automations" | "sandboxSettings"> & ExtensionHost, automationId: string, lane: SenderLane): Promise<boolean> => {
     const automation = await services.automations.get(automationId);
     if (automation === undefined || !automation.enabled) {
         return false;
     }
     const { admission } = await services.sandboxSettings.get();
     const verdict = guard(sessionStart, {
-        source: wakeSourceOf(automation.trigger),
+        source: await wakeSourceFor(services, automation.trigger),
         admission,
         ...opt("requireApproval", automation.requireApproval === true || lane.requireApproval ? true : undefined),
         ...opt("holdForSeconds", automation.holdForSeconds),
@@ -332,9 +334,12 @@ export const dispatchListenerMessage = async (
     // Whether the message reached any automation's filters, admitted or not: the roster records who tried, once.
     let reached = false;
     for (const automation of await services.automations.list()) {
+        // A message naming its automation (`automationId`, 2026-11-26: an intake's report, through that intake's door)
+        // reaches that one alone, still held to its filters and sender rules below.
         if (
             !automation.enabled ||
             automation.trigger.kind !== "listener" ||
+            (message.automationId !== undefined && message.automationId !== automation.id) ||
             !triggerAdmits(automation.trigger, message) ||
             !hears(automation.trigger)
         ) {
@@ -454,11 +459,11 @@ const pushListener = (services: Services, id: string, provider: ListenerMessage[
 
 // At boot (fire-resume.ts), after the journalled fires: every message still in the inbox goes back into its thread's
 // batcher, in arrival order, and fires like a fresh one. The sender's live stream died with the daemon, so the answer
-// goes where a held wake's does: a Visitor chat's outbox, else the channel's thread.
+// goes where a held wake's does: the channel's thread, through its gateway.
 export const resumeListenerInbox = async (services: Services, rows: readonly ListenerEntry[]): Promise<void> => {
     for (const entry of rows) {
         const { origin, thread, lane } = entry.context;
-        const sink = services.outboxStreamFor(origin) ?? channelAnswerSink(services, origin);
+        const sink = channelAnswerSink(services, origin);
         pushListener(services, entry.automationId, origin.provider, DEBOUNCE_MS, thread, entry.line, {
             ...entry.context,
             lane: { actsAs: lane.actsAs, ...opt("runAs", lane.runAs), requireApproval: lane.requireApproval },

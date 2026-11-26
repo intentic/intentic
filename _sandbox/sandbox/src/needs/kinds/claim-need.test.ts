@@ -1,6 +1,6 @@
 import type { Need } from "@intentic/sandbox-contract/schemas/needs";
-import type { ClaimHolder } from "../../issues/project-claims.js";
-import { projectOfRemote } from "../../issues/account-outbox.js";
+import type { ClaimHolder } from "../../account-routing/project-claims.js";
+import { projectOfRemote } from "../../account-routing/account-outbox.js";
 import { claimNeed } from "./claim-need.js";
 
 // A project claimed for this sandbox, which only the owner's own platform sign-in can make: the agent's ask raises the

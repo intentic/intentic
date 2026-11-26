@@ -49,7 +49,6 @@ const fakeServices = (root: string, registry: readonly PersistedAgent[] = []): S
         }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
-        outboxStreamFor: () => undefined,
         threadSessions: unstubbed<Services["threadSessions"]>("threadSessions", { settle: async () => {} }),
     });
 

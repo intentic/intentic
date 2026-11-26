@@ -1,5 +1,5 @@
 import { convertDocument } from "../documents/conversions.js";
-import { MODEL_ROLES, type ModelRole } from "../models/model-roles.js";
+import { CORE_MODEL_ROLES, type ModelRole } from "../models/model-roles.js";
 import { rolePins } from "../models/model-setups.js";
 import { SETTINGS_HISTORY } from "./settings-history.js";
 import { RepoChecksFileSchema, RuleSchema, SandboxSettingsSchema, SandboxSettingsWriteSchema } from "./settings.js";
@@ -156,7 +156,8 @@ describe(`the retired pre-push fix role`, () => {
 
     test(`is dropped from a stored file, leaving every other job's list, and the file reads`, () => {
         const stored = { modelRoles: { "pipeline-fix": [pin], "pre-push-fix": [pin] } };
-        expect(SandboxSettingsSchema.safeParse({ roleSetups: { "pre-push-fix": `high` } }).success).toBe(false);
+        // (2026-11-26) Any job's id reads since extensions declare their own, so a choice naming one nobody declares is kept.
+        expect(SandboxSettingsSchema.safeParse({ roleSetups: { "pre-push-fix": `high` } }).success).toBe(true);
         expect(runsOn(stored, `pipeline-fix`)).toEqual([pin]);
     });
 });
@@ -278,17 +279,21 @@ describe(`restore points' retention, renamed so a stored zero is the owner's own
 });
 
 describe(`default job setups`, () => {
-    test(`new settings place every job on its suggested preset`, () => {
+    const sources = [{ provider: `claude`, ready: true, models: [`claude-haiku-4-5`, `claude-sonnet-5`, `claude-opus-5`] }] as const;
+
+    test(`new settings place no job, and every job runs on its suggested preset`, () => {
         const settings = SandboxSettingsSchema.parse({});
-        expect(settings.roleSetups).toEqual(Object.fromEntries(MODEL_ROLES.map((role) => [role.id, role.setup])));
-        expect(settings.roleSetups[`commit-message`]).toBe(`low`);
-        expect(settings.roleSetups[`safety-judge`]).toBe(`medium`);
-        expect(settings.roleSetups[`pipeline-fix`]).toBe(`high`);
-        const sources = [{ provider: `claude`, ready: true, models: [`claude-haiku-4-5`, `claude-sonnet-5`, `claude-opus-5`] }] as const;
+        expect(settings.roleSetups).toBeUndefined();
+        expect(CORE_MODEL_ROLES.find((role) => role.id === `commit-message`)?.setup).toBe(`low`);
         expect(rolePins(settings, `commit-message`, sources)).toEqual([{ provider: `claude`, model: `claude-haiku-4-5` }]);
         expect(rolePins(settings, `safety-judge`, sources)).toEqual([{ provider: `claude`, model: `claude-sonnet-5` }]);
-        expect(rolePins(settings, `pipeline-fix`, sources)).toEqual([{ provider: `claude`, model: `claude-opus-5` }]);
-        expect(rolePins(settings, `pipeline-fix`, [])).toEqual([]);
+        expect(rolePins(settings, `safety-judge`, [])).toEqual([]);
+    });
+
+    test(`an extension's job runs on what its declaration suggests, and a job nobody declares on none`, () => {
+        const settings = SandboxSettingsSchema.parse({});
+        expect(rolePins(settings, `pipeline-fix`, sources, `high`)).toEqual([{ provider: `claude`, model: `claude-opus-5` }]);
+        expect(rolePins(settings, `pipeline-fix`, sources)).toEqual([]);
     });
 
     test(`saved assignments keep their choices and jobs left off`, () => {
@@ -296,20 +301,15 @@ describe(`default job setups`, () => {
         expect(SandboxSettingsSchema.parse({ roleSetups: { "commit-message": `high` } }).roleSetups).toEqual({ "commit-message": `high` });
         const saved = SandboxSettingsSchema.parse({ roleSetups: {} });
         expect(SandboxSettingsWriteSchema.parse({ ...saved, commandJudge: `watch` }).roleSetups).toEqual({});
-    });
-});
-
-// A memory kill's answer and the restart switch are both on to begin with: a memory kill lets its victims back one at a
-// time once memory settles (turn-break.ts), any other restart resumes what it cut. Only the two answers it takes are written.
-describe(`the answer to a memory kill`, () => {
-    test(`resumes by default, as resuming after any restart does`, () => {
-        const defaults = SandboxSettingsSchema.parse({});
-        expect(defaults.memoryKillPolicy).toBe(`resume`);
-        expect(defaults.autoResumeOnRestart).toBe(true);
+        // A saved map leaves a job it does not name on none, whatever it is suggested.
+        expect(rolePins(saved, `commit-message`, sources)).toEqual([]);
+        expect(rolePins(saved, `pipeline-fix`, sources, `high`)).toEqual([]);
     });
 
-    test(`takes wait or resume and nothing else`, () => {
-        expect(SandboxSettingsSchema.parse({ memoryKillPolicy: `wait` }).memoryKillPolicy).toBe(`wait`);
-        expect(SandboxSettingsSchema.safeParse({ memoryKillPolicy: `retry` }).success).toBe(false);
+    test(`a choice for an extension's job is kept through a save, whether or not anything declares it now`, () => {
+        const saved = SandboxSettingsSchema.parse({ roleSetups: { "commit-message": `low`, "deployment-fix": `medium`, "saldeo-reconcile": `high` } });
+        const written = SandboxSettingsWriteSchema.parse({ ...saved, commandJudge: `watch` });
+        expect(written.roleSetups).toEqual({ "commit-message": `low`, "deployment-fix": `medium`, "saldeo-reconcile": `high` });
+        expect(rolePins(written, `deployment-fix`, sources)).toEqual([{ provider: `claude`, model: `claude-sonnet-5` }]);
     });
 });

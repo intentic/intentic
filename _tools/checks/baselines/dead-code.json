@@ -604,10 +604,6 @@
     "_sandbox/sandbox/src/hosts/desktop-sync-ssh.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/hosts/host-peer.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/invariants/invariants.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/sandbox/src/issues/intake.routes.ts": {
-        "count": 2,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/links/inbound-links.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/links/link-tasks.ts": {
         "count": 2,
@@ -807,11 +803,6 @@
     },
     "_sandbox/sandbox/src/workload/resource-budget.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/workload/room-socket.ts": "standing when the check arrived (2026-10-16)",
-    "_sandbox/sandbox/src/workspace/deps/package-modules.ts": {
-        "count": 3,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/workspace/deps/package-usage.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/workspace/files/download/workspace-download.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/workspace/files/download/workspace-zip.ts": "standing when the check arrived (2026-10-16)",
     "_sandbox/sandbox/src/workspace/files/resident-tree.ts": "standing when the check arrived (2026-10-16)",

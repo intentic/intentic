@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { HttpBindings } from "@hono/node-server";
 import { CONNECT_TOKEN_HEADER, REQUEST_ID_HEADER } from "@intentic/sandbox-contract/protocol/headers";
+import { PUBLIC_DOOR_POW_CALLER_HEADER, PUBLIC_DOOR_POW_HEADER } from "@intentic/sandbox-contract/extension-protocol";
 import type { RouteMeta } from "@intentic/sandbox-contract/protocol/route-meta";
 import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
@@ -173,7 +174,18 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             // REQUEST_ID_HEADER must be allow-listed too, or the preflight drops it and the correlation stays empty.
             // content-encoding: an upload the browser gzipped (http/request-body.ts).
-            allowHeaders: ["authorization", "content-type", "content-encoding", CONNECT_TOKEN_HEADER, "x-intentic-base-hash", REQUEST_ID_HEADER],
+            // The proof of work an extension's public door reads (2026-11-26): a page elsewhere sends it, so without them
+            // the preflight refuses every call to a route that asks for one, the bug reporter's written reports among them.
+            allowHeaders: [
+                "authorization",
+                "content-type",
+                "content-encoding",
+                CONNECT_TOKEN_HEADER,
+                "x-intentic-base-hash",
+                REQUEST_ID_HEADER,
+                PUBLIC_DOOR_POW_HEADER,
+                PUBLIC_DOOR_POW_CALLER_HEADER,
+            ],
             // Chrome's own ceiling. Every call carries `authorization`, so each distinct URL (and a route's inputs are in
             // its URL) is asked about once before it is sent, and a phone on a cellular link pays that round trip again
             // for every URL whose answer has expired: ten minutes made most of a working session's reads two trips.

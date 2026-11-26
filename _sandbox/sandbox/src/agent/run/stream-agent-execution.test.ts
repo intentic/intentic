@@ -184,6 +184,8 @@ const fixture = (options: FixtureOptions = {}) => {
         activity: unstubbed<Services["activity"]>("activity", {
             append: options.append ?? (async (event) => void activity.push(event)),
         }),
+        // No extension declares an outward command here, so a turn's sniffer recognises none.
+        outwardActions: async () => ({ offered: [], commands: [] }),
         providerRefusals: unstubbed<Services["providerRefusals"]>("providerRefusals", { settle: async () => {} }),
         // What an answer covers is read off the readings it speaks for; none here.
         headroom: unstubbed<Services["headroom"]>("headroom", { read: async () => ({}) }),

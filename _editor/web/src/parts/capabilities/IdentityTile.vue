@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { tonePlate, toneWash } from "@intentic/ui";
+import { useOriginSources } from "../../models/agent-status/originSources";
 import { type SessionFacts, contextPressure, sessionKind } from "../../models/agent-status/sessionKind";
 import type { ChildTally } from "../fleet/childCount";
 
@@ -11,7 +12,8 @@ import type { ChildTally } from "../fleet/childCount";
 // `initials`: what the disc says when it would say nothing else, for a host that shows no title beside it (a tile card).
 const props = defineProps<{ session: SessionFacts | undefined; children?: ChildTally | null | undefined; initials?: string }>();
 const counted = computed(() => props.children !== undefined);
-const kind = computed(() => sessionKind(props.session));
+const originSources = useOriginSources();
+const kind = computed(() => sessionKind(props.session, originSources.value));
 // An amber wash and an amber mark as the context window fills, a solid amber plate once it is nearly spent (contextPressure).
 // The wash alone vanishes on an 18px disc, so while filling the mark inside carries the colour: the kind's glyph, or for
 // the everyday kind, which otherwise draws nothing, a dot.

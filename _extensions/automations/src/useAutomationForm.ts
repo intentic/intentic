@@ -6,12 +6,19 @@ import type {
     FireOn,
     SenderRule,
     Senders,
+    WatchKind,
     WatchSource,
     WebchatConfig,
     WorkspaceEventKind,
 } from "@intentic/sandbox-contract/schemas/automations";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
-import { AutomationSchema, WEBCHAT_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract/schemas/automations";
+import {
+    AutomationSchema,
+    BUILT_IN_WATCH_KINDS,
+    isUrlSource,
+    WEBCHAT_DAILY_MAX_DEFAULT,
+    watchParamsProblem,
+} from "@intentic/sandbox-contract/schemas/automations";
 import { unwatchedPick, VISITOR_CHAT_ROLE } from "@intentic/sandbox-contract/schemas/roles";
 import { asZone, type Zone } from "@intentic/sandbox-contract/time";
 import { computed, type ComputedRef, reactive, watch } from "vue";
@@ -25,14 +32,11 @@ const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
 
 export type TriggerKind = `schedule` | `once` | `event` | `listener` | `workspace`;
 
-// What decides, without a model, whether a fire goes ahead: nothing, the owner's own command, or one of the daemon's
-// ready-made sources. One choice, since the daemon refuses a guard beside a source.
-export type ConditionKind = `none` | `guard` | WatchSource[`kind`];
+// What decides, without a model, whether a fire goes ahead: nothing, the owner's own command, a page, or a watch kind an
+// extension declares, by its id. One choice, since the daemon refuses a guard beside a source.
+export type ConditionKind = `none` | `guard` | `url` | string;
 // What a passing check sets off; `agent` is what every automation did before it had a choice.
 export type TargetKind = AutomationTarget[`kind`];
-
-// The repository shape the daemon's schema accepts, said here so the refusal points at the box.
-const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
 // Why a typed pattern does not compile, the one thing the daemon refuses a page's `select` for; undefined when it does.
 const patternProblem = (pattern: string): string | undefined => {
@@ -124,6 +128,8 @@ export function useAutomationForm(
     sources: ComputedRef<readonly AvailableSource[]>,
     templates: ComputedRef<readonly AutomationTemplate[]>,
     sandboxZone: ComputedRef<Zone>,
+    // The watch kinds extensions declare here (catalog.ts `useWatchKinds`); the ones an older daemon checked itself when absent.
+    watchKinds: ComputedRef<readonly WatchKind[]> = computed(() => BUILT_IN_WATCH_KINDS),
 ) {
     // Text the form put in the box (starter or template prompt); compared verbatim to detect a user edit.
     const templatePrompts = computed(() => new Set<string>(templates.value.map((template) => template.prompt)));
@@ -137,13 +143,8 @@ export function useAutomationForm(
         // not lose what was typed into the others; only the picked kind reaches `build`.
         condition: `none` as ConditionKind,
         guard: ``,
-        npmPackage: ``,
-        // A range waits for a version to exist; a tag follows one (latest by default), for firing on a change.
-        npmBy: `range` as `range` | `tag`,
-        npmRange: ``,
-        npmTag: ``,
-        githubRepo: ``,
-        githubPrereleases: false,
+        // A contributed kind's parameters, by kind, as its declared fields name them: a text box's words, a switch on or off.
+        watchParams: {} as Record<string, Record<string, string | boolean>>,
         pageUrl: ``,
         pageSelect: ``,
         fireOn: `pass` as FireOn,
@@ -152,6 +153,9 @@ export function useAutomationForm(
         expiresAt: ``,
         target: `agent` as TargetKind,
         conversationId: ``,
+        // An extension's own target (`kind: extension`): set only by that extension, kept as loaded, never offered.
+        extension: ``,
+        handler: ``,
         // One line on what it watches for; a notification's title and what a woken conversation reads it as.
         note: ``,
         group: ``,
@@ -292,40 +296,41 @@ export function useAutomationForm(
     // A one-time wake retires itself as it fires, so neither way of retiring one means anything there.
     const retireOffered = computed(() => form.kind !== `once`);
 
+    // The kind the condition names, when an extension declares it; undefined for none, a guard, a page, or a kind none here does.
+    const watchKind = computed<WatchKind | undefined>(() => watchKinds.value.find((kind) => kind.id === form.condition));
+
+    // A contributed kind's parameters as stored: text trimmed, blank left out, a switch only when on.
+    const paramsOf = (kind: string): Record<string, string | true> =>
+        Object.fromEntries(
+            Object.entries(form.watchParams[kind] ?? {}).flatMap(([key, value]): [string, string | true][] => {
+                if (value === true) {
+                    return [[key, true]];
+                }
+                return value === false || value.trim() === `` ? [] : [[key, value.trim()]];
+            }),
+        );
+
     // The source the boxes describe, whether or not they are complete; `watchSource` is the one worth sending.
     const sourceOf = (): WatchSource | undefined => {
         switch (form.condition) {
-            case `npm`:
-                return {
-                    kind: `npm`,
-                    package: form.npmPackage.trim(),
-                    ...(form.npmBy === `range` && form.npmRange.trim() !== `` ? { range: form.npmRange.trim() } : {}),
-                    ...(form.npmBy === `tag` && form.npmTag.trim() !== `` ? { tag: form.npmTag.trim() } : {}),
-                };
-            case `github-release`:
-                return { kind: `github-release`, repo: form.githubRepo.trim(), ...(form.githubPrereleases ? { prereleases: true } : {}) };
-            case `url`:
-                return { kind: `url`, url: form.pageUrl.trim(), ...(form.pageSelect.trim() !== `` ? { select: form.pageSelect.trim() } : {}) };
             case `none`:
             case `guard`:
                 return undefined;
+            case `url`:
+                return { kind: `url`, url: form.pageUrl.trim(), ...(form.pageSelect.trim() !== `` ? { select: form.pageSelect.trim() } : {}) };
+            default:
+                return { kind: form.condition, ...paramsOf(form.condition) };
         }
     };
 
-    // Each kind's own refusal, said at the box rather than as the daemon's sentence after a save.
+    // Each kind's own refusal, said at the box rather than as the daemon's sentence after a save. A contributed kind is
+    // held to its declared fields by the same rule saving applies.
     const conditionError = computed<string | undefined>(() => {
         switch (form.condition) {
             case `none`:
                 return undefined;
             case `guard`:
                 return form.guard.trim() === `` ? t(`useAutomationForm.guardRequired`) : undefined;
-            case `npm`:
-                if (form.npmPackage.trim() === ``) {
-                    return t(`useAutomationForm.packageRequired`);
-                }
-                return form.npmBy === `range` && form.npmRange.trim() === `` ? t(`useAutomationForm.rangeRequired`) : undefined;
-            case `github-release`:
-                return REPO_RE.test(form.githubRepo.trim()) ? undefined : t(`useAutomationForm.repoFormat`);
             case `url`: {
                 if (!/^https?:\/\/\S+$/.test(form.pageUrl.trim()) || !URL.canParse(form.pageUrl.trim())) {
                     return t(`useAutomationForm.pageUrl`);
@@ -333,6 +338,10 @@ export function useAutomationForm(
                 const problem = form.pageSelect.trim() === `` ? undefined : patternProblem(form.pageSelect.trim());
                 return problem === undefined ? undefined : t(`useAutomationForm.selectInvalid`, { problem });
             }
+            default:
+                return watchKind.value === undefined
+                    ? t(`useAutomationForm.kindUnknown`, { kind: form.condition })
+                    : watchParamsProblem(watchKind.value, paramsOf(form.condition));
         }
     });
 
@@ -485,12 +494,7 @@ export function useAutomationForm(
             id: ``,
             condition: `none`,
             guard: ``,
-            npmPackage: ``,
-            npmBy: `range`,
-            npmRange: ``,
-            npmTag: ``,
-            githubRepo: ``,
-            githubPrereleases: false,
+            watchParams: {},
             pageUrl: ``,
             pageSelect: ``,
             fireOn: `pass`,
@@ -498,6 +502,8 @@ export function useAutomationForm(
             expiresAt: ``,
             target: `agent`,
             conversationId: ``,
+            extension: ``,
+            handler: ``,
             note: ``,
             group: ``,
             prompt: ``,
@@ -543,18 +549,11 @@ export function useAutomationForm(
         const source = from.source;
         form.guard = from.guard ?? ``;
         form.condition = source?.kind ?? (from.guard === undefined ? `none` : `guard`);
-        if (source?.kind === `npm`) {
-            form.npmPackage = source.package;
-            // A range wins over a tag in the daemon's own check, so a record naming both reads as the range it obeys.
-            form.npmBy = source.range !== undefined ? `range` : `tag`;
-            form.npmRange = source.range ?? ``;
-            form.npmTag = source.tag ?? ``;
+        if (source !== undefined && !isUrlSource(source)) {
+            const { kind, ...params } = source;
+            form.watchParams = { ...form.watchParams, [kind]: { ...params } };
         }
-        if (source?.kind === `github-release`) {
-            form.githubRepo = source.repo;
-            form.githubPrereleases = source.prereleases === true;
-        }
-        if (source?.kind === `url`) {
+        if (source !== undefined && isUrlSource(source)) {
             form.pageUrl = source.url;
             form.pageSelect = source.select ?? ``;
         }
@@ -564,6 +563,8 @@ export function useAutomationForm(
     const loadTarget = (target: AutomationTarget | undefined): void => {
         form.target = target?.kind ?? `agent`;
         form.conversationId = target?.kind === `conversation` ? target.conversationId : ``;
+        form.extension = target?.kind === `extension` ? target.extension : ``;
+        form.handler = target?.kind === `extension` ? target.handler : ``;
     };
 
     // Prefills only the fields a template carries; everything else resets first, so picking twice can't accumulate
@@ -754,6 +755,9 @@ export function useAutomationForm(
                 return { kind: `conversation`, conversationId: form.conversationId.trim() };
             case `notify`:
                 return { kind: `notify` };
+            // Kept as loaded: only the extension itself points an automation at its code (the daemon refuses anyone else).
+            case `extension`:
+                return { kind: `extension`, extension: form.extension, handler: form.handler };
         }
     };
 
@@ -925,6 +929,7 @@ export function useAutomationForm(
         needsModels,
         retireOffered,
         watchSource,
+        watchKind,
         conditionError,
         expiresAt,
         expiresError,

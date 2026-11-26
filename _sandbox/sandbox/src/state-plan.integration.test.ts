@@ -1,4 +1,4 @@
-import { accountOutboxDocument } from "./issues/account-outbox.js";
+import { accountOutboxDocument } from "./account-routing/account-outbox.js";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

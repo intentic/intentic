@@ -1,8 +1,5 @@
-import { mkdtempSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 
@@ -15,7 +12,6 @@ import type { Services } from "../composition.js";
 
 import { toolCardOf, toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.js";
 
-import { fileWebchatOutbox } from "../webchat/webchat-outbox.js";
 
 import { clientFor, collect, errorCode } from "../harness/route-client.testing.js";
 import { fakeHistory } from "../harness/route-fakes.testing.js";
@@ -808,12 +804,9 @@ test("agents.subagentTranscript reads an in-process subagent off its delegation'
 // controls whether the discord gateway is running.
 const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]) => {
     const records = new Map<string, TranscriptRow[]>();
-    // Real store, not a stub: a webchat place is only delivered if the words are actually collectable afterwards.
-    const webchatOutbox = fileWebchatOutbox(join(mkdtempSync(join(tmpdir(), "place-outbox-")), "outbox.json"));
     const client = clientFor(
         createApp(
             services({
-                webchatOutbox,
                 async *agent() {
                     yield { kind: "session", sessionId: "sess-live" };
                     yield { kind: "done" };
@@ -841,7 +834,7 @@ const channelPlaceHarness = (ports: Record<string, number>, activity?: unknown[]
             }),
         ),
     );
-    return { client, records, webchatOutbox };
+    return { client, records };
 };
 
 // Local stand-in for a gateway's loopback: records every /deliver body and answers as configured.
@@ -931,22 +924,6 @@ test("agents.place surfaces the gateway's own refusal sentence", async () => {
     } finally {
         gateway.close();
     }
-});
-
-// Webchat has no gateway extension and never will, so the daemon answers it itself: the words are queued in the
-// visitor's outbox for their next poll (webchat-outbox.ts), which is what makes "write as agent" reach a stranger.
-test("agents.place in a webchat conversation queues the words for the visitor as well as the record", async () => {
-    const { client, records, webchatOutbox } = channelPlaceHarness({});
-    await runAgentTurn(client, {
-        prompt: "answer the visitor",
-        conversationId: "conv1",
-        isolated: true,
-        origin: { automationId: "auto", provider: "webchat", channelId: "wc-visitor-1" },
-    });
-    const answered = await client.agents.place({ id: "conv1", text: "We are on it." });
-    expect(answered).toEqual({ ok: true, rowId: expect.stringMatching(/^[0-9a-z]{12}$/u) });
-    expect(records.get("conv1")?.at(-1)).toEqual({ role: "assistant", text: "We are on it.", placed: true, rowId: answered.rowId });
-    expect((await webchatOutbox.since("webchat:auto:wc-visitor-1", 0, Date.now())).replies).toMatchObject([{ text: "We are on it." }]);
 });
 
 // Same refusal shape as land/discard: place takes the turn's own mutex.

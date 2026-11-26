@@ -1,8 +1,9 @@
 import { createHmac, randomBytes, timingSafeEqual, createHash } from "node:crypto";
-import type { PowChallenge, WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract/schemas/automations";
+import type { PowChallenge } from "@intentic/sandbox-contract/schemas/automations";
 
-// The bot ceiling for an anonymous endpoint (two flavours), shared by the Visitor chat widget and the bug intake: both
-// face a browser with no credential.
+// The bot ceiling for an anonymous endpoint (two flavours), checked by an extension's public doors for a route that asks
+// for one (extensions/backend/public-door.routes.ts): the Visitor chat's widget and the bug reporter, each a browser with
+// no credential, call through them since 2026-11-26.
 // A ceiling, not a wall: neither stops a determined human, the automation's tool allowlist and budget caps bound the
 // damage if one gets through.
 // What it buys: a scraper doesn't get to spend an agent turn per request.
@@ -50,9 +51,9 @@ const leadingZeroBits = (digest: Buffer): number => {
     return bits;
 };
 
-// The widget sends `<salt>:<nonce>`; the daemon re-derives the salt's HMAC rather than storing it, so verifying is one
-// HMAC and one hash.
-const verifyProofOfWork = (answer: string, conversationId: string, now: number): boolean => {
+// The caller sends `<salt>:<nonce>`; the daemon re-derives the salt's HMAC rather than storing it, so verifying is one
+// HMAC and one hash. `caller` is the id the challenge was minted for, so a solution cannot move to another.
+export const proofOfWorkSolved = (answer: string, conversationId: string, now: number): boolean => {
     const separator = answer.lastIndexOf(":");
     if (separator <= 0) {
         return false;
@@ -67,8 +68,9 @@ const verifyProofOfWork = (answer: string, conversationId: string, now: number):
 
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
-// Cloudflare's server-side half. The secret never leaves the daemon, the widget only ever holds the site key.
-const verifyTurnstile = async (secretKey: string, token: string, remoteIp: string | undefined): Promise<boolean> => {
+// Cloudflare's server-side half, for a public door's route declaring `turnstile`: the secret never leaves the daemon,
+// the page only ever holds the site key.
+export const verifyTurnstile = async (secretKey: string, token: string, remoteIp: string | undefined): Promise<boolean> => {
     const body = new URLSearchParams({ secret: secretKey, response: token, ...(remoteIp !== undefined ? { remoteip: remoteIp } : {}) });
     const response = await fetch(TURNSTILE_VERIFY_URL, { method: "POST", body });
     if (!response.ok) {
@@ -76,29 +78,4 @@ const verifyTurnstile = async (secretKey: string, token: string, remoteIp: strin
     }
     const result = (await response.json()) as { success?: unknown };
     return result.success === true;
-};
-
-// Whichever answer the widget sent, the contract's own fields, so the two can't drift apart.
-export type AntiBotAnswer = Pick<WebchatMessage, "turnstileToken" | "powNonce">;
-
-// Whether this message clears the configured gate.
-// `kind` is the enforced mechanism (webchat-config's usableAntiBot), not the raw stored setting, so a half-configured
-// check can't silently vanish or become impossible.
-export const antiBotAccepted = async (
-    kind: "turnstile" | "pow" | "off",
-    config: WebchatConfig,
-    answer: AntiBotAnswer,
-    conversationId: string,
-    remoteIp: string | undefined,
-    now: number,
-): Promise<boolean> => {
-    if (kind === "off") {
-        return true;
-    }
-    if (kind === "pow") {
-        return answer.powNonce !== undefined && verifyProofOfWork(answer.powNonce, conversationId, now);
-    }
-    return answer.turnstileToken !== undefined && config.turnstileSecret !== undefined
-        ? verifyTurnstile(config.turnstileSecret, answer.turnstileToken, remoteIp)
-        : false;
 };

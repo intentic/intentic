@@ -37,48 +37,16 @@ export const webhookUrl = (automation: AutomationSummary): string | undefined =>
     return `${base}/automations/${encodeURIComponent(automation.id)}/fire?token=${encodeURIComponent(automation.webhookToken)}`;
 };
 
-// Snippet a customer pastes to put a Visitor chat on their site. The daemon's own origin serves both the bundle and its
-// routes, so only the automation id is needed; the origin allowlist decides who may use it.
-export const embedSnippet = (automation: AutomationSummary): string | undefined => {
-    const base = host().sandbox.origin();
-    if (automation.trigger.kind !== `listener` || automation.trigger.provider !== `webchat` || base === undefined) {
-        return undefined;
-    }
-    return `<script src="${base}/webchat/widget.js" data-automation="${automation.id}" defer></script>`;
+// A Visitor chat's embed snippet, and which sites have loaded its widget, are the visitor-chat extension's (2026-11-26,
+// this view's install dialog until then): this view opens that extension's install panel by its command, the way one
+// extension shows another's panel. Rejects when no extension answers it (switched off, or a sandbox from before).
+export const VISITOR_CHAT_INSTALL = `visitor-chat.install`;
+
+export const isVisitorChat = (automation: AutomationSummary): boolean => automation.trigger.kind === `listener` && automation.trigger.provider === `webchat`;
+
+export const openVisitorChatInstall = async (automationId: string): Promise<void> => {
+    await host().commands.execute(VISITOR_CHAT_INSTALL, automationId);
 };
-
-// Which sites have actually loaded a Visitor chat's widget; a working widget nobody has used and one never pasted both
-// show empty history. Polled only while the install panel is open.
-export interface VisitorChatInstall {
-    readonly origin: string;
-    readonly allowed: boolean;
-    readonly lastSeenAt: number;
-    readonly loads: number;
-}
-
-const INSTALL_POLL_MS = 4_000;
-
-export function useVisitorChatInstalls(automationId: Ref<string | undefined>, enabled: Ref<boolean>) {
-    const api = host();
-    const { query, error } = api.sandbox.query({
-        queryKey: computed(() => api.sandbox.key(`webchat-installs`, automationId.value ?? ``)),
-        queryFn: async (): Promise<VisitorChatInstall[]> => {
-            const id = automationId.value;
-            if (id === undefined) {
-                return [];
-            }
-            const body = (await api.sandbox.json(`/webchat/${encodeURIComponent(id)}/installs`)) as { origins?: VisitorChatInstall[] };
-            return body.origins ?? [];
-        },
-        enabled: computed(() => enabled.value && automationId.value !== undefined),
-        refetchInterval: INSTALL_POLL_MS,
-    });
-    return {
-        installs: computed<VisitorChatInstall[]>(() => query.data.value ?? []),
-        isLoading: query.isLoading,
-        error,
-    };
-}
 
 // One source checked now, nothing saved or remembered: the composer's "Check now", so the owner reads what a watch would
 // see before arming it. A mutation, not a query: it reaches the registry, GitHub or the page on every press, and only on

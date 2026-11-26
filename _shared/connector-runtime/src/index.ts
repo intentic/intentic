@@ -63,10 +63,8 @@ export {
     type PlatformAccessDaemon,
     PlatformAccessRefused,
 } from "./platform-access.js";
-export { findWorkspaceRoot, readGatewayUrl } from "./workspace.js";
-// Each platform's one-message ceiling, from the contract's single table (the subpath, so a gateway loads no more of
-// the contract than that).
-export { MESSAGE_LIMITS } from "@intentic/sandbox-contract/message-limits";
+export { type CardToolAnswer, type CardToolArgs, type CardToolJson, type CardToolOptions, CardToolRefused, callCardTool } from "./card-tools.js";
+export { declaredMessageLimit, findWorkspaceRoot, readGatewayUrl } from "./workspace.js";
 export {
     currentStep,
     elapsedOf,
@@ -86,6 +84,7 @@ export { createBufferedPainter, failureNotice, framePainter, type Painter } from
 export type {
     ListenerDispatchFrame,
     ListenerGatewayPhase,
+    ListenerHeldWake,
     ListenerHistoryEntry,
     ListenerMessage,
     ListenerPairing,

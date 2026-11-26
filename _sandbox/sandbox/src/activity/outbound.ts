@@ -1,199 +1,127 @@
+import { type CommandAction, commandActionGate } from "@intentic/extension-manifest";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
-import type { Services } from "../composition.js";
 import { parseJsonOr } from "@intentic/base/json";
+import { commandWords } from "../safety/shell-words.js";
+import type { Services } from "../composition.js";
+import { opt } from "../opt.js";
 
-// Outbound provider calls are the agent running curl in Bash; there's no typed send path, so this sniffs tool events,
-// matching each command to its result by tool-use id. Monitoring, not enforcement: a creatively-quoted command can slip
-// past the matchers. Regex over shell text, not a real tokenizer; heredocs and shell-variable URLs fall through to
-// `api.call` with no content.
+// What the agent sends out of the sandbox, as the extension that owns the service declared it: a cli card's
+// `commandActions` for its command-line tools here, and its `broker.actions` for requests through the credential gateway
+// (capabilities/broker/broker-actions.ts). The command guard and the gateway hold each to the owner's action rules
+// (guard/outbound-guard.ts), and both record it in Activity in this one row shape. Nothing here knows a provider: a send
+// is whatever an enabled extension says it is.
+// (2026-11-25) Until then this module matched three chat services' addresses and a fourth's command in shell text, by
+// name. Once the chat skills reached their services through the gateway's variables (2026-10-06) no address pattern saw
+// their sends, so none of them was recorded or held to a rule.
 
-// How much tool output survives into an error event's detail.
-const ERROR_TAIL = 300;
+// How much of a failure's own words survive into the row.
+export const ERROR_TAIL = 300;
 
 export interface OutboundCall {
+    // The card id the action's key is prefixed with, which is also the row's provider.
     readonly provider: string;
+    // The declared action (`message.send`), or `api.call` for a request no declaration covers.
     readonly type: string;
     readonly method: string;
+    // The request's path below its service, or a command's words after the program: never a query or a credential.
     readonly endpoint: string;
     readonly channelId?: string;
     readonly content?: string;
 }
 
-const matchDiscord = (command: string): OutboundCall | undefined => {
-    const url = /https:\/\/discord\.com\/api\/v10(\/[^\s"'\\]*)/.exec(command);
-    if (url === null) {
+// One declared command action, with the card id its key is prefixed with.
+export interface DeclaredCommand extends CommandAction {
+    readonly provider: string;
+}
+
+export interface CallOutcome {
+    readonly outcome: "ok" | "error";
+    readonly error?: string;
+}
+
+const programOf = (word: string): string => word.split("/").at(-1) ?? word;
+
+const argumentAt = (args: readonly string[], value: CommandAction["content"]): string | undefined => {
+    if (value === undefined || args[value.arg] === undefined) {
         return undefined;
     }
-    const endpoint = (url[1] as string).split("?")[0] as string;
-    const method = /-X\s+(GET|POST|PUT|PATCH|DELETE)/.exec(command)?.[1] ?? "GET";
-    const channelId = /\/channels\/(\d+)/.exec(endpoint)?.[1];
-    const payload = /-d\s+'([^']*)'/.exec(command)?.[1] ?? /-d\s+"((?:[^"\\]|\\.)*)"/.exec(command)?.[1];
-    let content: string | undefined;
-    if (payload !== undefined) {
-        try {
-            const parsed = JSON.parse(payload) as { content?: unknown };
-            content = typeof parsed.content === "string" ? parsed.content : payload;
-        } catch {
-            content = payload;
-        }
-    }
-    const type =
-        method === "POST" && /\/channels\/\d+\/messages$/.test(endpoint)
-            ? "message.send"
-            : method === "GET" && /\/channels\/\d+\/messages/.test(endpoint)
-              ? "messages.read"
-              : method === "PUT" && endpoint.includes("/reactions/")
-                ? "reaction.add"
-                : "api.call";
-    return {
-        provider: "discord",
-        type,
-        method,
-        endpoint,
-        ...(channelId !== undefined ? { channelId } : {}),
-        ...(content !== undefined ? { content } : {}),
-    };
+    return value.rest === true ? args.slice(value.arg).join(" ") : args[value.arg];
 };
 
-// Slack's API is method-per-path (`/api/chat.postMessage`), not REST verbs, so the method name is the type. Channel
-// rides in the body for a write, in the query for a read; both are checked.
-const SLACK_TYPES: Readonly<Record<string, string>> = {
-    "chat.postMessage": "message.send",
-    "chat.update": "message.edit",
-    "conversations.history": "messages.read",
-    "conversations.replies": "messages.read",
-    "reactions.add": "reaction.add",
-    "reactions.remove": "reaction.remove",
-};
+const startsWith = (words: readonly string[], declared: readonly string[]): boolean =>
+    words[0] !== undefined && programOf(words[0]) === declared[0] && declared.every((word, index) => index === 0 || words[index] === word);
 
-const matchSlack = (command: string): OutboundCall | undefined => {
-    const url = /https:\/\/slack\.com\/api(\/[^\s"'\\]*)/.exec(command);
-    if (url === null) {
+/**
+ * The declared command an invocation in `command` starts with, read with the shell's own quoting (each `;`, `&&` and `|`
+ * stage on its own): the first declaration that matches. A command the card's backend gates (`gatedBy: "backend"`) is
+ * never one: the outward-action door decides and records it (capabilities/broker/outward-door.ts), so the shell lets a
+ * held one reach the door that drafts its approval, and its row is written once. Reads the command text, so a tool
+ * reached under another name (an alias, a script around it) is not seen.
+ */
+export const classifyCommand = (commands: readonly DeclaredCommand[], command: string): OutboundCall | undefined => {
+    const declared = commands.filter((entry) => commandActionGate(entry).gatedBy === "sandbox");
+    if (declared.length === 0) {
         return undefined;
     }
-    const [path, query] = (url[1] as string).split("?");
-    const endpoint = path as string;
-    const method = /-X\s+(GET|POST|PUT|PATCH|DELETE)/.exec(command)?.[1] ?? "GET";
-    const payload = /-d\s+'([^']*)'/.exec(command)?.[1] ?? /-d\s+"((?:[^"\\]|\\.)*)"/.exec(command)?.[1];
-    let content: string | undefined;
-    let channelId = /[?&]channel=([^&\s"']+)/.exec(query ?? "")?.[1];
-    if (payload !== undefined) {
-        try {
-            const parsed = JSON.parse(payload) as { text?: unknown; channel?: unknown };
-            content = typeof parsed.text === "string" ? parsed.text : payload;
-            channelId = typeof parsed.channel === "string" ? parsed.channel : channelId;
-        } catch {
-            content = payload;
+    for (const words of commandWords(command)) {
+        const match = declared.find((entry) => startsWith(words, entry.command));
+        if (match === undefined) {
+            continue;
         }
-    }
-    return {
-        provider: "slack",
-        type: SLACK_TYPES[endpoint.replace("/", "")] ?? "api.call",
-        method,
-        endpoint,
-        ...(channelId !== undefined ? { channelId } : {}),
-        ...(content !== undefined ? { content } : {}),
-    };
-};
-
-// Telegram's path carries the bot token (`/bot<token>/sendMessage`); only the method is recorded, never the full path,
-// so even a hand-typed token can't leak.
-const TELEGRAM_TYPES: Readonly<Record<string, string>> = {
-    sendMessage: "message.send",
-    sendDocument: "message.send",
-    sendPhoto: "message.send",
-    sendVideo: "message.send",
-    sendAudio: "message.send",
-    sendVoice: "message.send",
-    editMessageText: "message.edit",
-    setMessageReaction: "reaction.add",
-    getFile: "file.read",
-};
-
-const matchTelegram = (command: string): OutboundCall | undefined => {
-    const url = /https:\/\/api\.telegram\.org\/(file\/)?bot[^/\s"']*\/([^\s"'\\?]*)/.exec(command);
-    if (url === null) {
-        return undefined;
-    }
-    // The download endpoint (`/file/bot<token>/<path>`) names a file, not a method; its verb is the fetch.
-    const endpoint = url[1] === undefined ? `/${url[2] as string}` : "/file";
-    const method = /-X\s+(GET|POST|PUT|PATCH|DELETE)/.exec(command)?.[1] ?? (/\s-[dF]\s/.test(command) ? "POST" : "GET");
-    const payload = /-d\s+'([^']*)'/.exec(command)?.[1] ?? /-d\s+"((?:[^"\\]|\\.)*)"/.exec(command)?.[1];
-    // Upload puts chat_id in a form field, a lookup in the query; both resolve to the same channelId.
-    let channelId = /-F\s+chat_id=([^\s"']+)/.exec(command)?.[1] ?? /[?&]chat_id=([^&\s"']+)/.exec(command)?.[1];
-    let content: string | undefined;
-    if (payload !== undefined) {
-        try {
-            const parsed = JSON.parse(payload) as { text?: unknown; chat_id?: unknown };
-            content = typeof parsed.text === "string" ? parsed.text : payload;
-            channelId = typeof parsed.chat_id === "string" || typeof parsed.chat_id === "number" ? String(parsed.chat_id) : channelId;
-        } catch {
-            content = payload;
-        }
-    }
-    return {
-        provider: "telegram",
-        type: TELEGRAM_TYPES[endpoint.slice(1)] ?? "api.call",
-        method,
-        endpoint,
-        ...(channelId !== undefined ? { channelId } : {}),
-        ...(content !== undefined ? { content } : {}),
-    };
-};
-
-// WhatsApp's skill drives the `whatsapp` CLI, not curl, so this matches a bin invocation, not a URL. Only
-// send/send-file record; `chats`/`download` are reads. Endpoint is the subcommand, matching the `whatsapp.message.send`
-// rule key.
-const unquote = (value: string): string => value.replace(/^["']/, "").replace(/["']$/, "");
-
-const matchWhatsApp = (command: string): OutboundCall | undefined => {
-    const invocation = /(?:^|[;&|(]\s*)whatsapp\s+(send|send-file)\s+("[^"]+"|'[^']+'|\S+)\s+([\S\s]+)/.exec(command);
-    if (invocation === null) {
-        return undefined;
-    }
-    const rest = (invocation[3] as string).trim();
-    return {
-        provider: "whatsapp",
-        type: "message.send",
-        method: "POST",
-        endpoint: `/${invocation[1] as string}`,
-        channelId: unquote(invocation[2] as string),
-        content: unquote(rest),
-    };
-};
-
-// One matcher per cli provider (cli/providers.ts key space): curl-based chat providers, plus whatsapp's bin.
-const matchers: readonly ((command: string) => OutboundCall | undefined)[] = [matchDiscord, matchSlack, matchTelegram, matchWhatsApp];
-
-// Shared with the enforcing PreToolUse gate (guard/outbound-guard.ts): one parser, so audit and enforcement can't
-// disagree.
-export const classifyOutboundCall = (command: string): OutboundCall | undefined => {
-    for (const match of matchers) {
-        const call = match(command);
-        if (call !== undefined) {
-            return call;
-        }
+        const args = words.slice(match.command.length);
+        return {
+            provider: match.provider,
+            type: match.action,
+            // A command has no verb of its own; its row is shown with the one a request doing the same would carry.
+            method: match.read === true ? "GET" : "POST",
+            endpoint: `/${match.command.slice(1).join("/")}`,
+            ...opt("channelId", argumentAt(args, match.channel)),
+            ...opt("content", argumentAt(args, match.content)),
+        };
     }
     return undefined;
 };
 
-// `curl -s` exits 0 on HTTP 4xx, so the body is the status signal: Discord's envelope has numeric `code`/`message`;
-// Slack and Telegram both answer `ok: false`, naming the reason `error` or `description` respectively.
-const outcomeOf = (output: string, isError: boolean | undefined): { outcome: "ok" | "error"; error?: string } => {
-    if (isError === true) {
+/**
+ * The refusal a JSON answer carries inside a success, by the two conventions services use: `ok: false` with the reason
+ * in `error` or `description`, or a numeric `code` beside a `message`. Undefined for any other answer, JSON or not.
+ */
+export const refusalIn = (text: string): string | undefined => {
+    const parsed = parseJsonOr(text, undefined) as { code?: unknown; message?: unknown; ok?: unknown; error?: unknown; description?: unknown } | null | undefined;
+    if (typeof parsed !== "object" || parsed === null) {
+        return undefined;
+    }
+    if (typeof parsed.code === "number" && typeof parsed.message === "string") {
+        return parsed.message;
+    }
+    if (parsed.ok === false) {
+        const reason = [parsed.error, parsed.description].find((each) => typeof each === "string");
+        return typeof reason === "string" ? reason : "the call was refused";
+    }
+    return undefined;
+};
+
+// A command's outcome: a failed tool call is an error in its own words, and a success may still carry a refusal.
+const commandOutcome = (output: string, failed: boolean): CallOutcome => {
+    if (failed) {
         return { outcome: "error", error: output.trim().slice(-ERROR_TAIL) };
     }
-    // Non-JSON output (empty 204 body, piped text) has no error envelope to read.
-    const parsed = parseJsonOr(output, undefined) as { code?: unknown; message?: unknown; ok?: unknown; error?: unknown; description?: unknown } | null | undefined;
-    if (typeof parsed?.code === "number" && typeof parsed.message === "string") {
-        return { outcome: "error", error: parsed.message };
-    }
-    if (parsed?.ok === false) {
-        const reason = [parsed.error, parsed.description].find((each) => typeof each === "string");
-        return { outcome: "error", error: reason ?? "the call was refused" };
-    }
-    return { outcome: "ok" };
+    const refusal = refusalIn(output);
+    return refusal === undefined ? { outcome: "ok" } : { outcome: "error", error: refusal };
 };
+
+/**
+ * The commands the enabled extensions declare, for a turn's sniffer: none, and a warning, when they cannot be read, since
+ * recording never fails the turn it records.
+ */
+export const sniffedCommands = (services: Pick<Services, "outwardActions" | "logger">): Promise<readonly DeclaredCommand[]> =>
+    services.outwardActions().then(
+        (actions) => actions.commands,
+        (error: Error) => {
+            services.logger.warn({ err: error }, "activity: the declared outward commands could not be read; this turn's are not recorded");
+            return [];
+        },
+    );
 
 export interface OutboundSniffer {
     readonly observe: (event: AgentEvent) => void;
@@ -201,25 +129,25 @@ export interface OutboundSniffer {
     readonly flush: () => void;
 }
 
-// One per turn, teed into streamAgent; appends are fire-and-forget so monitoring never fails the turn. `turnId` (minted
-// in agent.routes.ts) is stamped on every call so the feed folds a turn's sends into its own row.
-export const createOutboundSniffer = (services: Pick<Services, "activity" | "logger">, turnId: string): OutboundSniffer => {
+// One per turn, teed into the turn's frames; appends are fire-and-forget so recording never fails the turn. `turnId`
+// (minted in stream-agent.ts) is stamped on every call so the feed folds a turn's sends into its own row. A request
+// through the credential gateway is recorded there instead, where its real method, path and body are seen.
+export const createOutboundSniffer = (
+    services: Pick<Services, "activity" | "logger">,
+    turnId: string,
+    commands: readonly DeclaredCommand[],
+): OutboundSniffer => {
     const pending = new Map<string, OutboundCall>();
     let sessionId: string | undefined;
-    const record = (call: OutboundCall, result?: { outcome: "ok" | "error"; error?: string }): void => {
+    const record = (call: OutboundCall, result?: CallOutcome): void => {
         void services.activity
             .append({
-                provider: call.provider,
+                ...call,
                 direction: "out",
-                type: call.type,
-                method: call.method,
-                endpoint: call.endpoint,
                 turnId,
-                ...(call.channelId !== undefined ? { channelId: call.channelId } : {}),
-                ...(call.content !== undefined ? { content: call.content } : {}),
-                ...(sessionId !== undefined ? { sessionId } : {}),
-                ...(result !== undefined ? { outcome: result.outcome } : {}),
-                ...(result?.error !== undefined ? { error: result.error } : {}),
+                ...opt("sessionId", sessionId),
+                ...opt("outcome", result?.outcome),
+                ...opt("error", result?.error),
             })
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
     };
@@ -230,7 +158,7 @@ export const createOutboundSniffer = (services: Pick<Services, "activity" | "log
                 return;
             }
             if (event.kind === "tool_call" && event.name === "Bash" && event.target !== undefined) {
-                const call = classifyOutboundCall(event.target);
+                const call = classifyCommand(commands, event.target);
                 if (call !== undefined) {
                     pending.set(event.id, call);
                 }
@@ -244,7 +172,7 @@ export const createOutboundSniffer = (services: Pick<Services, "activity" | "log
                 }
                 pending.delete(event.id);
                 const text = event.content?.find((entry) => entry.type === "text")?.text ?? "";
-                record(call, outcomeOf(text, event.status === "failed"));
+                record(call, commandOutcome(text, event.status === "failed"));
             }
         },
         flush: () => {

@@ -29,7 +29,12 @@ test("a warm session keeps its conversation's bearer across its turns, and each 
     const first = mounts.lease("conv-a", { warmSession: true });
     const billing = first.open({ name: "billing", target: { kind: "extension", extension: "acme", card: "billing", path: "mcp" } });
     expect(billing).toEqual({ name: "billing", url: "http://127.0.0.1:8787/mcp/billing", token: billing.token });
-    expect(mounts.resolve(billing.token, "billing")).toEqual({ target: { kind: "extension", extension: "acme", card: "billing", path: "mcp" }, conversationId: "conv-a" });
+    expect(mounts.resolve(billing.token, "billing")).toEqual({
+        target: { kind: "extension", extension: "acme", card: "billing", path: "mcp" },
+        conversationId: "conv-a",
+        // What the turn holds, read live (2026-11-26): nothing granted here.
+        turn: { granted: [], mounted: expect.any(Function) },
+    });
     expect(mounts.resolve(billing.token, "payroll")).toEqual({ refused: "unleased" });
 
     first.release();
@@ -41,7 +46,7 @@ test("a warm session keeps its conversation's bearer across its turns, and each 
     const second = mounts.lease("conv-a", { warmSession: true });
     const laptop = second.open({ name: "laptop", target: { kind: "device", id: "laptop" } });
     expect(laptop.token).toBe(billing.token);
-    expect(mounts.resolve(laptop.token, "laptop")).toEqual({ target: { kind: "device", id: "laptop" }, conversationId: "conv-a" });
+    expect(mounts.resolve(laptop.token, "laptop")).toEqual({ target: { kind: "device", id: "laptop" }, conversationId: "conv-a", turn: { granted: [], mounted: expect.any(Function) } });
     expect(mounts.resolve(laptop.token, "billing")).toEqual({ refused: "unleased" });
     // A stale release of the earlier turn takes nothing from the later one.
     first.release();

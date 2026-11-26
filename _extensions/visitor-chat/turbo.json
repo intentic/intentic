@@ -1,0 +1,12 @@
+{
+    "$schema": "https://turborepo.com/schema.json",
+    "extends": ["//"],
+    "tasks": {
+        // The build copies the widget's bundle from @intentic/webchat-widget (scripts/widget.mjs), which no dependency
+        // names: an extension depends on the SDK alone, and the widget shares the contract's `embed` module with the bug
+        // reporter, which an extension may not import. So the edge is declared here, and the widget is built first.
+        "build": {
+            "dependsOn": ["^build", "@intentic/webchat-widget#build"]
+        }
+    }
+}

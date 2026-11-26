@@ -424,7 +424,6 @@
             "earlierChat": "Wcześniejszy czat",
             "edits": "Twoje zmiany",
             "unsavedSettings": "Niezapisane ustawienia",
-            "email": "E-mail",
             "error": "Błąd",
             "finishing": "Kończenie…",
             "firstWakesChat": "Pierwszy go budzi",
@@ -10712,6 +10711,7 @@
             "action": {
                 "messageSend": "Wysyłanie wiadomości",
                 "messageEdit": "Edytowanie wiadomości",
+                "messageDelete": "Usuwanie wiadomości",
                 "reactionAdd": "Dodawanie reakcji",
                 "reactionRemove": "Usuwanie reakcji",
                 "mailSend": "Wysyłanie poczty",
@@ -10721,7 +10721,8 @@
                 "documentRegisterOutgoing": "Rejestrowanie korespondencji wychodzącej",
                 "caseAttachDraft": "Dodawanie projektu do sprawy",
                 "deliverySend": "Wysyłanie przesyłki",
-                "deliveryOpen": "Otwieranie przesyłki"
+                "deliveryOpen": "Otwieranie przesyłki",
+                "all": "Każde działanie"
             },
             "value": {
                 "allow": "dozwolone",
@@ -14347,9 +14348,6 @@
                 "everyMinutes": "Co {count} min"
             },
             "source": {
-                "npm": "Pakiet npm {spec}",
-                "github": "Nowe wydania {repo}",
-                "githubPre": "Nowe wydania {repo}, też przedpremierowe",
                 "url": "Strona {url}",
                 "urlSelect": "Strona {url}, część pasująca do {select}"
             },

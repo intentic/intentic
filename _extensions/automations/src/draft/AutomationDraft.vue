@@ -30,7 +30,7 @@ import ModelProperty from "../properties/ModelProperty.vue";
 import RoleProperty from "../properties/RoleProperty.vue";
 import ServiceProperty from "../properties/ServiceProperty.vue";
 import { type AutomationChange, provideDraftWriter } from "../properties/useAutomationPatch";
-import { embedSnippet, useAutomations, useSandboxZone, webhookUrl } from "../useAutomations";
+import { isVisitorChat as isChat, openVisitorChatInstall, useAutomations, useSandboxZone, webhookUrl } from "../useAutomations";
 import { triggerKey, useAutomationForm } from "../useAutomationForm";
 import EndsProperty from "./EndsProperty.vue";
 import TemplatePicker from "./TemplatePicker.vue";
@@ -275,24 +275,28 @@ const promptPlaceholder = computed(() =>
                 <div v-if="savedId !== undefined" class="flex flex-col gap-3 pr-3">
                     <p class="text-sm text-content">
                         <Icon name="check-circle" class="mr-1.5 text-success" />{{
-                            savedAutomation && embedSnippet(savedAutomation) ? t(`automationComposer.visitorChatCreatedDrop`) : t(`automationComposer.automationCreatedWireUp`)
+                            savedAutomation && isChat(savedAutomation) ? t(`automationComposer.visitorChatCreatedDrop`) : t(`automationComposer.automationCreatedWireUp`)
                         }}
                     </p>
-                    <div v-if="savedAutomation" class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
-                        <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ embedSnippet(savedAutomation) ?? webhookUrl(savedAutomation) }}</code>
-                        <CopyButton
-                            :text="embedSnippet(savedAutomation) ?? webhookUrl(savedAutomation) ?? ``"
-                            :aria-label="
-                                embedSnippet(savedAutomation)
-                                    ? t(`automationComposer.copyEmbedSnippet`, { id: savedAutomation.id })
-                                    : t(`automationComposer.copyWebhookUrl`, { id: savedAutomation.id })
-                            "
-                        />
+                    <!-- A Visitor chat's snippet, and whether a site has loaded it yet, are its own extension's panel. -->
+                    <template v-if="savedAutomation && isChat(savedAutomation)">
+                        <Button
+                            tier="boring"
+                            class="self-start"
+                            :label="t(`automationComposer.showEmbedCode`)"
+                            @click="openVisitorChatInstall(savedAutomation.id).catch(() => (submitError = t(`automationsView.visitorChatOff`)))"
+                        >
+                            <template #icon><Icon name="globe" /></template>
+                        </Button>
+                        <p class="text-xs text-muted">
+                            {{ t(`automationComposer.pasteBefore`) }} <span class="font-mono">&lt;/body&gt;</span> {{ t(`automationComposer.onAnyPageListed`) }}
+                        </p>
+                    </template>
+                    <div v-else-if="savedAutomation" class="flex items-center gap-2 rounded-md border border-line bg-canvas px-3 py-2">
+                        <code class="min-w-0 flex-1 break-all font-mono text-2xs text-content">{{ webhookUrl(savedAutomation) }}</code>
+                        <CopyButton :text="webhookUrl(savedAutomation) ?? ``" :aria-label="t(`automationComposer.copyWebhookUrl`, { id: savedAutomation.id })" />
                     </div>
-                    <p v-if="savedAutomation && embedSnippet(savedAutomation)" class="text-xs text-muted">
-                        {{ t(`automationComposer.pasteBefore`) }} <span class="font-mono">&lt;/body&gt;</span> {{ t(`automationComposer.onAnyPageListed`) }}
-                    </p>
-                    <p v-else class="text-xs text-muted">{{ template?.setup ?? t(`automationComposer.anyExternalSystemWake`) }}</p>
+                    <p v-if="!(savedAutomation && isChat(savedAutomation))" class="text-xs text-muted">{{ template?.setup ?? t(`automationComposer.anyExternalSystemWake`) }}</p>
                     <Button tier="accent" class="self-end" :label="t(`automationComposer.done`)" @click="finish(savedId ?? ``)" />
                 </div>
 

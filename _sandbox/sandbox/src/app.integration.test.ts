@@ -625,43 +625,19 @@ test("automations.setEnabled changes only enablement on a security-sensitive aut
     expect(await store.get("support")).toEqual({ ...support, enabled: false });
 });
 
-test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist, reflects CORS, and records a run", async () => {
-    const store = memoryAutomationsStore([
-        automationRecord("support", {
-            trigger: { kind: "listener", provider: "webchat", allowedOrigins: ["https://site.example"] },
-            prompt: "help the visitor",
-        }),
-    ]);
-    // Bearer auth rejects everything, so reaching the route at all proves the exemption; the origin allowlist is the
-    // real gate.
-    // The widget's own origin isn't in allowOrigins: /webchat reflects the caller's origin regardless, letting a
-    // third-party embed through.
-    const app = createApp(
-        services({
-            automations: store,
-            config: { ...testConfig, webOrigin: "https://app.intentic" },
-            auth: { authorize: rejectAuth, authorizeOwner: rejectAuth },
-        }),
-    );
-    const send = (origin: string | undefined, body: unknown = { conversationId: "c1", content: "fix the header" }) =>
-        app.request("/webchat/support/message", {
-            method: "POST",
-            headers: { "content-type": "application/json", ...(origin !== undefined ? { origin } : {}) },
-            body: JSON.stringify(body),
-        });
-
-    // A disallowed / missing origin is refused by the route's own 403, not the bearer middleware's 401.
-    expect((await send("https://evil.example")).status).toBe(403);
-    expect((await send(undefined)).status).toBe(403);
-
-    // An allowed origin streams back as text/event-stream, with CORS reflecting that origin, not the daemon's own.
-    const ok = await send("https://site.example");
-    expect(ok.status).toBe(200);
-    expect(ok.headers.get("content-type")).toContain("text/event-stream");
-    expect(ok.headers.get("access-control-allow-origin")).toBe("https://site.example");
-    await ok.text();
-    await waitFor(async () => expect((await store.get("support"))?.runs).toHaveLength(1), SETTLES);
-    expect((await store.get("support"))?.runs[0]?.outcome).toBe("completed");
+// (2026-11-26) The Visitor chat's old message path is a forward onto its extension's door (moved-doors.routes.ts, whose
+// suite has the rest): still anyone's to call from a customer's page, so no bearer, and the caller's origin reflected.
+test("POST /webchat/:id/message skips bearer auth and reflects CORS, saying so when the Visitor chat extension is not on", async () => {
+    // Bearer auth rejects everything, so reaching the route at all proves the exemption.
+    const app = createApp(services({ config: { ...testConfig, webOrigin: "https://app.intentic", extensionsDir: "" }, auth: { authorize: rejectAuth, authorizeOwner: rejectAuth } }));
+    const answer = await app.request("/webchat/support/message", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://site.example" },
+        body: JSON.stringify({ conversationId: "c1", content: "fix the header" }),
+    });
+    expect(answer.status).toBe(404);
+    expect(answer.headers.get("access-control-allow-origin")).toBe("https://site.example");
+    expect(await answer.json()).toEqual({ error: "the Visitor chat is now an extension, which this sandbox does not have switched on" });
 
     // The preflight is answered with the reflected origin too, so the browser lets the cross-site POST through.
     const preflight = await app.request("/webchat/support/message", { method: "OPTIONS", headers: { origin: "https://site.example" } });

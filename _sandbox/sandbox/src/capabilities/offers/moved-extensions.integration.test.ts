@@ -8,8 +8,9 @@ import { fileDismissalsStore } from "./dismissals-store.js";
 import { MOVED_EXTENSIONS } from "./moved-extensions.js";
 import { capabilityRecommendations } from "./recommend.js";
 
-// e-urzad and prawo left the image (2026-11-23): a sandbox that used one is offered its repository's install on the
-// Extension tile, once, and a sandbox that never did is told nothing.
+// e-urzad and prawo left the image (2026-11-23), and the bug intake left the daemon for the issues extension
+// (2026-11-26): a sandbox that used one is offered its repository's install on the Extension tile, once, and a sandbox
+// that never did is told nothing.
 
 const noRemotes: GitRunner = async () => ({ stdout: "", stderr: "" });
 
@@ -37,7 +38,7 @@ const offered = async (root: string, active: readonly Capability[], dismissed = 
     capabilityRecommendations(root, active, await dismissed.list(), noRemotes);
 
 test("the pinned repositories are full commits on the intentic organisation", () => {
-    expect(MOVED_EXTENSIONS.map((moved) => moved.id)).toEqual(["intentic.e-urzad", "intentic.prawo"]);
+    expect(MOVED_EXTENSIONS.map((moved) => moved.id)).toEqual(["intentic.e-urzad", "intentic.prawo", "intentic.issues"]);
     for (const moved of MOVED_EXTENSIONS) {
         expect(moved.url).toMatch(/^https:\/\/github\.com\/intentic\/extension-[a-z-]+$/);
         expect(moved.ref).toMatch(/^[0-9a-f]{40}$/);
@@ -104,4 +105,29 @@ test("both used: one offer at a time, and declining each, through the real dismi
 test("installing the first brings the second up next", async () => {
     const root = await sandbox({ [`${STATE_DIR}/local/cache/prawo/acts.json`]: "{}" });
     expect((await offered(root, [ezdCard, installed(eUrzad.url)])).map((offer) => offer.prefill)).toEqual([{ url: prawo.url, ref: prawo.ref }]);
+});
+
+// The intake was the daemon's, so a sandbox used it without ever installing the extension: its inbox, or an automation on
+// the intake's source, is the sign, and nothing else of the daemon's is.
+test("a sandbox that used the daemon's bug intake is offered the issues extension, by its inbox or by an intake", async () => {
+    const issues = movedOf("intentic.issues");
+    const inbox = await sandbox({ [`${STATE_DIR}/records/issues/4f3a1b2c9d8e7f60.json`]: "{}" });
+    expect(await offered(inbox, [])).toEqual([
+        {
+            entry: "extension",
+            evidence: `${STATE_DIR}/records/issues/`,
+            reason: "Bug reports moved from the sandbox into the Issues extension",
+            prefill: { url: issues.url, ref: issues.ref },
+        },
+    ]);
+    const intake = await sandbox({
+        [`${STATE_DIR}/config/automations.json`]: JSON.stringify([
+            { id: "chat", trigger: { kind: "listener", provider: "webchat" } },
+            { id: "bugs", trigger: { kind: "listener", provider: "issues", allowedOrigins: ["https://shop.example"] } },
+        ]),
+    });
+    expect((await offered(intake, [])).map((offer) => offer.evidence)).toEqual(["an automation on the issues source in automations.json"]);
+    const chatOnly = await sandbox({ [`${STATE_DIR}/config/automations.json`]: JSON.stringify([{ id: "chat", trigger: { kind: "listener", provider: "webchat" } }]) });
+    expect(await offered(chatOnly, [])).toEqual([]);
+    expect(await offered(inbox, [installed(`${issues.url}.git`)])).toEqual([]);
 });

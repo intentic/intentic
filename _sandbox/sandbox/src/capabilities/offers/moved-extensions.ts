@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isMissing } from "@intentic/base/errors";
+import { parseJsonOr } from "@intentic/base/json";
+import { z } from "zod";
 import type { Capability, CapabilityRecommendation } from "@intentic/sandbox-contract/schemas/capabilities";
 import { extensionCacheDir, extensionStateDir, STATE_GROUP_DIR } from "@intentic/sandbox-contract/state/workspace-state";
 import { readExtensionEnablement } from "../extension-inventory/extension-enablement.js";
@@ -12,6 +14,11 @@ import type { DismissedRecommendation } from "./dismissals-store.js";
 // like knowledge and maintenance. A sandbox that used one would lose it silently on its next image, so the Extension
 // tile recommends installing it from its repository at the commit pinned below: the ordinary git install, where the
 // owner reads and approves its powers like any other. Nothing here installs anything.
+//
+// (2026-11-26) The same for a feature that left the daemon for an extension a sandbox may never have installed: the bug
+// intake, whose reports, inbox and wakes are the issues extension's backend now. A sandbox whose intake was core takes no
+// report until that extension is on, so it is offered once the sandbox shows it used the intake (its inbox, or an
+// automation on the intake's `issues` source).
 //
 // It is re-derived from what the sandbox holds on every read (recommend.ts), so it is said once: it stops the moment the
 // install lands (a capability of kind `extension` at that repository) or the owner declines it, and comes back only if
@@ -33,6 +40,10 @@ export interface MovedExtension {
     readonly connectors: readonly string[];
     // Where it kept a cache before extensions had their own (storage-catalog.ts DAEMON_CACHES), workspace-relative.
     readonly legacyCache?: string;
+    // The listener provider its automations name, when a stored automation on it is a sign of use.
+    readonly listenerProvider?: string;
+    // What the offer says moved, when it is not the extension itself.
+    readonly reason?: string;
 }
 
 // The standalone repositories, at the commits that first shipped them on their own (their manifests' `entry` and bundled
@@ -54,6 +65,18 @@ export const MOVED_EXTENSIONS: readonly MovedExtension[] = [
         ref: "1e9f396537324a2f61a0a8738471882b481fb1cc",
         connectors: ["prawo"],
         legacyCache: `${STATE_GROUP_DIR.local}/cache/prawo`,
+    },
+    // The commit the registry listed when the intake moved: bump it to the one that ships the extension's backend (its
+    // src/server) in the same sitting as the registry listing, since an older commit has the views and no intake.
+    {
+        id: "intentic.issues",
+        name: "issues",
+        label: "Issues",
+        url: "https://github.com/intentic/extension-issues",
+        ref: "155f62ff146ab76e59ad9ba5cea309cd24405ebe",
+        connectors: [],
+        listenerProvider: "issues",
+        reason: "Bug reports moved from the sandbox into the Issues extension",
     },
 ];
 
@@ -109,6 +132,9 @@ const evidenceOf = async (
             return `${dir}/`;
         }
     }
+    if (moved.listenerProvider !== undefined && (await listensOn(root, moved.listenerProvider))) {
+        return `an automation on the ${moved.listenerProvider} source in automations.json`;
+    }
     if (enablement[moved.id] === true) {
         return `${moved.id} switched on in extension-enablement.json`;
     }
@@ -116,6 +142,25 @@ const evidenceOf = async (
         return `${moved.id} settings in extension-settings.json`;
     }
     return undefined;
+};
+
+// Each stored automation's trigger, as far as telling its source apart needs: anything else in the file is kept loose.
+const StoredTriggersSchema = z.array(z.object({ trigger: z.object({ kind: z.string(), provider: z.string().optional() }).loose() }).loose());
+
+// Whether a stored automation listens on `provider`, read off the file itself: the automations store sits in the
+// automations area, which capabilities may not import. A file that does not parse is no evidence either way.
+const listensOn = async (root: string, provider: string): Promise<boolean> => {
+    let text: string;
+    try {
+        text = await readFile(statePath(root, ".intentic/config/automations.json"), "utf8");
+    } catch (error) {
+        if (isMissing(error)) {
+            return false;
+        }
+        throw error;
+    }
+    const stored = StoredTriggersSchema.safeParse(parseJsonOr(text, undefined));
+    return stored.success && stored.data.some(({ trigger }) => trigger.kind === "listener" && trigger.provider === provider);
 };
 
 // Only which extensions have saved settings, read off the file itself: its store (extensions/extension-settings.ts) sits
@@ -152,7 +197,7 @@ export const movedExtensionRecommendations = async (
             offers.push({
                 entry: "extension",
                 evidence,
-                reason: `${moved.label} moved to its own repository`,
+                reason: moved.reason ?? `${moved.label} moved to its own repository`,
                 prefill: { url: moved.url, ref: moved.ref },
             });
         }

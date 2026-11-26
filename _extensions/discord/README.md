@@ -21,6 +21,20 @@ flowchart LR
   id in base64, and a bot's user id is its application's), which is all the connected card's **Add to your server**
   link needs: Discord's invite with the permissions a reply and a call use (threads, embeds, reactions, connect,
   speak). The skill can build the same link.
+- The card declares what its REST calls do (`broker.actions`, by method and path: sending, editing and deleting a
+  message, adding and removing a reaction, and the message reads), so the sandbox's credential gateway records each call
+  in Activity with its channel and content, and holds it to the owner's action rules (`discord.message.send` and the
+  rest) before the token is attached.
+- A backend publishes the posts the owner approved for Discord ([src/server.ts](src/server.ts),
+  [src/publish.ts](src/publish.ts)). The card declares it (`channel.publish`, a channel id), so the daemon's approvals
+  executor hands such a post to `api.approvals.publish` only after the owner's yes was matched and spent; the backend
+  reads the bots' tokens from its own listener's feed (`/listeners/discord/state`) and posts through the first bot that
+  can see the channel, pinging nobody, refusing a post past the card's `channel.messageLimit` (2,000) or one the owner's
+  rules deny now, and answers the message's link. A post naming a channel, or attaching a file, goes to an agent turn
+  instead. Plain REST over `fetch`, so the shared backend host loads no discord.js. 2026-11-26: until then the daemon
+  posted it itself through the gateway's `/deliver`, from a table naming Discord.
+- The card also says where people's data goes for the Data protection page (`processors`: Discord Inc., US, and the
+  gateway and CDN hosts beside `discord.com`), and the gateway reads its reply-splitting limit from the same card.
 - The gateway is an `autoStart` extension process the daemon supervises while a Discord card or listener automation
   wants it. It holds one discord.js client per bot token and posts each human message to the daemon's listener route.
   The daemon itself holds no Discord connection.

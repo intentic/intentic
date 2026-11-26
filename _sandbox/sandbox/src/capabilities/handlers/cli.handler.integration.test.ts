@@ -104,6 +104,8 @@ test("apply writes the connector's SKILL.md, and discord reads active: its voice
 const whatsapp: Capability = { id: "whatsapp", kind: "cli", config: { provider: "whatsapp", phoneNumber: "+49 151 12345678" } };
 const ready = { capabilityId: "whatsapp", provider: "whatsapp", gateway: "ready" as const };
 
+// The WhatsApp card declares that its status is its listener's report and where its code is typed (`status` in its
+// manifest); nothing in the handler names WhatsApp.
 test("whatsapp pends until a phone links: silence, waiting, the live code, a refusal: then active", async () => {
     const { ctx } = tempCtx();
     await drain(cliHandler.apply(ctx, "whatsapp", whatsapp.config));
@@ -132,7 +134,7 @@ test("whatsapp pends until a phone links: silence, waiting, the live code, a ref
     setListenerStatus("whatsapp", { connections: [], pairing: { whatsapp: { state: "failed", detail: "Not a WhatsApp account" } } }, Date.now());
     expect(await cliHandler.status(ctx, "whatsapp", whatsapp.config)).toEqual({
         state: "pending",
-        detail: "WhatsApp refused that number: Not a WhatsApp account",
+        detail: "WhatsApp refused it: Not a WhatsApp account",
     });
     // Paired: nothing left to do, and the gateway reports the session ready.
     setListenerStatus("whatsapp", { connections: [ready], pairing: { other: { state: "waiting" } } }, Date.now());
@@ -251,7 +253,7 @@ test("cliEnvOf expands each connector's env template; two instances of one provi
     const imap: Capability = {
         id: "imap",
         kind: "cli",
-        config: { provider: "imap", host: "imap.example.com", port: "993", username: "u@e.com", password: "p#ss@word: &$100%!" },
+        config: { provider: "imap", host: "imap.example.com", port: "993", username: "u+tag#1 &$100%!@e.com", password: "p#ss@word: &$100%!" },
     };
     const primary: Capability = {
         id: "analytics",
@@ -271,27 +273,26 @@ test("cliEnvOf expands each connector's env template; two instances of one provi
         GITHUB_GIT_URL_GITHUB: "https://github.com",
     });
     expect(await cliEnvOf(hostFor([gitlab]), raw)).toEqual({ GITLAB_TOKEN_GITLAB: "gl", GITLAB_URL_GITLAB: "https://gitlab.example.com" });
-    // No encoding on this path (curl --user sends it verbatim); only ${field:uri} (postgres below) percent-encodes.
-    expect(await cliEnvOf(hostFor([imap]), raw)).toEqual({
+    // No encoding on this path: a value expands verbatim; only ${field:uri} (postgres below) percent-encodes. The IMAP
+    // card's password, like its refresh token, client secret and access token, stays with its extension's backend
+    // (2026-11-26): only the settings that name the account reach the shell.
+    const imapEnv = await cliEnvOf(hostFor([imap]), raw);
+    expect(imapEnv).toEqual({
         IMAP_HOST_IMAP: "imap.example.com",
         IMAP_PORT_IMAP: "993",
-        IMAP_USERNAME_IMAP: "u@e.com",
-        IMAP_PASSWORD_IMAP: "p#ss@word: &$100%!",
+        IMAP_USERNAME_IMAP: "u+tag#1 &$100%!@e.com",
         // The card's sending fields, left blank here: they expand to nothing, and the sender then reuses the IMAP login.
         SMTP_HOST_IMAP: "",
         SMTP_PORT_IMAP: "",
         SMTP_SECURITY_IMAP: "",
         SMTP_USERNAME_IMAP: "",
-        SMTP_PASSWORD_IMAP: "",
-        // The OAuth2 sign-in fields, unused by a password card: empty, and the CLI and watcher log in with the password.
+        // The OAuth2 sign-in fields, unused by a password card: empty, and the backend and watcher log in with the password.
         IMAP_AUTH_MODE_IMAP: "",
         IMAP_OAUTH_PROVIDER_IMAP: "",
         IMAP_OAUTH_TENANT_IMAP: "",
         IMAP_OAUTH_CLIENT_ID_IMAP: "",
-        IMAP_OAUTH_CLIENT_SECRET_IMAP: "",
-        IMAP_OAUTH_REFRESH_TOKEN_IMAP: "",
-        IMAP_ACCESS_TOKEN_IMAP: "",
     });
+    expect(Object.values(imapEnv)).not.toContain("p#ss@word: &$100%!");
     // Postgres URL template percent-encodes user/password/database via ${field:uri}.
     expect(await cliEnvOf(hostFor([primary, secondary]), raw)).toEqual({
         POSTGRES_URL_ANALYTICS: "postgresql://app:pw1@a.example.com:5432/metrics",

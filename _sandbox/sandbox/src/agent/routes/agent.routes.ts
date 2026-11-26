@@ -17,6 +17,9 @@ import { type AccountSwitch, switchAccount } from "../providers/accounts/switch-
 import { areasOf, runAsOf } from "../../auth/principal.js";
 import { operatorHere } from "../../auth/operator.js";
 import { speakerOf, spokenBy } from "../../seams/turn-speaker.js";
+import { recordIfExtensionOpens } from "../../extensions/runtime/extension-conversations.js";
+import { callerAtAgentDoor } from "../../extensions/backend/caller-assertion.js";
+import { memberRefusal } from "@intentic/sandbox-contract/protocol/member-reach";
 import { turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import { runToAttach } from "./next-run.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
@@ -122,6 +125,22 @@ const replyOnRunner = async (services: Services, input: AgentReply): Promise<boo
     return answered.applied;
 };
 
+// (2026-11-26) Who a turn POST /agent starts is for, when an extension's backend asks on behalf of whoever pressed its
+// button: the request's own caller, or the person a caller assertion the proxy minted for that extension names
+// (extensions/backend/caller-assertion.ts), with their access as the roster has it now and this route's floor asked for
+// them. A panel, an agent or a person's own bearer cannot present one; only the extension's token, beside it, can.
+const actingContext = async (services: Services, context: OrpcContext): Promise<OrpcContext> => {
+    const acting = await callerAtAgentDoor(services, (name) => context.headers.get(name), (caller) => memberRefusal(caller, "POST", "/agent")?.error);
+    if ("refused" in acting) {
+        throw new ORPCError(acting.status === 401 ? "UNAUTHORIZED" : "FORBIDDEN", { message: acting.refused });
+    }
+    if (acting.kind === "none") {
+        return context;
+    }
+    const { principal: _program, ...rest } = context;
+    return { ...rest, identity: acting.caller };
+};
+
 export const createAgentRoutes = (services: Services) => {
     const i = implement(agentContract).$context<OrpcContext>();
     const own = (context: OrpcContext, conversationId: string | undefined): void => ownedBy(services, context, conversationId);
@@ -143,7 +162,8 @@ export const createAgentRoutes = (services: Services) => {
     return {
         // Starts the turn detached, says the words into the running one, or queues them for the next; the answer says
         // which, with the run the message is in, and the turn keeps running regardless of this request.
-        run: i.run.handler(async ({ input, context }) => {
+        run: i.run.handler(async ({ input, context: received }) => {
+            const context = await actingContext(services, received);
             if (input.conversationId === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
             }
@@ -162,6 +182,8 @@ export const createAgentRoutes = (services: Services) => {
             const opening = await withOpeningSeal(services, context, conversationId, openingOf(services, context, conversationId, input), input.private);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const speaker = speakerOf(context.identity, context.principal);
+            // An extension's backend opening a conversation hears its runs end (extension-conversations.ts).
+            await recordIfExtensionOpens(services, (name) => context.headers.get(name), conversationId);
             // A person's words reopen an archived conversation, here at their door; the engine refuses every archived one.
             await services.agents.clearArchived([conversationId]);
             // Push rides the run's own lifecycle, not this request, since a tab may be asleep.

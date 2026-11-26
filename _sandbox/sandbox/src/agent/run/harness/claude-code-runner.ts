@@ -500,32 +500,27 @@ const baseOptions = (
                 ...firstHooks(request, approval),
                 // Runs before the tmux wrapper, so the classifier and card see the agent's own command, not wrapper
                 // boilerplate.
-                namedHooks("command-guard", commandGateHooks({
-                    policy: request.policy.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
-                    judging: request.policy.judging ?? "on",
-                    unattended: request.policy.unattended === true,
-                    // Read per command, not snapshotted beside it: attendance is the one fact about a turn that can arrive
-                    // after it starts, and it arrives as a steering message.
-                    steered: () => request.hooks.steered?.() === true,
-                    push,
-                    signal: request.signal,
-                    cards: request.hooks.cards,
-                    taint,
-                    cwd: request.spec.cwd,
-                    // Whether that cwd is this conversation's own copy; without it `git switch` in a worktree reads as moving a
-                    // checkout somebody else shares.
-                    ...opt("ownCheckout", request.spec.ownCheckout),
-                    judge: request.hooks.judge,
-                    log: request.hooks.logSafety,
-                    answered: request.hooks.safetyAnswered,
-                    remember: request.hooks.rememberSafety,
-                    rememberFailed: request.hooks.rememberSafetyFailed,
-                    // The same install rule and ledger every runtime's gate is built with (vendor-gate.ts).
-                    installs: request.hooks.projectInstalls,
-                    onImageInstall: request.hooks.onImageInstall,
-                    // The owner's action rules, in the same guard every runtime's gate is built from.
-                    actionRules: request.policy.actionRules,
-                })),
+                namedHooks("command-guard", commandGateHooks(({
+	policy: request.policy.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
+	judging: request.policy.judging ?? 'on',
+	unattended: request.policy.unattended === true,
+	steered: () => request.hooks.steered?.() === true,
+	push,
+	signal: request.signal,
+	cards: request.hooks.cards,
+	taint,
+	cwd: request.spec.cwd,
+	...opt('ownCheckout', request.spec.ownCheckout),
+	judge: request.hooks.judge,
+	log: request.hooks.logSafety,
+	answered: request.hooks.safetyAnswered,
+	remember: request.hooks.rememberSafety,
+	rememberFailed: request.hooks.rememberSafetyFailed,
+	installs: request.hooks.projectInstalls,
+	onImageInstall: request.hooks.onImageInstall,
+	actionRules: request.policy.actionRules,
+	outwardCommands: request.policy.outwardCommands
+}))),
                 // tmux wrapper carries the secret exit so the rewrites compose in order; without tmux the exit stands
                 // alone.
                 namedHooks("terminal", tmuxEnabled

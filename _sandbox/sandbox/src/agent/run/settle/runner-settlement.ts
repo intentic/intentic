@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import { KeyedProviderSchema } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { withGitCallerPart } from "@intentic/base/git";
-import { createOutboundSniffer } from "../../../activity/outbound.js";
+import { createOutboundSniffer, sniffedCommands } from "../../../activity/outbound.js";
 import type { Services } from "../../../composition.js";
 import { liveRunOf } from "../../../conversations/actor/conversation-holdings.js";
 import { opt } from "../../../opt.js";
@@ -95,7 +95,7 @@ async function* settledOnParent(
     const turnId = randomUUID();
     const run = liveRunOf(services.conversations, conversationId);
     const folded = createTurnFrames(root, input.sessionId, Date.now(), mirror.scan);
-    const sniffer = createOutboundSniffer(services, turnId);
+    const sniffer = createOutboundSniffer(services, turnId, await sniffedCommands(services));
     let account = input.account;
     let model = input.model === "" ? undefined : input.model;
     let ran = false;

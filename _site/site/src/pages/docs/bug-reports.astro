@@ -14,6 +14,10 @@ import DocsLayout from "../../components/docs/DocsLayout.astro";
         and what the person was doing just before.
     </p>
     <p>
+        Bug reports come with the <strong>Issues</strong> extension: install it from Extensions → Browse, and it brings the reporter, the
+        intake and the inbox with it.
+    </p>
+    <p>
         The difference from an error tracker is what happens next. The thing reading the report has your repository checked out, so it can
         reproduce the crash, fix the cause and run your tests — instead of paging you at eleven at night with a stack trace.
     </p>
@@ -50,7 +54,7 @@ https://www.example.com</code></pre>
 
     <h2>3 · Paste the snippet</h2>
     <p>Press <strong>Install</strong> on the row and copy the line it gives you. It goes on any page you listed, just before <code>&lt;/body&gt;</code>:</p>
-    <pre><code>&lt;script src="https://sandbox-&lt;id&gt;.&lt;zone&gt;/intake/sdk.js"
+    <pre><code>&lt;script src="https://sandbox-&lt;id&gt;.&lt;zone&gt;/door/intentic.issues/sdk.js"
         data-automation="bug-reports" data-release="a1b2c3d" defer&gt;&lt;/script&gt;</code></pre>
     <p>
         <strong><code>data-release</code> is the one worth wiring up.</strong> Give it whatever your build already knows — a commit sha, a

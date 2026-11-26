@@ -30,7 +30,7 @@ export const startGateway = async (options: {
     const sessions = brokerSessionsFrom(async () => randomKey);
     const handler = createGateway({
         sessions,
-        card: async (id) => (id === card.id ? { config: card.config, broker, name: options.spec.catalog.name } : undefined),
+        card: async (id) => (id === card.id ? { config: card.config, broker, name: options.spec.catalog.name, provider: card.config.provider } : undefined),
         ownerRules: async () => undefined,
         hostGuards: async () => [],
         credentialGate: { check: async () => ({ allow: true }) },

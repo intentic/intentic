@@ -11,8 +11,9 @@ import { createTurnMountRoute, type MountEndpoints } from "../../agent/tools/tur
 import type { AppEnv } from "../../app-env.js";
 import { readWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { ExtensionHost } from "../../capabilities/extension-inventory/installed-extensions.js";
+import type { Services } from "../../composition.js";
 import type { ExtensionBackend } from "./backend-supervisor.js";
-import { createExtensionMcpEndpoint, extensionMcpToolsOf } from "./extension-mcp.js";
+import { createExtensionMcpEndpoint, createExtensionToolsEndpoint, extensionMcpToolsOf } from "./extension-mcp.js";
 
 // A card whose extension serves it tools gets one server per granted card, mounted on the turn's lease. Here through the
 // cli card's `mcp`, the alias kept one release: the daemon's MCP door forwards to that card's path in the backend with
@@ -81,6 +82,7 @@ test("mounts one server per granted card whose extension serves its kind tools, 
     expect(mounts.resolve(token, "billing")).toEqual({
         target: { kind: "extension", extension: "test.acme", card: "billing", path: "mcp" },
         conversationId: "conv-a",
+        turn: { granted: [], mounted: expect.any(Function) },
     });
     // The plain card serves no MCP, and the reserved one would shadow a daemon server: neither is on the lease.
     expect(mounts.resolve(token, "other")).toEqual({ refused: "unleased" });
@@ -164,6 +166,50 @@ test("the door checks the bearer's lease, resolves the card and forwards onto th
         turnA.release();
         expect((await post("billing", TOKEN)).status).toBe(401);
         expect(upstream.seen).toHaveLength(1);
+    } finally {
+        upstream.server.close();
+    }
+});
+
+test("a card the owner put behind a named person refuses its tools' calls until the conversation holds a release", async () => {
+    const upstream = await backend();
+    try {
+        const capabilities = [acme];
+        const released = new Set<string>();
+        const tools = createExtensionToolsEndpoint({
+            ...hostFor(capabilities),
+            capabilities: unstubbed<Services["capabilities"]>("capabilities", {
+                list: async () => capabilities,
+                get: async (id: string) => capabilities.find((entry) => entry.id === id),
+            }),
+            extensionBackend: unstubbed<ExtensionBackend>("backend", {
+                proxyTarget: () => ({ port: upstream.port, hostToken: HOST_TOKEN }),
+                status: () => ({ state: "running", extensions: [] }),
+            }),
+            credentialGates: unstubbed<Services["credentialGates"]>("gates", {
+                forCapability: async (id: string) => (id === "billing" ? { subject: "billing", kind: "capability", approvers: ["boss@example.org"], scope: "conversation" } : undefined),
+            }),
+            credentialGrants: unstubbed<Services["credentialGrants"]>("grants", {
+                ready: Promise.resolve(),
+                has: (conversation: string, subject: string) => (released.has(`${conversation}/${subject}`) ? { approvedBy: "boss@example.org", at: 1 } : undefined),
+            }),
+        });
+        const target = { kind: "tools", extension: "test.acme", card: "billing" } as const;
+        const call = (method: string) => tools(target, { jsonrpc: "2.0", id: 1, method, params: { name: "send" } }, { name: "billing", conversationId: "conv-a", signal: new AbortController().signal });
+
+        expect(await call("tools/call")).toEqual({
+            jsonrpc: "2.0",
+            id: 1,
+            error: { code: -32000, message: '"billing" needs approval from boss@example.org before it is used: run `secrets request billing --why "…"`, and use it from the next turn once one of them releases it' },
+        });
+        expect(upstream.seen).toEqual([]);
+        // Listing what the card offers uses no credential.
+        await call("tools/list");
+        expect(upstream.seen).toHaveLength(1);
+        released.add("conv-a/billing");
+        await call("tools/call");
+        expect(upstream.seen).toHaveLength(2);
+        expect(upstream.seen[1]?.url).toBe("/tools/test.acme");
     } finally {
         upstream.server.close();
     }

@@ -1,9 +1,9 @@
-import { composeAsk } from "@intentic/sandbox-contract/chores";
+import { composeAsk } from "@intentic/sandbox-contract/briefs/agent-ask";
 import { formatCount } from "@intentic/ui/format";
 
 // What's said to an agent handed a new extension: the wish, quoted verbatim, plus the rules a workspace extension
 // lives under that are invisible from inside the directory. Built on composeAsk
-// (@intentic/sandbox-contract/chores); only the invariants are local to this surface.
+// (@intentic/sandbox-contract/briefs/agent-ask); only the invariants are local to this surface.
 
 const AUTHORING_INVARIANTS =
     // Each clause names a specific way the turn ends with a directory that fails to load.
@@ -133,4 +133,4 @@ export const auditBrief = ({ label, url, ref, path }: AuditBrief): string =>
     });
 
 // Re-exported so this file stays the one place the web reaches for an extension brief.
-export { updateBrief } from "@intentic/sandbox-contract/chores";
+export { updateBrief } from "@intentic/sandbox-contract/briefs/extension-update-brief";

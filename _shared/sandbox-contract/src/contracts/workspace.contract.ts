@@ -15,7 +15,6 @@ import {
     TemplatesListSchema,
     WorkspaceSyncSchema,
 } from "../schemas/workspace/workspace-repos.js";
-import { PackageModulesParamSchema, PackageModulesSchema, WorkspaceGraphSchema } from "../schemas/workspace/workspace-graph.js";
 import { WorkspaceSearchFrameSchema, WorkspaceSearchQuerySchema, WorkspaceSearchResultSchema } from "../schemas/workspace/workspace-search.js";
 import { WorkspaceInstallResultSchema, WorkspaceInstallSchema, WorkspaceSetupSchema } from "../schemas/workspace/workspace-setup.js";
 import {
@@ -380,27 +379,6 @@ export const workspaceContract = {
         })
         .input(RepoAppsParamSchema)
         .output(AppsListSchema),
-    // The monorepo's package dependency graph, from pnpm-workspace.yaml globs and each package.json's deps.
-    packageGraph: procedure
-        .route({
-            method: "GET",
-            path: "/workspace/repos/{repo}/graph",
-            summary: "How a repo's packages depend on each other",
-            description: "Every package in one multi-package repo and which of its siblings each one uses, which is what a dependency view draws.",
-        })
-        .input(RepoAppsParamSchema)
-        .output(WorkspaceGraphSchema),
-    // One package's modules grouped into units, and the value imports between them, placed in its declared layers.
-    packageModules: procedure
-        .route({
-            method: "GET",
-            path: "/workspace/repos/{repo}/layers",
-            summary: "How one package's modules import each other",
-            description:
-                "One workspace package's source directories as units, the value imports between them, and the layers its layers.json declares, which is what a view of its insides draws.",
-        })
-        .input(PackageModulesParamSchema)
-        .output(PackageModulesSchema),
     // Every repo's package dirs in one call, since a review spans repos and per-repo would fan out per open.
     modules: procedure
         .route({

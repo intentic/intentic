@@ -60,8 +60,8 @@ description: Prepare things for owner approval instead of doing them: posts to p
 
 Anything that acts in the owner's name, or cannot be undone, is NEVER done directly: write an approval file
 instead. The owner approves it in the app, which starts a short countdown they can still stop, and the
-daemon then carries it out when it comes due: sending a post itself where a platform has an API, or waking
-you with the exact files to act on. One JSON file per item: ${APPROVALS_DIR}/<id>.json (id: letters,
+daemon then carries it out when it comes due: handing a post to the extension that publishes on its platform
+where there is one, or waking you with the exact files to act on. One JSON file per item: ${APPROVALS_DIR}/<id>.json (id: letters,
 digits, dashes; it names the item in the UI). Two kinds, told apart by "kind":
 
 ## kind: "post", something to publish
@@ -82,11 +82,12 @@ digits, dashes; it names the item in the UI). Two kinds, told apart by "kind":
 Only "kind", "platform" and "content" are required; everything else is optional: except "actsAs", which
 every platform that posts through a logged-in browser needs (see below).
 - platform: the skill that will post it, "x", "reddit", "youtube", "discord", …
-- title (a new reddit post or a YouTube upload needs one) and target, where on the platform this goes.
-- A target that is a URL makes the post a REPLY to whatever is at it: a thread, a video, a tweet, or ONE
-  PERSON'S COMMENT (on reddit that is the comment's own permalink, .../comments/<post>/<slug>/<comment>/). The
-  publisher opens exactly this URL and replies where it lands, so the difference between the thread's address
-  and a comment's decides whether the reply nests under that person or arrives addressed to nobody.
+- title, where the platform wants a headline (a new thread, a video upload: its skill says), and target,
+  where on the platform this goes.
+- A target that is a URL makes the post a REPLY to whatever is at it: a thread, a video, a post, or ONE
+  PERSON'S COMMENT (that comment's own address, which the platform's skill says how to find). The publisher
+  opens exactly this URL and replies where it lands, so the difference between the thread's address and a
+  comment's decides whether the reply nests under that person or arrives addressed to nobody.
 - A reply publishes no title on any platform, so "title" on one is your note to the OWNER about why this
   reply: the app shows it as a note under the post rather than as a headline.
 - media: workspace-relative files; put them under ${APPROVALS_DIR}/media/.
@@ -119,7 +120,8 @@ every platform that posts through a logged-in browser needs (see below).
   rather than guessing. Execution happens with nobody watching, and a turn that names no role is given NO
   logged-in account at all: a browser-published post without this is failed unsent, with that reason written
   into it, and an action without it runs with no accounts, which is right only for work that needs none.
-  Discord and anything else the daemon posts through a stored key needs no role and ignores this.
+  A post its platform's own extension publishes (a connected Discord bot posting into a channel by its id)
+  needs no role and ignores this.
 - scheduledAt: your SUGGESTED time in epoch ms, \`date -d "2026-07-10 09:00 +02:00" +%s%3N\` (always give an
   explicit UTC offset; the sandbox clock is UTC). Omit it to let the owner pick the time at approval.
 - status: defaults to "proposed" if omitted, and PROPOSED IS THE ONLY ONE YOU MAY WRITE. The owner approves in

@@ -1,6 +1,7 @@
 import { commandJudgments } from "../safety/command-judge-cache.js";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { AdmissionRule,CommandClass,CommandLocus } from "@intentic/sandbox-contract/schemas/command-admission";
+import type { DeclaredCommand } from "../activity/outbound.js";
 import { outboundRefusal } from "./outbound-guard.js";
 import { mainLineOutcome } from "../git/main-line-guard.js";
 import { errorMessage } from "@intentic/base/errors";
@@ -46,8 +47,11 @@ export interface CommandGuardOptions {
     // Whether this transport can pause for an answer; false if the runtime's own watchdog aborts a paused turn.
     readonly canPark?: boolean;
     // The owner's action rules (SandboxSettings.actionRules), checked on every command before the safety tiers: a
-    // classified outbound send they deny or hold is refused (outbound-guard.ts), on every runtime this guard serves.
+    // declared outward command they deny or hold is refused (outbound-guard.ts), on every runtime this guard serves.
     readonly actionRules?: Readonly<Record<string, AdmissionRule>> | undefined;
+    // The outward commands the enabled extensions declare (capabilities/broker/outward-actions.ts), what the rules are read
+    // against; absent recognises none.
+    readonly outwardCommands?: readonly DeclaredCommand[] | undefined;
     // The turn's own signal, so a parked card settles when the turn is stopped instead of holding it open.
     readonly signal: AbortSignal;
     // Where a held command's card is parked, so the owner's answer finds it.
@@ -244,7 +248,7 @@ const keepLine = async (options: CommandGuardOptions, line: string | undefined, 
 // The owner's action rules on one command, asked first in every consult: a refusal for an outbound send they deny or
 // hold, else undefined.
 const outboundOutcome = (options: CommandGuardOptions, program: string): GuardOutcome | undefined => {
-    const reason = options.actionRules === undefined ? undefined : outboundRefusal(options.actionRules, program);
+    const reason = options.actionRules === undefined ? undefined : outboundRefusal(options.actionRules, program, options.outwardCommands ?? []);
     return reason === undefined ? undefined : { allow: false, reason };
 };
 

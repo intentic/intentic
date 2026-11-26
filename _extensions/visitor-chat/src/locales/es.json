@@ -1,0 +1,18 @@
+{
+    "installPanel": {
+        "allow": "Permitir",
+        "allowToLoadChat": "Permitir que {origin} cargue este chat",
+        "allowedSites": "Sitios permitidos",
+        "askedTurnedAway": "preguntó y fue rechazado · {lastSeenAt}",
+        "checking": "Comprobando…",
+        "copyEmbedSnippet": "Copiar el fragmento de inserción de {id}",
+        "couldntAddSite": "No se ha podido añadir ese sitio.",
+        "couldntReadInstalls": "No se ha podido leer qué sitios han cargado este widget.",
+        "embedCode": "Código de inserción",
+        "loadCount": "{count} carga | {count} cargas",
+        "loaded": "¿Se ha cargado?",
+        "noBrowserLoadedWidget": "Todavía ningún navegador ha cargado este widget. Pega el fragmento, abre tu sitio y esto se actualiza solo en unos segundos.",
+        "noSitesAllowed": "Aún no se permite ningún sitio, así que se rechaza a todos los visitantes. Añade uno abajo o edita la automatización.",
+        "pasteIntoSiteBefore": "Pega esto en tu sitio, antes de"
+    }
+}

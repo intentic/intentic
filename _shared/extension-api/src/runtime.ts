@@ -1,44 +1,55 @@
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { isAbsolute, relative, resolve } from "node:path";
-import { createBackoff, sleep, within } from "@intentic/base/async";
+import { within } from "@intentic/base/async";
 import { errorMessage, undefinedIfMissing } from "@intentic/base/errors";
 import { FetchJsonError, fetchJson } from "@intentic/base/fetch-json";
 import { queueOnFile, writeFileAtomic } from "@intentic/base/fs";
-import { parseJsonWith } from "@intentic/base/json";
-import { sandboxRouteAllowed } from "@intentic/extension-manifest/permissions";
+import {
+    EXTENSION_FIRE_HANDLER,
+    type ExtensionDeclaredReach,
+    NO_DECLARED_REACH,
+    sandboxRouteAllowed,
+} from "@intentic/extension-manifest/permissions";
 import type * as SandboxContract from "@intentic/sandbox-contract";
 import { readDocument } from "@intentic/sandbox-contract/documents";
 import {
-    EXTENSION_EVENT_KINDS,
-    EXTENSION_EVENTS_HEARTBEAT_MS,
+    EXTENSION_CALLER_HEADER,
     EXTENSION_PROCESS_ENV,
-    type ExtensionEventKind,
-    ExtensionEventSchema,
-    extensionEventsUrl,
+    ExtensionDeclaredReachSchema,
     ExtensionHealthSchema,
     ExtensionOwnSettingsSchema,
     ExtensionPermissionsSchema,
     extensionSettingsUrl,
+    readCallerClaim,
 } from "@intentic/sandbox-contract/extension-protocol";
+import { fenceAllows, foldPath } from "@intentic/sandbox-contract/policy/fence-paths";
 import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/headers";
 import type * as OrpcClient from "@orpc/client";
 import type * as OpenApiFetch from "@orpc/openapi-client/fetch";
+import { createBackendReach } from "./backend-reach.js";
+import { createTurnReach } from "./turn-reach.js";
 import type { Disposable } from "./disposable.js";
 import type {
     ApprovedActionHandler,
+    ApprovedPostHandler,
+    AutomationFireHandler,
     BackendRouteHandler,
+    DaemonDoors,
+    ExtensionCaller,
     ExtensionHealth,
     ExtensionProcessApi,
     ExtensionServerApi,
     ExtensionServerContext,
     ExtensionServerModule,
+    PublicRouteHandler,
     ServerActivation,
     ServerDocument,
     ServerDocumentOptions,
     StoredJson,
     ToolCard,
     ToolDefinition,
+    WatchCheckHandler,
 } from "./server.js";
 import { extensionApiVersion } from "./version.js";
 
@@ -48,7 +59,18 @@ export type {
     ApprovedAction,
     ApprovedActionHandler,
     ApprovedActionOutcome,
+    ApprovedPost,
+    ApprovedPostHandler,
+    AutomationFire,
+    AutomationFireHandler,
     BackendRouteHandler,
+    BrowserCall,
+    DaemonDoors,
+    ExecClass,
+    ExecOptions,
+    ExecResult,
+    ExtensionCaller,
+    ExtensionCallerWho,
     ExtensionHealth,
     ExtensionHealthState,
     ExtensionProcessApi,
@@ -56,15 +78,31 @@ export type {
     ExtensionServerContext,
     ExtensionServerModule,
     ExtensionSettingValues,
+    JobEnd,
+    JobSpec,
+    OwnerBrowserCall,
+    PublicRouteHandler,
+    PublicRouteVerification,
+    RunningJob,
+    RunSettled,
+    SandboxActivity,
     ServerActivation,
     ServerDocument,
     ServerDocumentOptions,
+    StartedJob,
     StoredJson,
+    ToolArguments,
     ToolCallContext,
+    ToolCallGrants,
     ToolCard,
     ToolContent,
     ToolDefinition,
     ToolEffect,
+    ToolGrantAccount,
+    TurnStanding,
+    WatchCheck,
+    WatchCheckAnswer,
+    WatchCheckHandler,
     ToolResult,
 } from "./server.js";
 
@@ -92,6 +130,8 @@ export interface DaemonApiOptions {
     readonly permissions: readonly string[];
     // Where requests go; the global `fetch` when absent, read at call time so a test can stand in for it.
     readonly fetch?: Fetch | undefined;
+    // Set on every request beside the token: a caller's assertion, for `asCaller`.
+    readonly headers?: Readonly<Record<string, string>> | undefined;
 }
 
 // Loads a module synchronously, which Node 22+ and Bun both do for ESM; used only for what a process should not pay for
@@ -110,7 +150,7 @@ const typedClient = (options: DaemonApiOptions, send: Fetch): Rpc => {
     return createORPCClient<Rpc>(
         new OpenAPILink(contract.sandboxContract, {
             url: options.url,
-            headers: { [EXTENSION_TOKEN_HEADER]: options.token },
+            headers: { ...options.headers, [EXTENSION_TOKEN_HEADER]: options.token },
             fetch: (request, init) => send(request, init),
             interceptors: [
                 // A procedure this build's contract does not declare is refused too: reaching one means a hand-built path.
@@ -145,6 +185,9 @@ export const createDaemonApi = (options: DaemonApiOptions): DaemonApi => {
     const send: Fetch = (input, init) => (options.fetch ?? globalThis.fetch)(input, init);
     const granted = (init?: RequestInit): Headers => {
         const headers = new Headers(init?.headers);
+        for (const [name, value] of Object.entries(options.headers ?? {})) {
+            headers.set(name, value);
+        }
         headers.set(EXTENSION_TOKEN_HEADER, options.token);
         return headers;
     };
@@ -153,6 +196,12 @@ export const createDaemonApi = (options: DaemonApiOptions): DaemonApi => {
         get rpc(): Rpc {
             client ??= typedClient(options, send);
             return client;
+        },
+        // The same doors with the caller's assertion on every request; the daemon judges it, so a stale or foreign one is
+        // its refusal to say, not this side's.
+        asCaller: (caller: ExtensionCaller): DaemonDoors => {
+            const { asCaller: _nested, ...doors } = createDaemonApi({ ...options, headers: { ...options.headers, [EXTENSION_CALLER_HEADER]: caller.assertion } });
+            return doors;
         },
         request: (path, init) => send(`${options.url}${path}`, { ...init, headers: granted(init) }),
         // Over base's transport, through the same `send`: a 30 s deadline (with the caller's signal), and a refusal's
@@ -184,144 +233,6 @@ export const createDaemonApi = (options: DaemonApiOptions): DaemonApi => {
                 }
                 throw error;
             }
-        },
-    };
-};
-
-type Listener = (values: readonly string[]) => void;
-
-// How long a connection may go without a frame before it is taken for dead: three missed heartbeats.
-const SILENCE_MS = EXTENSION_EVENTS_HEARTBEAT_MS * 3;
-
-// Every complete line in `buffer`, and what is left after the last one.
-const splitLines = (buffer: string) => {
-    const parts = buffer.split("\n");
-    const rest = parts.pop() ?? "";
-    return { lines: parts.map((line) => line.trim()).filter((line) => line !== ""), rest };
-};
-
-// The values a frame carries for its listeners, or undefined for a line this version cannot read (not JSON, or a kind a
-// newer daemon sends), which is skipped rather than fatal.
-const frameOf = (line: string): { readonly kind: ExtensionEventKind; readonly values: readonly string[] } | undefined => {
-    // A line that is not JSON is a frame this version cannot read, skipped like an unknown kind.
-    const event = parseJsonWith(line, ExtensionEventSchema);
-    if (event === undefined) {
-        return undefined;
-    }
-    switch (event.kind) {
-        case "heartbeat":
-            return undefined;
-        case "files":
-            return { kind: event.kind, values: event.paths };
-        case "settings":
-            return { kind: event.kind, values: event.keys };
-        default:
-            return { kind: event.kind, values: event.repos };
-    }
-};
-
-// The extension's event stream: opened by the first listener, closed with the last, reconnected with backoff while
-// anything listens. A drop means frames were missed, so a reconnect tells every listener "anything may have changed" with
-// an empty list, which is what a reader of an empty batch already does.
-const createEventHub = (open: (signal: AbortSignal) => Promise<Response>, log: (message: string) => void) => {
-    const listeners = new Map<ExtensionEventKind, Set<Listener>>(EXTENSION_EVENT_KINDS.map((kind) => [kind, new Set<Listener>()]));
-    let running: AbortController | undefined;
-    const count = (): number => [...listeners.values()].reduce((sum, set) => sum + set.size, 0);
-
-    const deliver = (kind: ExtensionEventKind, values: readonly string[]): void => {
-        for (const listener of listeners.get(kind) ?? []) {
-            try {
-                listener(values);
-            } catch (error) {
-                // A throwing listener is its own bug; the stream and every other listener carry on.
-                log(`a ${kind} listener threw: ${errorMessage(error)}`);
-            }
-        }
-    };
-
-    // One connection, read to its end; resolves when the daemon ends it or it falls silent.
-    const connect = async (outer: AbortSignal): Promise<void> => {
-        const connection = new AbortController();
-        const abort = (): void => connection.abort();
-        outer.addEventListener("abort", abort, { once: true });
-        let silence = setTimeout(abort, SILENCE_MS);
-        try {
-            const response = await open(connection.signal);
-            if (!response.ok || response.body === null) {
-                throw new Error(`the daemon answered ${response.status}`);
-            }
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-            for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-                clearTimeout(silence);
-                silence = setTimeout(abort, SILENCE_MS);
-                const split = splitLines(buffer + decoder.decode(chunk.value, { stream: true }));
-                buffer = split.rest;
-                for (const line of split.lines) {
-                    const frame = frameOf(line);
-                    if (frame !== undefined) {
-                        deliver(frame.kind, frame.values);
-                    }
-                }
-            }
-        } finally {
-            clearTimeout(silence);
-            outer.removeEventListener("abort", abort);
-        }
-    };
-
-    // Every connection after the first follows a gap, which a listener hears about as an empty batch.
-    const run = async (signal: AbortSignal): Promise<void> => {
-        let connections = 0;
-        const backoff = createBackoff({ floorMs: 1_000, capMs: 30_000, stableMs: SILENCE_MS });
-        while (!signal.aborted) {
-            if (connections > 0) {
-                for (const kind of EXTENSION_EVENT_KINDS) {
-                    deliver(kind, []);
-                }
-            }
-            connections += 1;
-            const opened = Date.now();
-            try {
-                await connect(signal);
-            } catch (error) {
-                if (!signal.aborted) {
-                    log(`the event stream dropped (${errorMessage(error)}); reconnecting`);
-                }
-            }
-            if (signal.aborted) {
-                return;
-            }
-            await sleep(backoff.next(Date.now() - opened), { signal, unref: true });
-        }
-    };
-
-    const subscribe = (kind: ExtensionEventKind, listener: Listener): Disposable => {
-        listeners.get(kind)?.add(listener);
-        if (running === undefined) {
-            running = new AbortController();
-            void run(running.signal);
-        }
-        return {
-            dispose: () => {
-                listeners.get(kind)?.delete(listener);
-                if (count() === 0) {
-                    running?.abort();
-                    running = undefined;
-                }
-            },
-        };
-    };
-
-    return {
-        subscribe,
-        close: (): void => {
-            for (const set of listeners.values()) {
-                set.clear();
-            }
-            running?.abort();
-            running = undefined;
         },
     };
 };
@@ -373,6 +284,11 @@ export interface ExtensionRuntimeOptions {
     // Where a log line goes; stdout with the id as a prefix when absent, which is what reaches the daemon's log.
     readonly log?: ((message: string) => void) | undefined;
     readonly fetch?: Fetch | undefined;
+    // The rest of the manifest's `permissions` (events, work, exec, fires): what the runtime asks for on the event
+    // stream, and refuses before asking when undeclared. Nothing declared when absent.
+    readonly declared?: ExtensionDeclaredReach | undefined;
+    // The ids of the watch kinds its manifest declares (`contributes.watchKinds`): the checks its backend may serve.
+    readonly watchKinds?: readonly string[] | undefined;
 }
 
 export interface ExtensionRuntime {
@@ -385,7 +301,7 @@ export interface ExtensionRuntime {
 export const createExtensionRuntime = (options: ExtensionRuntimeOptions): ExtensionRuntime => {
     const log = options.log ?? ((message: string) => void process.stdout.write(`[${options.id}] ${message}\n`));
     const daemon = createDaemonApi({ url: options.daemonUrl, token: options.token, id: options.id, permissions: options.permissions, fetch: options.fetch });
-    const events = createEventHub((signal) => daemon.request(extensionEventsUrl(), { signal }), log);
+    const reach = createBackendReach(options.id, daemon.request, options.declared ?? NO_DECLARED_REACH, log);
     return {
         api: {
             apiVersion: extensionApiVersion,
@@ -398,40 +314,119 @@ export const createExtensionRuntime = (options: ExtensionRuntimeOptions): Extens
             document: (path, documentOptions) => openDocument(options.stateDir, path, documentOptions),
             settings: {
                 get: async () => ExtensionOwnSettingsSchema.parse(await (await daemon.request(extensionSettingsUrl())).json()).settings,
-                onDidChange: (listener) => events.subscribe("settings", listener),
+                onDidChange: reach.onSettings,
             },
-            workspace: {
-                onDidChangeFiles: (listener) => events.subscribe("files", listener),
-                onDidChangeRefs: (listener) => events.subscribe("refs", listener),
-                onDidChangeRepos: (listener) => events.subscribe("repos", listener),
-            },
+            workspace: reach.workspace,
+            events: reach.events,
+            work: reach.work,
+            exec: reach.exec,
         },
-        close: events.close,
+        close: reach.close,
     };
 };
 
+/**
+ * Who a request into `/x/<id>` comes from, read off the assertion the daemon attached for extension `id`: undefined when
+ * there is none, it does not read, it names another extension, or its window has passed. Its signature is the daemon's
+ * to check (the host holds no key): what arrives here came through the daemon's proxy, which drops any the caller sent.
+ */
+export const callerOf = (request: Request, id: string, now = Date.now()): ExtensionCaller | undefined => {
+    const assertion = request.headers.get(EXTENSION_CALLER_HEADER) ?? "";
+    const claim = assertion === "" ? undefined : readCallerClaim(assertion);
+    if (claim === undefined || claim.extension !== id || now >= claim.expiresAt) {
+        return undefined;
+    }
+    // Only a person with areas is fenced; every other caller reads the workspace whole, as the daemon's routes answer it.
+    const { folders, ...who } = claim.caller.kind === "person" ? claim.caller : { ...claim.caller, folders: undefined };
+    // A path that climbs out of the workspace is inside nothing, whoever asks.
+    const reaches = (path: string): boolean => foldPath(path) !== undefined && fenceAllows(folders, path);
+    return { ...who, folders, reaches, expiresAt: claim.expiresAt, assertion };
+};
+
 // The backend api a `server` bundle is handed: the runtime plus the slots only the host serves, its route namespace, its
-// tools and the approved actions it carries out. A second `mount`, `serve` or `perform` replaces the first, per the
-// api's contract.
+// tools, the approved actions it carries out and the handlers automations fire. A second `mount`, `serve`, `perform` or
+// `onFire` for one name replaces the first, per the api's contract.
 export interface ServerApiSlots {
     readonly api: ExtensionServerApi;
     readonly handler: () => BackendRouteHandler | undefined;
+    // (2026-11-26) What answers the extension's public routes (`api.publicRoutes.serve`).
+    readonly publicHandler: () => PublicRouteHandler | undefined;
     readonly tools: () => ToolSource | undefined;
     readonly performer: () => ApprovedActionHandler | undefined;
+    // (2026-11-26) What publishes the approved posts its cards declare (`api.approvals.publish`).
+    readonly publisher: () => ApprovedPostHandler | undefined;
+    readonly fireHandler: (name: string) => AutomationFireHandler | undefined;
+    readonly checkHandler: (kind: string) => WatchCheckHandler | undefined;
     close(): void;
 }
 
+// The handlers automations fire, by name: only a name the manifest declares (`permissions.fires`), and a handler
+// disposed lets go of its name only while it is still the one registered.
+const createFireHandlers = (id: string, declared: readonly string[]) => {
+    const handlers = new Map<string, AutomationFireHandler>();
+    return {
+        onFire: (name: string, listener: AutomationFireHandler): Disposable => {
+            if (!EXTENSION_FIRE_HANDLER.test(name) || !declared.includes(name)) {
+                throw new Error(`extension "${id}" registered the fire handler "${name}" without declaring it: declare it in permissions.fires in its manifest`);
+            }
+            handlers.set(name, listener);
+            return {
+                dispose: () => {
+                    if (handlers.get(name) === listener) {
+                        handlers.delete(name);
+                    }
+                },
+            };
+        },
+        handler: (name: string): AutomationFireHandler | undefined => handlers.get(name),
+    };
+};
+
+// The checks a backend serves, by kind: only a kind the manifest declares (`contributes.watchKinds`), and a handler
+// disposed lets go of its kind only while it is still the one registered.
+const createCheckHandlers = (id: string, declared: readonly string[]) => {
+    const handlers = new Map<string, WatchCheckHandler>();
+    return {
+        serve: (kind: string, handler: WatchCheckHandler): Disposable => {
+            if (!declared.includes(kind)) {
+                throw new Error(`extension "${id}" served the watch kind "${kind}" without declaring it: declare it in contributes.watchKinds in its manifest`);
+            }
+            handlers.set(kind, handler);
+            return {
+                dispose: () => {
+                    if (handlers.get(kind) === handler) {
+                        handlers.delete(kind);
+                    }
+                },
+            };
+        },
+        handler: (kind: string): WatchCheckHandler | undefined => handlers.get(kind),
+    };
+};
+
 export const createServerApi = (options: ExtensionRuntimeOptions): ServerApiSlots => {
     const runtime = createExtensionRuntime(options);
+    // (2026-11-26) What its tools do with the calling turn's grants (turn-reach.ts).
+    const turn = createTurnReach(options.id, runtime.api.daemon.request, (options.declared ?? NO_DECLARED_REACH).turn, runtime.api.log);
     let mounted: BackendRouteHandler | undefined;
+    let publicHandler: PublicRouteHandler | undefined;
     let tools: ToolSource | undefined;
     let performer: ApprovedActionHandler | undefined;
+    let publisher: ApprovedPostHandler | undefined;
+    const fires = createFireHandlers(options.id, (options.declared ?? NO_DECLARED_REACH).fires);
+    const checks = createCheckHandlers(options.id, options.watchKinds ?? []);
     return {
         api: {
             ...runtime.api,
             routes: {
                 mount: (handler) => {
                     mounted = handler;
+                },
+            },
+            caller: (request) => callerOf(request, options.id),
+            publicRoutes: {
+                serve: (handler) => {
+                    publicHandler = handler;
                 },
             },
             tools: {
@@ -443,11 +438,23 @@ export const createServerApi = (options: ExtensionRuntimeOptions): ServerApiSlot
                 perform: (handler) => {
                     performer = handler;
                 },
+                publish: (handler) => {
+                    publisher = handler;
+                },
             },
+            automations: { onFire: fires.onFire },
+            checks: { serve: checks.serve },
+            browser: turn.browser,
+            ownerBrowser: turn.ownerBrowser,
+            jobs: turn.jobs,
         },
         handler: () => mounted,
+        publicHandler: () => publicHandler,
         tools: () => tools,
         performer: () => performer,
+        publisher: () => publisher,
+        fireHandler: fires.handler,
+        checkHandler: checks.handler,
         close: runtime.close,
     };
 };
@@ -520,6 +527,18 @@ const required = (env: NodeJS.ProcessEnv, name: string): string => {
     return value;
 };
 
+// The declared reach a process was started with; nothing declared when the variable is absent (a daemon from before it).
+const declaredOf = (raw: string | undefined): ExtensionDeclaredReach => {
+    if (raw === undefined || raw === "") {
+        return NO_DECLARED_REACH;
+    }
+    const parsed = ExtensionDeclaredReachSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+        throw new Error(`${EXTENSION_PROCESS_ENV.declared} is not the JSON of a declared reach`);
+    }
+    return parsed.data;
+};
+
 const permissionsOf = (raw: string | undefined): readonly string[] => {
     if (raw === undefined || raw === "") {
         return [];
@@ -544,4 +563,5 @@ export const connectExtensionProcess = (env: NodeJS.ProcessEnv = process.env, op
         stateDir: required(env, EXTENSION_PROCESS_ENV.state),
         cacheDir: required(env, EXTENSION_PROCESS_ENV.cache),
         log: options.log,
+        declared: declaredOf(env[EXTENSION_PROCESS_ENV.declared]),
     });

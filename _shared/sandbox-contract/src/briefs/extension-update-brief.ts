@@ -1,0 +1,33 @@
+import { composeAsk } from "./agent-ask.js";
+
+// An extension update, read as a diff between the installed and proposed commits, manifest delta leading (a new
+// `permissions.sandbox` entry is reach never approved). Lives here, not the web app, because both the update card's
+// button and the daemon's agent-prepared update policy build this same read. In the `chores` subpath until 2026-11-26,
+// which still re-exports it until extension API 3.0.0.
+const UPDATE_INVARIANTS =
+    `This turn reads and reports; it changes nothing and installs nothing. Clone into a scratch directory ` +
+    `outside the workspace and read the diff between the two commits: the installed code was approved once ` +
+    `already, so what is between them is the whole subject. Lead with the manifest's delta: any route added to ` +
+    `\`permissions.sandbox\` is reach the owner never approved and the headline whatever else changed. Then the ` +
+    `code: what behaviour changed, in the owner's terms, citing file and line.`;
+
+export interface UpdateBrief {
+    // The listing's display name, or the repository when it is being installed straight from a URL.
+    readonly label: string;
+    readonly url: string;
+    // What is installed and what the update proposes, both full shas, both facts, neither a branch.
+    readonly fromRef: string;
+    readonly toRef: string;
+    // Subdirectory inside the repository, for a monorepo source. Empty for a repo of its own.
+    readonly path: string;
+}
+
+export const updateBrief = ({ label, url, fromRef, toRef, path }: UpdateBrief): string =>
+    composeAsk({
+        subject: `Read what changed in the ${label} extension before it is updated here: ${url}, from ${fromRef} to ${toRef}${path === `` ? `` : `, in ${path}`}.`,
+        why: `The installed commit was approved once already; the update replaces it wholesale, because the sha is the identity and there is no build step between the pushed bytes and the code that runs.`,
+        diagnosis: `The manifest (intentic-extension.json at the extension root) is the contract on both sides of the diff, so its delta is readable exactly like the code's.`,
+        goal: `Read the diff and say what the update actually is: the manifest delta first, then what the code now does that it did not, and what it stopped doing.`,
+        invariants: UPDATE_INVARIANTS,
+        done: `Done when you end on a recommendation the owner can act on, update, update and watch something named, or stay on ${fromRef.slice(0, 7)}, with the change that decided it cited by file and line.`,
+    });

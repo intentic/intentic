@@ -2,13 +2,13 @@ import {
     type ChatReply,
     type ChatSurface,
     createChatReply,
+    declaredMessageLimit,
     type Logger,
-    MESSAGE_LIMITS,
     type ProgressDetail,
+    REPLY_TIMING,
     type ReplyMark,
     type ReplyRegistry,
     type ReplyTiming,
-    REPLY_TIMING,
     tablesToCode,
 } from "@intentic/connector-runtime";
 import { renderCard } from "./card.js";
@@ -23,7 +23,7 @@ import type { Route } from "./inbound.js";
 
 export { isNarration, LOST_NOTICE, REPLY_TIMING, type ReplyRegistry, type ReplyTiming, type RunControl } from "@intentic/connector-runtime";
 
-const DISCORD_MAX = MESSAGE_LIMITS.discord;
+const DISCORD_MAX = declaredMessageLimit(new URL("../intentic-extension.json", import.meta.url), "discord");
 
 export const EMOJI = { heard: "👀", done: "✅", failed: "❌", held: "✋", queued: "⏳", stopped: "⏹️" } as const satisfies Record<ReplyMark, string>;
 

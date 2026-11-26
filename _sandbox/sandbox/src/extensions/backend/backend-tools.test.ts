@@ -88,3 +88,24 @@ test("what a call returns becomes content: text as text, a result as itself, any
     expect(toToolResult({ content: [{ type: "text", text: "as is" }], isError: true })).toEqual({ content: [{ type: "text", text: "as is" }], isError: true });
     expect(toToolResult({ n: 1 })).toEqual({ content: [{ type: "text", text: `{\n  "n": 1\n}` }] });
 });
+
+test("a call is handed its conversation, and (2026-11-26) its turn's grants and its ticket, as the daemon's door sent them", async () => {
+    const seen: Parameters<ToolDefinition["call"]>[1][] = [];
+    const context: ToolDefinition = {
+        name: "context",
+        description: "Says what it was handed.",
+        inputSchema: { type: "object" },
+        call: (_args, handed) => {
+            seen.push(handed);
+            return "ok";
+        },
+    };
+    const grants = { accounts: [{ id: "chatgpt", kind: "browser" as const, sites: ["chatgpt.com"] }], browsers: ["brave"], cards: [] };
+    const message = { jsonrpc: "2.0" as const, id: 9, method: "tools/call", params: { name: "context", arguments: {} } };
+    await answerToolMessage({ id: "acme.tools", source: () => [context] }, { conversationId: "conv-a", turn: { ticket: "t-1", grants }, message }, signal);
+    await answerToolMessage({ id: "acme.tools", source: () => [context] }, { message }, signal);
+    expect(seen).toEqual([
+        { signal: expect.any(AbortSignal), conversationId: "conv-a", grants, ticket: "t-1" },
+        { signal: expect.any(AbortSignal) },
+    ]);
+});

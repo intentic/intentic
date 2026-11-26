@@ -1,14 +1,15 @@
-import { readFile } from "node:fs/promises";
-import { type ActionDraft, actionFor, type ActionOutcome, executeAction, loadAction } from "./actions.js";
+import type { ActionDraft, ActionOutcome } from "./actions.js";
 import { calendarCommands } from "./calendar.js";
 import { documentCommands } from "./documents.js";
-import { workspaceFile } from "./files.js";
+import type { CommandIo } from "./files.js";
 import type { Graph, Json } from "./graph.js";
 import { mailCommands } from "./mail.js";
 
 // The `m365` command line: words pick a command, `--flag value` pairs carry its options, and a flag the command does
 // not read is refused before anything is sent, rather than silently dropped. Output is Graph's JSON, trimmed with
-// `$select` to what a reader needs; failures print to stdout with exit 2, the agent-CLI contract `gw` keeps too.
+// `$select` to what a reader needs; failures print to stdout with exit 2, the agent-CLI contract `gw` keeps too. The
+// commands run in the extension's backend, which holds the card's sign-in (server.ts); the CLI hands them the files they
+// read and saves what they write (cli.ts).
 
 export const HELP = `m365 [--account <card id>] <group> <command> [arguments] [--flags]
   accounts | whoami | auth login
@@ -28,9 +29,9 @@ export const HELP = `m365 [--account <card id>] <group> <command> [arguments] [-
   files search --query <text> [--drive <id>] [--limit 50]
   files download <item-id> --out <workspace path> [--drive <id>]
   files upload --file <workspace path> --name <file name> [--drive <id>] [--parent <folder-id>]
-  action run <approval-id>
 Sending, replying, forwarding, calendar changes and uploads wait for the owner's approval unless an action rule says
-otherwise (microsoft365.mail.send, microsoft365.calendar.write, microsoft365.files.upload).`;
+otherwise (microsoft365.mail.send, microsoft365.calendar.write, microsoft365.files.upload). An approved one is carried
+out by the connection itself; nothing needs running.`;
 
 export interface Arguments {
     readonly words: readonly string[];
@@ -135,10 +136,11 @@ export const validateArguments = (args: Arguments): void => {
     }
 };
 
-// What one command's code is handed: the connection, the workspace, and its own arguments, already validated.
+// What one command's code is handed: the connection, the files it reads and writes, and its own arguments, already
+// validated.
 export interface CommandContext {
     readonly graph: Graph;
-    readonly root: string;
+    readonly io: CommandIo;
     readonly flag: (name: string) => string | undefined;
     readonly required: (name: string) => string;
     readonly id: () => string;
@@ -149,7 +151,10 @@ export interface CommandContext {
 
 const LIMIT_MAX = 1000;
 
-const contextOf = (graph: Graph, root: string, args: Arguments): CommandContext => {
+// Carries out one outward action under the owner's rules (actions.ts executeAction, wired by the backend).
+export type Act = (draft: ActionDraft) => Promise<ActionOutcome>;
+
+const contextOf = (graph: Graph, io: CommandIo, args: Arguments, act: Act): CommandContext => {
     const flag = (name: string): string | undefined => args.flags[name];
     const required = (name: string): string => {
         const value = flag(name);
@@ -160,7 +165,7 @@ const contextOf = (graph: Graph, root: string, args: Arguments): CommandContext 
     };
     return {
         graph,
-        root,
+        io,
         flag,
         required,
         id: () => args.words.at(-1) ?? "",
@@ -173,23 +178,28 @@ const contextOf = (graph: Graph, root: string, args: Arguments): CommandContext 
             return value;
         },
         // SAFETY: the file is the agent's own request body; Graph validates its shape and refuses what it cannot use.
-        json: async () => JSON.parse(await readFile(await workspaceFile(root, required("file"), false), "utf8")) as Json,
-        act: (draft) => executeAction(root, graph, actionFor(graph.account, draft)),
+        json: async () => JSON.parse((await io.read(required("file"))).toString("utf8")) as Json,
+        act,
     };
 };
 
 // What a command prints: Graph's own JSON, or what became of an action.
 export type Output = Json | ActionOutcome | undefined;
 
-export const runCommand = async (graph: Graph, root: string, args: Arguments): Promise<Output> => {
+// (2026-11-26) What `m365 action run` meets now: an approval drafted by an older `m365`, which a fresh turn was told to
+// carry out with it. The yes is never this command's to judge any more, so the request is proposed again instead.
+export const LEGACY_ACTION_RUN =
+    "That approval was drafted by an older version of `m365`, which checked it from the workspace file. Held actions now go to the owner's approval queue directly and are carried out by the connection once approved: run the original command again to propose it, and mark this item failed with that reason.";
+
+export const runCommand = async (graph: Graph, io: CommandIo, args: Arguments, act: Act): Promise<Output> => {
     validateArguments(args);
     const name = commandOf(args);
-    const ctx = contextOf(graph, root, args);
+    const ctx = contextOf(graph, io, args, act);
     if (name === "whoami") {
         return graph.call<Json>("/me?$select=id,displayName,mail,userPrincipalName,preferredLanguage");
     }
     if (name === "action run") {
-        return executeAction(root, graph, await loadAction(root, ctx.id()), ctx.id());
+        throw new Error(LEGACY_ACTION_RUN);
     }
     const command = args.words[1] ?? "";
     const group = args.words[0] === "mail" ? mailCommands : args.words[0] === "calendar" ? calendarCommands : documentCommands;

@@ -7,7 +7,6 @@ import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automati
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { z } from "zod";
 import { automationConfig } from "../../harness/route-stores.testing.js";
-import { WEBCHAT_PROVIDER } from "../../webchat/webchat-config.js";
 import { listenerInboxDocument, workspaceInboxDocument } from "./inbox-store.js";
 import { dispatchListenerMessage } from "../listeners.js";
 import { answeringWake, bootAutomations, daemonOn, hangingWake } from "./restart.testing.js";
@@ -29,7 +28,7 @@ const waitingMessages = (root: string): string[] => rowsOf(root, listenerInboxDo
 const waitingEvents = (root: string): string[] => rowsOf(root, workspaceInboxDocument).map((row) => row.event.agentId);
 
 const said = (id: string, channelId: string, content: string): ListenerMessage => ({
-    provider: WEBCHAT_PROVIDER,
+    provider: "webchat",
     type: "message",
     id,
     channelId,
@@ -45,7 +44,7 @@ test("channel messages waiting behind a running fire or in their debounce are an
     const root = mkdtempSync(join(tmpdir(), "restart-inbox-"));
     const cut: AgentTurn[] = [];
     const before = daemonOn(root, hangingWake(cut));
-    await before.services.automations.upsert(automationConfig("desk", { trigger: { kind: "listener", provider: WEBCHAT_PROVIDER } }));
+    await before.services.automations.upsert(automationConfig("desk", { trigger: { kind: "listener", provider: "webchat" } }));
     await dispatchListenerMessage(before.services, said("m1", "c1", "first"), 5);
     await waitFor(() => expect(cut).toHaveLength(1), SETTLES);
     // The turn running on c1 does not take it, so it waits for a fire of its own; c2's sits in a long debounce.
@@ -65,11 +64,10 @@ test("channel messages waiting behind a running fire or in their debounce are an
     // after it. c2's is a thread of its own, run beside c1's rather than behind it, so across threads only the set is owed.
     expect(ran.filter((turn) => turn.conversationId === cut[0]?.conversationId).map((turn) => wordOf(turn.prompt))).toEqual(["first", "second"]);
     expect(ran.map((turn) => wordOf(turn.prompt)).toSorted()).toEqual(["first", "second", "third"]);
-    const replies = async (channelId: string): Promise<string[]> =>
-        (await after.services.webchatOutbox.since(`webchat:desk:${channelId}`, 0, Date.now())).replies.map((reply) => reply.text);
+    const replies = (channelId: string): string[] => after.delivered().filter((reply) => reply.channelId === channelId).map((reply) => reply.text);
     // An answer is written as its turn ends, a moment after the fire lets its lane go: what the visitor's next poll finds.
-    await waitFor(async () => expect(await replies("c1")).toEqual(["answer:first", "answer:second"]), SETTLES);
-    await waitFor(async () => expect(await replies("c2")).toEqual(["answer:third"]), SETTLES);
+    await waitFor(async () => expect(replies("c1")).toEqual(["answer:first", "answer:second"]), SETTLES);
+    await waitFor(async () => expect(replies("c2")).toEqual(["answer:third"]), SETTLES);
     expect(waitingMessages(root)).toEqual([]);
     expect(await after.services.turnJournal.list()).toEqual([]);
 });
@@ -80,7 +78,7 @@ test("channel messages waiting behind a running fire or in their debounce are an
 test("a message that arrives after the boot read the inboxes is answered once, by its own fire, beside the replayed ones", async () => {
     const root = mkdtempSync(join(tmpdir(), "restart-inbox-"));
     const before = daemonOn(root, hangingWake([]));
-    await before.services.automations.upsert(automationConfig("desk", { trigger: { kind: "listener", provider: WEBCHAT_PROVIDER } }));
+    await before.services.automations.upsert(automationConfig("desk", { trigger: { kind: "listener", provider: "webchat" } }));
     await dispatchListenerMessage(before.services, said("m3", "c2", "third"), 60_000);
     expect(waitingMessages(root)).toEqual(["m3"]);
     before.crash();

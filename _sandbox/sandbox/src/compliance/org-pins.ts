@@ -7,7 +7,8 @@ import type { AuditService } from "../audit/audit-service.js";
 import type { OrgPolicyHolder } from "../org/org-policy.js";
 import { privacyShieldDocument } from "../privacy/privacy-policy.js";
 import { settingsDocument } from "../settings/settings-store.js";
-import { applyPreset, presetItemsOfGroups } from "./preset.js";
+import type { Services } from "../composition.js";
+import { applyPreset, presetItemsOfGroups, publicOfficeActionKeys } from "./preset.js";
 
 /* AN ORGANISATION'S PINNED SETTINGS (docs/architecture/organisations.md, "Pins"). A policy's `preset` names groups of
  * the public-office preset (compliance/preset.ts); every item in them is applied to what the daemon READS from
@@ -36,23 +37,25 @@ export type Pin<T> = (stored: T) => Promise<PinOutcome<T>>;
 
 export type PinnedDocument = "settings" | "privacy";
 
-// Pure: the settings with the policy's pinned preset items applied.
-export const pinSettings = (settings: SandboxSettings, policy: OrgPolicy | undefined): PinOutcome<SandboxSettings> => {
-    const ids = presetItemsOfGroups(orgPinnedGroups(policy)).settings;
-    const reapply = (current: SandboxSettings): SandboxSettings =>
-        ids.length === 0 ? current : applyPreset({ settings: current, privacy: DEFAULT_PRIVACY_SHIELD, nameModel: false }, ids, true).settings;
+// Pure: the settings with the policy's pinned preset items applied. `actionKeys` are the outward actions the action rules
+// can hold here (preset.ts publicOfficeActionKeys): a pinned `actions` group holds each of them.
+export const pinSettings = (settings: SandboxSettings, policy: OrgPolicy | undefined, actionKeys: readonly string[]): PinOutcome<SandboxSettings> => {
+    const ids = presetItemsOfGroups(orgPinnedGroups(policy), actionKeys).settings;
+    const state = (current: SandboxSettings) => ({ settings: current, privacy: DEFAULT_PRIVACY_SHIELD, nameModel: false, actionKeys });
+    const reapply = (current: SandboxSettings): SandboxSettings => (ids.length === 0 ? current : applyPreset(state(current), ids, true).settings);
     if (ids.length === 0) {
         return { value: settings, loosened: [], reapply };
     }
-    const outcome = applyPreset({ settings, privacy: DEFAULT_PRIVACY_SHIELD, nameModel: false }, ids, true);
+    const outcome = applyPreset(state(settings), ids, true);
     return { value: outcome.settings, loosened: outcome.applied, reapply };
 };
 
 // Pure: the privacy shield's policy with the policy's pinned privacy items applied. `nameModel` says whether a local name
 // model is installed; without one, finding names by the model is no promise the shield could keep, and is skipped.
 export const pinPrivacy = (privacy: PrivacyShieldPolicy, policy: OrgPolicy | undefined, nameModel: boolean): PinOutcome<PrivacyShieldPolicy> => {
-    const ids = presetItemsOfGroups(orgPinnedGroups(policy)).privacy;
-    const apply = (current: PrivacyShieldPolicy) => applyPreset({ settings: PLACEHOLDER_SETTINGS, privacy: current, nameModel }, ids, true);
+    // The privacy items read no action rule, so they need no outward actions to be named.
+    const ids = presetItemsOfGroups(orgPinnedGroups(policy), []).privacy;
+    const apply = (current: PrivacyShieldPolicy) => applyPreset({ settings: PLACEHOLDER_SETTINGS, privacy: current, nameModel, actionKeys: [] }, ids, true);
     const reapply = (current: PrivacyShieldPolicy): PrivacyShieldPolicy => (ids.length === 0 ? current : apply(current).privacy);
     if (ids.length === 0) {
         return { value: privacy, loosened: [], reapply };
@@ -86,11 +89,21 @@ export const createPinDriftReporter = (deps: {
     };
 };
 
+// The outward actions a pinned `actions` group holds, read only when a policy pins that group.
+export type ActionKeys = () => Promise<readonly string[]>;
+
+const pinnedActionKeys = async (policy: OrgPolicy | undefined, actionKeys: ActionKeys): Promise<readonly string[]> =>
+    orgPinnedGroups(policy).includes("actions") ? actionKeys() : [];
+
 export const settingsPin =
-    (holder: Pick<OrgPolicyHolder, "current">, drifted: (document: PinnedDocument, policy: OrgPolicy | undefined, loosened: readonly string[]) => void): Pin<SandboxSettings> =>
+    (
+        holder: Pick<OrgPolicyHolder, "current">,
+        drifted: (document: PinnedDocument, policy: OrgPolicy | undefined, loosened: readonly string[]) => void,
+        actionKeys: ActionKeys,
+    ): Pin<SandboxSettings> =>
     async (stored) => {
         const policy = await holder.current();
-        const pinned = pinSettings(stored, policy);
+        const pinned = pinSettings(stored, policy, await pinnedActionKeys(policy, actionKeys));
         drifted("settings", policy, pinned.loosened);
         return pinned;
     };
@@ -113,9 +126,13 @@ export const privacyPin =
 
 // The refusal for a write that would undo a pin, or undefined to take it. Only the routes a person saves through ask:
 // they answer 403 with the items named, where a silent rewrite would leave the page showing a value that did not stick.
-export const settingsPinRefusal = async (holder: Pick<OrgPolicyHolder, "current">, next: SandboxSettings): Promise<OrgPinRefusal | undefined> => {
+export const settingsPinRefusal = async (
+    holder: Pick<OrgPolicyHolder, "current">,
+    next: SandboxSettings,
+    actionKeys: ActionKeys,
+): Promise<OrgPinRefusal | undefined> => {
     const policy = await holder.current();
-    const loosened = pinSettings(next, policy).loosened;
+    const loosened = pinSettings(next, policy, await pinnedActionKeys(policy, actionKeys)).loosened;
     return policy === undefined || loosened.length === 0 ? undefined : orgPinRefusal(policy, loosened);
 };
 
@@ -140,10 +157,16 @@ export interface OrgPins {
     readonly warn: (message: string, error: Error) => void;
 }
 
+// The outward actions the enabled extensions declare, and the sandbox's own: what a pinned `actions` group holds.
+export const outwardActionKeys =
+    (whole: () => Pick<Services, "outwardActions">): ActionKeys =>
+    async () =>
+        publicOfficeActionKeys((await whole().outwardActions()).offered);
+
 export const createOrgPins = (deps: {
     readonly holder: Pick<OrgPolicyHolder, "current">;
     readonly logger: Logger;
-    readonly whole: () => { readonly audit: Pick<AuditService, "record"> };
+    readonly whole: () => { readonly audit: Pick<AuditService, "record"> } & Pick<Services, "outwardActions">;
 }): OrgPins => {
     const drifted = createPinDriftReporter({
         logger: deps.logger,
@@ -156,7 +179,7 @@ export const createOrgPins = (deps: {
             }),
     });
     return {
-        settingsPin: settingsPin(deps.holder, drifted),
+        settingsPin: settingsPin(deps.holder, drifted, outwardActionKeys(deps.whole)),
         privacyPin: (nameModel) => privacyPin(deps.holder, nameModel, drifted),
         warn: (message, error) => deps.logger.warn({ err: error }, message),
     };

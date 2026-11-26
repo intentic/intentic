@@ -1,6 +1,7 @@
 import { embedEndpointOf, embedScript } from "@intentic/sandbox-contract/embed";
 import { createClient, type InitOptions, type IssueClient } from "./client.js";
 import { openDialog } from "./dialog.js";
+import { DOOR } from "./transport.js";
 
 // Two ways in, one module so they don't drift:
 // - a <script> tag auto-boots from its own attributes; the daemon is the origin the script loaded from, unless
@@ -73,8 +74,9 @@ const boot = (script: HTMLScriptElement): void => {
 const globalTarget = window as unknown as { Intentic?: Record<string, unknown> };
 globalTarget.Intentic = { ...globalTarget.Intentic, init, openReportDialog, captureException, report, breadcrumb };
 
-// Read at module scope while the script body executes; absent under a bundler.
-const tag = embedScript("/intake/sdk.js");
+// Read at module scope while the script body executes; absent under a bundler. A snippet from before 2026-11-26 still
+// names the daemon's old path, which serves this same bundle.
+const tag = embedScript(`/${DOOR}/sdk.js`) ?? embedScript("/intake/sdk.js");
 if (tag !== null) {
     boot(tag);
 }

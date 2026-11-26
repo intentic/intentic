@@ -343,14 +343,14 @@ const lengthOf = (item: ApprovalSummary): string | undefined => {
     if (!isPost(item)) {
         return undefined;
     }
-    const limit = limitOf(item.platform);
+    const limit = limitOf(item.platform, platformCatalog.value);
     const count = edit.liveLength(item);
     if (limit !== undefined) {
         return `${formatCount(count)} / ${formatCount(limit)}`;
     }
     return count > OVERSIZED || edit.isEditing(item) ? t(`approvalsView.characters`, { count: formatCount(count) }, count) : undefined;
 };
-const isOver = (item: ApprovalSummary): boolean => isPost(item) && edit.liveLength(item) > (limitOf(item.platform) ?? Infinity);
+const isOver = (item: ApprovalSummary): boolean => isPost(item) && edit.liveLength(item) > (limitOf(item.platform, platformCatalog.value) ?? Infinity);
 
 // The agent's own note on a post, held in `title` wherever the platform doesn't publish one (postText.ts): shown as one
 // muted line, not a headline.

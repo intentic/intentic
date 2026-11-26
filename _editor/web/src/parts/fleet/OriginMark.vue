@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
-import type { Tip } from "@intentic/ui";
+import { BrandMark, type Tip } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { originMeta } from "../../models/agent-status/agentStatus-meta";
+import { useOriginSources } from "../../models/agent-status/originSources";
 
 /* "This conversation came in from outside": the one mark that tells an agent an automation opened for a Discord mention. */
 
@@ -11,7 +12,8 @@ const props = defineProps<{ origin?: AgentOrigin; compact?: boolean }>();
 
 const t = useT();
 
-const meta = computed(() => (props.origin !== undefined ? originMeta(props.origin) : undefined));
+const listeners = useOriginSources();
+const meta = computed(() => (props.origin !== undefined ? originMeta(props.origin, listeners.value) : undefined));
 
 // The compact glyph's hover: the source, then which automation opened it, where, and for whom.
 const tip = computed((): Tip | undefined =>
@@ -36,7 +38,8 @@ const tip = computed((): Tip | undefined =>
         class="flex min-w-0 items-center gap-1.5 text-2xs text-muted"
         :aria-label="meta.hint"
     >
-        <Icon :name="meta.icon" class="shrink-0 text-2xs" />
+        <BrandMark v-if="meta.logo !== undefined" plain :size="10" :name="meta.label" :logo="meta.logo" :icon="meta.icon" class="shrink-0" />
+        <Icon v-else :name="meta.icon" class="shrink-0 text-2xs" />
         <template v-if="compact !== true">
             <span class="shrink-0 font-medium">{{ meta.label }}</span>
             <template v-if="meta.detail !== undefined">

@@ -18,9 +18,6 @@ import { appPanelKey, buildAppSpec, repoApps } from "./layout/app-previews.js";
 import { runFileApps } from "./layout/run-file.js";
 import { classifyWorkspace } from "./deps/classify.js";
 import { readModules } from "./deps/modules.js";
-import { readWorkspaceManifests } from "./deps/package-graph.js";
-import { readPackageModules } from "./deps/package-modules.js";
-import { readUsedPackageGraph } from "./deps/package-usage.js";
 import { discoverRepos, isValidRepoName, ROOT_REPO } from "./layout/repo-discovery.js";
 import { resolveReference } from "./files/resolve-reference.js";
 import { createCheckoutOverlays, NO_OVERLAY, overlaidView } from "./files/checkout-overlay.js";
@@ -413,20 +410,6 @@ export const createWorkspaceRoutes = (services: Services) => {
                 }),
             );
             return { apps };
-        }),
-        // Monorepo's workspace package dependency graph, each edge with what the dependent's files do with it, for the
-        // apps extension's Dependencies view.
-        packageGraph: i.packageGraph.handler(async ({ input, context }) =>
-            readUsedPackageGraph(join(services.workspace.root, await monorepoOf(context, input.repo))),
-        ),
-        // One package's units and the imports between them, placed in its layers.json, for the same view's drill-down.
-        packageModules: i.packageModules.handler(async ({ input, context }) => {
-            const repoDir = join(services.workspace.root, await monorepoOf(context, input.repo));
-            const modules = await readPackageModules(repoDir, readWorkspaceManifests(repoDir), input.package);
-            if (modules === undefined) {
-                throw new ORPCError("NOT_FOUND", { message: `no workspace package "${input.package}" in ${input.repo}` });
-            }
-            return modules;
         }),
         // Starts one app instance's dev server: its own process, port and preview-<repo>--<app>-<id>.<zone> host.
         startApp: i.startApp.handler(async ({ input, context }) => {

@@ -98,40 +98,34 @@ export const AuditSettingsSchema = z.object({
 });
 export type AuditSettings = z.infer<typeof AuditSettingsSchema>;
 
-// Every outward action the agent can take that the action rules (SandboxSettings.actionRules) gate, by the key its gate
-// consults: the outbound sniffer's (the daemon's activity/outbound.ts: discord, slack, telegram, whatsapp) and the
-// subagent gate's (guard/actions.ts childSpawn). Writes only: a rule on `messages.read` would hold a bot reading its own
-// channel. Email sending is the key the IMAP extension's sender consults (_extensions/imap/src/send.ts); the three
-// `microsoft365.*` keys are what `m365` consults before sending, changing a calendar or uploading
-// (_extensions/microsoft-365/src/actions.ts); the `ezdrp.*` and `edoreczenia.*` keys are the office acts the e-urzad
-// extension's guard consults (src/core/guard.ts in intentic/extension-e-urzad): registering mail and adding files in EZD RP, sending
-// an e-Doręczenia delivery, and opening one, the one read here with legal effect (it can make the delivery received).
-// One list for the public-office preset, which holds every one of them, and the editor's Guardrails page, which sets them.
-export const OUTWARD_ACTION_KEYS = [
-    "discord.message.send",
-    "discord.reaction.add",
-    "slack.message.send",
-    "slack.message.edit",
-    "slack.reaction.add",
-    "slack.reaction.remove",
-    "telegram.message.send",
-    "telegram.message.edit",
-    "telegram.reaction.add",
-    "whatsapp.message.send",
-    "imap.message.send",
-    "microsoft365.mail.send",
-    "microsoft365.calendar.write",
-    "microsoft365.files.upload",
-    "ezdrp.document.register-incoming",
-    "ezdrp.document.register-outgoing",
-    "ezdrp.case.attach-draft",
-    "edoreczenia.delivery.send",
-    "edoreczenia.delivery.open",
-    "agents.spawn",
-] as const;
-export type OutwardActionKey = (typeof OUTWARD_ACTION_KEYS)[number];
+// The outward action the core's own gate consults: starting a subagent (the daemon's guard/actions.ts childSpawn). Every
+// other key the action rules (SandboxSettings.actionRules) gate is declared by the extension that performs it, as
+// `<card id>.<action>` (a cli card's `broker.actions` and `commandActions`, extension-manifest capability-broker.ts), and
+// the daemon serves the enabled extensions' union (`GET /settings/outward-actions`) to the Guardrails page and the
+// public-office preset. Writes only: a rule on `messages.read` would hold a bot reading its own channel.
+// (2026-11-25) Until then this file listed every service's keys (Discord, Slack, Telegram and WhatsApp, which the
+// daemon's outbound sniffer matched; IMAP and Microsoft 365, whose CLIs consult them; e-urzad's office acts), and the
+// list drifted from what the gates consulted. A stored rule keeps its key, so every one written before still applies.
+export const SPAWN_ACTION_KEY = "agents.spawn";
 
-// The service an action key belongs to: its first segment (`discord`, `imap`, `agents`).
+export const OutwardActionSchema = z.object({
+    key: z.string().min(1).describe("The key a rule for it is written under: `<card id>.<action>`, such as `slack.message.send`."),
+    extension: z.string().min(1).describe("The enabled extension that declares it (`publisher.name`)."),
+    unruled: z
+        .literal("hold")
+        .optional()
+        .describe("What it comes to while no rule names it, when that is not allow: its tool holds it for the owner until a rule says otherwise."),
+});
+export type OutwardAction = z.infer<typeof OutwardActionSchema>;
+
+export const OutwardActionsSchema = z.object({
+    actions: z
+        .array(OutwardActionSchema)
+        .describe("Every outward action the enabled extensions declare that is more than a read, once each. Starting a subagent is the sandbox's own, and not among them."),
+});
+export type OutwardActions = z.infer<typeof OutwardActionsSchema>;
+
+// The service an action key belongs to: its first segment, the card id (`discord`, `imap`), or `agents`.
 export const outwardActionService = (key: string): string => key.split(".")[0] ?? key;
 
 // The rule an action's gate applies today: the exact key, else the service's wildcard (guard/actions.ts outboundSend).
@@ -141,7 +135,7 @@ export const effectiveActionRule = (rules: Readonly<Record<string, AdmissionRule
     if (rules[key] !== undefined) {
         return rules[key];
     }
-    return key === "agents.spawn" ? undefined : rules[`${outwardActionService(key)}.*`];
+    return key === SPAWN_ACTION_KEY ? undefined : rules[`${outwardActionService(key)}.*`];
 };
 
 export const AI_NOTICE_TEXT_MAX = 4000;

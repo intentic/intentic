@@ -3,7 +3,7 @@ import { dirname, join, resolve as resolvePath } from "node:path";
 import { undefinedIfMissing } from "@intentic/base/errors";
 import { pathExists } from "@intentic/base/fs";
 import { parse, YAMLError } from "yaml";
-import { readWorkspaceManifests } from "./package-graph.js";
+import { readWorkspaceManifests } from "./workspace-manifests.js";
 import { parseJsonOr } from "@intentic/base/json";
 
 // Dependency drift: an installed tree that no longer satisfies what is declared above it, missed by workspace-setup's

@@ -239,6 +239,7 @@ const targetCaption = (target: TargetKind): string =>
         agent: t(`automationFields.targetCaption.agent`),
         conversation: t(`automationFields.targetCaption.conversation`),
         notify: t(`automationFields.targetCaption.notify`),
+        extension: t(`automationFields.targetCaption.extension`),
     })[target];
 // The rail under "Then" says what the prompt is for, which the target decides.
 const promptCaption = computed<string>(() =>
@@ -246,6 +247,7 @@ const promptCaption = computed<string>(() =>
         agent: t(`automationFields.whatWakes`),
         conversation: t(`automationFields.whatConversationIsTold`),
         notify: t(`automationFields.whatNotificationSays`),
+        extension: t(`automationFields.whatExtensionIsHanded`),
     })[effectiveTarget.value],
 );
 

@@ -1,5 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
+import type { ConversationActors } from "../../../../conversations/actor/conversation-actors.js";
 import { turnRunOf } from "../../../../conversations/actor/conversation-holdings.js";
+import { conversationProfile, type PersistedAgent } from "../../../../conversations/registry/agents-store.js";
 import { whenFileAppears } from "../../file-appears.js";
 import {
     type BackgroundJob,
@@ -44,6 +46,24 @@ export interface DaemonJobSpec {
     // `signal` aborts once the job is stopped (its end written by someone else): what it still does is read by nobody.
     readonly run: (signal: AbortSignal, job: RunningDaemonJob) => Promise<DaemonJobEnd>;
 }
+
+export interface JobSeedDeps {
+    readonly conversations: Pick<ConversationActors, "holdings" | "send">;
+    readonly agents: { readonly entry: (id: string) => PersistedAgent | undefined };
+    readonly historyRoot: string;
+}
+
+/**
+ * A conversation's job seed, woken as the conversation's own profile, as a child's report wakes its parent: what a job
+ * the daemon carries for a tool call (chatgpt-image-jobs.ts, an extension's, extensions/turn/tool-turn-doors.ts) is filed
+ * with. Undefined for a conversation the registry does not know.
+ */
+export const conversationJobSeeds =
+    (deps: JobSeedDeps) =>
+    (conversationId: string): BackgroundJobSeed | undefined => {
+        const entry = deps.agents.entry(conversationId);
+        return entry === undefined ? undefined : { conversationId, profile: conversationProfile(entry), conversations: deps.conversations, historyRoot: deps.historyRoot };
+    };
 
 // Room left in what a reader is handed for the marker that says something was cut.
 const CUT_MARGIN_BYTES = 200;

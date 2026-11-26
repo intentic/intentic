@@ -10,20 +10,22 @@ import { automationAudience } from "../../push/push-audience.js";
 // Where a passing check goes when it is not a new agent (AutomationTargetSchema): back into a conversation that is
 // already there, or to the owner's phone with no model at all. Also what a watch says when it reaches its end date.
 
+// `carried`: nothing failed, the target took it later rather than now (an extension's backend that was down).
 export type TargetOutcome =
-    { readonly ok: true; readonly conversationId?: string; readonly detail?: string } | { readonly ok: false; readonly error: string };
+    | { readonly ok: true; readonly conversationId?: string; readonly detail?: string; readonly carried?: true }
+    | { readonly ok: false; readonly error: string };
 
 // What a conversation-bound wake reads: the same notice a condition watch's wake is (watch-wake.ts), so the conversation
 // draws it as the watch it is and the model reads it the way it reads every watch, then the automation's own words on
 // what to do now. `outcome` is `met` for a fire and `timeout` for an end date reached.
-const conversationWake = (automation: AutomationRecord, outcome: "met" | "timeout", observed: string | undefined, now: number): string => {
+const conversationWake = (automation: AutomationRecord, outcome: "met" | "timeout", observed: string | undefined, now: number, check: string | undefined): string => {
     const armedAt = automation.watch?.armedAt ?? now;
     const notice = watchWakePrompt({
         outcome,
         id: automation.id,
         note: automation.note ?? automation.id,
         elapsed: sinceLabel(now - armedAt),
-        command: conditionLabel(automation) ?? "(no check: it fires on its trigger alone)",
+        command: check ?? "(no check: it fires on its trigger alone)",
         exitCode: outcome === "met" ? 0 : undefined,
         output: observed ?? "",
     });
@@ -68,7 +70,7 @@ export const continueConversation = async (
         { turns: services.turns },
         {
             conversationId,
-            prompt: conversationWake(automation, outcome, observed.text, now),
+            prompt: conversationWake(automation, outcome, observed.text, now, await conditionLabel(services, automation)),
             voice: "sandbox",
             source: `automation:${automation.id}`,
             // One per fire, so a delivery repeated for the same fire is met with the first one's receipt.

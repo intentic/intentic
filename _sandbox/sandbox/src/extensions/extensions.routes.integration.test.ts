@@ -13,6 +13,7 @@ import { workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import { listenerProvidersOf } from "../capabilities/extension-inventory/installed-extensions.js";
 
 import { workspacePaths } from "../workspace/workspace.js";
+import { memoryAutomationsStore } from "../automations/automations-slice.testing.js";
 
 import { clientFor, errorCode } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
@@ -47,6 +48,22 @@ test("extensions.setEnabled keeps the extension listed, switches it off, and unw
 
     await client.extensions.setEnabled({ id: "intentic.discord", enabled: true });
     expect((await listed())["intentic.discord"]).toBe(true);
+});
+
+// (2026-11-26) A listener has no check to fail, so the automations it fires are told once, as the switch goes off, why
+// nothing reaches them: the Visitor chat's chats, built in and on, which anyone may switch off.
+test("switching off the extension whose listener fires an automation says so on that automation", async () => {
+    const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-quiet-")));
+    const chat = { id: "chat", trigger: { kind: "listener" as const, provider: "webchat", allowedOrigins: ["https://shop.example"] }, prompt: "Answer.", enabled: true, runs: [] };
+    const automations = memoryAutomationsStore([chat, { ...chat, id: "paused", enabled: false }]);
+    const client = clientFor(createApp(services({ workspace, automations })));
+
+    await client.extensions.setEnabled({ id: "intentic.visitor-chat", enabled: false });
+
+    expect((await automations.get("chat"))?.runs).toMatchObject([{ outcome: "error", detail: expect.stringContaining("intentic.visitor-chat") }]);
+    expect((await automations.get("paused"))?.runs).toEqual([]);
+    await client.extensions.setEnabled({ id: "intentic.visitor-chat", enabled: true });
+    expect((await automations.get("chat"))?.runs).toHaveLength(1);
 });
 
 test("an essential extension cannot be switched off, reads enabled over a stale entry, and says so on its row", async () => {
@@ -151,6 +168,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.social",
         "intentic.telegram",
         "intentic.viewers",
+        "intentic.visitor-chat",
         "intentic.whatsapp",
     ]);
 });

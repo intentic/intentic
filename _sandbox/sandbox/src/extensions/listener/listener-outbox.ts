@@ -10,7 +10,7 @@ import { opt } from "../../opt.js";
 import { defineInFlight } from "../../seams/restart/in-flight.js";
 import { defineDocument } from "../../store/evolution/documents.js";
 import { openEntries } from "../../store/open-document.js";
-import { type OutboxSink, outboxKeyOf } from "../../webchat/webchat-outbox.js";
+import type { TurnStream } from "../../automations/fire/fire-options.js";
 import { deliverThroughGateway, type GatewayFailure, GatewayDeliveryError } from "./listener-deliver.js";
 
 // How a reply reaches its gateway: deliverThroughGateway, a stand-in in a test.
@@ -231,22 +231,17 @@ export const drainOwedReplies = (services: Services, deliver: DeliverToGateway =
     return drainer.running;
 };
 
-// Owes `text` to the channel (and thread) the origin names, journalled before this answers, and starts trying it.
-// A Visitor chat's reply goes into its own outbox instead, which the visitor's browser drains; an origin with no
-// channel has nowhere to go.
+// Owes `text` to the channel (and thread) the origin names, journalled before this answers, and starts trying it. An
+// origin with no channel has nowhere to go. (2026-11-26) A Visitor chat's reply goes to its extension's gateway like any
+// other, which puts it in the outbox the visitor's browser drains; the daemon wrote that outbox itself until then.
 export const oweToListenerChannel = async (
     services: Services,
     origin: AgentOrigin,
     text: string,
     deliver: DeliverToGateway = deliverThroughGateway,
-): Promise<"owed" | "delivered" | "no-gateway"> => {
+): Promise<"owed" | "no-gateway"> => {
     if (origin.channelId === undefined) {
         return "no-gateway";
-    }
-    const visitor = outboxKeyOf(origin);
-    if (visitor !== undefined) {
-        await services.webchatOutbox.append(visitor, text, Date.now());
-        return "delivered";
     }
     const now = Date.now();
     const reply: OwedReply = {
@@ -278,6 +273,13 @@ export const owedRepliesInFlight = defineInFlight({
     read: async (services: Deps) => owedReplies(services),
     recover: async (services: Services) => drainOwedReplies(services),
 });
+
+// A turn's answer gathered for somewhere no live stream reaches, and when it is journalled there. `TurnStream.end` returns
+// void, so without `settled` the write is still in flight when the turn returns: a restart then loses the answer.
+export interface OutboxSink {
+    readonly stream: TurnStream;
+    readonly settled: () => Promise<void>;
+}
 
 // The sink an approved wake from a gateway's channel answers into: the stream that carried the request closed when it
 // was held, so the answer is gathered whole and owed to the channel's gateway once the turn ends (listener-outbox.ts),

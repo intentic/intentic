@@ -1,5 +1,5 @@
 import type { AutomationSummary } from "@intentic/sandbox-contract/schemas/automations";
-import { embedSnippet } from "../useAutomations";
+import { isVisitorChat } from "../useAutomations";
 import { t } from "../i18n.js";
 
 export interface VisitorChatSummary {
@@ -9,12 +9,11 @@ export interface VisitorChatSummary {
 }
 
 // The Visitor chat settings that decide whether the widget works at all: where it may be embedded, who may talk to it,
-// and what stops a bot. Undefined for any other automation, and until the sandbox's own origin is known, so Install
-// never opens on nothing. Mirrors the daemon's resolution (webchat-config.ts): missing keys report as off, matching
-// what is enforced.
+// and what stops a bot. Undefined for any other automation. Mirrors the visitor-chat extension's resolution (its
+// public-config.ts): missing keys report as off, matching what is enforced.
 export const visitorChatOf = (automation: AutomationSummary): VisitorChatSummary | undefined => {
     const fires = automation.trigger;
-    if (fires.kind !== `listener` || fires.provider !== `webchat` || embedSnippet(automation) === undefined) {
+    if (fires.kind !== `listener` || !isVisitorChat(automation)) {
         return undefined;
     }
     const config = automation.webchat ?? {};

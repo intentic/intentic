@@ -5,6 +5,7 @@ import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-spe
 import { openingRung, readyChain, rungModel } from "@intentic/sandbox-contract/models/model-pins";
 import { useNow } from "@intentic/ui/async";
 import { computed, type ComputedRef } from "vue";
+import { useModelRoles } from "../jobs/useModelRoles";
 import { useSandboxSettings } from "../sandbox/useSandboxSettings";
 import { providerReady } from "./access";
 import { modelChoiceLabel } from "./modelPins";
@@ -58,11 +59,15 @@ export interface RoleModel {
 
 export function useRoleModel(role: ModelRole): RoleModel {
     const { settings } = useSandboxSettings();
+    // An extension's job (`pipeline-fix`) resolves by id like the sandbox's own; in a sandbox that never placed its jobs
+    // its declaration says which setup it runs on, as the daemon reads it (useModelRoles.ts).
+    const { roles } = useModelRoles();
+    const suggested = computed(() => roles.value?.find((entry) => entry.id === role)?.setup);
     const pinned = computed<readonly ModelPin[]>(() => {
         if (settings.value === undefined) {
             return [];
         }
-        const ladder = roleLadder(settings.value, role);
+        const ladder = roleLadder(settings.value, role, suggested.value);
         if (ladder.kind === `preset`) {
             readConnectedCatalogs();
         }

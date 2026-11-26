@@ -28,6 +28,7 @@ const AREAS = {
     audit: () => ({ label: t(`sandbox.driftReport.areas.audit.label`), where: t(`sandbox.driftReport.areas.audit.where`) }),
     automations: () => ({ label: t(`sandbox.driftReport.areas.automations.label`), where: t(`sandbox.driftReport.areas.automations.where`) }),
     capabilities: () => ({ label: t(`sandbox.driftReport.areas.capabilities.label`), where: t(`sandbox.driftReport.areas.capabilities.where`) }),
+    // A daemon older than 2026-11-26 still serves its chores routes, which the maintenance extension's backend took over.
     chores: () => ({ label: t(`sandbox.driftReport.areas.chores.label`), where: t(`sandbox.driftReport.areas.chores.where`) }),
     ci: () => ({ label: t(`sandbox.driftReport.areas.ci.label`), where: t(`sandbox.driftReport.areas.ci.where`) }),
     compliance: () => ({ label: t(`sandbox.driftReport.areas.compliance.label`), where: t(`sandbox.driftReport.areas.compliance.where`) }),

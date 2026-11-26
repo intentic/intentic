@@ -1,5 +1,5 @@
 import type { ClaimNeed, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
-import type { ClaimHolder } from "../../issues/project-claims.js";
+import type { ClaimHolder } from "../../account-routing/project-claims.js";
 import { opt } from "../../opt.js";
 import type { AskContext, Answerer, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 

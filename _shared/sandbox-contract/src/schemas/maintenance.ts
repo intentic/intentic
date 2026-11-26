@@ -1,8 +1,9 @@
 // maintenance: the standing evidence a chore is decided from
 import { z } from "zod";
-// The daemon serves facts, never a verdict: which chore is due is computed by shared code
-// (`@intentic/sandbox-contract/chores`) so the tile and panel can't disagree. Split by cost: probes (subprocesses,
-// cached with a TTL) vs signals (cheap, recomputed per request).
+// FROZEN (2026-11-26), with the `chores` subpath whose types it gives: the maintenance extension's backend measures and
+// serves this evidence now (its src/chores/schema.ts), and the daemon's GET /chores, POST /chores/probe and
+// POST /chores/ledger are gone. Kept for that subpath until extension API 3.0.0, and for the extension-readiness schemas
+// at the bottom, which the extensions contract reads and which stay.
 
 export const PROBE_IDS = ["outdated", "audit", "knip", "jscpd", "ui", "bundle", "mutation"] as const;
 export const ProbeIdSchema = z.enum(PROBE_IDS);

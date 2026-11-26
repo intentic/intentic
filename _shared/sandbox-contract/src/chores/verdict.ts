@@ -1,3 +1,4 @@
+// FROZEN (2026-11-26): the maintenance extension owns this; kept unchanged for the extension wire until 3.0.0 (index.ts).
 import type { ChoreLedgerEntry, ChoreOutcome, ChoresReport, ProbeId, ProbeResult } from "../schemas/maintenance.js";
 import { type Chore, type ChoreContext, type ChoreFinding, CHORES, chorePrompt } from "./chores.js";
 import { probeSpec } from "./probes.js";

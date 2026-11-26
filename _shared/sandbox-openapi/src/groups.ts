@@ -155,14 +155,6 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "The points the sandbox saves as work happens, what changed between one and the next, one file's two sides, and restoring from one.",
     },
     {
-        name: "chores",
-        shelf: "workspace",
-        label: "Chores",
-        summary: "What every repository currently measures, and what has been done about it",
-        description:
-            'Maintenance evidence: read the measurements, ask for one to be retaken, record what somebody concluded. There is deliberately no "run this chore" route, because a chore run is an ordinary conversation and so already has its own working copy, record and cost.',
-    },
-    {
         name: "panels",
         shelf: "workspace",
         label: "Panels",
@@ -416,14 +408,6 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
         summary: "Things the agent has prepared, waiting for you to say yes",
         description:
             "The owner's side of the queue: posts to publish, actions to carry out. The agent writes the files directly; this is the inbox, the one call that covers approving, editing and retrying, and the deletion that is a rejection.",
-    },
-    {
-        name: "issues",
-        shelf: "ship",
-        label: "Issues",
-        summary: "Bugs your own users hit, grouped, and putting an agent on one",
-        description:
-            "The owner's side of the bug intake, and the counterpart to the pipelines group: an inbox of failures with one route that hands a failure to an agent rather than to you. Reports arrive at the public /intake/… endpoints from the reporter embedded on your sites — a separate prefix precisely because any browser on the internet can reach those and none of these — and the daemon groups them by fingerprint, so a crash that hit a thousand browsers is one row with a count. These routes read that inbox, move a row between open, resolved and ignored, start a turn on one, throw one away, and answer which sites have actually loaded the reporter. Nothing here creates an issue.",
     },
 
     // The sandbox itself

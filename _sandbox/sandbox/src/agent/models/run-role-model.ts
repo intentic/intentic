@@ -5,6 +5,7 @@ import { type ModelSource, openingRung, readyChain } from "@intentic/sandbox-con
 import { NATIVE_PROVIDERS } from "@intentic/sandbox-contract/models/provider-specs";
 import { roleLadder } from "@intentic/sandbox-contract/models/model-setups";
 import type { Services } from "../../composition.js";
+import { declaredSuggestion } from "./declared-roles.js";
 import { failingStreak } from "./role-model-health.js";
 import { ladderPinsNow } from "./role-model.js";
 import { rungCapacity } from "./role-model-quota.js";
@@ -27,9 +28,18 @@ const readinessSources = async (services: Services): Promise<ModelSource[]> => {
 };
 
 // Pin this role should open on, or undefined so the caller falls back to its own composer pick; carries the whole pin
-// (effort, harness), not just provider/model.
-export const runRoleModel = async (services: Services, role: ModelRole): Promise<ModelPin | undefined> =>
-    pinnedRunModel(services, await ladderPinsNow(services, roleLadder(await services.sandboxSettings.get(), role)));
+// (effort, harness), not just provider/model. A job an extension declares (`pipeline-fix`) resolves by its id like the
+// sandbox's own; while the owner has placed no job, its declaration says which setup it runs on (declared-roles.ts).
+export const runRoleModel = async (services: Services, role: ModelRole): Promise<ModelPin | undefined> => {
+    const settings = await services.sandboxSettings.get();
+    const suggested =
+        settings.roleSetups === undefined
+            ? await declaredSuggestion(services, role, (error) =>
+                  services.logger.warn({ err: error, role }, "run role: the installed extensions could not be read, so the job opens on its caller's model"),
+              )
+            : undefined;
+    return pinnedRunModel(services, await ladderPinsNow(services, roleLadder(settings, role, suggested)));
+};
 
 // Walks any ordered ladder of pins, whoever wrote it (a role, a role, an automation); readiness and quota are
 // sandbox facts, not the caller's. An empty ladder answers undefined and the caller decides what that means.

@@ -10,7 +10,7 @@ import { settingsDocument } from "../settings/settings-store.js";
 import { documentFilename, renderDocument } from "./drafts.js";
 import { markdownToDocx } from "./docx.js";
 import { type FactsServices, gatherFacts } from "./facts.js";
-import { applyPreset, presetPreview } from "./preset.js";
+import { applyPreset, presetPreview, publicOfficeActionKeys } from "./preset.js";
 import { reportOf } from "./report.js";
 
 // The data protection page's routes (sandbox-contract compliance.contract.ts): the live report, the documents filled in
@@ -52,12 +52,13 @@ export const createComplianceRoutes = (
         }),
         preset: i.preset.handler(async () => {
             const facts = await gatherFacts(services);
-            return { items: presetPreview({ settings: facts.settings, privacy: facts.privacy, nameModel: facts.readers.model }) };
+            return { items: presetPreview({ settings: facts.settings, privacy: facts.privacy, nameModel: facts.readers.model, actionKeys: facts.actionKeys }) };
         }),
         applyPreset: i.applyPreset.handler(async ({ input, context }) => {
-            const [settings, status] = await Promise.all([services.sandboxSettings.get(), services.privacyShield.status()]);
+            const [settings, status, outward] = await Promise.all([services.sandboxSettings.get(), services.privacyShield.status(), services.outwardActions()]);
             // The route floors at the owner, so whoever reaches here may change the shield.
-            const outcome = applyPreset({ settings, privacy: status.policy, nameModel: status.readers.model }, input.items, true);
+            const state = { settings, privacy: status.policy, nameModel: status.readers.model, actionKeys: publicOfficeActionKeys(outward.offered) };
+            const outcome = applyPreset(state, input.items, true);
             if (outcome.settingsChanged) {
                 await versionedSettingsWrite(services, [settingsDocument.path], "Settings: public-office preset", () => services.sandboxSettings.set(outcome.settings));
             }

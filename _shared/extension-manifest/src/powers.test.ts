@@ -33,6 +33,18 @@ const VIEW = { id: "board", label: "Board", surface: "rail" } as const;
 const COMMAND = { command: "acme.run", title: "Run" };
 const SETTING = { key: "token", type: "string", title: "Token" } as const;
 const SERVER = { server: "dist/server.js" };
+const LISTENER = {
+    provider: "acme",
+    events: [{ type: "message", label: "A message" }],
+    automation: { label: "Acme", channel: { label: "Channel", placeholder: "#general" }, starterPrompt: "Answer it." },
+};
+const WATCH_KIND = {
+    id: "pypi",
+    label: "PyPI package",
+    description: "A version on PyPI.",
+    sentence: "PyPI {package}",
+    fields: [{ key: "package", label: "Package", required: true }],
+};
 // One card of each kind, so every arm of the capability union is reached through it.
 const CARDS: readonly Card[] = [
     CLI_CARD,
@@ -65,6 +77,48 @@ const ROWS: readonly Row[] = [
         without: { permissions: {} },
         with: { permissions: { daemon: ["GET /workspace/tree"] } },
         adds: ["daemon:GET /workspace/tree", "its backend calls the daemon route GET /workspace/tree"],
+    },
+    {
+        power: "events:run",
+        without: { permissions: { events: [] } },
+        with: { permissions: { events: ["run"] } },
+        adds: ["events:run", "its backend hears when a conversation it started finishes a turn"],
+    },
+    {
+        power: "events:activity",
+        without: { permissions: { events: ["run"] } },
+        with: { permissions: { events: ["run", "activity"] } },
+        adds: ["events:activity", "its backend hears whether any agent turn is running in the sandbox"],
+    },
+    {
+        power: "work",
+        without: { permissions: { work: false } },
+        with: { permissions: { work: true } },
+        adds: ["work", "its backend keeps the sandbox awake, and a restart waiting, while it holds work in flight"],
+    },
+    {
+        power: "exec:command",
+        without: { permissions: { exec: [] } },
+        with: { permissions: { exec: ["command"] } },
+        adds: ["exec:command", "its backend runs commands, admitted like an agent's"],
+    },
+    {
+        power: "exec:toolchain",
+        without: { permissions: { exec: ["command"] } },
+        with: { permissions: { exec: ["command", "toolchain"] } },
+        adds: ["exec:toolchain", "its backend runs heavy tools, queued with the sandbox's builds and tests"],
+    },
+    {
+        power: "fires:${value}",
+        without: { permissions: { fires: [] } },
+        with: { permissions: { fires: ["sweep"] } },
+        adds: ["fires:sweep", 'the sandbox\'s automations wake its backend\'s "sweep" handler'],
+    },
+    {
+        power: "watch-kind:${id}",
+        without: contributes({ watchKinds: [] }, SERVER),
+        with: contributes({ watchKinds: [WATCH_KIND] }, SERVER),
+        adds: ["watch-kind:pypi", 'its backend checks "PyPI package" watches for the sandbox\'s automations'],
     },
     { power: "view:${id}", without: contributes({ views: [] }), with: contributes({ views: [VIEW] }), adds: ["view:board", 'a rail view "Board"'] },
     {
@@ -161,14 +215,20 @@ const ROWS: readonly Row[] = [
     {
         power: "listener:${provider}",
         without: contributes({}),
-        with: contributes({
-            listener: {
-                provider: "acme",
-                events: [{ type: "message", label: "A message" }],
-                automation: { label: "Acme", channel: { label: "Channel", placeholder: "#general" }, starterPrompt: "Answer it." },
-            },
-        }),
+        with: contributes({ listener: LISTENER }),
         adds: ["listener:acme", 'a realtime listener provider "acme"'],
+    },
+    {
+        power: "listener-strangers:${provider}",
+        without: contributes({ listener: LISTENER }),
+        with: contributes({ listener: { ...LISTENER, strangers: "visitor" } }),
+        adds: ["listener-strangers:acme", 'anyone on the internet can wake an agent through its "acme" listener'],
+    },
+    {
+        power: "public:${path}",
+        without: contributes({ publicRoutes: [] }, SERVER),
+        with: contributes({ publicRoutes: [{ path: "hook", methods: ["POST"], signature: { scheme: "github", secret: "HOOK_SECRET" } }] }, SERVER),
+        adds: ["public:hook", "anyone on the internet can call its backend at POST /hook when signed with your secret HOOK_SECRET"],
     },
     { power: "bin", without: contributes({}), with: contributes({ bin: "bin" }), adds: ["bin", "puts its shipped tools on the agent's PATH"] },
     {

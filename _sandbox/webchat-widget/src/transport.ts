@@ -1,23 +1,30 @@
 import type { WebchatMessage, WebchatPending, WebchatPublicConfig } from "@intentic/sandbox-contract/schemas/automations";
-import { embedFailure, type EmbedEndpoint, embedUrl, fetchEmbedChallenge, fetchEmbedJson, type PowChallenge, WEBCHAT_EVENT } from "@intentic/sandbox-contract/embed";
+import { embedFailure, type EmbedEndpoint, embedUrl, fetchEmbedJson, type PowChallenge, WEBCHAT_EVENT } from "@intentic/sandbox-contract/embed";
 import { createSseParser, type SseEvent } from "@intentic/sandbox-contract/sse";
 
-// Widget's half of the wire: three calls against the daemon's public /webchat door, all subject to its origin
-// allowlist. Failures carry the server's own sentence (EmbedError), not a status code.
+// Widget's half of the wire: its calls against the Visitor chat's public door, every one subject to the chat's allowed
+// sites. Since 2026-11-26 that door is the visitor-chat extension's (/door/intentic.visitor-chat/…, served by its
+// backend behind the sandbox's own protections), where the daemon's /webchat/… was before; the daemon still forwards the
+// old paths for a widget loaded before the update. Failures carry the server's own sentence (EmbedError), not a status
+// code.
+export const DOOR = "door/intentic.visitor-chat";
 
-// Slug for the three calls every embed makes; only the reply (SSE over POST) is this widget's own.
-const SLUG = "webchat";
+// The headers the door reads a proof of work from (the sandbox contract's PUBLIC_DOOR_POW_HEADER and
+// PUBLIC_DOOR_POW_CALLER_HEADER, spelled here since this bundle imports nothing that would drag zod in).
+const POW_HEADER = "x-intentic-pow";
+const POW_CALLER_HEADER = "x-intentic-pow-caller";
 
-export const fetchConfig = (endpoint: EmbedEndpoint): Promise<WebchatPublicConfig> => fetchEmbedJson<WebchatPublicConfig>(embedUrl(endpoint, SLUG, "config"));
+export const fetchConfig = (endpoint: EmbedEndpoint): Promise<WebchatPublicConfig> => fetchEmbedJson<WebchatPublicConfig>(embedUrl(endpoint, DOOR, "config"));
 
-// Challenge is minted for one thread: the daemon signs the conversation id into the salt, so a solution can't move to
+// Challenge is minted for one thread: the sandbox signs the conversation id into the salt, so a solution can't move to
 // another.
-export const fetchChallenge = (endpoint: EmbedEndpoint, conversationId: string): Promise<PowChallenge> => fetchEmbedChallenge(endpoint, SLUG, "conversation", conversationId);
+export const fetchChallenge = (endpoint: EmbedEndpoint, conversationId: string): Promise<PowChallenge> =>
+    fetchEmbedJson<PowChallenge>(`${endpoint.base}/${DOOR}/~challenge?caller=${encodeURIComponent(conversationId)}`);
 
 // Replies queued since `after`: what an approval-gated guest answers with, and where a human writing as the agent lands.
 // Spends no challenge and starts no turn, so it is safe to call on a page the visitor is only reading.
 export const fetchPending = (endpoint: EmbedEndpoint, conversationId: string, after: number): Promise<WebchatPending> =>
-    fetchEmbedJson<WebchatPending>(`${embedUrl(endpoint, SLUG, "messages")}?conversation=${encodeURIComponent(conversationId)}&after=${after}`);
+    fetchEmbedJson<WebchatPending>(`${embedUrl(endpoint, DOOR, "messages")}?conversation=${encodeURIComponent(conversationId)}&after=${after}`);
 
 export interface ReplySink {
     // One chunk of the agent's answer, as it is written.
@@ -32,14 +39,29 @@ export interface ReplySink {
 // timeout): what arrived is kept, and the visitor is told the rest will not.
 const CUT_SHORT = "The connection closed before the reply finished. Try again.";
 
+// Where one message goes: a thread's first, carrying a solved proof of work, to the route the door checks one on, with
+// the proof in the door's headers; every other to the plain route.
+interface DoorRequest {
+    readonly url: string;
+    readonly init: RequestInit;
+}
+
+const requestOf = (endpoint: EmbedEndpoint, message: WebchatMessage): DoorRequest => {
+    const { powNonce, ...body } = message;
+    const headers = new Headers({ "content-type": "application/json" });
+    if (powNonce === undefined) {
+        return { url: embedUrl(endpoint, DOOR, "message"), init: { method: "POST", headers, body: JSON.stringify(body) } };
+    }
+    headers.set(POW_HEADER, powNonce);
+    headers.set(POW_CALLER_HEADER, message.conversationId);
+    return { url: embedUrl(endpoint, DOOR, "proven"), init: { method: "POST", headers, body: JSON.stringify(body) } };
+};
+
 // Sends one message and pumps the reply into `sink` until the stream ends; resolves when the turn is over. A thrown
 // EmbedError means the message never reached an agent.
 export const sendMessage = async (endpoint: EmbedEndpoint, message: WebchatMessage, sink: ReplySink): Promise<void> => {
-    const response = await fetch(embedUrl(endpoint, SLUG, "message"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(message),
-    });
+    const { url, init } = requestOf(endpoint, message);
+    const response = await fetch(url, init);
     if (!response.ok || response.body === null) {
         throw await embedFailure(response);
     }

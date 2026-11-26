@@ -1909,10 +1909,6 @@
         "count": 21,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_sandbox/sandbox/src/issues/issues-store.ts#fileIssuesStore#lines": {
-        "count": 120,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_sandbox/sandbox/src/links/inbound-links.ts#fileInboundLinks#lines": {
         "count": 153,
         "why": "standing when the check arrived (2026-10-16)"
@@ -2683,11 +2679,7 @@
         "count": 24,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },
-    "_sandbox/sandbox/src/workspace/deps/package-graph.ts#readRepoMap#cognitive": {
-        "count": 22,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_sandbox/sandbox/src/workspace/deps/package-usage.ts#withUsage.<anonymous>#cognitive": {
+    "_extensions/repo-apps/src/server/package-usage.ts#withUsage.<anonymous>#cognitive": {
         "count": 41,
         "why": "oxlint-plugin-complexity 4 corrects nested-function cognitive scoring; recalibrated against the same source with plugin 3 and 4, retaining existing allowance deltas."
     },

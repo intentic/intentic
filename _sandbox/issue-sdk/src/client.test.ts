@@ -31,7 +31,7 @@ const fakeDaemon = (over: Partial<IssuePublicConfig> = {}, reportStatus = 200): 
             if (url.endsWith("/config")) {
                 return new Response(JSON.stringify({ ...CONFIG, ...over }), { status: 200 });
             }
-            if (url.includes("/challenge")) {
+            if (url.includes("/~challenge?caller=")) {
                 // Difficulty 1 keeps the puzzle real but cheap: a handful of hashes, not CPU-seconds.
                 return new Response(JSON.stringify({ salt: "s.a.b", difficulty: 1 }), { status: 200 });
             }
@@ -65,7 +65,7 @@ test("a captured error arrives with its stack, the page, the build and the brows
 
     expect(id).toBe("4f3a1b2c");
     expect(sent).toHaveLength(1);
-    expect(sent[0]?.url).toBe("https://sandbox.example/intake/bugs/report");
+    expect(sent[0]?.url).toBe("https://sandbox.example/door/intentic.issues/bugs/report");
     const report = sent[0]?.body["report"] as Record<string, unknown>;
     expect(report["kind"]).toBe("crash");
     expect(report["message"]).toContain(error.message);
@@ -165,14 +165,21 @@ test("the puzzle is solved for a written report and skipped for a crash", async 
     expect(sent[0]?.body).not.toHaveProperty("powNonce");
 
     await live.report({ description: "a thing" });
-    expect(String(sent[1]?.body["powNonce"])).toMatch(/^s\.a\.b:\d+$/);
+    // The door reads the proof from its headers, bound to the browser's own id, on the route that checks one.
+    expect(sent[1]?.url).toBe("https://sandbox.example/door/intentic.issues/bugs/written");
+    const headers = new Headers(sent[1]?.init.headers);
+    expect(headers.get("x-intentic-pow")).toMatch(/^s\.a\.b:\d+$/);
+    expect(headers.get("x-intentic-pow-caller")).toBe(String(sent[1]?.body["clientId"]));
+    expect(sent[1]?.body).not.toHaveProperty("powNonce");
 });
 
 test("an ingest key rides every report when the host set one", async () => {
     const sent = fakeDaemon();
     const live = await started({ key: "intake_abc" });
     await live.captureException(new Error("boom"));
-    expect(sent[0]?.body["key"]).toBe("intake_abc");
+    // As `?key=`, which the door takes off before the backend sees the call; never in the body.
+    expect(new URL(sent[0]?.url ?? "").searchParams.get("key")).toBe("intake_abc");
+    expect(sent[0]?.body).not.toHaveProperty("key");
     expect(String(sent[0]?.body["clientId"])).toHaveLength(36);
 });
 

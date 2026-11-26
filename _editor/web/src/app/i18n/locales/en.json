@@ -424,7 +424,6 @@
             "earlierChat": "Earlier chat",
             "edits": "Your edits",
             "unsavedSettings": "Unsaved settings",
-            "email": "Email",
             "error": "Error",
             "finishing": "Finishing…",
             "firstWakesChat": "First one wakes it",
@@ -6656,9 +6655,6 @@
                 "everyMinutes": "Every {count} minutes"
             },
             "source": {
-                "npm": "The npm package {spec}",
-                "github": "New releases of {repo}",
-                "githubPre": "New releases of {repo}, prereleases too",
                 "url": "The page {url}",
                 "urlSelect": "The page {url}, the part matching {select}"
             },
@@ -11380,6 +11376,7 @@
             "action": {
                 "messageSend": "Sending messages",
                 "messageEdit": "Editing messages",
+                "messageDelete": "Deleting messages",
                 "reactionAdd": "Adding reactions",
                 "reactionRemove": "Removing reactions",
                 "mailSend": "Sending mail",
@@ -11389,7 +11386,8 @@
                 "documentRegisterOutgoing": "Registering outgoing mail",
                 "caseAttachDraft": "Adding a draft to a case",
                 "deliverySend": "Sending a delivery",
-                "deliveryOpen": "Opening a delivery"
+                "deliveryOpen": "Opening a delivery",
+                "all": "Every action"
             },
             "value": {
                 "allow": "allowed",

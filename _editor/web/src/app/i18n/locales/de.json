@@ -424,7 +424,6 @@
             "earlierChat": "Früherer Chat",
             "edits": "Ihre Änderungen",
             "unsavedSettings": "Ungespeicherte Einstellungen",
-            "email": "E-Mail",
             "error": "Fehler",
             "finishing": "Wird abgeschlossen…",
             "firstWakesChat": "Der erste weckt ihn",
@@ -6656,9 +6655,6 @@
                 "everyMinutes": "Alle {count} Minuten"
             },
             "source": {
-                "npm": "Das npm-Paket {spec}",
-                "github": "Neue Releases von {repo}",
-                "githubPre": "Neue Releases von {repo}, auch Vorabversionen",
                 "url": "Die Seite {url}",
                 "urlSelect": "Die Seite {url}, der zu {select} passende Teil"
             },
@@ -11380,6 +11376,7 @@
             "action": {
                 "messageSend": "Nachrichten senden",
                 "messageEdit": "Nachrichten bearbeiten",
+                "messageDelete": "Nachrichten löschen",
                 "reactionAdd": "Reaktionen hinzufügen",
                 "reactionRemove": "Reaktionen entfernen",
                 "mailSend": "E-Mails senden",
@@ -11389,7 +11386,8 @@
                 "documentRegisterOutgoing": "Ausgangspost registrieren",
                 "caseAttachDraft": "Einen Entwurf zu einem Vorgang hinzufügen",
                 "deliverySend": "Eine Zustellung senden",
-                "deliveryOpen": "Eine Zustellung öffnen"
+                "deliveryOpen": "Eine Zustellung öffnen",
+                "all": "Jede Aktion"
             },
             "value": {
                 "allow": "erlaubt",

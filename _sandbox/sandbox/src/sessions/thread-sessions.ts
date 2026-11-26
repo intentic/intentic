@@ -28,10 +28,7 @@ export const threadSessionsDocument = defineDocument({
     granularity: "record",
 });
 
-// How long a quiet Visitor chat thread keeps its conversation; overridable via WebchatConfig.sessionTtlMinutes.
-export const WEBCHAT_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-
-// Shorter than the Visitor chat's TTL: a channel carries many unrelated topics, not one visitor's thread.
+// Short: a channel carries many unrelated topics, not one person's thread.
 export const CHANNEL_SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
 // A provider's own thread (a Discord or Slack thread) is one topic, picked back up days later where it left off: its

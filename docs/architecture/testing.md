@@ -84,7 +84,7 @@ said back after the edit that writes it and the standing ones may only shrink.
 | `eval:automations` | Docker for this checkout's sandbox image and a Claude credential (`INTENTIC_EVAL_CLAUDE_TOKEN`); real model allowance ([Evals](#evals)) | by hand; nightly only with the repository variable `INTENTIC_EVAL_AUTOMATIONS=1`, or a dispatch with `only: automation-evals` |
 | Onboarding | Playwright ([`_tools/onboarding`](../../_tools/onboarding)) with [`_tools/fake-upstream`](../../_tools/fake-upstream) standing in for model endpoints | nightly |
 | Desktop smoke | installed desktop builds ([`_tools/desktop-smoke`](../../_tools/desktop-smoke), [`_tools/desktop-smoke-windows`](../../_tools/desktop-smoke-windows)) | CI, release, nightly |
-| Mutation | [`stryker.conf.mjs`](../../stryker.conf.mjs) over unit suites of the daemon and its contract | the daemon's `test-strength` chore |
+| Mutation | [`stryker.conf.mjs`](../../stryker.conf.mjs) over unit suites of the daemon and its contract | the maintenance extension's `test-strength` chore |
 | Perf | Valgrind for instruction counts, Chromium over the demo for render, call, layout and mutation counts ([`_tools/perf`](../../_tools/perf)) | CI, when a change reaches `@intentic/perf` or the demo |
 
 ## Evals

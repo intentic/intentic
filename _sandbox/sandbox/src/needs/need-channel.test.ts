@@ -3,13 +3,14 @@ import { needChannelOf, needChannelText } from "./need-channel.js";
 
 // What a channel conversation hears when its agent asks a person for something, and which conversations hear it.
 
-test("a channel a person started the conversation from hears it; a visitor's chat and a conversation with no channel do not", () => {
+test("a channel a person started the conversation from hears it; a stranger's source and a conversation with no channel do not", () => {
     const slack: AgentOrigin = { automationId: "slack-listener", provider: "slack", channelId: "C0123" };
-    expect(needChannelOf(slack)).toEqual(slack);
-    // A visitor is a stranger: nothing a need asks for is theirs to give.
-    expect(needChannelOf({ automationId: "site-chat", provider: "webchat", channelId: "visitor-1" })).toBeUndefined();
-    expect(needChannelOf({ automationId: "slack-listener", provider: "slack" })).toBeUndefined();
-    expect(needChannelOf(undefined)).toBeUndefined();
+    expect(needChannelOf(slack, undefined)).toEqual(slack);
+    // A visitor is a stranger, by what its source declares: nothing a need asks for is theirs to give.
+    expect(needChannelOf({ automationId: "site-chat", provider: "webchat", channelId: "visitor-1" }, "visitor")).toBeUndefined();
+    expect(needChannelOf({ automationId: "intake", provider: "issues", channelId: "https://shop.example" }, "report")).toBeUndefined();
+    expect(needChannelOf({ automationId: "slack-listener", provider: "slack" }, undefined)).toBeUndefined();
+    expect(needChannelOf(undefined, undefined)).toBeUndefined();
 });
 
 test("the ask is said with the agent's case and where to answer it", () => {

@@ -1,9 +1,5 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { extensionStateDir } from "@intentic/sandbox-contract/workspace-state";
-import { accountsFrom, assertWrite, bindingOf, cloudOf, scopesFor, selectAccount } from "./accounts.js";
-import { deviceLogin, fileTokenCache, saveToVault, SignInError, tokenSession } from "./auth.js";
+import { accountsFrom, assertWrite, cloudOf, scopesFor, selectAccount } from "./accounts.js";
+import { deviceLogin, SignInError, tokenSession } from "./auth.js";
 import { account, httpQueue } from "./testing.js";
 
 test("a rotated refresh token is stored before use, and the access token is reused until a minute before it expires", async () => {
@@ -27,24 +23,6 @@ test("a rotated refresh token is stored before use, and the access token is reus
     expect(new URLSearchParams(String(calls[1]!.init?.body)).get("refresh_token")).toBe("rotated");
     expect(new URLSearchParams(String(calls[0]!.init?.body)).get("client_secret")).toBeNull();
     expect(calls).toHaveLength(2);
-});
-
-test("the on-disk cache spares the next process a mint, and only for the same credential", async () => {
-    const root = await mkdtemp(join(tmpdir(), "m365-cache-"));
-    try {
-        const first = httpQueue([{ body: { access_token: "cached-access", expires_in: 3600 } }]);
-        expect(await tokenSession(account, async () => {}, { http: first.http, cache: fileTokenCache(root, account) })()).toBe("cached-access");
-        const path = join(root, extensionStateDir("intentic.microsoft-365"), "office", "token.json");
-        expect((await stat(path)).mode & 0o777).toBe(0o600);
-        expect(await readFile(path, "utf8")).not.toContain("initial");
-        const second = httpQueue([]);
-        expect(await tokenSession(account, async () => {}, { http: second.http, cache: fileTokenCache(root, account) })()).toBe("cached-access");
-        const reentered = { ...account, refreshToken: "pasted-again" };
-        const third = httpQueue([{ body: { access_token: "fresh", expires_in: 3600 } }]);
-        expect(await tokenSession(reentered, async () => {}, { http: third.http, cache: fileTokenCache(root, reentered) })()).toBe("fresh");
-    } finally {
-        await rm(root, { recursive: true, force: true });
-    }
 });
 
 test("a refused refresh says what to do and never what Microsoft's body held", async () => {
@@ -176,28 +154,6 @@ test("the card's own sign-in asks for exactly what the CLI refreshes with, read 
     expect(write).toEqual({ scope: scopesFor({ ...account, access: "write" }) });
 });
 
-test("the CLI stores through the daemon with the agent token, naming the card's settings, and tolerates a newer rotation", async () => {
-    const root = await mkdtemp(join(tmpdir(), "m365-vault-"));
-    const env = { INTENTIC_AGENT_TOKEN_PATH: join(root, "agent.token") };
-    await Bun.write(env.INTENTIC_AGENT_TOKEN_PATH, "agent-token\n");
-    try {
-        const { http, calls } = httpQueue([
-            { status: 200, body: { ok: true } },
-            { status: 409, body: {} },
-            { status: 409, body: {} },
-        ]);
-        await saveToVault(account, { env, http })("new", "initial", true);
-        const call = calls[0]!;
-        expect(call.url).toMatch(/\/capabilities\/office\/oauth-token$/);
-        expect(new Headers(call.init?.headers).get("x-intentic-agent")).toBe("agent-token");
-        expect(JSON.parse(String(call.init?.body))).toEqual({ binding: bindingOf(account), previous: "initial", refreshToken: "new", login: true });
-        await saveToVault(account, { env, http })("newer", "initial");
-        await expect(saveToVault(account, { env, http })("again", "initial", true)).rejects.toThrow("did not store");
-    } finally {
-        await rm(root, { recursive: true, force: true });
-    }
-});
-
 test("read only asks for read permissions, clouds are pinned, and cards come from the per-instance env", () => {
     const read = { ...account, access: "read" };
     expect(scopesFor(read)).toBe(
@@ -213,6 +169,12 @@ test("read only asks for read permissions, clouds are pinned, and cards come fro
     expect(() => cloudOf({ ...account, tenantId: "a/b" })).toThrow("tenant");
     const env = { M365_TENANT_ID_OFFICE_MAIL: "tenant", M365_CLIENT_ID_OFFICE_MAIL: "client", M365_TENANT_ID_HOME: "t2", M365_CLIENT_ID_HOME: "c2" };
     expect(selectAccount(accountsFrom(env), "office-mail").id).toBe("office_mail");
+    // A sign-in some older environment still carried is not read: it belongs to the backend alone.
+    const stale = accountsFrom({ ...env, M365_REFRESH_TOKEN_HOME: "refresh", M365_CLIENT_SECRET_HOME: "secret" });
+    expect(stale.map((card) => [card.refreshToken, card.clientSecret])).toEqual([
+        [undefined, undefined],
+        [undefined, undefined],
+    ]);
     expect(() => selectAccount(accountsFrom(env))).toThrow("--account");
     expect(() => selectAccount([])).toThrow("add the Microsoft 365 card");
 });

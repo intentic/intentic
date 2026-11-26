@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { packageRoot } from "@intentic/constants/node";
+import { BUILT_IN_WATCH_KINDS } from "@intentic/sandbox-contract/schemas/automations";
 import { CapabilityConnectableSchema, type NeedRaised, NeedRaiseSchema, NeedsListSchema, NeedSchema } from "@intentic/sandbox-contract/schemas/needs";
 import {
     type CredentialGate,
@@ -655,8 +656,18 @@ describe("the asking commands speak the needs contract", () => {
     });
 });
 
+// The catalogue as a sandbox serves it, its watch kinds the connectors extension's (2026-11-26): what `--watch` is checked
+// against before anything is asked, and what a listing names a source by.
+const CATALOG = { sources: [], templates: [], watchKinds: BUILT_IN_WATCH_KINDS };
+const withKinds =
+    (inner: Daemon["answer"]): Daemon["answer"] =>
+    (seen) =>
+        `${seen.method} ${seen.path}` === declared(["automations", "catalog"], undefined) ? { status: 200, body: CATALOG } : inner(seen);
+
 describe("the automations command speaks the automations and needs contracts", () => {
     let server: Daemon;
+    // What the command asked beyond reading the catalogue.
+    const asked = () => server.seen.filter((seen) => seen.method !== "GET");
     beforeAll(async () => {
         server = await daemon();
     });
@@ -668,12 +679,16 @@ describe("the automations command speaks the automations and needs contracts", (
     });
 
     it("propose sends one automation ask: the source, a schedule off the hour, this conversation as its target", async () => {
-        server.answer = raised({ state: "open", message: "Asked a person: Run an automation unattended: Bun 1.4.3 is published.", need: OPEN_NEED });
+        server.answer = withKinds(raised({ state: "open", message: "Asked a person: Run an automation unattended: Bun 1.4.3 is published.", need: OPEN_NEED }));
         const result = await run(server.port, "automations", [
             "propose",
             "bun-1-4-3",
-            "--npm",
-            "bun@>=1.4.3",
+            "--watch",
+            "npm",
+            "--with",
+            "package=bun",
+            "--with",
+            "range=>=1.4.3",
             "--until",
             "first-fire",
             "--note",
@@ -684,7 +699,7 @@ describe("the automations command speaks the automations and needs contracts", (
             "bun check ships in 1.4.3",
         ]);
         expect(result.code).toBe(3);
-        const body = NeedRaiseSchema.parse(server.seen[0]?.body);
+        const body = NeedRaiseSchema.parse(asked()[0]?.body);
         expect(body.why).toBe("bun check ships in 1.4.3");
         const ask = body.ask;
         if (ask.kind !== "automation") {
@@ -705,13 +720,17 @@ describe("the automations command speaks the automations and needs contracts", (
         expect(ask.automation.models).toBeUndefined();
     });
 
-    it("a dist-tag is a tag, a GitHub source carries its repo, and a new agent needs a model", async () => {
-        server.answer = raised({ state: "open", message: "Asked.", need: OPEN_NEED });
+    it("a kind's parameters are its declared fields, a switch named alone, and a new agent needs a model", async () => {
+        server.answer = withKinds(raised({ state: "open", message: "Asked.", need: OPEN_NEED }));
         await run(server.port, "automations", [
             "propose",
             "bun-canary",
-            "--npm",
-            "bun@canary",
+            "--watch",
+            "npm",
+            "--with",
+            "package=bun",
+            "--with",
+            "tag=canary",
             "--fire-on",
             "change",
             "--target",
@@ -722,8 +741,12 @@ describe("the automations command speaks the automations and needs contracts", (
         await run(server.port, "automations", [
             "propose",
             "bun-releases",
-            "--github",
-            "oven-sh/bun",
+            "--watch",
+            "github-release",
+            "--with",
+            "repo=oven-sh/bun",
+            "--with",
+            "prereleases",
             "--every",
             "1d",
             "--target",
@@ -733,19 +756,41 @@ describe("the automations command speaks the automations and needs contracts", (
             "--prompt",
             "Summarise it.",
         ]);
-        const asks = server.seen.map((seen) => NeedRaiseSchema.parse(seen.body).ask);
+        const asks = asked().map((seen) => NeedRaiseSchema.parse(seen.body).ask);
         expect(asks.map((ask) => (ask.kind === "automation" ? ask.automation.source : undefined))).toEqual([
             { kind: "npm", package: "bun", tag: "canary" },
-            { kind: "github-release", repo: "oven-sh/bun" },
+            { kind: "github-release", repo: "oven-sh/bun", prereleases: true },
         ]);
         expect(asks.map((ask) => (ask.kind === "automation" ? ask.automation.target : undefined))).toEqual([{ kind: "notify" }, { kind: "agent" }]);
         expect(asks[1]?.kind === "automation" ? asks[1].automation.models : undefined).toEqual([
             { provider: "claude", model: "claude-sonnet-4-6", effort: "low" },
         ]);
 
-        const modelless = await run(server.port, "automations", ["propose", "x", "--github", "a/b", "--target", "new", "--prompt", "p"]);
+        const modelless = await run(server.port, "automations", ["propose", "x", "--watch", "github-release", "--with", "repo=a/b", "--target", "new", "--prompt", "p"]);
         expect(modelless.code).toBe(2);
         expect(modelless.stdout).toContain("needs at least one --model");
+    });
+
+    it("a kind's fields are held before anything is asked, and the retired spellings say what replaced them", async () => {
+        server.answer = withKinds(raised({ state: "open", message: "Asked.", need: OPEN_NEED }));
+        const propose = (...source: string[]) => run(server.port, "automations", ["propose", "x", ...source, "--prompt", "p"]);
+        expect((await propose("--watch", "github-release", "--with", "repo=bun")).stdout).toContain("Repository must look like owner/name");
+        expect((await propose("--watch", "npm", "--with", "version=1")).stdout).toContain("a npm watch has no version: it takes package, range, tag");
+        expect((await propose("--watch", "npm")).stdout).toContain("a npm watch needs --with package=<package>");
+        expect((await propose("--watch", "pypi", "--with", "package=x")).stdout).toContain("no extension here checks pypi watches: the kinds here are npm, github-release");
+        expect((await propose("--npm", "bun@>=1.4.3")).stdout).toContain("--npm is now --watch npm --with package=<name>");
+        expect((await propose("--github", "oven-sh/bun")).stdout).toContain("--github is now --watch github-release --with repo=<owner/name>");
+        expect(asked()).toEqual([]);
+    });
+
+    it("kinds lists every watch kind from the catalogue, with what --watch and --with take", async () => {
+        server.answer = withKinds(() => ({ status: 404, body: {} }));
+        const result = await run(server.port, "automations", ["kinds"]);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain("github-release — GitHub release, from intentic.connectors");
+        expect(result.stdout).toContain("--with repo=<oven-sh/bun>  Repository (required)");
+        expect(result.stdout).toContain("--with prereleases  Prereleases too");
+        expect(result.stdout).toContain("--watch npm");
     });
 
     it("propose --on asks for a listener that starts a new agent, its senders wearing the role it names", async () => {
@@ -792,12 +837,13 @@ describe("the automations command speaks the automations and needs contracts", (
         expect(modelless).toMatchObject({ code: 2 });
         expect(modelless.stdout).toContain("needs at least one --model");
         const scheduled = await run(server.port, "automations", ["propose", "x", "--on", "google", "--every", "1h", "--model", "a/b", "--prompt", "p"]);
-        expect(scheduled.stdout).toContain("takes no --npm, --github, --url, --every or --cron");
+        expect(scheduled.stdout).toContain("takes no --watch, --url, --every or --cron");
         const continuing = await run(server.port, "automations", ["propose", "x", "--on", "google", "--target", "here", "--model", "a/b", "--prompt", "p"]);
         expect(continuing.stdout).toContain("can only start a new agent");
-        const stray = await run(server.port, "automations", ["propose", "x", "--npm", "bun", "--from", "a@b.c", "--prompt", "p"]);
+        server.answer = withKinds(() => ({ status: 404, body: {} }));
+        const stray = await run(server.port, "automations", ["propose", "x", "--watch", "npm", "--with", "package=bun", "--from", "a@b.c", "--prompt", "p"]);
         expect(stray.stdout).toContain("--from narrows a listener");
-        expect(server.seen).toEqual([]);
+        expect(asked()).toEqual([]);
     });
 
     it("sources lists each listener from the catalogue the contract declares, with the flags that narrow it", async () => {
@@ -831,17 +877,17 @@ describe("the automations command speaks the automations and needs contracts", (
     });
 
     it("check runs one source through the route the contract declares and exits by whether it passes", async () => {
-        server.answer = (seen) =>
+        server.answer = withKinds((seen) =>
             `${seen.method} ${seen.path}` === declared(["automations", "check"], seen.body)
                 ? { status: 200, body: { pass: false, saw: "no published version of bun satisfies >=1.4.3 yet (latest is 1.4.2)" } }
-                : { status: 404, body: { message: `nothing at ${seen.path}` } };
-        const result = await run(server.port, "automations", ["check", "--npm", "bun@>=1.4.3"]);
+                : { status: 404, body: { message: `nothing at ${seen.path}` } });
+        const result = await run(server.port, "automations", ["check", "--watch", "npm", "--with", "package=bun", "--with", "range=>=1.4.3"]);
         expect(result).toMatchObject({ code: 1, stdout: "does not pass: no published version of bun satisfies >=1.4.3 yet (latest is 1.4.2)\n" });
-        expect(server.seen[0]?.body).toEqual({ source: { kind: "npm", package: "bun", range: ">=1.4.3" } });
+        expect(asked()[0]?.body).toEqual({ source: { kind: "npm", package: "bun", range: ">=1.4.3" } });
     });
 
-    it("the listing says what each automation checks, where it goes and what it saw last", async () => {
-        server.answer = (seen) =>
+    it("the listing says what each automation checks, in its kind's own words, where it goes and what it saw last", async () => {
+        server.answer = withKinds((seen) =>
             seen.method === "GET" && seen.path === "/automations"
                 ? {
                       status: 200,
@@ -862,7 +908,7 @@ describe("the automations command speaks the automations and needs contracts", (
                           ],
                       },
                   }
-                : { status: 404, body: {} };
+                : { status: 404, body: {} });
         const result = await run(server.port, "automations", []);
         expect(result.code).toBe(0);
         expect(result.stdout).toContain("bun-1-4-3 [on] cron 17 */6 * * *");

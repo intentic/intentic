@@ -59,9 +59,9 @@ value import closing a cycle between two of them fails too (standing ones: `_too
 | --- | --- | --- |
 | foundation | storage, ports and primitives every other layer stands on; they know no subsystem | `store/` `seams/` `http/` `offload/` `netd/` `fences/` `speech/` `areas/` `workload/` `safety/` `tunnel/` `image/` `retry/` |
 | host | what the box itself offers: identity, secrets, files, git, processes, engines, the OS and its network | `auth/` `access/` `roles/` `secrets/` `guard/` `git/` `workspace/` `derived/` `hashline/` `engines/` `terminal/` `processes/` `privacy/` `environment/` `peers/` `push/` `ports/` `exit/` `vpn/` `netdisk/` `usage/` `logs/` `rules/` `endpoints/` `trial/` `system/` `activity/` `audit/` `org/` |
-| connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `webchat/` `issues/` `account-routing/` `definition/` |
+| connections | what the owner connected: capabilities, browsers, devices, extensions, channels and published files | `capabilities/` `browser/` `desktop/` `webext/` `phones/` `hosts/` `wallet/` `sandboxes/` `runners/` `scaffold/` `extensions/` `panels/` `public/` `share/` `account-routing/` `definition/` |
 | agent | the turn engine, its runtimes, conversations, transcripts and the code a turn runs | `agent/` `runtimes/` `conversations/` `sessions/` `execution/` |
-| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `chores/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
+| orchestration | what starts and steers turns on its own: automations, loops, workflows, CI repair, needs, settings, and what reconciles the connections hub | `automations/` `compliance/` `loops/` `workflows/` `ci/` `links/` `needs/` `approvals/` `settings/` `portability/` `migrations/` `history/` `retention/` `hub/` |
 | composition | boot wiring and whole-daemon self-checks, which import every layer and are imported by none | `bootstrap/` `invariants/` `harness/` |
 | (none) | in no layer: the boundary check places no module here | `e2e/` `evals/` |
 <!-- <<< end of generated layers.json -->
@@ -107,7 +107,7 @@ flowchart LR
 
 - It runs as the child of `intentic-netd` ([../netd](../netd)), which owns every port, the TLS certificate and
   the platform tunnel, and relays HTTP over a Unix socket. The daemon decides, netd binds.
-- AI literacy confirmations live per member and notice version in `/history/member-ai-literacy.json`; member confirmation and maintainer listing use the settings routes. Visitor chat public config includes the AI disclosure flag and optional wording.
+- AI literacy confirmations live per member and notice version in `/history/member-ai-literacy.json`; member confirmation and maintainer listing use the settings routes. A Visitor chat's settings (the visitor-chat extension's) include the AI disclosure flag and optional wording.
 - Two roots: `/work` is what agents edit; `/history` is the daemon's own (git dirs, worktrees, the conversation
   database, snapshots, logs) and sits outside `/work`.
   It is not out of an agent's reach: an unfenced agent runs as root in the default agent domain and can write it.
@@ -167,6 +167,11 @@ flowchart LR
   chat's calls one after another. The door also rewrites the tool's description in the listing, since the extension's
   own describes one blocking call. A turn with no conversation has nobody to wake, so its call still waits for the
   picture; a restart mid-image ends the job as lost, and the image may still land on the shelf.
+- An extension's agent tools act within the turn calling them (`extensions/turn/tool-grants.ts`, `tool-turn-doors.ts`,
+  2026-11-26): the MCP door tells each call what the turn holds and mints it a ticket, which opens the turn's own
+  browser router for an account it holds, on that account's sites only (`turn-browser.ts`), the owner's browser it
+  holds through the webext door, and a background job on the same job files and lanes as the ChatGPT image's, its work
+  done in the extension's backend ([extensions.md](../../docs/architecture/extensions.md)).
 - The audit trail (`audit/`, `/history/audit/`): who changed a setting, a member, an area, a secret's gate or a policy,
   who signed in, what was exported or deleted, and with `settings.audit.recordReads` who opened what. One middleware
   records by contract route name (`audit/audit-http.ts`); another module calls `services.audit.record({ actor, action,
@@ -751,6 +756,42 @@ flowchart LR
   audit record (2026-10-15: until then a turn ran the extension's command, which could only read the agent-written
   item to decide whether it was approved). Agents still run as root, so this holds against a turn that cannot reach
   `/history` or the host process, not against one that tampers with them.
+- A post whose platform's card declares `channel.publish` (2026-11-26; the Discord bot's) goes the same way: once its
+  yes is spent, the executor hands it to that card's extension through the same door, to `api.approvals.publish`, when
+  its target matches the card's pattern and it attaches nothing (`approvals/post-channels.ts`). Every other post goes to
+  a turn, whose brief adds what each platform's card says about posting there (`channel.posting`). Until then the
+  daemon posted to Discord itself through the gateway (`approvals/direct-publish.ts`), from a table naming Discord.
+- An automation whose target is `{ kind: "extension" }` (2026-11-26) runs no model: after its admission, check and holds
+  it is handed to the handler the extension's backend registered, through the backend host's `POST /fires/<id>` door
+  (`extensions/backend/extension-fires.ts`), and only an automation that extension saved itself, for a handler its
+  manifest declares, reaches it (`automations/watch/extension-target.ts`). A fire its backend cannot take now is owed in
+  `/history/extension-fires-owed.json` and tried again with backoff, and at the next boot, until it is taken or a day
+  has passed; a later fire of the same automation replaces it and counts it.
+- Bug-report intake, grouping, the inbox and escalation are the issues extension's backend (2026-11-26; this daemon's
+  `issues/` until then): the reporter and the report door are its public routes (`/door/intentic.issues/…`), its wakes
+  go through its own `issues` listener, which declares `strangers: "report"`, and Investigate starts a turn as the
+  person who pressed it. The daemon keeps only account routing's half: a report another sandbox of the account sends is
+  admitted at `POST /account/report` and handed to that backend's `account-report` handler through the fires door above
+  (`account-routing/account.routes.ts`), or answered 503 for the sender's outbox to keep. The intake's old public paths,
+  out in customers' pages, are forwarded onto the extension's door with the key and proof the old SDK put in the body
+  moved to where the door reads them (`extensions/backend/moved-doors.routes.ts`).
+- The Visitor chat is the built-in visitor-chat extension (2026-11-26; this daemon's `webchat/` until then): the widget,
+  a chat's settings, the message with its answer streamed back and the poll for later answers are its public routes
+  (`/door/intentic.visitor-chat/…`), and a message wakes its automation through the extension's own `webchat` listener,
+  which declares `strangers: "visitor"`. A reply its visitor's stream did not carry (a held wake let, a person writing
+  as the agent) is delivered to that listener's gateway like any channel's, which keeps the visitor's outbox: the
+  listener outbox and "speak as the agent" know no provider by name. The daemon keeps one door for it,
+  `POST /listeners/<provider>/identity` (`extensions/listener/visitor-identity.ts`), which verifies a signed-in
+  stranger's Google ID token against the site's own client id and says whether the address is the owner's or a
+  member's, for a listener strangers reach, so the roster never reaches an extension. The `/webchat/…` paths, in every
+  pasted snippet, are forwarded onto the extension's door, a proof of work the old widget put in the body moved to
+  where the door reads it (`extensions/backend/moved-doors.routes.ts`).
+- A watch's source of a kind an extension declares (`contributes.watchKinds`, 2026-11-26; the connectors extension's
+  `npm` and `github-release`) is checked by that extension's backend through the backend host's `POST /checks/<id>`
+  door (`automations/watch/contributed-check.ts`), handed its parameters, what the last pass saw and the gateway
+  addresses of the extension's own cards the kind names, narrowed by the automation's role. A page (`url`) is checked
+  here (`automations/watch/watch-sources.ts`). A kind whose extension is off records an error run naming it, every check,
+  until it is back; a backend that is down is a check that did not pass this time.
 - A plugin connection is pinned like an extension: its install resolves the branch or tag it names to a full commit,
   stored as `commit` (`CapabilityHandler.installed`), and re-applying the stored entry checks that commit out again.
   Adding it anew is the update.
@@ -1063,8 +1104,10 @@ flowchart LR
   `autoUpdate` says where it stands, and the `update` runtime domain tells every page when that moves.
 - Whether the sandbox is busy is one answer asked for a purpose (`bootstrap/working-now.ts`, 2026-10-05). A restart (the
   automatic update, a device rebuild asked to wait, the host's keeper reading `/run/intentic/work.json`'s `liveTurns`)
-  waits for turns, lands, running subagents and workflow steps; idle-stop waits for those and for parked subagents and
-  armed watches, which only this daemon's clock moves on. The device rebuild used to wait for turns alone.
+  waits for turns, lands, running subagents, workflow steps and the work an extension holds in flight (`api.work.hold`,
+  `extensions/runtime/extension-holds.ts`, for as long as its request stays open); idle-stop waits for those and for
+  parked subagents and armed watches, which only this daemon's clock moves on. The device rebuild used to wait for turns
+  alone.
 - Sleep keeps every promised clock in `bootstrap/promised-wakes.ts`: cron and one-time automations, scheduled
   messages, held countdowns and approved actions. On a hosted machine (`system/sleep/idle-stop.ts`):
   - A promise due within seven minutes (the platform's two-minute lead and five minutes asleep) keeps it awake. Before a
@@ -1101,9 +1144,9 @@ flowchart LR
   anchor, the sign-in Chromium, the extension backend host, and every command run to a deadline; `seams/workload-stamp.ts`). The boot ends a
   stamped process of an older run outside tmux unless it is meant to survive (X displays, openbox, VPN and exit
   clients, dockerd, model servers; `system/boot/generation-sweep.ts`), and the reaper's minute sweep ends a command past
-  its deadline. A command the daemon waits on (an automation's guard, a loop's stop check, a chore probe, a watch check,
-  an edit rule, a turn's JS run, a Python check) runs through `workload/run-check.ts`: its own process group, ended whole
-  (SIGTERM, then SIGKILL) at its deadline or an abort, in a workload class, its output capped; `process-tiers` in
+  its deadline. A command the daemon waits on (an automation's guard, a loop's stop check, an extension's `api.exec`, a
+  watch check, an edit rule, a turn's JS run, a Python check) runs through `workload/run-check.ts`: its own process
+  group, ended whole (SIGTERM, then SIGKILL) at its deadline or an abort, in a workload class, its output capped; `process-tiers` in
   `_tools/checks` ratchets the hand-rolled rest. Pi turns are stamped with their conversation, a `one-shot` helper is live while its
   parent is, a forced reap's SIGKILL follows even after a discard forgot the conversation, an armed watch no longer
   shields a finished turn's processes, and a tmux session an agent made by hand goes with its conversation
@@ -1133,8 +1176,7 @@ flowchart LR
   repository without a branch destination before writing anything; those changes stay in its worktree. Work lands
   uncommitted in the branch checkout, where the owner stages and commits it through Changes.
 - Review Git evidence is reused for matching checkout generations and placement/landing metadata, for at most ten
-  seconds and a bounded set of conversations. Ignored outputs and files outside checkouts are read fresh. Chore
-  evidence has the same ten-second generation bound, and each fresh pass shares one workspace-manifest reading.
+  seconds and a bounded set of conversations. Ignored outputs and files outside checkouts are read fresh.
   Missing change-feed coverage falls back to fresh readings. Landing expiry retains only the paths a landing can
   claim, with repository-wide head touches shared once; a path touched and then reverted stays expired.
 - A job an agent kept running for the person survives a restart and never expires (`agent/tools/jobs/background-jobs.ts`
@@ -1182,7 +1224,7 @@ flowchart LR
   restart's re-fire runs on the role the sender was given and settles the same thread.
 - Every automation fire runs inside the automation's own `allowedTools`, whichever door it came through (2026-10-12):
   `runFire` reads it off the record, so schedules, webhooks, channel listeners, approved holds and restart re-fires
-  are bound the same as the Visitor chat and bug intake. The list is a boundary, not a permission hint: on the Claude
+  are bound the same as the visitor-chat and issues extensions' listeners. The list is a boundary, not a permission hint: on the Claude
   Code loop a PreToolUse hook refuses every call off it (`agent/tools/tool-allowlist.ts`), on Codex its per-thread
   PreToolUse hook does the same through the door's policy gate (`runtimes/codex/codex-hooks.ts`), and a runtime with no
   check before every call (`toolAllowlist: false`: OpenCode, Cursor, ACP agents, Pi) never runs a turn that carries

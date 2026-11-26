@@ -1,8 +1,8 @@
 import { escapeHtml } from "@intentic/base/escape";
 import { FetchJsonError, fetchJson } from "@intentic/base/fetch-json";
 
-// The zod-free half of an embed's wire and look, shared by the two embeds (webchat-widget, issue-sdk) and the daemon's
-// doors behind them. Nothing imported but base's dependency-free subpaths: this bundles into someone else's page, and
+// The zod-free half of an embed's wire and look, shared by the two embeds (webchat-widget, issue-sdk) and the doors
+// behind them (since 2026-11-26 their extensions' public routes, the visitor-chat and issues extensions'). Nothing imported but base's dependency-free subpaths: this bundles into someone else's page, and
 // the contract's barrel would drag in zod (measured at 1.1 MB for two strings).
 
 // Where an embed talks to: the daemon it came from, and the automation it is the public face of.

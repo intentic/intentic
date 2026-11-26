@@ -41,15 +41,17 @@ something happens out in the world that may take longer (a package version ships
 changes), propose a durable watch:
 
 ```
-automations propose <id> --npm bun@'>=1.4.3' --until first-fire --note "…" --prompt "…" --why "…"
+automations propose <id> --watch npm --with package=bun --with 'range=>=1.4.3' --until first-fire --note "…" --prompt "…" --why "…"
 ```
 
-(or `--github owner/repo`, `--url … [--select <regex>]`, `--guard '<cmd>'`). Its check runs without a model every few
+(or `--watch github-release --with repo=owner/repo`, `--url … [--select <regex>]`, `--guard '<cmd>'`). `--watch` names a
+watch kind an installed extension checks, and `automations kinds` lists them with the `--with` parameters each takes;
+a page (`--url`) is the sandbox's own. Its check runs without a model every few
 hours (`--every`, 6h unless changed; or `--cron`), and only when it passes does anything wake: this conversation by
 default (`--target here`), only a push (`--target notify`), or a new agent (`--target new --model …`). `--fire-on
 change` fires only when what it sees moves; `--expires 30d` gives up and says so; `--as <role>` names the role its
 wakes act as: a card's id, `full-access` or `no-accounts` (the default, which keeps connector credentials such as a
-connected Gmail but reaches no signed-in site account). `automations check --npm …` shows what a source sees today; `automations` lists what runs, and
+connected Gmail but reaches no signed-in site account). `automations check --watch … --with …` (or `--url …`) shows what a source sees today; `automations` lists what runs, and
 `automations show <id>` one of them with its recent runs.
 
 ## Workflows

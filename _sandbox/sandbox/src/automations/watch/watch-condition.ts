@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { WatchState } from "@intentic/sandbox-contract/schemas/automations";
 import { classifyCommand } from "@intentic/sandbox-contract/policy/command-classes";
-import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
+import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/policy/shell/workspace-root-exclude";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { oneLine } from "@intentic/base/one-line";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
@@ -10,11 +10,14 @@ import type { Services } from "../../composition.js";
 import { statePath } from "../../state-paths.js";
 import { runCheck, shellArgv } from "../../workload/run-check.js";
 import { type AutomationRecord, sawSame, WATCH_VALUE_MAX, watchDigest } from "../automations-store.js";
+import { watchSourceSentence } from "@intentic/sandbox-contract/schemas/automations";
+import { opt } from "../../opt.js";
+import { checkWatchSource } from "./contributed-check.js";
 import { guardCapabilityEnv } from "./guard-env.js";
-import { checkSource, sourceLabel } from "./watch-sources.js";
+import { catalogWatchKinds } from "./watch-kinds.js";
 
 // The check in front of every automation that has one, and the only part of a watch that runs while nothing has
-// happened: a guard command or a ready-made source (watch-sources.ts), never a model. It decides whether this fire
+// happened: a guard command or a ready-made source (contributed-check.ts), never a model. It decides whether this fire
 // goes ahead, remembers what it saw (automations-store.ts recordWatch), and words what it saw for whoever is woken, so
 // "Bun 1.4.3 is out" arrives as that sentence rather than as a bare "your guard passed".
 
@@ -35,16 +38,17 @@ const DIFF_LINES = 60;
 const GUARD_FETCH = "automation-guard-fetch";
 
 // What a check came to. `go`: fire, with what it saw worded for the wake (absent when it saw nothing worth saying).
-// `skip`: record a skipped run saying why. `quiet`: nothing moved since last time, which a frequent watch would
-// otherwise write into its history every few minutes.
+// `skip`: record a skipped run saying why, or an errored one when the check could not run as things stand (`broken`: its
+// kind's extension is off or gone). `quiet`: nothing moved since last time, which a frequent watch would otherwise write
+// into its history every few minutes.
 export type ConditionVerdict =
     | { readonly kind: "go"; readonly observed?: string; readonly outside?: string; readonly value?: string; readonly commit?: () => Promise<void> }
-    | { readonly kind: "skip"; readonly detail: string }
+    | { readonly kind: "skip"; readonly detail: string; readonly broken?: true }
     | { readonly kind: "quiet"; readonly detail: string };
 
-// What the check is, in a line: the source's own label, or the guard command itself.
-export const conditionLabel = (automation: Pick<AutomationRecord, "source" | "guard">): string | undefined =>
-    automation.source !== undefined ? sourceLabel(automation.source) : automation.guard;
+// What the check is, in a line: the source in its kind's own words, or the guard command itself.
+export const conditionLabel = async (services: Services, automation: Pick<AutomationRecord, "source" | "guard">): Promise<string | undefined> =>
+    automation.source !== undefined ? watchSourceSentence(automation.source, await catalogWatchKinds(services)) : automation.guard;
 
 // The file a guard may keep between runs; the daemon makes its directory and never reads it.
 export const guardStateFile = (root: string, id: string): string => statePath(root, ".intentic/records/automation-state/", id);
@@ -75,23 +79,7 @@ const guardEnv = async (services: Services, automation: AutomationRecord, payloa
     };
 };
 
-// What a ready-made source reads its way in from: the daemon's environment with the same connector credentials a guard of
-// this automation would get, so a connected GitHub card answers for a releases check (watch-sources.ts githubApi).
-export const sourceEnv = async (
-    services: Services,
-    automation: Pick<AutomationRecord, "id" | "actsAs" | "runAs">,
-): Promise<Record<string, string | undefined>> => ({
-    ...process.env,
-    ...(await guardCapabilityEnv(services, automation).catch((error: unknown) => {
-        services.logger.warn(
-            { err: error, automation: automation.id },
-            "automation source: connector credentials could not be resolved, it checks without them",
-        );
-        return {};
-    })),
-});
-
-type Checked = { readonly pass: true; readonly output: string } | { readonly pass: false; readonly detail: string };
+type Checked = { readonly pass: true; readonly output: string } | { readonly pass: false; readonly detail: string; readonly broken?: true };
 
 // Exit 0 passes, with what it printed on stdout; anything else is what it is still waiting for, in its own words.
 const runGuard = async (services: Services, automation: AutomationRecord, command: string, payload: string | undefined): Promise<Checked> => {
@@ -191,23 +179,26 @@ export const rememberFiredCondition = async (services: Services, automation: Aut
     }));
 };
 
+// The source's check, or the guard command's, run once.
+const runCondition = async (services: Services, automation: AutomationRecord, payload: string | undefined): Promise<Checked> =>
+    automation.source !== undefined
+        ? await checkWatchSource(services, automation.source, { automation, last: automation.watch?.value })
+        : await runGuard(services, automation, automation.guard as string, payload);
+
 // Runs the automation's check, if it has one, and decides. An automation with neither a guard nor a source goes ahead
 // with nothing to say, exactly as before watches existed.
 export const checkCondition = async (services: Services, automation: AutomationRecord, payload: string | undefined): Promise<ConditionVerdict> => {
     if (automation.source === undefined && automation.guard === undefined) {
         return { kind: "go" };
     }
-    const checked: Checked =
-        automation.source !== undefined
-            ? await checkSource(automation.source, { fetch: (url, init) => fetch(url, init), env: await sourceEnv(services, automation) })
-            : await runGuard(services, automation, automation.guard as string, payload);
+    const checked = await runCondition(services, automation, payload);
     const now = Date.now();
     // Read fresh rather than off the record the tick handed over: two fires of a busy automation queue behind one
     // another, and the second must compare against what the first just saw.
     const previous = (await services.automations.get(automation.id))?.watch;
     if (!checked.pass) {
         await remember(services, automation.id, now, () => ({ waiting: failureGist(checked.detail) || "the check did not pass" }));
-        return { kind: "skip", detail: checked.detail };
+        return { kind: "skip", detail: checked.detail, ...opt("broken", checked.broken) };
     }
     const value = checked.output;
     const outside = conditionOutside(automation);

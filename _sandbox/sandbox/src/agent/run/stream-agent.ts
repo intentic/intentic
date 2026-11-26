@@ -13,7 +13,7 @@ import type { SnapshotTurn } from "@intentic/sandbox-contract/schemas/history";
 import type { TranscriptRow, TurnNote } from "@intentic/sandbox-contract/events/transcript";
 import type { FreshStart, HandedOff, HandoffOffer } from "@intentic/sandbox-contract/schemas/providers/handoff";
 import type { Logger } from "pino";
-import { createOutboundSniffer } from "../../activity/outbound.js";
+import { createOutboundSniffer, sniffedCommands } from "../../activity/outbound.js";
 import { turnCliEnv } from "./harness/turn-env.js";
 import type { Services } from "../../composition.js";
 import { REPO_SYNC_NOTE_TITLE, type RepoSync, syncAdvisory, syncWorkspaceRepos } from "../../workspace/layout/sync-repos.js";
@@ -955,8 +955,8 @@ async function* runPreparedTurn(
     // This turn's identity in the activity log, minted here so its events join as one row.
     const turnId = randomUUID();
     const run = input.conversationId === undefined ? undefined : liveRunOf(services.conversations, input.conversationId);
-    // Tees every frame past the activity sniffer: outbound provider calls are only visible here.
-    const sniffer = createOutboundSniffer(services, turnId);
+    // Tees every frame past the activity sniffer: an extension's outward command (`whatsapp send`) is only visible here.
+    const sniffer = createOutboundSniffer(services, turnId, await sniffedCommands(services));
     const record = turnActivity(services, { input, provider, turnId, attribution, sessionId: () => frames.readings().sessionId });
     const state: TurnState = {
         input,

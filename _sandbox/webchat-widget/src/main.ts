@@ -7,8 +7,9 @@ import { fetchConfig } from "./transport.js";
 
 const TAG = "intentic-visitor-chat";
 
-// Read at module scope, while this script's body is still executing.
-const ownScript = embedScript("/webchat/widget.js");
+// Read at module scope, while this script's body is still executing: the extension's door, or the path a snippet
+// pasted before 2026-11-26 names, which the sandbox forwards there.
+const ownScript = embedScript("/visitor-chat/widget.js") ?? embedScript("/webchat/widget.js");
 
 const boot = async (script: HTMLScriptElement): Promise<void> => {
     const endpoint = embedEndpointOf(script);

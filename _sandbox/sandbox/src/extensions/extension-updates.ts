@@ -15,7 +15,7 @@ import {
     ExtensionUpdateSchema,
 } from "@intentic/sandbox-contract/schemas/extension-updates";
 import type { ExtensionConfig } from "@intentic/sandbox-contract/schemas/git-installs";
-import { updateBrief } from "@intentic/sandbox-contract/chores";
+import { updateBrief } from "@intentic/sandbox-contract/briefs/extension-update-brief";
 import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { extensionDir, extensionRootOf, extensionsRoot, parseExtensionManifest, readExtensionManifest, extensionProcessKey } from "../capabilities/extension-dirs.js";

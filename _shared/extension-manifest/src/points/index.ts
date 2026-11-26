@@ -9,29 +9,37 @@ import { documentsPoint } from "./documents.js";
 import { environmentPoint } from "./environment.js";
 import { filesPoint } from "./files.js";
 import { listenerPoint } from "./listener.js";
+import { modelRolesPoint } from "./model-roles.js";
 import { processesPoint } from "./processes.js";
+import { publicRoutesPoint } from "./public-routes.js";
 import { settingsPoint } from "./settings.js";
 import { sideViewsPoint } from "./side-views.js";
 import { toolsPoint } from "./tools.js";
 import { viewersPoint } from "./viewers.js";
 import { viewsPoint } from "./views.js";
+import { watchKindsPoint } from "./watch-kinds.js";
 
 export * from "./agent.js";
 export * from "./automation-templates.js";
 export * from "./bin.js";
 export * from "./capabilities.js";
+export * from "./capability-broker.js";
 export * from "./capability-field-shapes.js";
+export * from "./channel-facts.js";
 export * from "./commands.js";
 export * from "./documents.js";
 export * from "./environment.js";
 export * from "./files.js";
 export * from "./listener.js";
+export * from "./model-roles.js";
 export * from "./processes.js";
+export * from "./public-routes.js";
 export * from "./settings.js";
 export * from "./side-views.js";
 export * from "./tools.js";
 export * from "./viewers.js";
 export * from "./views.js";
+export * from "./watch-kinds.js";
 
 // Everything a manifest may declare. `contributes` (manifest.ts), the authoring schema (json-schema.ts) and the SDK's
 // surface guard are all generated from this list, so the three can't disagree about what this build supports. Adding a
@@ -50,8 +58,11 @@ export const CONTRIBUTION_POINTS = [
     capabilitiesPoint,
     listenerPoint,
     automationTemplatesPoint,
+    watchKindsPoint,
+    modelRolesPoint,
     binPoint,
     toolsPoint,
+    publicRoutesPoint,
 ] as const satisfies readonly ContributionPoint[];
 
 // The `contributes` shape those points assemble to. A mapped type rather than a widened record, so

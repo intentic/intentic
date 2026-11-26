@@ -6,11 +6,11 @@
         "codeChores": "Code chores",
         "copyWebhookUrl": "Copy webhook URL for {id}",
         "done": "Done",
-        "visitorChatCreatedDrop": "Visitor chat created: drop this into your site:",
         "integrations": "Integrations",
         "onAnyPageListed": "on any page you listed above. The launcher appears in the corner; visitor conversations show up on your agents board, where you can watch and take over.",
         "pasteBefore": "Paste it before",
-        "copyEmbedSnippet": "Copy the embed snippet for {id}"
+        "showEmbedCode": "Show the embed code",
+        "visitorChatCreatedDrop": "Visitor chat created: drop this into your site:"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "About a second of each visitor's browser time. No keys.",
@@ -160,28 +160,13 @@
         "whatHasToBeTrue": "What has to be true first. No model runs to check it.",
         "conditionNone": "Always",
         "conditionGuard": "Command",
-        "conditionNpm": "npm package",
-        "conditionGithub": "GitHub release",
         "conditionUrl": "Web page",
         "conditionCaption": {
             "none": "Nothing is checked: every fire goes ahead.",
             "guard": "A shell command run in the workspace first. Exit 0 goes ahead, and what it prints goes with the wake; anything else is recorded as skipped. $AUTOMATION_STATE names a file it may keep between runs, and $AUTOMATION_LAST holds what it printed when it last passed.",
-            "npm": "A package on the npm registry, checked by the sandbox itself: no shell, no token.",
-            "github": "The newest release of a public GitHub repository, checked by the sandbox itself.",
             "url": "One web page's text, or the part of it a pattern picks out."
         },
         "guardCommand": "Command that decides whether it goes ahead",
-        "waitForVersion": "Wait for a version",
-        "followTag": "Follow a tag",
-        "package": "Package",
-        "versionRange": "Version range",
-        "distTag": "Tag",
-        "npmCaption": {
-            "range": "Passes once a published version satisfies the range; what it sees is that version.",
-            "tag": "Sees the version under this tag, latest when blank. Pair it with “only a change” to hear about each new one."
-        },
-        "repository": "Repository",
-        "prereleasesToo": "Count prereleases too",
         "page": "Page",
         "onlyWhatMatches": "Only what matches (optional)",
         "pageCaption": "Blank watches the page's whole text. A regular expression narrows it to what it matches, its first group if it has one.",
@@ -204,7 +189,8 @@
         "targetCaption": {
             "agent": "A new agent starts with the prompt below and what the check saw.",
             "conversation": "The conversation picks up where it stopped, told what the check saw and the prompt below. It runs on its own model.",
-            "notify": "No model runs: your devices get a notification with what the check saw, or the words below when it saw nothing."
+            "notify": "No model runs: your devices get a notification with what the check saw, or the words below when it saw nothing.",
+            "extension": "No model runs: the extension's own code is woken through the handler it registered. Only that extension points an automation at itself."
         },
         "pickConversation": "Pick a conversation",
         "conversationToContinue": "Conversation to continue",
@@ -213,11 +199,12 @@
         "whatNotificationSays": "What the notification says.",
         "notifyPlaceholder": "The page you were watching changed.",
         "guardPlaceholder": "test -n \"$(git status --porcelain)\"",
-        "tagPlaceholder": "latest",
         "aiDisclosure": "Tell visitors replies come from AI",
         "aiDisclosureText": "Custom disclosure (optional)",
         "aiDisclosureDefault": "Replies are written by an AI assistant and may contain mistakes.",
-        "roleGoneHint": "That role no longer exists, so its wakes would run with no tools and no accounts. Pick another."
+        "roleGoneHint": "That role no longer exists, so its wakes would run with no tools and no accounts. Pick another.",
+        "whatExtensionIsHanded": "What the extension's handler is handed",
+        "kindOff": "{extension}, which checks these watches, is switched off: this watch fails on every check until it is back on."
     },
     "automationRow": {
         "alreadyFired": "Already fired",
@@ -299,7 +286,8 @@
         "roleMissing": "Role gone",
         "roleMissingNote": "{ids} no longer exists, so its wakes run with no tools and no accounts. Pick another role.",
         "noAccounts": "No accounts",
-        "noAccountsNote": "Its wakes reach none of your signed-in accounts. Pick All accounts or a role if it has to post or browse as you."
+        "noAccountsNote": "Its wakes reach none of your signed-in accounts. Pick All accounts or a role if it has to post or browse as you.",
+        "wakesExtension": "Wakes {extension} ({handler})"
     },
     "automationsView": {
         "addAutomation": "Add an automation",
@@ -326,7 +314,8 @@
         "readingAutomations": "Reading your automations…",
         "runHistoryCantUndone": "and its run history? This can't be undone.",
         "showAll": "Show all {count}",
-        "takeOneOffersBelow": "Take one of the offers below, or build your own with"
+        "takeOneOffersBelow": "Take one of the offers below, or build your own with",
+        "visitorChatOff": "The Visitor chat extension is not on in this sandbox, so its embed code cannot be shown. Switch it on under Extensions."
     },
     "catalog": {
         "allChannels": "all channels",
@@ -341,22 +330,6 @@
     },
     "extension": {
         "automations": "Automations"
-    },
-    "visitorChatInstallDialog": {
-        "allow": "Allow",
-        "allowToLoadChat": "Allow {origin} to load this chat",
-        "allowedSites": "Allowed sites",
-        "askedTurnedAway": "asked and was turned away · {lastSeenAt}",
-        "checking": "Checking…",
-        "copyEmbedSnippet": "Copy the embed snippet for {id}",
-        "couldntAddSite": "Could not add that site.",
-        "done": "Done",
-        "install": "Install",
-        "loadCount": "{count} load | {count} loads",
-        "loaded": "Has it loaded?",
-        "noBrowserLoadedWidget": "No browser has loaded this widget yet. Paste the snippet, open your site, and this updates on its own within a few seconds.",
-        "noSitesAllowed": "No sites are allowed yet, so every visitor is turned away. Add one below or edit the automation.",
-        "pasteIntoSiteBefore": "Paste this into your site, before"
     },
     "useCiDelivery": {
         "allPolled": "Webhooks aren't set up, so pipelines are polled instead: this fires within {minutes} minutes rather than instantly.",
@@ -385,14 +358,12 @@
         "pickModel": "Pick at least one model: an automation runs while nobody is watching, so nothing is chosen for it.",
         "promptRequired": "Prompt is required.",
         "guardRequired": "Write the command, or pick another condition.",
-        "packageRequired": "Name the package, like bun or {'@'}scope/name.",
-        "rangeRequired": "Name a version range, like >=1.4.3, or follow a tag instead.",
-        "repoFormat": "Name the repository as owner/name, like oven-sh/bun.",
         "pageUrl": "Give the page's full address, starting with http:// or https://.",
         "selectInvalid": "That pattern does not compile: {problem}",
         "pickEndDate": "Pick the end date and time, or clear it.",
         "endPassed": "That end date has already passed.",
-        "pickConversation": "Pick the conversation to continue."
+        "pickConversation": "Pick the conversation to continue.",
+        "kindUnknown": "No extension here checks {kind} watches any more: install or switch on the one that does, or pick another condition."
     },
     "cronSchedule": {
         "afterSessions": "{label} · after {count} sessions | {label} · after {count} sessions",
@@ -450,9 +421,6 @@
         }
     },
     "watch": {
-        "npm": "npm {spec}",
-        "releases": "Releases of {repo}",
-        "releasesWithPre": "Releases of {repo}, prereleases too",
         "pageMatching": "{url}, matching {select}",
         "checked": "Checked {when}",
         "notChecked": "Not checked yet",

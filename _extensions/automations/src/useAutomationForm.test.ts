@@ -607,33 +607,38 @@ describe(`the condition`, () => {
         expect(built.fireOn).toBe(`change`);
     });
 
-    it(`writes an npm range, or a tag, never both`, () => {
+    // (2026-11-26) A contributed kind's boxes come from its declaration (here the contract's record of npm and GitHub
+    // releases, which the connectors extension declares), and are held to its fields by the rule saving applies.
+    it(`writes a contributed kind's parameters as its declared fields name them, held to them`, () => {
         const { form, build, conditionError, watchSource } = filled();
         form.condition = `npm`;
-        expect(conditionError.value).toMatch(/Name the package/);
+        expect(conditionError.value).toBe(`Package is required`);
         expect(watchSource.value).toBeUndefined();
-        form.npmPackage = `bun`;
-        expect(conditionError.value).toMatch(/version range/);
-        form.npmRange = `>=1.4.3`;
-        form.npmTag = `canary`;
+        form.watchParams[`npm`] = { package: `  bun `, range: `>=1.4.3`, tag: `` };
+        expect(conditionError.value).toBeUndefined();
         expect(build().source).toEqual({ kind: `npm`, package: `bun`, range: `>=1.4.3` });
         expect(watchSource.value).toEqual({ kind: `npm`, package: `bun`, range: `>=1.4.3` });
-        form.npmBy = `tag`;
-        expect(build().source).toEqual({ kind: `npm`, package: `bun`, tag: `canary` });
-        // Blank is latest, which the daemon reads from an absent tag.
-        form.npmTag = ``;
+        // Blank is absent, which the check reads as latest.
+        form.watchParams[`npm`] = { package: `bun`, range: ``, tag: `` };
         expect(build().source).toEqual({ kind: `npm`, package: `bun` });
     });
 
-    it(`writes a GitHub repository's releases, prereleases only when asked`, () => {
+    it(`writes a GitHub repository's releases, the switch stored only when on, and the pattern its field declares`, () => {
         const { form, build, conditionError } = filled();
         form.condition = `github-release`;
-        form.githubRepo = `bun`;
-        expect(conditionError.value).toMatch(/owner\/name/);
-        form.githubRepo = `oven-sh/bun`;
+        form.watchParams[`github-release`] = { repo: `bun`, prereleases: false };
+        expect(conditionError.value).toBe(`Repository must look like owner/name`);
+        form.watchParams[`github-release`] = { repo: `oven-sh/bun`, prereleases: false };
         expect(build().source).toEqual({ kind: `github-release`, repo: `oven-sh/bun` });
-        form.githubPrereleases = true;
+        form.watchParams[`github-release`] = { repo: `oven-sh/bun`, prereleases: true };
         expect(build().source).toEqual({ kind: `github-release`, repo: `oven-sh/bun`, prereleases: true });
+    });
+
+    it(`says so for a kind no extension here declares, rather than saving a watch nothing checks`, () => {
+        const { form, conditionError, valid } = filled();
+        form.condition = `pypi`;
+        expect(conditionError.value).toMatch(/pypi/);
+        expect(valid.value).toBe(false);
     });
 
     it(`writes a web page and its pattern, and refuses one that does not compile`, () => {
@@ -655,7 +660,7 @@ describe(`the condition`, () => {
         form.condition = `guard`;
         form.guard = `./check`;
         form.condition = `github-release`;
-        form.githubRepo = `oven-sh/bun`;
+        form.watchParams[`github-release`] = { repo: `oven-sh/bun` };
         const built = build();
         expect(built.guard).toBeUndefined();
         expect(built.source).toEqual({ kind: `github-release`, repo: `oven-sh/bun` });

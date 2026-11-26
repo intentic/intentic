@@ -179,9 +179,16 @@ The cold-session trim settings (`coldTrim`, `coldTrimHoldout`, `coldTrimMinToken
 (`coldTrimArm`, `coldTrimmed`) support comparing eligible Claude Code follow-ups. `SavingsReport.coldTrim` holds
 the reading when either arm has samples.
 
-New sandbox settings place every model job on its suggested Low, Medium or High setup, derived from
-`MODEL_ROLES` (`src/models/model-roles.ts`). Saved `roleSetups` maps stay as written, including jobs left off
-and empty maps; connecting an account fills the preset model lists without requiring a placement step. The automatic
+New sandbox settings store no `roleSetups` map: every model job runs on its suggested Low, Medium or High setup, the
+sandbox's own from `CORE_MODEL_ROLES` (`src/models/model-roles.ts`), an extension's from its manifest's
+`contributes.modelRoles` (`contributedModelRole`; the daemon serves both, `GET /settings/model-roles`). A job's id is
+an open string (`ModelRoleSchema`), so `AgentTurn.job` and a saved map name an extension's job like the sandbox's own;
+`runRole` beside `job` keeps its closed list (`RunRoleSchema`, frozen), which far ends in the field read, and `jobFields`
+picks the field a job rides in.
+Saved `roleSetups` maps stay as written, including jobs left off, empty maps and the choice for a job whose extension
+is off; connecting an account fills the preset model lists without requiring a placement step. The six jobs the table
+held for extensions until 2026-11-26 stay recorded as they were (`EXTENSION_ROLES_BEFORE_CONTRIBUTIONS`,
+`ROLES_BEFORE_CONTRIBUTIONS`), for the editor against an older daemon and for the 2026-10-12 settings conversion. The automatic
 Low preset excludes models whose id explicitly says `slow`, while written pins stay as the owner set them.
 
 A plan reply's optional `feedback` holds execution instructions on approval and revision requests on rejection.

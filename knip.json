@@ -9,7 +9,7 @@
     // this repo's convention for cross-package CSS and is invisible to a module graph. The dependency is
     // declared so the edge is stated in the manifest, not so anything imports the package by name.
     // `@stryker-mutator/command-runner` is core's built-in runner (stryker.conf.mjs `testRunner: "command"`), not a package;
-    // core itself is run by the test-strength chore (sandbox-contract/src/chores/probes.ts) through `pnpm exec`, which no script names.
+    // core itself is run by the maintenance extension's test-strength chore (its src/chores/probes.ts) through `pnpm exec`, which no script names.
     // `@commitlint/cli` is run by path from .githooks/commit-msg (node_modules/.bin/commitlint). `gpt-tokenizer` is
     // optional: _tools/nav/lib/tokens.mjs loads it only under NAV_TOKENIZER=real and falls back to its estimator.
     "ignoreDependencies": ["gpt-tokenizer", "@intentic/entry-css", "@stryker-mutator/command-runner", "@stryker-mutator/core", "@commitlint/cli"],
@@ -192,7 +192,7 @@
             "entry": ["src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/imap": {
-            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
+            "entry": ["src/cli.ts", "src/gateway.ts", "src/server.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/slack": {
             "entry": ["src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
@@ -204,10 +204,14 @@
             "entry": ["src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/microsoft-365": {
-            "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
+            "entry": ["src/cli.ts", "src/gateway.ts", "src/server.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/google-workspace": {
             "entry": ["src/cli.ts", "src/gateway.ts", "src/**/*.test.{ts,mts,mjs}"]
+        },
+        // The backend bundle vite.server.config.ts builds; nothing imports it, the extension host loads it.
+        "_extensions/connectors": {
+            "entry": ["src/server/server.ts", "src/**/*.test.{ts,mts,mjs}"]
         },
         "_extensions/deployments": {
             "entry": ["src/server/server.ts", "src/**/*.test.{ts,mts,mjs}"]

@@ -16,7 +16,7 @@ import { clientFor, proven } from "../harness/route-client.testing.js";
 import { memoryMembersStore } from "../harness/route-stores.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { runAgentTurn } from "../harness/route-turns.testing.js";
-import { accountOutboxOf } from "../issues/account-outbox.js";
+import { accountOutboxOf } from "./account-outbox.js";
 import { turnProof } from "../seams/workload-stamp.js";
 import { filePairingsStore } from "./pairings-store.js";
 import { routeSecretsOf } from "./route-secrets.js";

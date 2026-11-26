@@ -1,33 +1,63 @@
-<!-- What has to be true before a fire goes ahead, checked with no model: nothing, a command, or a check the sandbox makes itself (a package version, a release, a page); with what that check sees today, and whether it fires on every pass or only on a change. -->
+<!-- What has to be true before a fire goes ahead, checked with no model: nothing, a command, a page, or a watch kind an extension declares (a package version, a release), drawn from its declaration; with what that check sees today, and whether it fires on every pass or only on a change. -->
 <script setup lang="ts">
 import type { FireOn, WatchCheckResult } from "@intentic/sandbox-contract/schemas/automations";
-import { Button, CodeField, Icon, type IconName, SegmentedControl, ToggleSwitch, ui } from "@intentic/extension-ui";
+import { Button, CodeField, Icon, type IconName, InfoHint, SegmentedControl, ToggleSwitch, ui } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
+import { glyph, useWatchKinds } from "../catalog";
 import { useWatchCheck } from "../useAutomations";
 import type { AutomationFormState, ConditionKind } from "../useAutomationForm";
 import { t } from "../i18n.js";
 
 const props = defineProps<{ state: AutomationFormState }>();
-const { form, touched, markTouched, watchSource, conditionError } = props.state;
+const { form, touched, markTouched, watchSource, watchKind, conditionError } = props.state;
+const kinds = useWatchKinds();
 
-// Chips rather than tabs: five kinds wrap on a phone, and the trigger's own tabs above are already the loud question.
-const CONDITION_OPTIONS = computed<readonly { value: ConditionKind; label: string; icon?: IconName }[]>(() => [
-    { value: `none`, label: t(`automationFields.conditionNone`) },
-    { value: `guard`, label: t(`automationFields.conditionGuard`), icon: `terminal` },
-    { value: `npm`, label: t(`automationFields.conditionNpm`), icon: `box` },
-    { value: `github-release`, label: t(`automationFields.conditionGithub`), icon: `github` },
-    { value: `url`, label: t(`automationFields.conditionUrl`), icon: `globe` },
-]);
-const conditionCaption = (condition: ConditionKind): string =>
-    ({
-        none: t(`automationFields.conditionCaption.none`),
-        guard: t(`automationFields.conditionCaption.guard`),
-        npm: t(`automationFields.conditionCaption.npm`),
-        "github-release": t(`automationFields.conditionCaption.github`),
-        url: t(`automationFields.conditionCaption.url`),
-    })[condition];
+// Chips rather than tabs: the kinds wrap on a phone, and the trigger's own tabs above are already the loud question.
+// Nothing, a command and a page are the sandbox's own; every other chip is a watch kind an enabled extension declares,
+// drawn from its declaration. A stored source naming a kind whose extension is off, or gone, keeps a chip of its own.
+const CONDITION_OPTIONS = computed<readonly { value: ConditionKind; label: string; icon?: IconName | undefined }[]>(() => {
+    const offered = kinds.value.filter((kind) => kind.enabled || kind.id === form.condition);
+    const known = new Set([`none`, `guard`, `url`, ...offered.map((kind) => kind.id)]);
+    return [
+        { value: `none`, label: t(`automationFields.conditionNone`) },
+        { value: `guard`, label: t(`automationFields.conditionGuard`), icon: `terminal` },
+        ...offered.map((kind) => ({ value: kind.id, label: kind.label, icon: glyph(kind.icon) })),
+        { value: `url`, label: t(`automationFields.conditionUrl`), icon: `globe` },
+        ...(known.has(form.condition) ? [] : [{ value: form.condition, label: form.condition }]),
+    ];
+});
+const conditionCaption = computed<string>(() => {
+    switch (form.condition) {
+        case `none`:
+            return t(`automationFields.conditionCaption.none`);
+        case `guard`:
+            return t(`automationFields.conditionCaption.guard`);
+        case `url`:
+            return t(`automationFields.conditionCaption.url`);
+        default:
+            return watchKind.value?.description ?? ``;
+    }
+});
+// A kind that is declared but whose extension is off: the watch fails, as an error on each run, until it is back.
+const kindOff = computed(() => (watchKind.value !== undefined && !watchKind.value.enabled ? watchKind.value.extension : undefined));
 const conditionShown = computed(() => touched.has(`condition`) && conditionError.value !== undefined);
-const isSource = computed(() => form.condition === `npm` || form.condition === `github-release` || form.condition === `url`);
+const isSource = computed(() => form.condition !== `none` && form.condition !== `guard`);
+
+// A contributed kind's boxes, kept per kind so flipping between kinds while deciding loses nothing typed.
+const paramsHere = (): Record<string, string | boolean> => {
+    const kind = form.condition;
+    form.watchParams[kind] ??= {};
+    return form.watchParams[kind];
+};
+const textOf = (key: string): string => {
+    const value = form.watchParams[form.condition]?.[key];
+    return value === undefined || value === true || value === false ? `` : value;
+};
+const switchOf = (key: string): boolean => form.watchParams[form.condition]?.[key] === true;
+const setParam = (key: string, value: string | boolean): void => {
+    paramsHere()[key] = value;
+};
+const typed = (event: Event): string => (event.target instanceof HTMLInputElement ? event.target.value : ``);
 
 const FIRE_ON_OPTIONS = computed(
     () =>
@@ -82,7 +112,7 @@ const checkVerdict = (result: WatchCheckResult): string => {
                 {{ option.label }}
             </button>
         </div>
-        <p class="text-2xs text-subtle">{{ conditionCaption(form.condition) }}</p>
+        <p class="text-2xs text-subtle">{{ conditionCaption }}</p>
 
         <!-- The block a command is read in, with a caret: a code block's own ground and rim, as the opened automation draws it. -->
         <CodeField
@@ -97,72 +127,34 @@ const checkVerdict = (result: WatchCheckResult): string => {
             @blur="markTouched(`condition`)"
         />
 
-        <template v-if="form.condition === `npm`">
-            <div class="flex flex-wrap gap-1.5">
-                <button
-                    type="button"
-                    :class="ui.chip({ on: form.npmBy === `range` })"
-                    :aria-pressed="form.npmBy === `range`"
-                    @click="form.npmBy = `range`"
-                >
-                    {{ t(`automationFields.waitForVersion`) }}
-                </button>
-                <button
-                    type="button"
-                    :class="ui.chip({ on: form.npmBy === `tag` })"
-                    :aria-pressed="form.npmBy === `tag`"
-                    @click="form.npmBy = `tag`"
-                >
-                    {{ t(`automationFields.followTag`) }}
-                </button>
-            </div>
-            <div class="grid max-w-2xl gap-3 @2xl:grid-cols-2">
-                <label class="ui-field min-w-0">
-                    <span class="text-xs text-subtle">{{ t(`automationFields.package`) }}</span>
-                    <input
-                        v-model="form.npmPackage"
-                        placeholder="bun"
-                        spellcheck="false"
-                        :class="[ui.input(`font-mono`), conditionShown && form.npmPackage.trim() === `` ? `ui-field-error-box` : ``]"
-                        @blur="markTouched(`condition`)"
-                    />
-                </label>
-                <label v-if="form.npmBy === `range`" class="ui-field min-w-0">
-                    <span class="text-xs text-subtle">{{ t(`automationFields.versionRange`) }}</span>
-                    <input
-                        v-model="form.npmRange"
-                        placeholder=">=1.4.3"
-                        spellcheck="false"
-                        :class="[ui.input(`font-mono`), conditionShown && form.npmRange.trim() === `` ? `ui-field-error-box` : ``]"
-                        @blur="markTouched(`condition`)"
-                    />
+        <!-- A contributed kind's parameters, as its declaration names them: a box per text field, a switch per switch. -->
+        <div v-if="watchKind !== undefined && watchKind.fields.length > 0" class="grid max-w-2xl gap-3 @2xl:grid-cols-2">
+            <template v-for="field in watchKind.fields" :key="field.key">
+                <label v-if="field.type === `switch`" class="flex items-center gap-2 self-end pb-2 text-xs text-content">
+                    <ToggleSwitch :model-value="switchOf(field.key)" :aria-label="field.label" @update:model-value="setParam(field.key, $event)" />
+                    {{ field.label }}
+                    <InfoHint v-if="field.hint" :label="field.label" :text="field.hint" />
                 </label>
                 <label v-else class="ui-field min-w-0">
-                    <span class="text-xs text-subtle">{{ t(`automationFields.distTag`) }}</span>
-                    <input v-model="form.npmTag" :placeholder="t(`automationFields.tagPlaceholder`)" spellcheck="false" :class="ui.input(`font-mono`)" />
+                    <span class="flex items-center gap-1 text-xs text-subtle">
+                        {{ field.label }}
+                        <InfoHint v-if="field.hint" :label="field.label" :text="field.hint" />
+                    </span>
+                    <input
+                        :value="textOf(field.key)"
+                        :placeholder="field.placeholder"
+                        spellcheck="false"
+                        :class="[ui.input(`font-mono`), conditionShown && field.required === true && textOf(field.key).trim() === `` ? `ui-field-error-box` : ``]"
+                        @input="setParam(field.key, typed($event))"
+                        @blur="markTouched(`condition`)"
+                    />
                 </label>
-            </div>
-            <p class="text-2xs text-subtle">
-                {{ form.npmBy === `range` ? t(`automationFields.npmCaption.range`) : t(`automationFields.npmCaption.tag`) }}
-            </p>
-        </template>
-
-        <div v-if="form.condition === `github-release`" class="flex flex-wrap items-end gap-x-6 gap-y-2">
-            <label class="ui-field w-full min-w-0 max-w-sm">
-                <span class="text-xs text-subtle">{{ t(`automationFields.repository`) }}</span>
-                <input
-                    v-model="form.githubRepo"
-                    placeholder="oven-sh/bun"
-                    spellcheck="false"
-                    :class="[ui.input(`font-mono`), conditionShown ? `ui-field-error-box` : ``]"
-                    @blur="markTouched(`condition`)"
-                />
-            </label>
-            <label class="flex items-center gap-2 pb-2 text-xs text-content">
-                <ToggleSwitch v-model="form.githubPrereleases" :aria-label="t(`automationFields.prereleasesToo`)" />
-                {{ t(`automationFields.prereleasesToo`) }}
-            </label>
+            </template>
         </div>
+        <p v-if="kindOff !== undefined" class="flex items-start gap-1.5 text-xs text-warning">
+            <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />
+            {{ t(`automationFields.kindOff`, { extension: kindOff }) }}
+        </p>
 
         <template v-if="form.condition === `url`">
             <div class="grid max-w-2xl gap-3 @2xl:grid-cols-2">

@@ -94,6 +94,74 @@
                             "sentence": "its backend calls the daemon route ${value}"
                         }
                     }
+                },
+                "events": {
+                    "description": "Events your backend hears through `api.events` beyond its settings and the workspace's changes: `run`, a turn ending in a conversation it started through POST /agent with its own token; `activity`, whether any agent turn is running in the sandbox.",
+                    "type": "array",
+                    "items": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "const": "run",
+                                "power": {
+                                    "key": "events:run",
+                                    "sentence": "its backend hears when a conversation it started finishes a turn"
+                                }
+                            },
+                            {
+                                "type": "string",
+                                "const": "activity",
+                                "power": {
+                                    "key": "events:activity",
+                                    "sentence": "its backend hears whether any agent turn is running in the sandbox"
+                                }
+                            }
+                        ]
+                    }
+                },
+                "work": {
+                    "description": "Whether your backend may hold work in flight with `api.work.hold(label)`: while held, the sandbox stays awake and an update or restart waits for it, as for an agent's turn.",
+                    "type": "boolean",
+                    "power": {
+                        "key": "work",
+                        "sentence": "its backend keeps the sandbox awake, and a restart waiting, while it holds work in flight"
+                    }
+                },
+                "exec": {
+                    "description": "The workload classes `api.exec` may run a command under: `command`, admitted and ranked as an agent's shell command; `toolchain`, a heavy tool (a build, a test run, an analyser), which also takes turns in the sandbox's heavy-command queue.",
+                    "type": "array",
+                    "items": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "const": "command",
+                                "power": {
+                                    "key": "exec:command",
+                                    "sentence": "its backend runs commands, admitted like an agent's"
+                                }
+                            },
+                            {
+                                "type": "string",
+                                "const": "toolchain",
+                                "power": {
+                                    "key": "exec:toolchain",
+                                    "sentence": "its backend runs heavy tools, queued with the sandbox's builds and tests"
+                                }
+                            }
+                        ]
+                    }
+                },
+                "fires": {
+                    "description": "Handlers an automation may fire in your backend (`api.automations.onFire(name, handler)`): an automation whose target is `{ kind: \"extension\" }` names this extension and one of these, and fires it on its trigger under the scheduler's admission, holds and journal, without an agent.",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+                        "power": {
+                            "key": "fires:${value}",
+                            "sentence": "the sandbox's automations wake its backend's \"${value}\" handler"
+                        }
+                    }
                 }
             },
             "additionalProperties": false
@@ -760,6 +828,92 @@
                                             "additionalProperties": false
                                         }
                                     },
+                                    "channel": {
+                                        "description": "Facts about the platform this card reaches: its one-message limit, whether your backend publishes approved posts there itself and to which targets, and what a publishing turn should know about posting there. A post's `platform` names this card's id.",
+                                        "type": "object",
+                                        "properties": {
+                                            "messageLimit": {
+                                                "description": "The longest one message may be on this platform, in JavaScript string length (UTF-16 code units). The approvals inbox counts a post against it, and your own gateway splits a reply there. Absent: no known cap.",
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 10000000
+                                            },
+                                            "publish": {
+                                                "description": "Your backend publishes this platform's approved posts itself (`api.approvals.publish`), handed over by the approvals queue only after the person's yes was matched and spent, instead of an agent turn driving the logged-in browser. Needs `server`.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "target": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "description": "The targets your backend can address, as a regular expression a post's whole `target` must match (`^\\\\d{5,}$` for a channel id). A post with another target, or with attachments, goes to an agent turn instead."
+                                                    }
+                                                },
+                                                "required": [
+                                                    "target"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "posting": {
+                                                "description": "What an agent turn publishing an approved post on this platform should know beyond its skill, said once in the turn's brief: how a reply nests, what a target means here.",
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 1000
+                                            }
+                                        },
+                                        "additionalProperties": false
+                                    },
+                                    "processors": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "flow": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "team-chat",
+                                                        "email-imap",
+                                                        "email-smtp",
+                                                        "connector"
+                                                    ],
+                                                    "description": "Which kind of path this is: `team-chat` (people's messages, both ways), `email-imap` (mail read from a server), `email-smtp` (mail sent through one), `connector` (whatever the agent chose to send)."
+                                                },
+                                                "operator": {
+                                                    "description": "Who runs the service, as its terms name them (`Discord Inc.`). Absent: the office is asked.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "region": {
+                                                    "description": "Where the operator says it processes the data (`US`, `EU`, `EU/US`), only where it publishes one.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "thirdCountry": {
+                                                    "description": "True when the operator processes the data outside the European Economic Area, which makes this a transfer to a third country.",
+                                                    "type": "boolean"
+                                                },
+                                                "hosts": {
+                                                    "description": "Every host data is sent to on this path, beyond the card's `hosts`: a realtime gateway, a file CDN.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
+                                                },
+                                                "hostField": {
+                                                    "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                }
+                                            },
+                                            "required": [
+                                                "flow"
+                                            ],
+                                            "additionalProperties": false
+                                        },
+                                        "description": "Where a card of this kind sends people's data, one entry per path out, for the Data protection page and the documents it drafts. Absent: one generic connector path over the card's `hosts`."
+                                    },
                                     "kind": {
                                         "type": "string",
                                         "const": "cli"
@@ -1118,12 +1272,208 @@
                                                     ],
                                                     "additionalProperties": false
                                                 }
+                                            },
+                                            "actions": {
+                                                "description": "The outward actions this card's requests perform (send, edit, react), checked in order against each request the gateway sees; the first that covers it names it. The gateway records each request of a card that declares any in Activity (one no action covers as `api.call`) and holds it to the owner's action rules for `<card id>.<action>`.",
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "action": {
+                                                            "type": "string",
+                                                            "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$",
+                                                            "description": "The action's key below the card's id (`message.send`, `reaction.add`): the sandbox names it `<card id>.<action>`, which is the key the owner's action rules (Guardrails) are written under."
+                                                        },
+                                                        "methods": {
+                                                            "description": "The HTTP methods that perform it; absent is every method.",
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "string",
+                                                                "pattern": "^[A-Z]+$"
+                                                            }
+                                                        },
+                                                        "paths": {
+                                                            "description": "The paths that perform it, below the route's upstream, in the rules' globs: `*` one segment, `**` any number (`/channels/*/messages`). Absent is every path.",
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "string",
+                                                                "format": "starts_with",
+                                                                "pattern": "^\\/.*"
+                                                            }
+                                                        },
+                                                        "read": {
+                                                            "description": "This action only reads. It is recorded and held to a rule written for it like any other, but Guardrails does not offer it: a rule there would hold the bot reading its own channel.",
+                                                            "type": "boolean"
+                                                        },
+                                                        "channel": {
+                                                            "description": "Where the request names the channel, chat or recipient it acts on, for its Activity row.",
+                                                            "anyOf": [
+                                                                {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "field": {
+                                                                            "type": "string",
+                                                                            "minLength": 1,
+                                                                            "description": "A top-level field of the request's JSON, url-encoded or multipart body, else of its query (`channel`, `chat_id`)."
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "field"
+                                                                    ],
+                                                                    "additionalProperties": false
+                                                                },
+                                                                {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "after": {
+                                                                            "type": "string",
+                                                                            "minLength": 1,
+                                                                            "description": "The path segment that follows this one (`channels` reads `123` from `/channels/123/messages`)."
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "after"
+                                                                    ],
+                                                                    "additionalProperties": false
+                                                                }
+                                                            ]
+                                                        },
+                                                        "content": {
+                                                            "description": "Where the request carries what it says, for its Activity row. A JSON body without that field is recorded whole; a file upload never is.",
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "field": {
+                                                                    "type": "string",
+                                                                    "minLength": 1,
+                                                                    "description": "A top-level field of the request's body (`text`, `content`)."
+                                                                }
+                                                            },
+                                                            "required": [
+                                                                "field"
+                                                            ],
+                                                            "additionalProperties": false
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "action"
+                                                    ],
+                                                    "additionalProperties": false
+                                                }
                                             }
                                         },
                                         "required": [
                                             "routes"
                                         ],
                                         "additionalProperties": false
+                                    },
+                                    "status": {
+                                        "type": "object",
+                                        "properties": {
+                                            "from": {
+                                                "type": "string",
+                                                "const": "listener",
+                                                "description": "The card's status is whatever this extension's listener last reported for it."
+                                            },
+                                            "pairingSteps": {
+                                                "description": "Where a person types the pairing code the listener reports, as the card says it: \"Type this code <pairingSteps>.\"",
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 300
+                                            }
+                                        },
+                                        "required": [
+                                            "from"
+                                        ],
+                                        "description": "Take this card's status from your listener's report (`POST /listeners/<provider>/status`, its `connections` and `pairing`), for a card whose settings anyone could type but only the gateway knows whether they work.",
+                                        "additionalProperties": false
+                                    },
+                                    "commandActions": {
+                                        "description": "The outward actions this card's command-line tools perform (`whatsapp send` sends a message), for a tool that reaches its service some other way than the gateway. Each is offered on Guardrails as `<card id>.<action>`. The sandbox refuses a command the owner's rule denies or holds before it runs and records it in Activity once it ends, unless the card's backend carries it out (`gatedBy: \"backend\"`), which then asks the outward-action door instead.",
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "action": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$",
+                                                    "description": "The action's key below the card's id (`message.send`, `reaction.add`): the sandbox names it `<card id>.<action>`, which is the key the owner's action rules (Guardrails) are written under."
+                                                },
+                                                "command": {
+                                                    "minItems": 1,
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "pattern": "^\\S+$"
+                                                    },
+                                                    "description": "The program and the words that select the command (`[\"whatsapp\", \"send\"]`), matched at the start of an invocation."
+                                                },
+                                                "read": {
+                                                    "description": "This action only reads. It is recorded and held to a rule written for it like any other, but Guardrails does not offer it: a rule there would hold the bot reading its own channel.",
+                                                    "type": "boolean"
+                                                },
+                                                "channel": {
+                                                    "description": "The argument naming the chat or recipient, for its Activity row.",
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "arg": {
+                                                            "type": "integer",
+                                                            "minimum": 0,
+                                                            "maximum": 9007199254740991,
+                                                            "description": "The argument's position after the command's own words, counted from 0."
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "arg"
+                                                    ],
+                                                    "additionalProperties": false
+                                                },
+                                                "content": {
+                                                    "description": "The argument carrying what it says, for its Activity row.",
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "arg": {
+                                                            "type": "integer",
+                                                            "minimum": 0,
+                                                            "maximum": 9007199254740991,
+                                                            "description": "The argument's position after the command's own words, counted from 0."
+                                                        },
+                                                        "rest": {
+                                                            "description": "Take every argument from there on, joined by spaces (a message typed unquoted).",
+                                                            "type": "boolean"
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "arg"
+                                                    ],
+                                                    "additionalProperties": false
+                                                },
+                                                "gatedBy": {
+                                                    "description": "Who holds the command to the owner's action rule. `sandbox` (the default): the command guard refuses a command the rule denies or holds before it runs, and the turn records it in Activity once it ends. `backend`: the card's own backend carries the action out and asks the sandbox's outward-action door first (`POST /capabilities/{id}/outward-action`), which decides, records it in Activity and turns a hold into an approvals item the backend performs once a person says yes; the command guard lets the command run, so a held send reaches the door that drafts its approval.",
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "sandbox",
+                                                        "backend"
+                                                    ]
+                                                },
+                                                "unruled": {
+                                                    "description": "What the action comes to while no action rule names it. `allow` (the default) lets it go. `hold` waits for the owner's yes until a rule says otherwise: the command guard refuses it with the way to draft an approval, or, for `gatedBy: \"backend\"`, the outward-action door drafts it. Guardrails shows it as the action's default. Declarations of one action that differ hold it if any says `hold`.",
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "allow",
+                                                        "hold"
+                                                    ]
+                                                },
+                                                "selfGated": {
+                                                    "description": "Deprecated since 2.52.0: declare `gatedBy: \"backend\"` and `unruled: \"hold\"`, which is how `true` is still read (an `unruled` beside it wins).",
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": [
+                                                "action",
+                                                "command"
+                                            ],
+                                            "additionalProperties": false
+                                        }
                                     },
                                     "mcp": {
                                         "description": "Deprecated: declare `contributes.tools` with `perCard` naming this card instead, and serve the tools with `api.tools.serve`. A path in this extension's backend (`server`) answering MCP over Streamable HTTP; every turn granted a card of this kind gets it as a server named by the card's id, each request arriving at `<path>/<card id>`.",
@@ -1396,6 +1746,92 @@
                                             ],
                                             "additionalProperties": false
                                         }
+                                    },
+                                    "channel": {
+                                        "description": "Facts about the platform this card reaches: its one-message limit, whether your backend publishes approved posts there itself and to which targets, and what a publishing turn should know about posting there. A post's `platform` names this card's id.",
+                                        "type": "object",
+                                        "properties": {
+                                            "messageLimit": {
+                                                "description": "The longest one message may be on this platform, in JavaScript string length (UTF-16 code units). The approvals inbox counts a post against it, and your own gateway splits a reply there. Absent: no known cap.",
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 10000000
+                                            },
+                                            "publish": {
+                                                "description": "Your backend publishes this platform's approved posts itself (`api.approvals.publish`), handed over by the approvals queue only after the person's yes was matched and spent, instead of an agent turn driving the logged-in browser. Needs `server`.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "target": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "description": "The targets your backend can address, as a regular expression a post's whole `target` must match (`^\\\\d{5,}$` for a channel id). A post with another target, or with attachments, goes to an agent turn instead."
+                                                    }
+                                                },
+                                                "required": [
+                                                    "target"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "posting": {
+                                                "description": "What an agent turn publishing an approved post on this platform should know beyond its skill, said once in the turn's brief: how a reply nests, what a target means here.",
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 1000
+                                            }
+                                        },
+                                        "additionalProperties": false
+                                    },
+                                    "processors": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "flow": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "team-chat",
+                                                        "email-imap",
+                                                        "email-smtp",
+                                                        "connector"
+                                                    ],
+                                                    "description": "Which kind of path this is: `team-chat` (people's messages, both ways), `email-imap` (mail read from a server), `email-smtp` (mail sent through one), `connector` (whatever the agent chose to send)."
+                                                },
+                                                "operator": {
+                                                    "description": "Who runs the service, as its terms name them (`Discord Inc.`). Absent: the office is asked.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "region": {
+                                                    "description": "Where the operator says it processes the data (`US`, `EU`, `EU/US`), only where it publishes one.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "thirdCountry": {
+                                                    "description": "True when the operator processes the data outside the European Economic Area, which makes this a transfer to a third country.",
+                                                    "type": "boolean"
+                                                },
+                                                "hosts": {
+                                                    "description": "Every host data is sent to on this path, beyond the card's `hosts`: a realtime gateway, a file CDN.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
+                                                },
+                                                "hostField": {
+                                                    "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                }
+                                            },
+                                            "required": [
+                                                "flow"
+                                            ],
+                                            "additionalProperties": false
+                                        },
+                                        "description": "Where a card of this kind sends people's data, one entry per path out, for the Data protection page and the documents it drafts. Absent: one generic connector path over the card's `hosts`."
                                     },
                                     "kind": {
                                         "type": "string",
@@ -1676,6 +2112,92 @@
                                             "additionalProperties": false
                                         }
                                     },
+                                    "channel": {
+                                        "description": "Facts about the platform this card reaches: its one-message limit, whether your backend publishes approved posts there itself and to which targets, and what a publishing turn should know about posting there. A post's `platform` names this card's id.",
+                                        "type": "object",
+                                        "properties": {
+                                            "messageLimit": {
+                                                "description": "The longest one message may be on this platform, in JavaScript string length (UTF-16 code units). The approvals inbox counts a post against it, and your own gateway splits a reply there. Absent: no known cap.",
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 10000000
+                                            },
+                                            "publish": {
+                                                "description": "Your backend publishes this platform's approved posts itself (`api.approvals.publish`), handed over by the approvals queue only after the person's yes was matched and spent, instead of an agent turn driving the logged-in browser. Needs `server`.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "target": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "description": "The targets your backend can address, as a regular expression a post's whole `target` must match (`^\\\\d{5,}$` for a channel id). A post with another target, or with attachments, goes to an agent turn instead."
+                                                    }
+                                                },
+                                                "required": [
+                                                    "target"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "posting": {
+                                                "description": "What an agent turn publishing an approved post on this platform should know beyond its skill, said once in the turn's brief: how a reply nests, what a target means here.",
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 1000
+                                            }
+                                        },
+                                        "additionalProperties": false
+                                    },
+                                    "processors": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "flow": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "team-chat",
+                                                        "email-imap",
+                                                        "email-smtp",
+                                                        "connector"
+                                                    ],
+                                                    "description": "Which kind of path this is: `team-chat` (people's messages, both ways), `email-imap` (mail read from a server), `email-smtp` (mail sent through one), `connector` (whatever the agent chose to send)."
+                                                },
+                                                "operator": {
+                                                    "description": "Who runs the service, as its terms name them (`Discord Inc.`). Absent: the office is asked.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "region": {
+                                                    "description": "Where the operator says it processes the data (`US`, `EU`, `EU/US`), only where it publishes one.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "thirdCountry": {
+                                                    "description": "True when the operator processes the data outside the European Economic Area, which makes this a transfer to a third country.",
+                                                    "type": "boolean"
+                                                },
+                                                "hosts": {
+                                                    "description": "Every host data is sent to on this path, beyond the card's `hosts`: a realtime gateway, a file CDN.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
+                                                },
+                                                "hostField": {
+                                                    "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                }
+                                            },
+                                            "required": [
+                                                "flow"
+                                            ],
+                                            "additionalProperties": false
+                                        },
+                                        "description": "Where a card of this kind sends people's data, one entry per path out, for the Data protection page and the documents it drafts. Absent: one generic connector path over the card's `hosts`."
+                                    },
                                     "kind": {
                                         "type": "string",
                                         "const": "device"
@@ -1945,6 +2467,92 @@
                                             ],
                                             "additionalProperties": false
                                         }
+                                    },
+                                    "channel": {
+                                        "description": "Facts about the platform this card reaches: its one-message limit, whether your backend publishes approved posts there itself and to which targets, and what a publishing turn should know about posting there. A post's `platform` names this card's id.",
+                                        "type": "object",
+                                        "properties": {
+                                            "messageLimit": {
+                                                "description": "The longest one message may be on this platform, in JavaScript string length (UTF-16 code units). The approvals inbox counts a post against it, and your own gateway splits a reply there. Absent: no known cap.",
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 10000000
+                                            },
+                                            "publish": {
+                                                "description": "Your backend publishes this platform's approved posts itself (`api.approvals.publish`), handed over by the approvals queue only after the person's yes was matched and spent, instead of an agent turn driving the logged-in browser. Needs `server`.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "target": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "description": "The targets your backend can address, as a regular expression a post's whole `target` must match (`^\\\\d{5,}$` for a channel id). A post with another target, or with attachments, goes to an agent turn instead."
+                                                    }
+                                                },
+                                                "required": [
+                                                    "target"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "posting": {
+                                                "description": "What an agent turn publishing an approved post on this platform should know beyond its skill, said once in the turn's brief: how a reply nests, what a target means here.",
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 1000
+                                            }
+                                        },
+                                        "additionalProperties": false
+                                    },
+                                    "processors": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "flow": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "team-chat",
+                                                        "email-imap",
+                                                        "email-smtp",
+                                                        "connector"
+                                                    ],
+                                                    "description": "Which kind of path this is: `team-chat` (people's messages, both ways), `email-imap` (mail read from a server), `email-smtp` (mail sent through one), `connector` (whatever the agent chose to send)."
+                                                },
+                                                "operator": {
+                                                    "description": "Who runs the service, as its terms name them (`Discord Inc.`). Absent: the office is asked.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "region": {
+                                                    "description": "Where the operator says it processes the data (`US`, `EU`, `EU/US`), only where it publishes one.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "thirdCountry": {
+                                                    "description": "True when the operator processes the data outside the European Economic Area, which makes this a transfer to a third country.",
+                                                    "type": "boolean"
+                                                },
+                                                "hosts": {
+                                                    "description": "Every host data is sent to on this path, beyond the card's `hosts`: a realtime gateway, a file CDN.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
+                                                },
+                                                "hostField": {
+                                                    "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                }
+                                            },
+                                            "required": [
+                                                "flow"
+                                            ],
+                                            "additionalProperties": false
+                                        },
+                                        "description": "Where a card of this kind sends people's data, one entry per path out, for the Data protection page and the documents it drafts. Absent: one generic connector path over the card's `hosts`."
                                     },
                                     "kind": {
                                         "type": "string",
@@ -2221,6 +2829,92 @@
                                             "additionalProperties": false
                                         }
                                     },
+                                    "channel": {
+                                        "description": "Facts about the platform this card reaches: its one-message limit, whether your backend publishes approved posts there itself and to which targets, and what a publishing turn should know about posting there. A post's `platform` names this card's id.",
+                                        "type": "object",
+                                        "properties": {
+                                            "messageLimit": {
+                                                "description": "The longest one message may be on this platform, in JavaScript string length (UTF-16 code units). The approvals inbox counts a post against it, and your own gateway splits a reply there. Absent: no known cap.",
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 10000000
+                                            },
+                                            "publish": {
+                                                "description": "Your backend publishes this platform's approved posts itself (`api.approvals.publish`), handed over by the approvals queue only after the person's yes was matched and spent, instead of an agent turn driving the logged-in browser. Needs `server`.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "target": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "description": "The targets your backend can address, as a regular expression a post's whole `target` must match (`^\\\\d{5,}$` for a channel id). A post with another target, or with attachments, goes to an agent turn instead."
+                                                    }
+                                                },
+                                                "required": [
+                                                    "target"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "posting": {
+                                                "description": "What an agent turn publishing an approved post on this platform should know beyond its skill, said once in the turn's brief: how a reply nests, what a target means here.",
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 1000
+                                            }
+                                        },
+                                        "additionalProperties": false
+                                    },
+                                    "processors": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "flow": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "team-chat",
+                                                        "email-imap",
+                                                        "email-smtp",
+                                                        "connector"
+                                                    ],
+                                                    "description": "Which kind of path this is: `team-chat` (people's messages, both ways), `email-imap` (mail read from a server), `email-smtp` (mail sent through one), `connector` (whatever the agent chose to send)."
+                                                },
+                                                "operator": {
+                                                    "description": "Who runs the service, as its terms name them (`Discord Inc.`). Absent: the office is asked.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "region": {
+                                                    "description": "Where the operator says it processes the data (`US`, `EU`, `EU/US`), only where it publishes one.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "thirdCountry": {
+                                                    "description": "True when the operator processes the data outside the European Economic Area, which makes this a transfer to a third country.",
+                                                    "type": "boolean"
+                                                },
+                                                "hosts": {
+                                                    "description": "Every host data is sent to on this path, beyond the card's `hosts`: a realtime gateway, a file CDN.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
+                                                },
+                                                "hostField": {
+                                                    "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                }
+                                            },
+                                            "required": [
+                                                "flow"
+                                            ],
+                                            "additionalProperties": false
+                                        },
+                                        "description": "Where a card of this kind sends people's data, one entry per path out, for the Data protection page and the documents it drafts. Absent: one generic connector path over the card's `hosts`."
+                                    },
                                     "kind": {
                                         "type": "string",
                                         "const": "phone"
@@ -2496,6 +3190,92 @@
                                             "additionalProperties": false
                                         }
                                     },
+                                    "channel": {
+                                        "description": "Facts about the platform this card reaches: its one-message limit, whether your backend publishes approved posts there itself and to which targets, and what a publishing turn should know about posting there. A post's `platform` names this card's id.",
+                                        "type": "object",
+                                        "properties": {
+                                            "messageLimit": {
+                                                "description": "The longest one message may be on this platform, in JavaScript string length (UTF-16 code units). The approvals inbox counts a post against it, and your own gateway splits a reply there. Absent: no known cap.",
+                                                "type": "integer",
+                                                "minimum": 1,
+                                                "maximum": 10000000
+                                            },
+                                            "publish": {
+                                                "description": "Your backend publishes this platform's approved posts itself (`api.approvals.publish`), handed over by the approvals queue only after the person's yes was matched and spent, instead of an agent turn driving the logged-in browser. Needs `server`.",
+                                                "type": "object",
+                                                "properties": {
+                                                    "target": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200,
+                                                        "description": "The targets your backend can address, as a regular expression a post's whole `target` must match (`^\\\\d{5,}$` for a channel id). A post with another target, or with attachments, goes to an agent turn instead."
+                                                    }
+                                                },
+                                                "required": [
+                                                    "target"
+                                                ],
+                                                "additionalProperties": false
+                                            },
+                                            "posting": {
+                                                "description": "What an agent turn publishing an approved post on this platform should know beyond its skill, said once in the turn's brief: how a reply nests, what a target means here.",
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "maxLength": 1000
+                                            }
+                                        },
+                                        "additionalProperties": false
+                                    },
+                                    "processors": {
+                                        "minItems": 1,
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "flow": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                        "team-chat",
+                                                        "email-imap",
+                                                        "email-smtp",
+                                                        "connector"
+                                                    ],
+                                                    "description": "Which kind of path this is: `team-chat` (people's messages, both ways), `email-imap` (mail read from a server), `email-smtp` (mail sent through one), `connector` (whatever the agent chose to send)."
+                                                },
+                                                "operator": {
+                                                    "description": "Who runs the service, as its terms name them (`Discord Inc.`). Absent: the office is asked.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "region": {
+                                                    "description": "Where the operator says it processes the data (`US`, `EU`, `EU/US`), only where it publishes one.",
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                },
+                                                "thirdCountry": {
+                                                    "description": "True when the operator processes the data outside the European Economic Area, which makes this a transfer to a third country.",
+                                                    "type": "boolean"
+                                                },
+                                                "hosts": {
+                                                    "description": "Every host data is sent to on this path, beyond the card's `hosts`: a realtime gateway, a file CDN.",
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                    }
+                                                },
+                                                "hostField": {
+                                                    "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
+                                                    "type": "string",
+                                                    "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                }
+                                            },
+                                            "required": [
+                                                "flow"
+                                            ],
+                                            "additionalProperties": false
+                                        },
+                                        "description": "Where a card of this kind sends people's data, one entry per path out, for the Data protection page and the documents it drafts. Absent: one generic connector path over the card's `hosts`."
+                                    },
                                     "kind": {
                                         "type": "string",
                                         "const": "agent"
@@ -2547,6 +3327,18 @@
                                 "additionalProperties": false
                             },
                             "description": "The event types this source can fire, with the wording the automation editor offers them under. The daemon accepts no others."
+                        },
+                        "strangers": {
+                            "description": "Set when anyone on the internet can reach this source without the owner adding them (a chat on a public page, a crash reporter), which holds its wakes to the owner's floor for strangers: `visitor`, someone talking with an assistant; `report`, a stranger's report setting work going, held for approval unless the owner says otherwise. Absent: its senders are people the owner connected, held to the floor for a team chat message.",
+                            "type": "string",
+                            "enum": [
+                                "visitor",
+                                "report"
+                            ],
+                            "power": {
+                                "key": "listener-strangers:${provider}",
+                                "sentence": "anyone on the internet can wake an agent through its \"${provider}\" listener"
+                            }
                         },
                         "automation": {
                             "type": "object",
@@ -2722,6 +3514,7 @@
                                         "type": "string",
                                         "enum": [
                                             "schedule",
+                                            "once",
                                             "event",
                                             "listener",
                                             "workspace"
@@ -2731,7 +3524,52 @@
                                         "type": "string",
                                         "minLength": 1
                                     },
+                                    "tz": {
+                                        "description": "Which clock the cron's times mean, as a zone name. Absent: the sandbox's own.",
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "afterSessions": {
+                                        "description": "Fire only once this many new sessions have run since the last wake.",
+                                        "type": "integer",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 9007199254740991
+                                    },
+                                    "at": {
+                                        "type": "integer",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 9007199254740991
+                                    },
+                                    "dailyMax": {
+                                        "description": "How many webhook calls a day may wake it.",
+                                        "type": "integer",
+                                        "exclusiveMinimum": 0,
+                                        "maximum": 9007199254740991
+                                    },
+                                    "signature": {
+                                        "description": "Require the sender's signature: its scheme, and the name of the sandbox secret holding the signing secret.",
+                                        "type": "object",
+                                        "properties": {
+                                            "scheme": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            },
+                                            "secret": {
+                                                "type": "string",
+                                                "minLength": 1
+                                            }
+                                        },
+                                        "required": [
+                                            "scheme",
+                                            "secret"
+                                        ],
+                                        "additionalProperties": false
+                                    },
                                     "provider": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "channelId": {
                                         "type": "string",
                                         "minLength": 1
                                     },
@@ -2742,7 +3580,21 @@
                                     "mentioned": {
                                         "type": "boolean"
                                     },
+                                    "branch": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "allowedOrigins": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    },
                                     "event": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "repo": {
                                         "type": "string",
                                         "minLength": 1
                                     }
@@ -2757,6 +3609,71 @@
                                 "description": "A condition that must hold before the turn runs: what makes a template safe to leave switched on.",
                                 "type": "string",
                                 "minLength": 1
+                            },
+                            "source": {
+                                "description": "A ready-made check instead of a guard: `{ kind: \"url\", url, select? }`, the sandbox's own, or a kind an enabled extension declares in `watchKinds`, its parameters beside `kind`.",
+                                "type": "object",
+                                "properties": {
+                                    "kind": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "required": [
+                                    "kind"
+                                ],
+                                "additionalProperties": {
+                                    "type": [
+                                        "string",
+                                        "boolean"
+                                    ]
+                                }
+                            },
+                            "fireOn": {
+                                "description": "Fire on every passing check, or only when what it saw changed.",
+                                "type": "string",
+                                "enum": [
+                                    "pass",
+                                    "change"
+                                ]
+                            },
+                            "until": {
+                                "description": "Switch it off the first time it fires.",
+                                "type": "string",
+                                "enum": [
+                                    "first-fire"
+                                ]
+                            },
+                            "target": {
+                                "description": "What a passing check sets off: a new agent (the default), only a notification, or (`extension`) a handler of this extension's own backend, which only this extension can save.",
+                                "type": "object",
+                                "properties": {
+                                    "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                            "agent",
+                                            "conversation",
+                                            "notify",
+                                            "extension"
+                                        ]
+                                    },
+                                    "conversationId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "extension": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "handler": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    }
+                                },
+                                "required": [
+                                    "kind"
+                                ],
+                                "additionalProperties": false
                             },
                             "holdForSeconds": {
                                 "description": "Wait this long and coalesce repeats, rather than firing on every event.",
@@ -2805,6 +3722,183 @@
                     },
                     "description": "Starting points this pack offers in the automation composer, a trigger, a prompt written for that trigger's payload, and whatever guard makes it safe to leave on. Declared by whoever knows the service rather than by the composer, so they appear when your pack is installed and disappear with it. Pure prefill: creating one makes an ordinary automation."
                 },
+                "watchKinds": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "pattern": "^(?!url$)[a-z][a-z0-9-]{0,63}$",
+                                "description": "The kind's id, which an automation's source names as `kind`. Keep it once shipped: a stored automation names it."
+                            },
+                            "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40,
+                                "description": "What the composer's chip says: a few words, like `npm package`."
+                            },
+                            "icon": {
+                                "description": "A name from the host's icon set for the chip.",
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "logo": {
+                                "description": "A simple-icons slug, drawn where a logo fits better than an icon.",
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "description": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 300,
+                                "description": "One sentence under the chips on what the check looks at and when it passes."
+                            },
+                            "sentence": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "description": "What one source of this kind watches, in a few words, for the automation's row, its approval card and the wake: `{key}` puts a parameter in, and a `[…]` segment is left out when a parameter it names is absent or off, like `GitHub releases of {repo}[ (prereleases too){prereleases}]`. A switch puts nothing in: it only keeps its segment."
+                            },
+                            "fields": {
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "key": {
+                                            "type": "string",
+                                            "pattern": "^(?!kind$)[a-z][a-zA-Z0-9]{0,39}$",
+                                            "description": "The parameter's name as the automation stores it, beside `kind`: what `--with <key>=<value>` sets on the command line."
+                                        },
+                                        "label": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 80,
+                                            "description": "The box's label in the composer."
+                                        },
+                                        "type": {
+                                            "description": "`text` (the default): a line of text, stored as typed. `switch`: on or off, stored as `true` only when on.",
+                                            "type": "string",
+                                            "enum": [
+                                                "text",
+                                                "switch"
+                                            ]
+                                        },
+                                        "required": {
+                                            "description": "Whether a source of this kind must carry it. A switch is never required.",
+                                            "type": "boolean"
+                                        },
+                                        "placeholder": {
+                                            "description": "An example value, shown in the empty box.",
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                        },
+                                        "hint": {
+                                            "description": "One sentence on what it changes, behind the field's (i).",
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 300
+                                        },
+                                        "pattern": {
+                                            "description": "A regular expression a text value must match, checked when the automation is saved, in the composer and by the command.",
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 300
+                                        },
+                                        "patternHint": {
+                                            "description": "What a value that matches looks like, said when one does not: `owner/name`.",
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 120
+                                        },
+                                        "maxLength": {
+                                            "description": "The longest a text value may be. Absent means 2000 characters.",
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0,
+                                            "maximum": 2000
+                                        }
+                                    },
+                                    "required": [
+                                        "key",
+                                        "label"
+                                    ],
+                                    "additionalProperties": false
+                                },
+                                "description": "Its parameters, in the order the composer draws them."
+                            },
+                            "capabilities": {
+                                "description": "Ids of this extension's own capability cards whose credential-gateway addresses each check is handed, as the automation's role reaches them: a GitHub card for a private repository's releases. Never a credential itself.",
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                }
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "label",
+                            "description",
+                            "sentence",
+                            "fields"
+                        ],
+                        "power": {
+                            "key": "watch-kind:${id}",
+                            "sentence": "its backend checks \"${label}\" watches for the sandbox's automations"
+                        },
+                        "additionalProperties": false
+                    },
+                    "description": "Ready-made checks an automation can name instead of a guard command: a package's version, a service's newest release. Your backend answers each check (`api.checks.serve(id, handler)`), and the sandbox runs it on the automation's schedule with no shell and no model, firing only when it passes or when what it saw changed. The composer, the `automations` command and the approval card draw each kind from this declaration. Needs a `server` bundle."
+                },
+                "modelRoles": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "maxLength": 40,
+                                "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+                                "description": "The job's id: what the owner's choice of setup is stored under, and what a run this extension starts names as `job` on POST /agent. Keep it once shipped: a stored choice names it. An id the sandbox's own jobs or an earlier extension already use is not taken."
+                            },
+                            "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40,
+                                "description": "What the settings page calls the job, in the owner's words: `Pipeline fixes`."
+                            },
+                            "explanation": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 300,
+                                "description": "One sentence under the label on what starts the job, saying more than the label does: `The agent started by Fix on a failed pipeline.`"
+                            },
+                            "icon": {
+                                "description": "A name from the host's icon set for the job's chip. Absent draws a wrench.",
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "setup": {
+                                "description": "The setup the job is suggested: where a sandbox that never placed its jobs runs it, and where the settings page puts it when the owner places it again. What the work needs, not what it costs today. Absent is `medium`.",
+                                "type": "string",
+                                "enum": [
+                                    "low",
+                                    "medium",
+                                    "high"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "label",
+                            "explanation"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "description": "The jobs this extension starts agent runs for, each of which the owner puts on a model setup in Sandbox ▸ Agent ▸ Models beside the sandbox's own: a run you start through `POST /agent` names its job as `job`, and runs on that setup's model when it names none of its own (an id the sandbox's own table held until 2026-11-26 may ride as `runRole`, which a sandbox from before reads too). Switching the extension off hides its jobs on that page and keeps the owner's choices for them."
+                },
                 "bin": {
                     "type": "string",
                     "minLength": 1,
@@ -2841,6 +3935,139 @@
                     },
                     "description": "Tools for the agent, as an MCP server the daemon mounts into every turn and every runtime (Claude Code, Codex, Cursor, ACP agents). Serve them from your `server` bundle with `api.tools.serve((card) => [...])`, or from a declared process's port. Replaces an agent plugin's `.mcp.json`, which only Claude Code read.",
                     "additionalProperties": false
+                },
+                "publicRoutes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "Where it answers, under /door/<id>/: segments joined by \"/\", each a lowercase word or a lone `*` for any one segment, e.g. \"hook\", \"*/report\"."
+                            },
+                            "methods": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "enum": [
+                                        "GET",
+                                        "POST",
+                                        "PUT",
+                                        "PATCH",
+                                        "DELETE"
+                                    ]
+                                },
+                                "description": "The methods it answers; anything else is refused before your backend hears of it."
+                            },
+                            "automation": {
+                                "description": "The path's first `*` names an automation listening on this extension's own listener provider: one that is not there answers 404 and one switched off 409, its `allowedOrigins` are the list `origins` checks, its door key is what `key` admits, and the day's ceiling is counted per automation.",
+                                "type": "boolean",
+                                "const": true
+                            },
+                            "origins": {
+                                "description": "`listed`: a browser's Origin must be on the automation's allowed origins, or the call is refused (403); needs `automation`. `any` or absent: no Origin is checked, as for a provider's webhook.",
+                                "type": "string",
+                                "enum": [
+                                    "listed",
+                                    "any"
+                                ]
+                            },
+                            "key": {
+                                "description": "A caller with no Origin to check (an app, a server) may present the automation's door key instead, as `?key=` or `Authorization: Bearer`; needs `automation` and `origins: \"listed\"`. The key itself never reaches your backend.",
+                                "type": "boolean",
+                                "const": true
+                            },
+                            "keyFromBrowsers": {
+                                "description": "(2026-11-26) An automation that opts in (its trigger's `keyFromBrowsers`) lets its door key admit a browser whose Origin is not on its list too; needs `key`. The owner opts each automation in, off by default, since a key in a public page is anyone's to copy: the minute's window and the day's ceiling are then what bound it.",
+                                "type": "boolean",
+                                "const": true
+                            },
+                            "signature": {
+                                "description": "Refuse anything not signed by the sender with the named secret (and, for a timestamped scheme, sent within five minutes); a redelivery of a call already taken is answered without reaching your backend.",
+                                "type": "object",
+                                "properties": {
+                                    "scheme": {
+                                        "type": "string",
+                                        "enum": [
+                                            "github",
+                                            "linear",
+                                            "sentry",
+                                            "stripe",
+                                            "standard-webhooks"
+                                        ],
+                                        "description": "Which provider's signing scheme the sender uses."
+                                    },
+                                    "secret": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$",
+                                        "description": "The name of the sandbox secret holding the signing secret, which the owner sets; its value never reaches your backend."
+                                    }
+                                },
+                                "required": [
+                                    "scheme",
+                                    "secret"
+                                ],
+                                "additionalProperties": false
+                            },
+                            "turnstile": {
+                                "description": "Refuse a call without a Cloudflare Turnstile token the sandbox verifies with Cloudflare under the named secret: the page renders the widget with its site key (public, yours to serve) and sends the token it gets as `x-intentic-turnstile`. A token is good once.",
+                                "type": "object",
+                                "properties": {
+                                    "secret": {
+                                        "type": "string",
+                                        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$",
+                                        "description": "The name of the sandbox secret holding the Cloudflare Turnstile secret key, which the owner sets; its value never reaches your backend."
+                                    }
+                                },
+                                "required": [
+                                    "secret"
+                                ],
+                                "additionalProperties": false
+                            },
+                            "proofOfWork": {
+                                "description": "Refuse a call without a solved challenge: the caller fetches one at GET /door/<id>/~challenge?caller=<its id> and sends `x-intentic-pow: <salt>:<nonce>` and `x-intentic-pow-caller: <its id>`.",
+                                "type": "boolean",
+                                "const": true
+                            },
+                            "rate": {
+                                "description": "Calls a minute one caller (by address) may make before 429; 30 when absent.",
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 600
+                            },
+                            "dailyMax": {
+                                "description": "Calls a day it takes in all (per automation, for an automation's route) before 429; 1000 when absent. `\"none\"` (2026-11-26) counts no day at all, for a route that only serves what a page loads (a script, its settings), so a busy site's page views cannot shut it; only a GET-only route may say it, and its minute's window and size still hold.",
+                                "anyOf": [
+                                    {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 100000
+                                    },
+                                    {
+                                        "type": "string",
+                                        "const": "none"
+                                    }
+                                ]
+                            },
+                            "bodyMax": {
+                                "description": "The largest body it takes, in bytes; 65536 when absent, at most 1048576.",
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 1048576
+                            }
+                        },
+                        "required": [
+                            "path",
+                            "methods"
+                        ],
+                        "power": {
+                            "key": "public:${path}",
+                            "sentence": "anyone on the internet can call its backend at ${methods|, } /${path}${signature? when signed with your secret ${signature.secret}:}"
+                        },
+                        "additionalProperties": false
+                    },
+                    "description": "Routes anyone on the internet may call without signing in, served at /door/<id>/<path> and handed to your backend's `api.publicRoutes.serve` handler only after the sandbox's own protections passed the call: its size, a per-minute window and a daily ceiling, an automation's allowed origins or its door key, a proof-of-work challenge, a Cloudflare Turnstile token, a provider's signature, the last two checked against secrets you never see. Each is a power the owner approves."
                 }
             },
             "additionalProperties": false

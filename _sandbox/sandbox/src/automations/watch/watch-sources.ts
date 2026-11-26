@@ -1,12 +1,13 @@
 import { Script, createContext } from "node:vm";
-import type { WatchSource } from "@intentic/sandbox-contract/schemas/automations";
-import { maxSatisfying, validRange } from "semver";
+import type { UrlWatchSource } from "@intentic/sandbox-contract/schemas/automations";
 import { errorMessage } from "@intentic/base/errors";
 import { readCappedText } from "@intentic/base/capped-read";
 
-// The ready-made checks a watch can name instead of a guard command (WatchSourceSchema): the daemon asks the registry,
-// GitHub or the page itself, with no shell, no extension and no model. Each answers whether its condition holds and what
-// it saw, which is what `fireOn: change` compares and what the wake is told.
+// The daemon's own ready-made check (`url`): a page's text, or what a pattern matches on it, fetched with no shell, no
+// extension and no model. It answers whether its condition holds and what it saw, which is what `fireOn: change`
+// compares and what the wake is told. (2026-11-26) The npm and GitHub release checks left for the connectors extension's
+// backend, which serves them as watch kinds it declares (watch-kinds.ts, contributed-check.ts); a page stays here, since
+// it names no provider and every sandbox can use it.
 
 export type SourceCheck =
     | { readonly pass: true; readonly output: string }
@@ -17,22 +18,7 @@ export type SourceFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 export interface SourceContext {
     readonly fetch: SourceFetch;
-    // Where an authenticated request finds its way: a connected GitHub card's credential-gateway address
-    // (GITHUB_API_URL_<card>), else GITHUB_TOKEN or GH_TOKEN, when the owner set one.
-    readonly env: Readonly<Record<string, string | undefined>>;
 }
-
-// GitHub's API as this sandbox reaches it: through a connected GitHub card's credential gateway when there is one, which
-// signs the request itself, else directly, with a token when one is set. Unauthenticated requests share an hourly limit
-// per address that a datacentre's address is often past already.
-const githubApi = (env: SourceContext["env"]): { readonly base: string; readonly headers: Record<string, string> } => {
-    const gateway = Object.entries(env).find(([key, value]) => key.startsWith("GITHUB_API_URL_") && value !== undefined && value !== "");
-    if (gateway?.[1] !== undefined) {
-        return { base: gateway[1].replace(/\/$/, ""), headers: {} };
-    }
-    const token = env["GITHUB_TOKEN"] ?? env["GH_TOKEN"];
-    return { base: "https://api.github.com", headers: token === undefined || token === "" ? {} : { authorization: `Bearer ${token}` } };
-};
 
 // One request may take this long before the check reads as not passing; a 60-second guard has the same bound.
 const FETCH_TIMEOUT_MS = 20_000;
@@ -40,35 +26,18 @@ const FETCH_TIMEOUT_MS = 20_000;
 const PAGE_MAX_BYTES = 2_000_000;
 const USER_AGENT = "intentic-sandbox-watch";
 
-// The source in a few words, for a run's detail, a notification and the wake's "Check command" line.
-export const sourceLabel = (source: WatchSource): string => {
-    if (source.kind === "npm") {
-        const spec = source.range ?? source.tag;
-        return `npm ${source.package}${spec === undefined ? "" : `@${spec}`}`;
-    }
-    if (source.kind === "github-release") {
-        return `GitHub releases of ${source.repo}${source.prereleases === true ? " (prereleases too)" : ""}`;
-    }
-    return source.select === undefined ? source.url : `${source.url} (matching ${source.select})`;
-};
-
-// What upsert refuses, so a source that could never be checked is never saved: a range semver cannot read, a pattern
+// What upsert refuses, so a page that could never be checked is never saved: an address that is not http(s), a pattern
 // that does not compile. Undefined when it can run.
-export const sourceProblem = (source: WatchSource): string | undefined => {
-    if (source.kind === "npm" && source.range !== undefined && validRange(source.range) === null) {
-        return `"${source.range}" is not a semver range npm understands, like >=1.4.3 or ^2`;
+export const sourceProblem = (source: UrlWatchSource): string | undefined => {
+    if (!/^https?:\/\//.test(source.url)) {
+        return "a watched page must be an http or https address";
     }
-    if (source.kind === "url") {
-        if (!/^https?:\/\//.test(source.url)) {
-            return "a watched page must be an http or https address";
-        }
-        if (source.select !== undefined) {
-            try {
-                // Compiled only to learn whether it can be; the check compiles its own each time.
-                void new RegExp(source.select);
-            } catch (error) {
-                return `the select pattern does not compile: ${errorMessage(error)}`;
-            }
+    if (source.select !== undefined) {
+        try {
+            // Compiled only to learn whether it can be; the check compiles its own each time.
+            void new RegExp(source.select);
+        } catch (error) {
+            return `the select pattern does not compile: ${errorMessage(error)}`;
         }
     }
     return undefined;
@@ -89,82 +58,6 @@ const timed = async (context: SourceContext, url: string, headers: Record<string
     } catch (error) {
         return `could not reach ${new URL(url).host}: ${errorMessage(error)}`;
     }
-};
-
-// A scoped name keeps its @ and escapes its slash, the registry's own spelling.
-const registryUrl = (name: string): string =>
-    `https://registry.npmjs.org/${name.startsWith("@") ? `@${encodeURIComponent(name.slice(1))}` : encodeURIComponent(name)}`;
-
-interface Packument {
-    readonly "dist-tags"?: Record<string, string>;
-    readonly versions?: Record<string, unknown>;
-}
-
-const checkNpm = async (source: Extract<WatchSource, { kind: "npm" }>, context: SourceContext): Promise<SourceCheck> => {
-    // The abbreviated document: dist-tags and the version list, without every version's readme.
-    const response = await timed(context, registryUrl(source.package), { accept: "application/vnd.npm.install-v1+json" });
-    if (typeof response === "string") {
-        return { pass: false, detail: response };
-    }
-    if (response.status === 404) {
-        return { pass: false, detail: `npm has no package named ${source.package}` };
-    }
-    if (!response.ok) {
-        return { pass: false, detail: `the npm registry answered ${response.status}` };
-    }
-    const packument = (await response.json()) as Packument;
-    if (source.range !== undefined) {
-        const match = maxSatisfying(Object.keys(packument.versions ?? {}), source.range);
-        const latest = packument["dist-tags"]?.["latest"];
-        return match === null
-            ? {
-                  pass: false,
-                  detail: `no published version of ${source.package} satisfies ${source.range} yet${latest === undefined ? "" : ` (latest is ${latest})`}`,
-              }
-            : { pass: true, output: `${source.package}@${match}` };
-    }
-    const tag = source.tag ?? "latest";
-    const version = packument["dist-tags"]?.[tag];
-    return version === undefined
-        ? { pass: false, detail: `${source.package} has no "${tag}" tag` }
-        : { pass: true, output: `${source.package}@${version}` };
-};
-
-interface Release {
-    readonly tag_name?: string;
-    readonly name?: string | null;
-    readonly html_url?: string;
-    readonly draft?: boolean;
-    readonly prerelease?: boolean;
-}
-
-const checkGithubRelease = async (source: Extract<WatchSource, { kind: "github-release" }>, context: SourceContext): Promise<SourceCheck> => {
-    const api = githubApi(context.env);
-    const response = await timed(context, `${api.base}/repos/${source.repo}/releases?per_page=20`, {
-        accept: "application/vnd.github+json",
-        ...api.headers,
-    });
-    if (typeof response === "string") {
-        return { pass: false, detail: response };
-    }
-    if (response.status === 404) {
-        return { pass: false, detail: `GitHub has no public repository ${source.repo}` };
-    }
-    if (!response.ok) {
-        return {
-            pass: false,
-            detail: `GitHub answered ${response.status}${response.status === 403 ? " (likely its hourly limit for requests without a token)" : ""}`,
-        };
-    }
-    const releases = (await response.json()) as readonly Release[];
-    const newest = releases.find((release) => release.draft !== true && (source.prereleases === true || release.prerelease !== true));
-    if (newest?.tag_name === undefined) {
-        return { pass: false, detail: `${source.repo} has published no ${source.prereleases === true ? "" : "full "}release yet` };
-    }
-    // Only what names the release, never its notes: a typo fixed in the notes is not a new release.
-    const name =
-        newest.name !== undefined && newest.name !== null && newest.name !== "" && newest.name !== newest.tag_name ? ` (${newest.name})` : "";
-    return { pass: true, output: [`${newest.tag_name}${name}`, ...(newest.html_url === undefined ? [] : [newest.html_url])].join("\n") };
 };
 
 // A page's words, not its markup: scripts and styles go whole, tags go, entities a page always uses come back, and runs
@@ -203,7 +96,7 @@ const boundedMatch = (pattern: string, text: string): RegExpExecArray | null | "
     return scope.match;
 };
 
-const checkUrl = async (source: Extract<WatchSource, { kind: "url" }>, context: SourceContext): Promise<SourceCheck> => {
+const checkUrl = async (source: UrlWatchSource, context: SourceContext): Promise<SourceCheck> => {
     const response = await timed(context, source.url, { accept: "text/html,text/plain,application/json;q=0.9,*/*;q=0.5" });
     if (typeof response === "string") {
         return { pass: false, detail: response };
@@ -230,17 +123,11 @@ const checkUrl = async (source: Extract<WatchSource, { kind: "url" }>, context: 
     return { pass: true, output: (match[1] ?? match[0]).trim() };
 };
 
-export const checkSource = async (source: WatchSource, context: SourceContext): Promise<SourceCheck> => {
+export const checkUrlSource = async (source: UrlWatchSource, context: SourceContext): Promise<SourceCheck> => {
     try {
-        if (source.kind === "npm") {
-            return await checkNpm(source, context);
-        }
-        if (source.kind === "github-release") {
-            return await checkGithubRelease(source, context);
-        }
         return await checkUrl(source, context);
     } catch (error) {
-        // A body that would not parse is a check that did not pass, said as such, never a crashed tick.
+        // A body that would not be read is a check that did not pass, said as such, never a crashed tick.
         return { pass: false, detail: `the check failed: ${errorMessage(error)}` };
     }
 };

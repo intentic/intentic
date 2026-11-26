@@ -22,12 +22,25 @@
             "POST /automations/*/enabled",
             "DELETE /automations/*",
             "POST /automations/*/run",
-            "POST /automations/*/rotate-token",
-            "GET /webchat/*/installs"
+            "POST /automations/*/rotate-token"
         ]
     },
     "contributes": {
         "views": [{ "id": "automations", "label": "Automations", "surface": "rail" }],
+        "automationTemplates": [
+            {
+                "id": "page-changes",
+                "title": "When a page changes",
+                "icon": "globe",
+                "trigger": { "kind": "schedule", "cron": "7 * * * *" },
+                "source": { "kind": "url", "url": "https://example.com/status" },
+                "fireOn": "change",
+                "target": { "kind": "notify" },
+                "description": "Tell me when the text of a web page changes, a status page, a pricing page, a changelog.",
+                "prompt": "The page you were watching changed; what changed is below.",
+                "note": "checks hourly · only when its text changes"
+            }
+        ],
         "files": [
             { "path": ".intentic/config/automations.json", "invalidates": ["automations"] },
             { "path": ".intentic/records/automation-runs.json", "invalidates": ["automations"] },

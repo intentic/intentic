@@ -1,6 +1,8 @@
 import type { sandboxContract } from "@intentic/sandbox-contract";
 import type { Conversion, Granularity } from "@intentic/sandbox-contract/documents";
 import type { ToolEffect } from "@intentic/sandbox-contract/peer-mcp-server";
+import type { WebhookSignatureScheme } from "@intentic/sandbox-contract/schemas/automations";
+import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Disposable } from "./disposable.js";
 
@@ -31,12 +33,105 @@ export interface ToolResult {
     readonly isError?: boolean;
 }
 
+// (2026-11-26) A sandbox browser account the calling turn holds (a browser card, or an identity's own browser): its id,
+// which `api.browser.call` names, and the sites it signs in on, the only ones an extension drives its browser on (its
+// sign-in and home pages' hosts, widened to the operator's sign-in family: x.com stands for twitter.com too).
+export interface ToolGrantAccount {
+    readonly id: string;
+    readonly kind: "browser" | "identity";
+    readonly sites: readonly string[];
+}
+
+// (2026-11-26) What the turn that called a tool holds, read by the daemon from that turn's own grants (its role, and the
+// reach of the people it is for): never a credential, never more than the turn holds.
+export interface ToolCallGrants {
+    // The sandbox's signed-in browser accounts, for `api.browser.call`.
+    readonly accounts: readonly ToolGrantAccount[];
+    // The owner's own browsers (their `webext` cards), for `api.ownerBrowser.call`.
+    readonly browsers: readonly string[];
+    // The cards of this extension's own kinds the turn holds.
+    readonly cards: readonly string[];
+}
+
 // What one call is handed beside its arguments.
 export interface ToolCallContext {
     // Aborted when the agent's client gives up on the call, or the host's deadline for it passes.
     readonly signal: AbortSignal;
     // The conversation the calling turn belongs to, when it has one.
     readonly conversationId?: string | undefined;
+    // (2026-11-26) What the calling turn holds, so a tool can refuse itself ("this turn holds no chatgpt.com account");
+    // the daemon refuses anything outside it anyway. Absent where no daemon told it (a test, a daemon before 2.55.0).
+    readonly grants?: ToolCallGrants | undefined;
+    // (2026-11-26) This call's ticket onto its turn, minted by the daemon for this extension and this call and good only
+    // while it runs: what `api.browser.call`, `api.ownerBrowser.call` and `api.jobs.start` hand back. Opaque.
+    readonly ticket?: string | undefined;
+}
+
+// (2026-11-26) What reaches the calling turn's grants: a tool's call while it runs (its ToolCallContext), or a job it
+// started (RunningJob) for as long as the job runs.
+export interface TurnStanding {
+    readonly grants?: ToolCallGrants | undefined;
+    readonly ticket?: string | undefined;
+    // Ends the request when aborted.
+    readonly signal?: AbortSignal | undefined;
+}
+
+// (2026-11-26) One call of a page tool in the sandbox's signed-in browser of an account the turn holds: `tool` as the
+// agent's `browser` server names it (`browser_navigate`, `browser_evaluate`, `browser_click`, …), `args` its arguments
+// without `account`. Only the page's own tools, and only on the account's sites: a navigation elsewhere is refused, a
+// call on a page elsewhere is refused, and a call that leaves them has its answer withheld.
+export interface BrowserCall {
+    readonly account: string;
+    readonly tool: string;
+    readonly args?: ToolArguments | undefined;
+}
+
+// (2026-11-26) One call of a tool of the owner's own browser the turn holds (`open`, `read`, `click`, …, as the agent's
+// server for that browser names them), through the same door as the agent's: the browser's own site switches apply.
+export interface OwnerBrowserCall {
+    readonly browser: string;
+    readonly tool: string;
+    readonly args?: ToolArguments | undefined;
+}
+
+// A tool's arguments, as a tool of the agent's is called with them.
+export type ToolArguments = Parameters<ToolDefinition["call"]>[0];
+
+// (2026-11-26) What a job's work came to: `output` is what `wait` and the conversation's wake hand the agent, cut in the
+// middle past the job's bound.
+export interface JobEnd {
+    readonly ok: boolean;
+    readonly output: string;
+}
+
+// (2026-11-26) A job's work while it runs: its id, the grants and ticket of the call that started it (good for as long
+// as the job runs; the sandbox's own browsers only while that call's turn still runs, the owner's browser throughout),
+// and a line onto what the job shows meanwhile. `signal` aborts once the job is stopped, by the agent or a person.
+export interface RunningJob {
+    readonly id: string;
+    readonly grants: ToolCallGrants;
+    readonly ticket: string;
+    readonly signal: AbortSignal;
+    say(line: string): void;
+}
+
+// (2026-11-26) A background job a tool starts in the calling conversation, as a `run_in_background` command is one:
+// `command` is how `wait` and the transcript name it, `description` what the conversation's card shows, `started` its
+// output until it ends (what it is doing, and what to do if a restart takes it down meanwhile). In a `lane`, at most
+// `most` (1 when absent) of that lane run at once, first come first served, and never two naming one `key` at once.
+export interface JobSpec {
+    readonly command: string;
+    readonly description: string;
+    readonly started: string;
+    readonly lane?: { readonly name: string; readonly key?: string | undefined; readonly most?: number | undefined } | undefined;
+    // The work, run once the job's turn in its lane comes; a throw ends the job as failed with its message.
+    readonly run: (job: RunningJob) => Promise<JobEnd>;
+}
+
+// (2026-11-26) A job filed: its id, which the agent's `wait` takes, and how many runs of its lane were ahead of it.
+export interface StartedJob {
+    readonly id: string;
+    readonly ahead: number;
 }
 
 export interface ToolDefinition {
@@ -56,6 +151,68 @@ export interface ToolDefinition {
 // One request into this extension's `/x/<id>` namespace, prefix already stripped. Return `undefined` for "not mine":
 // the host answers 404.
 export type BackendRouteHandler = (request: Request) => Promise<Response | undefined>;
+
+// (2026-11-26) Who is calling through `/x/<id>`, as the daemon verified them (`api.caller(request)`): a person signed in,
+// a repository's operator panel, a program holding a control token, another extension's backend, or nobody at all on a
+// sandbox that runs without sign-in. Read off an assertion the daemon minted for this extension and this request, good
+// for two minutes, which no extension can mint: `asCaller` hands it back to the daemon to act as that person.
+export type ExtensionCallerWho =
+    | {
+          readonly kind: "person";
+          readonly email: string;
+          readonly name?: string | undefined;
+          // Their access tier: guest, viewer, collaborator, writer, maintainer or owner.
+          readonly tier: MemberTier;
+          // The area ids their access is fenced to; absent for the whole workspace.
+          readonly areas?: readonly string[] | undefined;
+          // The parts of the sandbox they were given to run (people, secrets, privacy, ownAccounts).
+          readonly manages?: readonly string[] | undefined;
+      }
+    | { readonly kind: "panel" }
+    | { readonly kind: "program"; readonly id: string; readonly label: string }
+    | { readonly kind: "extension"; readonly id: string }
+    | { readonly kind: "local" };
+
+export type ExtensionCaller = ExtensionCallerWho & {
+    // The workspace folders (relative to `workspaceRoot`) this caller may read: absent for the whole workspace, empty for
+    // none of it. Only a person with areas is fenced; every other kind reads it whole, as the daemon's own routes answer it.
+    readonly folders?: readonly string[] | undefined;
+    // Whether a workspace-relative path is inside `folders`, by segment (`app2` is not inside `app`); a path that climbs
+    // out of the workspace is inside nothing.
+    readonly reaches: (path: string) => boolean;
+    // When the assertion stops being believed (ms); `asCaller` past it is refused.
+    readonly expiresAt: number;
+    // The assertion itself, as the daemon minted it.
+    readonly assertion: string;
+};
+
+// (2026-11-26) What the daemon checked of a call through one of this extension's public routes before handing it over
+// (`contributes.publicRoutes`), as `api.publicRoutes.serve` hears it.
+export interface PublicRouteVerification {
+    // The declared route it landed on, as the manifest spells its path.
+    readonly route: string;
+    // The automation an automation-scoped route is for: on this extension's own listener provider, and switched on.
+    readonly automationId?: string | undefined;
+    // The browser's Origin, on the automation's allowed origins when the route checks them.
+    readonly origin?: string | undefined;
+    // Admitted by the automation's door key in place of a listed Origin; the key itself is not handed on.
+    readonly keyed?: boolean | undefined;
+    // Signed by the provider with the route's secret under this scheme, and the provider's id for the delivery, which no
+    // earlier call the door took carried.
+    readonly signature?: { readonly scheme: WebhookSignatureScheme; readonly deliveryId?: string | undefined } | undefined;
+    // The caller id a solved proof-of-work challenge was signed to.
+    readonly proofOfWork?: { readonly caller: string } | undefined;
+    // (2026-11-26) A Cloudflare Turnstile token passed, verified by the daemon with Cloudflare under the route's secret.
+    readonly turnstile?: true | undefined;
+    // The caller's address as the edge forwarded it: advisory, never an identity.
+    readonly remoteIp?: string | undefined;
+    // When the daemon took it (ms).
+    readonly at: number;
+}
+
+// One call through a public route, path relative to /door/<id>, its door key (if any) already taken off. Return
+// `undefined` for "not mine": the host answers 404.
+export type PublicRouteHandler = (request: Request, verified: PublicRouteVerification) => Promise<Response | undefined> | Response | undefined;
 
 // An action in the approvals queue that names this extension as its `performer`, handed over by the daemon only after
 // it found a person's yes on record matching the item as it stands, and spent that yes. The workspace file is never
@@ -89,6 +246,137 @@ export type ApprovedActionOutcome =
     | { readonly outcome: "uncertain"; readonly error: string };
 
 export type ApprovedActionHandler = (action: ApprovedAction, context: { readonly signal: AbortSignal }) => Promise<ApprovedActionOutcome>;
+
+// (2026-11-26) A post in the approvals queue for a platform one of this extension's cards publishes on
+// (`channel.publish`, the post's `platform` naming the card's id), handed over by the daemon's approvals executor only
+// after it found a person's yes on record matching the post as it stands, and spent that yes. Its words are the ones the
+// person approved: publish them as they are, or refuse.
+export interface ApprovedPost {
+    // The item's id in the approvals queue.
+    readonly id: string;
+    // The card id the post names, lowercased (`discord`).
+    readonly platform: string;
+    // Exactly what to publish.
+    readonly content: string;
+    // A headline, where the post carries one.
+    readonly title?: string | undefined;
+    // Where it goes, matching the card's declared `channel.publish.target` pattern.
+    readonly target: string;
+    // Who said yes (their sign-in) and when, as the daemon recorded it, as for an action.
+    readonly approver?: string | undefined;
+    readonly approvedAt: number;
+    // The sandbox's action rules as the daemon reads them now, organisation pins applied.
+    readonly actionRules: Readonly<Record<string, string>>;
+}
+
+// What publishing it came to, in the queue's three states; a `done` result is the row's link (the message's URL) or line.
+export type ApprovedPostHandler = (post: ApprovedPost, context: { readonly signal: AbortSignal }) => Promise<ApprovedActionOutcome>;
+
+// (2026-11-26) A run ending in a conversation this extension started (POST /agent with its own token), as
+// `api.events.onRunSettled` hears it. `stopped`: a person's stop or a parent's cancel ended it, not the turn itself.
+export interface RunSettled {
+    readonly conversationId: string;
+    // Which run of the conversation it was.
+    readonly run: string;
+    readonly outcome: "done" | "failed" | "stopped";
+    readonly error?: string | undefined;
+    // Its last top-level prose, empty when it said nothing (cut at 20 000 characters).
+    readonly closing: string;
+}
+
+// Whether any agent turn is running in the sandbox, as `api.events.onActivity` hears it.
+export interface SandboxActivity {
+    readonly live: boolean;
+}
+
+// The workload classes `api.exec` runs under, each declared in `permissions.exec`: `command`, admitted and ranked as an
+// agent's shell command; `toolchain`, a heavy tool, which also takes turns in the sandbox's heavy-command queue.
+export type ExecClass = "command" | "toolchain";
+
+export interface ExecOptions {
+    // `command` when absent.
+    readonly class?: ExecClass;
+    // Absolute, or relative to the workspace root; the workspace root when absent.
+    readonly cwd?: string;
+    // Laid over the daemon's environment.
+    readonly env?: Readonly<Record<string, string>>;
+    readonly stdin?: string;
+    // How long it may take, waiting for room or a queue slot included: 10 minutes when absent, at most 2 hours.
+    readonly timeoutMs?: number;
+    // Bytes kept per stream, 1 MiB when absent, at most 64 MiB; past it the stream is still read and `truncated` says so.
+    readonly outputBytes?: number;
+    // Which end of an overflowing stream is kept: the head when absent.
+    readonly keep?: "head" | "tail";
+    // What the queue and the process list call it, after the extension's name.
+    readonly label?: string;
+    // Ends it, as its deadline does.
+    readonly signal?: AbortSignal;
+}
+
+export interface ExecResult {
+    // Set when the sandbox did not start it: no room came free within its deadline. Nothing ran.
+    readonly refused?: string | undefined;
+    // How long it waited for room before it started; a queued `toolchain` run waits inside its own run instead.
+    readonly waitedMs: number;
+    // Absent when it did not exit by itself: ended (`ended`), never started (`spawnError`), or killed by a signal.
+    readonly exitCode?: number | undefined;
+    readonly signal?: string | undefined;
+    readonly stdout: string;
+    readonly stderr: string;
+    readonly truncated: boolean;
+    readonly ended?: "timeout" | "aborted" | undefined;
+    readonly spawnError?: string | undefined;
+}
+
+// (2026-11-26) One automation's fire, handed to the handler its target names: an automation saved with
+// `target: { kind: "extension", extension: "<publisher.name>", handler }` by this extension itself fires it on its trigger,
+// under the scheduler's admission, held wakes and fire journal, with no agent. `id` is the same on every try: a handler
+// told twice (the daemon stopped before it heard the answer) can tell.
+export interface AutomationFire {
+    readonly id: string;
+    readonly automationId: string;
+    readonly handler: string;
+    // When the automation fired (ms). A fire made while the backend was down is handed over once it is back, late.
+    readonly firedAt: number;
+    // How many earlier fires of the same automation this one stands for, fired while the backend was down.
+    readonly coalesced: number;
+    // The trigger's payload (a webhook's body, a workspace event) and what the automation's check saw, when there.
+    readonly payload?: string | undefined;
+    readonly observed?: string | undefined;
+    // The automation's own words (its `prompt`).
+    readonly prompt: string;
+}
+
+// Answers once the fire is taken; a throw is recorded on the automation's run as an error and the fire is not tried
+// again. Bounded by the daemon's ten-minute deadline: long work holds itself (`api.work.hold`) and returns.
+export type AutomationFireHandler = (fire: AutomationFire, context: { readonly signal: AbortSignal }) => void | Promise<void>;
+
+// (2026-11-26) One check of a watch kind this extension declares (`contributes.watchKinds`), handed to the handler
+// `api.checks.serve` registered for it, from the daemon's automations engine alone through a door of the backend host no
+// person's, panel's or agent's token reaches: on an automation's trigger, when the composer's Check now is pressed, and
+// when an agent proposes a watch of this kind.
+export interface WatchCheck {
+    readonly kind: string;
+    // The source's parameters as the automation stores them, already checked against the kind's declared fields.
+    readonly params: Readonly<Record<string, string | boolean>>;
+    // What the last passing check saw, cut to the daemon's bound: a check that words what changed reads it. Absent
+    // before the first pass, and for a check tried by hand.
+    readonly last?: string | undefined;
+    // The credential-gateway addresses of the cards the kind names in `capabilities`, as the automation's role reaches
+    // them, under the names a turn's shell sees them by (`GITHUB_API_URL_<CARD>`). Never a credential: the gateway signs
+    // what is sent through them. Empty when no such card is connected, or the role reaches none.
+    readonly reach: Readonly<Record<string, string>>;
+    // The automation it checks for; absent for a check tried by hand.
+    readonly automationId?: string | undefined;
+}
+
+// What a check came to. A pass carries what it saw: what `fireOn: change` compares and the wake is told, so only what
+// names the thing watched belongs in it (a release's tag, not its notes). A miss carries what it is still waiting for, in
+// a sentence the automation's run history shows.
+export type WatchCheckAnswer = { readonly pass: true; readonly output: string } | { readonly pass: false; readonly detail: string };
+
+// Answers within the daemon's deadline (a minute); a throw reads as a check that did not pass, its message the detail.
+export type WatchCheckHandler = (check: WatchCheck, context: { readonly signal: AbortSignal }) => WatchCheckAnswer | Promise<WatchCheckAnswer>;
 
 // An extension's own setting values, keyed as its manifest's `contributes.settings` declares them.
 export type ExtensionSettingValues = Readonly<Record<string, string | number | boolean>>;
@@ -178,10 +466,41 @@ export interface ExtensionServerApi {
         // The repository set itself moved (a clone, a scaffold, a delete); answers the whole set.
         onDidChangeRepos(listener: (repos: readonly string[]) => void): Disposable;
     };
+    // (2026-11-26) What the sandbox tells this extension's code without an agent turn, each kind declared in
+    // `permissions.events` (a listener of an undeclared kind throws, naming the field). Over the same stream as
+    // `workspace`; a stream that dropped and came back may have missed a run ending, which a reader catches up on by
+    // reading the conversation.
+    readonly events: {
+        // A run ending in a conversation this extension started through POST /agent with its own token (`run`).
+        onRunSettled(listener: (run: RunSettled) => void): Disposable;
+        // Whether any agent turn is running in the sandbox (`activity`): told as the stream opens, then each time it flips.
+        onActivity(listener: (activity: SandboxActivity) => void): Disposable;
+    };
+    // (2026-11-26) Work in flight (`permissions.work`): while a hold stands the sandbox stays awake and an update or a
+    // restart waits for it, as for an agent's turn, named by its label. Disposing lets it go, and so does this backend
+    // dying; after a daemon restart the runtime holds again. Throws when the manifest does not declare `work`.
+    readonly work: {
+        hold(label: string): Disposable;
+    };
+    // (2026-11-26) Runs one command to its end under a workload class the manifest declares (`permissions.exec`),
+    // admitted by the sandbox's memory budget, and for `toolchain` queued with every agent's builds and tests, instead
+    // of competing with them. Never a shell: `argv` runs as given. Rejects when the class is not declared or the daemon
+    // refuses the request; a command that fails answers with its exit code.
+    readonly exec: (argv: readonly string[], options?: ExecOptions) => Promise<ExecResult>;
     readonly routes: {
         // Serves this extension's route namespace; the daemon proxies /x/<id>/* here through its ordinary auth. A
         // second mount replaces the first.
         mount(handler: BackendRouteHandler): void;
+    };
+    // (2026-11-26) Who a request through `/x/<id>` comes from, as the daemon verified them; undefined for a request the
+    // daemon did not attach one to (a daemon from before 2.53.0), one minted for another extension, or one past its
+    // window.
+    readonly caller: (request: Request) => ExtensionCaller | undefined;
+    // (2026-11-26) The routes anyone on the internet may call (`contributes.publicRoutes`), served at /door/<id>/<path>:
+    // reached only once the daemon's own protections passed the call, never through `/x/<id>`, whose handler hears only
+    // people signed in. A second serve replaces the first.
+    readonly publicRoutes: {
+        serve(handler: PublicRouteHandler): void;
     };
     // The agent's tools (`contributes.tools`). The host owns the MCP transport, its deadlines and the card lookup: it
     // answers the handshake, lists what `tools` returns for the card a server was mounted for (undefined for an
@@ -194,8 +513,41 @@ export interface ExtensionServerApi {
     // `performer` names this extension reaches `perform` from the daemon's approvals executor alone, through a door of
     // the backend host that no /x route, panel or agent token reaches, after the daemon has matched and spent the yes.
     // The credentials stay in the backend, read from the daemon. A second perform replaces the first.
+    // (2026-11-26) `publish` is the same door for an approved post on a platform a card of this extension declares it
+    // publishes on (`channel.publish`), in place of an agent turn driving the logged-in browser. A second publish
+    // replaces the first.
     readonly approvals: {
         perform(handler: ApprovedActionHandler): void;
+        publish(handler: ApprovedPostHandler): void;
+    };
+    // (2026-11-26) The handlers an automation fires in this backend (`permissions.fires` declares each name): reached
+    // from the daemon's automations engine alone, through a door of the backend host no /x route, panel or agent token
+    // reaches. A second handler for one name replaces the first; registering an undeclared name throws.
+    readonly automations: {
+        onFire(handler: string, listener: AutomationFireHandler): Disposable;
+    };
+    // (2026-11-26) What its agent tools may do with the grants of the turn calling them, each a power the manifest declares
+    // in `permissions.turn` and the daemon refuses undeclared, and anything the turn does not hold either way. Each takes
+    // the call's context (or a running job's), and rejects with the daemon's words when refused.
+    // The sandbox's signed-in browser of an account the turn holds, on that account's sites (`browser`). The turn's own
+    // browser: the account's page is the one the agent's `browser` tools drive, so a call takes its tab.
+    readonly browser: {
+        call(standing: TurnStanding, call: BrowserCall): Promise<ToolResult>;
+    };
+    // The owner's own browser the turn holds (`owner-browser`).
+    readonly ownerBrowser: {
+        call(standing: TurnStanding, call: OwnerBrowserCall): Promise<ToolResult>;
+    };
+    // A background job in the calling conversation (`jobs`), answered once filed: its work runs in this backend while
+    // the agent goes on, and the agent collects its end with `wait`, or is woken by it.
+    readonly jobs: {
+        start(standing: TurnStanding, spec: JobSpec): Promise<StartedJob>;
+    };
+    // (2026-11-26) The checks of the watch kinds this extension declares (`contributes.watchKinds`), one handler per kind:
+    // reached from the daemon's automations engine alone, through a door of the backend host. A second handler for one
+    // kind replaces the first; serving a kind the manifest does not declare throws.
+    readonly checks: {
+        serve(kind: string, handler: WatchCheckHandler): Disposable;
     };
     // Authenticated transport to the daemon's own routes; every call is checked against the manifest's
     // `permissions.daemon` allowlist.
@@ -206,8 +558,16 @@ export interface ExtensionServerApi {
         // For what the contract does not carry: bytes (`/workspace/raw`) and the daemon's hand-written routes.
         request(path: string, init?: RequestInit): Promise<Response>;
         json<T>(path: string, init?: RequestInit): Promise<T>;
+        // (2026-11-26) The same doors carrying a caller's assertion beside the extension's token, for the routes that act
+        // as whoever pressed: POST /agent starts the turn as that person, held to their access as it stands then. Every
+        // other route answers by the extension's own reach. The daemon refuses an assertion past its window, minted for
+        // another extension or in another sandbox.
+        asCaller(caller: ExtensionCaller): DaemonDoors;
     };
 }
+
+// Authenticated transport to the daemon's own routes, as `api.daemon` and `api.daemon.asCaller(caller)` both carry it.
+export type DaemonDoors = Omit<ExtensionServerApi["daemon"], "asCaller">;
 
 export interface ExtensionServerContext {
     // This extension's routing id, its /x/<id> namespace segment.
@@ -216,9 +576,13 @@ export interface ExtensionServerContext {
 
 // What a declared process (`contributes.processes`) gets, from `connectExtensionProcess` in
 // `@intentic/extension-api/runtime`: the backend's api without the halves only the backend host can serve. A process
-// answers on its own port, so it mounts no routes, serves tools there (`contributes.tools.process`) and carries out no
-// approved action.
-export type ExtensionProcessApi = Omit<ExtensionServerApi, "routes" | "tools" | "approvals">;
+// answers on its own port, so it mounts no routes, serves tools there (`contributes.tools.process`), carries out no
+// approved action, is woken by no automation, answers no watch's check and no public route, hears no `/x` caller, and
+// (serving no tool through the host) reaches no turn; it hears, holds and runs the way the backend does.
+export type ExtensionProcessApi = Omit<
+    ExtensionServerApi,
+    "routes" | "tools" | "approvals" | "automations" | "checks" | "caller" | "publicRoutes" | "browser" | "ownerBrowser" | "jobs"
+>;
 
 // Shape of the manifest `server` bundle's default (or named) export; `activateServer` runs once per activation, which
 // is once per backend-host start unless the extension returns a `deactivate`, after which a change to it alone

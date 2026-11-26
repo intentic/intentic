@@ -1,6 +1,5 @@
 import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { FixResume } from "@intentic/sandbox-contract/state/fix-attempt-plan";
-import type { ModelRole } from "@intentic/sandbox-contract/models/model-roles";
 import { sendableEffort } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { AgentRunAllowance, AgentRunChoice, ModelPicking } from "@intentic/ui";
 import { effectScope } from "vue";
@@ -45,7 +44,8 @@ const namedChoice = (selection: {
 };
 
 // Caches one role's list app-wide: read from a computed or click handler, contexts with no Vue injection of their
-// own, via a detached `appScope` so it outlives the first button to unmount. Bounded by the fixed role catalog.
+// own, via a detached `appScope` so it outlives the first button to unmount. Bounded by the jobs the sandbox and its
+// extensions declare (a contributed one, `acceptance-run`, is taken by id like the sandbox's own).
 const appScope = effectScope(true);
 const entered = new Map<string, RoleModel>();
 // `run()` returns undefined only for a stopped scope; this one is never stopped.
@@ -54,7 +54,7 @@ const roleModel = (role: string): RoleModel => {
     if (held !== undefined) {
         return held;
     }
-    const made = appScope.run(() => useRoleModel(role as ModelRole))!;
+    const made = appScope.run(() => useRoleModel(role))!;
     entered.set(role, made);
     return made;
 };

@@ -15,7 +15,7 @@ import {
 } from "@intentic/extension-ui";
 import { computed, ref } from "vue";
 import { nextIn, scheduleTriggerLabel, since } from "./cronSchedule";
-import { type AvailableSource, listenerSourceOf } from "./catalog";
+import { type AvailableSource, listenerSourceOf, useWatchKinds } from "./catalog";
 import AutomationDetail from "./detail/AutomationDetail.vue";
 import AutomationEditor from "./AutomationEditor.vue";
 import RunStrip from "./RunStrip.vue";
@@ -32,6 +32,7 @@ import { t } from "./i18n.js";
 // trigger glyph doubles as the health light. Shared by every shelf, since an enabled chore is an ordinary automation.
 
 const service = useServices();
+const watchKinds = useWatchKinds();
 
 const props = defineProps<{
     automation: AutomationSummary;
@@ -157,9 +158,12 @@ const targetPhrase = computed<string | undefined>(() => {
     if (goes?.kind === `conversation`) {
         return t(`automationRow.continues`, { conversation: titleOf(goes.conversationId) });
     }
+    if (goes?.kind === `extension`) {
+        return t(`automationRow.wakesExtension`, { extension: goes.extension, handler: goes.handler });
+    }
     return goes?.kind === `notify` ? t(`automationRow.notifiesYou`) : undefined;
 });
-const TARGET_ICON = { conversation: `comments`, notify: `mobile` } as const;
+const TARGET_ICON = { conversation: `comments`, notify: `mobile`, extension: `plug` } as const;
 
 // Every value of an opened automation is changed where it is shown (properties/); the full form is for what has no
 // place there of its own, mounted only while open, so it loads fresh each time.
@@ -229,7 +233,7 @@ const verbs = computed((): ActionItem[] => [
                 <Icon
                     v-if="automation.source"
                     name="eye"
-                    v-tooltip.top="{ title: t(`automationRow.watches`), note: sourceLabel(automation.source) }"
+                    v-tooltip.top="{ title: t(`automationRow.watches`), note: sourceLabel(automation.source, watchKinds) }"
                     class="shrink-0 text-2xs text-subtle"
                 />
                 <!-- Where a fire goes when it is not a new agent: unobtrusive, since the drawer says it in words. -->

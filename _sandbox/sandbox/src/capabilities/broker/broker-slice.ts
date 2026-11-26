@@ -3,6 +3,7 @@ import { BROKER_PORT } from "@intentic/constants";
 import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 import { contributionFor, contributionRegistry } from "../contributions.js";
 import type { ExtensionHost } from "../extension-inventory/installed-extensions.js";
+import { outwardActionsOf, type OutwardActions } from "./outward-actions.js";
 import type { CardDeps } from "../../guard/card-offers.js";
 import type { HoldDeps } from "../../guard/held-asks.js";
 import type { ConversationGrants } from "../../roles/conversation-grants.js";
@@ -42,6 +43,9 @@ export interface BrokerSlice {
     readonly sshKeys: SshKeyStore;
     // The ssh agent's sockets: the owner's, and one per conversation (SSH_AUTH_SOCK in its turns).
     readonly sshAgent: SshAgentSockets;
+    // The outward actions the enabled extensions declare (outward-actions.ts): what the action rules are offered for, and
+    // the commands the command guard and the turn's record recognise. Read off the cached inventory, so every turn may ask.
+    readonly outwardActions: () => Promise<OutwardActions>;
     // The gateway's git rewrites for the git the daemon runs by itself (daemon-git-env.ts): a remote follow, the
     // turn-start sync, Fetch, Pull, Back up. Never throws; none when it cannot be read.
     readonly daemonGitEnv: () => Promise<Record<string, string>>;
@@ -141,6 +145,7 @@ export const createBrokerSlice = ({ authRoot, cards, hold, conversationGrants, h
             credentialPolicy,
         }),
         brokerSessions: sessions,
+        outwardActions: () => outwardActionsOf(host),
         credentialPolicy,
         rulePrompts: createRulePrompts({ ...cards, grants: conversationGrants, hold, warn }),
         gatewayOrigin,

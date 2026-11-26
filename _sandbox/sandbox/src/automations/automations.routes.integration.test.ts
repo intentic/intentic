@@ -15,6 +15,7 @@ import { testConfig } from "../env.config.testing.js";
 import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { createAutomationsRoutes } from "./automations.routes.js";
 import { fileAutomationsStore } from "./automations-store.js";
+import { installWatchKinds } from "./watch/watch-kinds.testing.js";
 
 // Run now's REFUSALS, which are the half a by-hand fire can get wrong without anyone noticing: the fire it
 // does perform is the e2e suite's (it wants a real daemon behind it). Only the manifest is touched on these
@@ -55,7 +56,7 @@ test("run now still refuses an automation that isn't there at all", async () => 
 
 // Sender rules need a source that vouches for `author.id`; the catalogue says which do. The daemon's own sources never
 // declare one, so an empty extensions dir is exactly the case where every listener refuses them.
-const catalogServices = (root: string): Services =>
+const catalogServices = (root: string, overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -69,6 +70,7 @@ const catalogServices = (root: string): Services =>
         // listener reconcile that follows it logs rather than throws.
         doorTokens: unstubbed<Services["doorTokens"]>("doorTokens", { ensure: async () => "token", remove: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
+        ...overrides,
     });
 
 // The one fake that lets a fire actually START and then stop on its own: the workspace refuses clock-started wakes, so
@@ -178,12 +180,12 @@ test("a schedule fires on the wall clock of its own zone, not the container's", 
 // back to the container's UTC, which is the same bug with one fewer place to look.
 test("an automation with no zone of its own follows the sandbox's setting", async () => {
     const root = mkdtempSync(join(tmpdir(), "routes-"));
-    const services = {
-        ...catalogServices(root),
+    // An override rather than a spread: spreading the unstubbed fake drops every service it would have answered for.
+    const services = catalogServices(root, {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse({ timezone: "Asia/Tokyo" }),
         }),
-    };
+    });
     const routes = createAutomationsRoutes(services);
     await call(routes.upsert, automation("morning", { kind: "schedule", cron: "15 9 * * *" }), { context });
 
@@ -208,10 +210,10 @@ test("upsert refuses a cron that parses but can never come round", async () => {
     expect(await services.automations.get("past")).toBeUndefined();
 });
 
-test("upsert refuses sender rules on a source that does not identify who is writing: the Visitor chat", async () => {
+test("upsert refuses sender rules on a source that does not identify who is writing: the daemon's own CI", async () => {
     const services = catalogServices(mkdtempSync(join(tmpdir(), "routes-")));
     const routes = createAutomationsRoutes(services);
-    const guest = { ...automation("guest", { kind: "listener", provider: "webchat", allowedOrigins: ["https://example.com"] }), senders };
+    const guest = { ...automation("guest", { kind: "listener", provider: "ci" }), senders };
     await expect(call(routes.upsert, guest, { context })).rejects.toThrow(/does not identify who is writing/);
     expect(await services.automations.get("guest")).toBeUndefined();
 });
@@ -256,22 +258,36 @@ const watching = (id: string, extra: Partial<Automation>): Automation => ({
 });
 
 test("a watch is refused two checks at once, a change with nothing to compare, and a source that could never be read", async () => {
-    const services = watchServices(mkdtempSync(join(tmpdir(), "routes-")));
+    const root = mkdtempSync(join(tmpdir(), "routes-"));
+    await installWatchKinds(join(root, "extensions"));
+    const services = watchServices(root);
     const routes = createAutomationsRoutes(services);
-    const npm = { kind: "npm" as const, package: "bun", range: ">=1.4.3" };
+    const npm = { kind: "npm", package: "bun", range: ">=1.4.3" };
     await expect(call(routes.upsert, watching("both", { guard: "true", source: npm }), { context })).rejects.toThrow(/not both/);
     await expect(call(routes.upsert, watching("nothing", { fireOn: "change" }), { context })).rejects.toThrow(/needs a check to compare/);
-    await expect(call(routes.upsert, watching("vague", { source: { kind: "npm", package: "bun", range: "soon" } }), { context })).rejects.toThrow(
-        /not a semver range/,
+    // The kind's declared fields are what a source is held to: one it requires missing. npm and github-release keep the
+    // shape they were released with on the wire (watch-sources.ts), which drops a parameter it does not name, as it always did.
+    await call(routes.upsert, watching("vague", { source: { kind: "npm", package: "bun", version: "soon" } }), { context });
+    expect((await services.automations.get("vague"))?.source).toEqual({ kind: "npm", package: "bun" });
+    // Refused by the released shape itself, before the declaration is read.
+    await expect(call(routes.upsert, watching("nameless", { source: { kind: "github-release" } }), { context })).rejects.toThrow("Input validation failed");
+    await expect(call(routes.upsert, watching("pypi", { source: { kind: "pypi", package: "x" } }), { context })).rejects.toThrow(
+        'no installed extension serves the "pypi" watch kind',
+    );
+    await expect(call(routes.upsert, watching("page", { source: { kind: "url", url: "ftp://x.dev/" } }), { context })).rejects.toThrow(
+        "a watched page must be an http or https address",
     );
     await expect(call(routes.upsert, watching("late", { source: npm, expiresAt: Date.now() - 1_000 }), { context })).rejects.toThrow(
         /end date has already passed/,
     );
-    expect(await services.automations.list()).toEqual([]);
+    // Only the npm watch whose stray parameter was dropped was saved; every refusal above stored nothing.
+    expect((await services.automations.list()).map((stored) => stored.id)).toEqual(["vague"]);
 });
 
 test("a new agent needs a model, a conversation target needs its conversation, and either other target needs no model", async () => {
-    const services = watchServices(mkdtempSync(join(tmpdir(), "routes-")), ["rapid-ridge"]);
+    const root = mkdtempSync(join(tmpdir(), "routes-"));
+    await installWatchKinds(join(root, "extensions"));
+    const services = watchServices(root, ["rapid-ridge"]);
     const routes = createAutomationsRoutes(services);
     const { models: _models, ...modelless } = watching("bun", { source: { kind: "npm", package: "bun", range: ">=1.4.3" }, until: "first-fire" });
     await expect(call(routes.upsert, modelless, { context })).rejects.toThrow(/needs a model/);
@@ -287,6 +303,6 @@ test("an automation that listens for messages only ever starts an agent", async 
     const services = watchServices(mkdtempSync(join(tmpdir(), "routes-")));
     const routes = createAutomationsRoutes(services);
     await expect(
-        call(routes.upsert, { ...automation("chat", { kind: "listener", provider: "webchat" }), target: { kind: "notify" } }, { context }),
+        call(routes.upsert, { ...automation("chat", { kind: "listener", provider: "ci" }), target: { kind: "notify" } }, { context }),
     ).rejects.toThrow(/can only start an agent/);
 });

@@ -1,7 +1,11 @@
-// The longest one message may be on each platform, declared once: the approvals inbox counts a post against it (over it,
-// a post does not post), the daemon refuses a direct publish past it, and each messaging gateway spills a reply into a
-// follow-up message there. Measured in JavaScript string length (UTF-16 code units), which never undercounts a
-// platform that counts characters. A platform absent here has no known cap.
+// FROZEN (2026-11-26, extension API 2.54.0): a platform's one-message limit is what the card naming it declares
+// (`channel.messageLimit` in its extension's manifest), which the gateways, the approvals inbox and a publishing backend
+// read. Nothing in the repository reads this table except the approvals inbox facing a daemon from before 2.54.0, whose
+// cards declare none. It stays because the extension wire records this subpath (@intentic/extension-api/wire), and
+// leaves at extension API 3.0.0 as a pure delete; never add a platform here.
+//
+// The longest one message may be on each platform, as that daemon knew it. Measured in JavaScript string length (UTF-16
+// code units), which never undercounts a platform that counts characters. A platform absent here has no known cap.
 export const MESSAGE_LIMITS = {
     bluesky: 300,
     discord: 2_000,

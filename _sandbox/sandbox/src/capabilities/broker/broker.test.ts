@@ -219,6 +219,7 @@ describe("the credential gateway", () => {
         try {
             const card: GatewayCard = {
                 name: "Service (service)",
+                provider: "service",
                 config: { token: "real-secret", url: upstream.origin },
                 broker: { routes: [{ upstream: "${url}/api", env: "SERVICE_URL", headers: { authorization: "Bearer ${token}" } }] },
             };
@@ -252,6 +253,7 @@ describe("the credential gateway", () => {
         try {
             const card: GatewayCard = {
                 name: "Service (service)",
+                provider: "service",
                 config: { token: "real-secret", url: upstream.origin },
                 broker: { routes: [{ upstream: "${url}/api", env: "SERVICE_URL", headers: { authorization: "Bearer ${token}" } }] },
             };
@@ -294,6 +296,7 @@ describe("the credential gateway", () => {
     test("retires an address once the card's settings move its upstream", async () => {
         const card: GatewayCard = {
             name: "Service",
+            provider: "service",
             config: { token: "t", url: "https://moved.example.com" },
             broker: { routes: [{ upstream: "${url}" }] },
         };
@@ -307,6 +310,7 @@ describe("the credential gateway", () => {
         try {
             const card: GatewayCard = {
                 name: "Bot",
+                provider: "service",
                 config: { token: "123:abc", url: upstream.origin },
                 broker: { routes: [{ upstream: "${url}", pathPrefix: "/bot${token}" }] },
             };
@@ -326,6 +330,7 @@ describe("the credential gateway", () => {
         try {
             const card: GatewayCard = {
                 name: "Service",
+                provider: "service",
                 config: { token: "t", url: upstream.origin },
                 broker: {
                     routes: [{ upstream: "${url}", headers: { authorization: "Bearer ${token}" } }],
@@ -355,6 +360,7 @@ describe("the credential gateway", () => {
         try {
             const card: GatewayCard = {
                 name: "Service",
+                provider: "service",
                 config: { token: "t", url: upstream.origin },
                 broker: { routes: [{ upstream: "${url}" }], rules: [{ action: "deny" }] },
             };
@@ -377,7 +383,7 @@ describe("the credential gateway", () => {
     test("a pass a person gave follows the rule they answered, not its place in the list", async () => {
         const upstream = await upstreamServer();
         try {
-            const card: GatewayCard = { name: "Service", config: { token: "t", url: upstream.origin }, broker: { routes: [{ upstream: "${url}" }] } };
+            const card: GatewayCard = { name: "Service", provider: "service", config: { token: "t", url: upstream.origin }, broker: { routes: [{ upstream: "${url}" }] } };
             const deletes: BrokerRule = { methods: ["DELETE"], action: "ask", why: "deletes things" };
             let owner: BrokerRule[] = [deletes];
             const passes = new Set<string>();
@@ -411,6 +417,7 @@ describe("the credential gateway", () => {
     test("refuses when the owner's host guard leaves the upstream off, or a named approver declines", async () => {
         const card: GatewayCard = {
             name: "Service",
+            provider: "service",
             config: { token: "t", url: "https://api.example.com" },
             broker: { routes: [{ upstream: "${url}" }] },
         };
@@ -432,7 +439,7 @@ describe("the credential gateway", () => {
                 : { status: 302, headers: { location: "https://downloads.example.com/f" } },
         );
         try {
-            const card: GatewayCard = { name: "Service", config: { token: "t", url: upstream.origin }, broker: { routes: [{ upstream: "${url}" }] } };
+            const card: GatewayCard = { name: "Service", provider: "service", config: { token: "t", url: upstream.origin }, broker: { routes: [{ upstream: "${url}" }] } };
             const gateway = createGateway(harness(card).deps);
             const base = await addressFor(0, `${upstream.origin}/`);
             expect((await gateway(new Request(`${base}/a`, { redirect: "manual" }))).headers.get("location")).toBe(`${base}/b?x=1`);
@@ -448,6 +455,7 @@ describe("the credential gateway", () => {
         try {
             const card: GatewayCard = {
                 name: "Login",
+                provider: "service",
                 config: { token: "client-secret", url: upstream.origin },
                 broker: { routes: [{ upstream: "${url}", form: { client_secret: "${token}" } }] },
             };
@@ -475,6 +483,7 @@ describe("the credential gateway", () => {
 describe("the credential gateway's open calls", () => {
     const card: GatewayCard = {
         name: "Service (service)",
+        provider: "service",
         config: { token: "real-secret", url: "https://svc.example.com" },
         broker: { routes: [{ upstream: "${url}/api", env: "SERVICE_URL", headers: { authorization: "Bearer ${token}" } }] },
     };

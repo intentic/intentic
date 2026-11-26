@@ -20,6 +20,8 @@ import {
     TimezoneOfferSchema,
     TimezoneStateSchema,
 } from "../schemas/settings.js";
+import { ModelRolesSchema } from "../models/model-roles.js";
+import { OutwardActionsSchema } from "../schemas/data-protection.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DayWindowQuerySchema } from "../schemas/providers/usage.js";
 
@@ -92,6 +94,28 @@ export const settingsContract = {
                 "A separate read rather than a field on the settings, because a rule firing is not somebody editing anything: folding it in would turn every firing into a settings write and put a self-changing value inside the object a screen edits.",
         })
         .output(RuleFiringsSchema),
+    // Read off the enabled extensions' manifests, not out of the settings file: the rules are the owner's, the actions
+    // they can be written for are each extension's own declaration (2026-11-25).
+    outwardActions: procedure
+        .route({
+            method: "GET",
+            path: "/settings/outward-actions",
+            summary: "What the action rules can be written for",
+            description:
+                "Every outward action the enabled extensions declare (send a Slack message, upload to OneDrive), by the key an action rule for it is written under. Reads are left out: a rule on one would hold a bot reading its own channel.",
+        })
+        .output(OutwardActionsSchema),
+    // Read off the extensions' manifests, not out of the settings file: which setup a job runs on is the owner's, the jobs
+    // there are are the sandbox's own and each extension's declaration (2026-11-26).
+    modelRoles: procedure
+        .route({
+            method: "GET",
+            path: "/settings/model-roles",
+            summary: "The jobs a model setup can be chosen for",
+            description:
+                "Every job this sandbox picks a model for: its own (commit messages, the safety judge, loop iterations), then each installed extension's (`contributes.modelRoles`: pipeline fixes, maintenance chores), with whether that extension is switched on. A switched-off extension's job stays listed so the owner's choice for it is kept, and is not shown.",
+        })
+        .output(ModelRolesSchema),
     // Read off the repositories themselves, not out of the settings file: the declaration is a tracked file in each
     // repository, and only the owner's answer to it lives here.
     repoChecks: procedure

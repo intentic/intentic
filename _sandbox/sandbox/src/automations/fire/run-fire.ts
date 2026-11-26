@@ -4,7 +4,8 @@ import type { AgentTurn, ModelPin } from "@intentic/sandbox-contract/schemas/age
 import type { AutomationApproval, Trigger } from "@intentic/sandbox-contract/schemas/automations";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import type { Services } from "../../composition.js";
-import { sessionStart, wakeSourceOf } from "../../guard/actions.js";
+import { sessionStart } from "../../guard/actions.js";
+import { wakeSourceFor } from "./wake-source.js";
 import { guard } from "../../guard/guard.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { automationPending, turnFinished } from "../../push/notifications.js";
@@ -21,6 +22,7 @@ import { conversationLink } from "../../system/boot/open-in-app.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
 import { refusalOf, type WakeRefusal, wakeEnding, wakePostures } from "../wake/wake-fallback.js";
 import { mintConversationId, ownOrigin, sessionsGate } from "./fire-sessions.js";
+import { fireExtension } from "../../extensions/backend/extension-fires.js";
 import type { TurnStream, FireOptions, FireOutcome } from "./fire-options.js";
 import { automationAudience, OPERATORS } from "../../push/push-audience.js";
 
@@ -193,7 +195,7 @@ const recordTargetRun = async (services: Services, automation: AutomationRecord,
     await services.automations.recordRun(automation.id, {
         at: Date.now(),
         ...(outcome.ok
-            ? { outcome: "completed" as const, ...(outcome.detail === undefined ? {} : { detail: outcome.detail }) }
+            ? { outcome: outcome.carried === true ? ("carried" as const) : ("completed" as const), ...(outcome.detail === undefined ? {} : { detail: outcome.detail }) }
             : { outcome: "error" as const, detail: outcome.error }),
         ...(outcome.ok && outcome.conversationId !== undefined ? { conversationId: outcome.conversationId } : {}),
     });
@@ -208,9 +210,56 @@ const recordTargetRun = async (services: Services, automation: AutomationRecord,
         .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
 };
 
-// Whoever wrote is told the wake waits for a person, rather than left reading silence as a dead bot.
-const announceHeld = (stream: TurnStream | undefined): void => {
-    stream?.held?.(HELD_NOTICE);
+// What a fire whose target is not a new agent hands on, once it passed its admission, check and holds.
+interface Elsewhere {
+    readonly observed: string | undefined;
+    readonly observedOutside: string | undefined;
+    readonly observedValue: string | undefined;
+    readonly payload: string | undefined;
+    // This fire's own name, and the id its journal row is filed under (the same on a replay).
+    readonly fireKey: string;
+    readonly fireId: string;
+}
+
+// Fires an automation whose target is not a new agent, and records its run: the owner's phone with no model, a
+// conversation that already exists, or an extension's own code through the handler its backend registered
+// (extensions/backend/extension-fires.ts). False for a new agent, which the caller starts itself.
+const firedElsewhere = async (services: Services, automation: AutomationRecord, fire: Elsewhere): Promise<boolean> => {
+    const target = automation.target ?? { kind: "agent" as const };
+    switch (target.kind) {
+        case "agent":
+            return false;
+        case "notify":
+            await recordTargetRun(services, automation, await notifyOwner(services, automation, fire.observedValue ?? fire.observed));
+            return true;
+        case "extension": {
+            const fired = await fireExtension(services, {
+                id: fire.fireId,
+                extension: target.extension,
+                handler: target.handler,
+                automationId: automation.id,
+                prompt: automation.prompt,
+                payload: fire.payload,
+                observed: fire.observedValue ?? fire.observed,
+            });
+            const carried = fired.outcome === "carried" ? ({ carried: true } as const) : {};
+            await recordTargetRun(services, automation, fired.outcome === "error" ? { ok: false, error: fired.detail } : { ok: true, detail: fired.detail, ...carried });
+            return true;
+        }
+        case "conversation": {
+            const said = { ...opt("text", fire.observed), ...opt("outside", fire.observedOutside) };
+            await recordTargetRun(services, automation, await continueConversation(services, automation, target.conversationId, "met", said, fire.fireKey));
+            return true;
+        }
+    }
+};
+
+// Whoever wrote is told the wake waits for a person, rather than left reading silence as a dead bot, and (2026-11-26)
+// which held wake it is and the conversation it runs in once let: a thread's is known before the wake is decided, so the
+// sender can link it now.
+const announceHeld = (services: Pick<Services, "config">, stream: TurnStream | undefined, id: string, conversationId: string | undefined): void => {
+    const link = conversationId === undefined ? undefined : conversationLink(services.config, conversationId);
+    stream?.held?.(HELD_NOTICE, { id, ...opt("conversationId", conversationId), ...opt("link", link) });
 };
 
 // The channel learns which conversation answers it, and where a person opens that, before any of the work.
@@ -313,7 +362,7 @@ export const runFire = async (
         const { admission } = await services.sandboxSettings.get();
         const requireApproval = automation.requireApproval === true || lane?.requireApproval === true;
         const verdict = guard(sessionStart, {
-            source: wakeSourceOf(automation.trigger),
+            source: await wakeSourceFor(services, automation.trigger),
             admission,
             ...(requireApproval ? { requireApproval } : {}),
             ...opt("holdForSeconds", automation.holdForSeconds),
@@ -346,7 +395,9 @@ export const runFire = async (
                 if (condition.kind === "skip" || cleared === "approval") {
                     await services.automations.recordRun(automation.id, {
                         at: Date.now(),
-                        outcome: "skipped",
+                        // A check that cannot run as things stand (its watch kind's extension is off) is an error, not
+                        // a quiet skip: it says so in red until the extension is back.
+                        outcome: condition.kind === "skip" && condition.broken === true ? "error" : "skipped",
                         ...(condition.detail !== "" ? { detail: condition.detail } : {}),
                     });
                 }
@@ -360,7 +411,7 @@ export const runFire = async (
             // Holds the wake instead of running; inFlight releases in the finally, so the lock isn't held during the
             // wait.
             if (verdict.effect === "hold" && cleared === undefined) {
-                await services.heldWakes.add(
+                const heldWake = await services.heldWakes.add(
                     heldWakeSnapshot(automation.id, verdict.autoRunAfterS, {
                         payload: capped,
                         observed,
@@ -382,31 +433,14 @@ export const runFire = async (
                         ...(automation.trigger.kind === "listener" ? { provider: automation.trigger.provider } : {}),
                     })
                     .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
-                announceHeld(stream);
+                announceHeld(services, stream, heldWake.id, resumedConversationId);
                 // A held wake waits on whoever can release it, the sandbox's owner and maintainers, while they are away.
                 void services.pushSender.notifyIfAway(automationPending(automation.id, automation.prompt), OPERATORS);
                 return {};
             }
         }
-        // Somewhere other than a new agent: the owner's phone with no model, or a conversation that already exists.
-        const target = automation.target ?? { kind: "agent" as const };
-        if (target.kind === "notify") {
-            await recordTargetRun(services, automation, await notifyOwner(services, automation, observedValue ?? observed));
-            return {};
-        }
-        if (target.kind === "conversation") {
-            const continued = await continueConversation(
-                services,
-                automation,
-                target.conversationId,
-                "met",
-                {
-                    ...(observed === undefined ? {} : { text: observed }),
-                    ...(observedOutside === undefined ? {} : { outside: observedOutside }),
-                },
-                fireKey,
-            );
-            await recordTargetRun(services, automation, continued);
+        // Somewhere other than a new agent: the owner's phone, a conversation that already exists, an extension's code.
+        if (await firedElsewhere(services, automation, { observed, observedOutside, observedValue, payload: capped, fireKey, fireId: journalled ?? fireKey })) {
             return {};
         }
         // What this wake runs on, walked before anything is spent or written down (see `wakeModel`).

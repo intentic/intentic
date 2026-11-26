@@ -1,9 +1,11 @@
 import { assessReport, digestOf, ledgerKey } from "@intentic/sandbox-contract/chores";
 import type { ChoreLedgerEntry, ChoresReport, ProbeResult } from "@intentic/sandbox-contract/schemas/maintenance";
 
-// Evidence `GET /chores` returns for acme-shop, plus its ledger. The route answers only with measurements (probes,
-// package facts, the repo's shape); the app turns them into verdicts. Numbers are chosen so due, snoozed, clear, unavailable
-// and not-applicable each have one example.
+// Evidence the maintenance extension's backend (`GET /x/intentic.maintenance/report`) returns for acme-shop, plus its
+// ledger. It answers only with measurements (probes, package facts, the repo's shape); the app turns them into verdicts.
+// Numbers are chosen so due, snoozed, clear, unavailable and not-applicable each have one example. The digests come from
+// the contract's frozen copy of the chore book (`@intentic/sandbox-contract/chores`, until extension API 3.0.0), which
+// matches the book of the maintenance this demo vendors.
 
 // Supported Node LTS, so the runtime chore reads `clear`.
 const NODE = `v22.14.0`;
@@ -304,7 +306,7 @@ export const choresReport = (now: number): ChoresReport => ({
     node: NODE,
 });
 
-/** POST /chores/ledger, record a run, or snooze. One row per repo + chore, newest write wins. */
+/** The backend's POST /ledger: record a run, or snooze. One row per repo + chore, newest write wins. */
 export const writeLedger = (now: number, written: ChoreLedgerEntry): void => {
     const rows = (ledger ??= seedLedger(now));
     const index = rows.findIndex((row) => ledgerKey(row.repo, row.chore) === ledgerKey(written.repo, written.chore));

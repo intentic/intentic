@@ -1,7 +1,6 @@
-import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import type { CommandContext, Commands } from "./commands.js";
-import { saveAttachments, workspaceFile } from "./files.js";
+import { saveAttachments } from "./files.js";
 import { type Json, query, segment } from "./graph.js";
 
 // Outlook mail. Reading is free; sending, replying and forwarding are `microsoft365.mail.send`, so they are proposed
@@ -63,7 +62,7 @@ const attachedFiles = async (ctx: CommandContext): Promise<Attached> => {
     const listed: string[] = [];
     let total = 0;
     for (const path of paths) {
-        const bytes = await readFile(await workspaceFile(ctx.root, path, false));
+        const bytes = await ctx.io.read(path);
         total += bytes.length;
         if (total > ATTACH_MAX_BYTES) {
             throw new Error("Attachments over 3 MB in total cannot go in one message: share a OneDrive link instead (m365 files upload)");
@@ -107,7 +106,7 @@ const read = async (ctx: CommandContext): Promise<Json> => {
     // Graph answers HTML unless asked; text is what an agent reads, and what a hostile message cannot hide markup in.
     const message = await ctx.graph.call<Json>(`/me/messages/${segment(ctx.id())}`, { headers: { Prefer: `outlook.body-content-type="${body}"` } });
     const directory = ctx.flag("attachments");
-    const saved = directory === undefined ? [] : await saveAttachments(ctx.graph, ctx.root, ctx.id(), directory);
+    const saved = directory === undefined ? [] : await saveAttachments(ctx.graph, ctx.io, ctx.id(), directory);
     return { message, savedAttachments: saved };
 };
 
@@ -145,6 +144,7 @@ const respond =
             method: "POST",
             body: body as Json,
             summary: `${answered} — to ${to}`,
+            channel: to,
             details: [
                 `${answered} from ${addresses([original.from ?? {}])}`,
                 `Goes to: ${to}`,
@@ -203,6 +203,7 @@ export const mailCommands: Commands = {
             // SAFETY: built from the request object and Graph JSON only.
             body: { message: message as Json, saveToSentItems: true },
             summary: `Send "${message.subject ?? "(no subject)"}" — to ${addresses(message.toRecipients)}`,
+            channel: addresses(message.toRecipients),
             details: messageDetails(ctx.graph.account.id, message, attached),
         });
     },

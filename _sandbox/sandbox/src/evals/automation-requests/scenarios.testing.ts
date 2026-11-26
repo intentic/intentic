@@ -1,4 +1,4 @@
-import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import { type Automation, isUrlSource } from "@intentic/sandbox-contract/schemas/automations";
 
 // What an owner says in plain English, and what a good agent does about it: propose an automation (on a card the owner
 // approves; `automations propose` is the only door), ask what they meant, or set nothing up. Graded from the daemon's
@@ -52,7 +52,9 @@ const source =
         if (seen.kind !== kind) {
             return `source is ${seen.kind}, wanted ${kind}`;
         }
-        const name = seen.kind === "npm" ? `${seen.package}@${seen.range ?? seen.tag ?? ""}` : seen.kind === "github-release" ? seen.repo : seen.url;
+        // A contributed kind's parameters sit beside `kind`, as the connectors extension declares them (2026-11-26).
+        const param = (key: string): string => (isUrlSource(seen) ? "" : String(Object.fromEntries(Object.entries(seen))[key] ?? ""));
+        const name = isUrlSource(seen) ? seen.url : seen.kind === "npm" ? `${param("package")}@${param("range") || param("tag")}` : param("repo");
         return names.test(name) ? undefined : `source names "${name}", wanted ${String(names)}`;
     };
 
@@ -60,7 +62,7 @@ const source =
 const checksPage =
     (host: string): AutomationCheck =>
     (automation) =>
-        (automation.source?.kind === "url" && automation.source.url.includes(host)) || (automation.guard ?? "").includes(host)
+        (automation.source !== undefined && isUrlSource(automation.source) && automation.source.url.includes(host)) || (automation.guard ?? "").includes(host)
             ? undefined
             : `neither a url source nor a guard reads ${host}`;
 

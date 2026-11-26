@@ -27,6 +27,11 @@ const LOOSE = SandboxSettingsSchema.parse({
     commandJudge: "off",
 });
 
+// The outward actions an IMAP sandbox's enabled extensions declare, and the sandbox's own: what a pinned `actions` group
+// holds. Asked for only when a policy pins that group.
+const ACTION_KEYS = ["imap.message.send", "agents.spawn"];
+const actionKeys = async (): Promise<readonly string[]> => ACTION_KEYS;
+
 const holder = async (pinned: OrgPolicy | undefined) => {
     const orgPolicy = createOrgPolicyHolder({ authRoot: mkdtempSync(join(tmpdir(), "org-pins-")), logger: createLogger(testConfig) });
     if (pinned !== undefined) {
@@ -56,7 +61,7 @@ const settled = async <T>(read: () => T, done: (value: T) => boolean): Promise<T
 
 describe("pinning the preset", () => {
     it("applies only the groups the policy names, never loosens a stricter value, and pins once however often", () => {
-        const pinned = pinSettings(LOOSE, policy(["actions", "judge"]));
+        const pinned = pinSettings(LOOSE, policy(["actions", "judge"]), ACTION_KEYS);
         expect(pinned.value.actionRules["imap.message.send"]).toBe("hold");
         expect(pinned.value.commandJudge).toBe("on");
         // Retention is not pinned here, so forever stays forever.
@@ -64,15 +69,15 @@ describe("pinning the preset", () => {
         expect(pinned.loosened).toContain("actionRules.imap.message.send");
         expect(pinned.loosened).toContain("commandJudge");
         expect(pinned.loosened).not.toContain("retention.transcriptDays");
-        expect(pinSettings(pinned.value, policy(["actions", "judge"])).loosened).toEqual([]);
+        expect(pinSettings(pinned.value, policy(["actions", "judge"]), ACTION_KEYS).loosened).toEqual([]);
         // An office that already denies sending keeps its deny.
         const stricter = SandboxSettingsSchema.parse({ actionRules: { "imap.message.send": "deny" } });
-        expect(pinSettings(stricter, policy(["actions"])).value.actionRules["imap.message.send"]).toBe("deny");
+        expect(pinSettings(stricter, policy(["actions"]), ACTION_KEYS).value.actionRules["imap.message.send"]).toBe("deny");
     });
 
     it("hands a personal sandbox, and a policy pinning nothing, exactly what it was given", () => {
-        expect(pinSettings(LOOSE, undefined)).toMatchObject({ value: LOOSE, loosened: [] });
-        expect(pinSettings(LOOSE, policy([]))).toMatchObject({ value: LOOSE, loosened: [] });
+        expect(pinSettings(LOOSE, undefined, ACTION_KEYS)).toMatchObject({ value: LOOSE, loosened: [] });
+        expect(pinSettings(LOOSE, policy([]), ACTION_KEYS)).toMatchObject({ value: LOOSE, loosened: [] });
         const off = PrivacyShieldPolicySchema.parse({ mode: "off" });
         expect(pinPrivacy(off, undefined, true)).toMatchObject({ value: off, loosened: [] });
     });
@@ -92,7 +97,7 @@ describe("a settings file edited outside the routes", () => {
         writeFileSync(path, JSON.stringify(LOOSE));
         const orgPolicy = await holder(policy(["actions", "retention", "judge"]));
         const { recorded, report } = drifts();
-        const store = fileSandboxSettingsStore(path, settingsPin(orgPolicy, report));
+        const store = fileSandboxSettingsStore(path, settingsPin(orgPolicy, report, actionKeys));
         const read = await store.get();
         expect(read.actionRules["imap.message.send"]).toBe("hold");
         expect(read.retention.transcriptDays).toBe(90);
@@ -115,10 +120,10 @@ describe("a settings file edited outside the routes", () => {
 
     it("stores a write from anywhere but a person's save pinned, and leaves a personal sandbox's file as written", async () => {
         const dir = mkdtempSync(join(tmpdir(), "org-pins-"));
-        const bound = fileSandboxSettingsStore(join(dir, "bound.json"), settingsPin(await holder(policy(["judge"])), drifts().report));
+        const bound = fileSandboxSettingsStore(join(dir, "bound.json"), settingsPin(await holder(policy(["judge"])), drifts().report, actionKeys));
         await bound.set(LOOSE);
         expect(JSON.parse(readFileSync(join(dir, "bound.json"), "utf8"))).toMatchObject({ commandJudge: "on" });
-        const personal = fileSandboxSettingsStore(join(dir, "personal.json"), settingsPin(await holder(undefined), drifts().report));
+        const personal = fileSandboxSettingsStore(join(dir, "personal.json"), settingsPin(await holder(undefined), drifts().report, actionKeys));
         await personal.set(LOOSE);
         expect(JSON.parse(readFileSync(join(dir, "personal.json"), "utf8"))).toMatchObject({ commandJudge: "off" });
         expect((await personal.get()).commandJudge).toBe("off");
@@ -128,7 +133,7 @@ describe("a settings file edited outside the routes", () => {
         const path = join(mkdtempSync(join(tmpdir(), "org-pins-")), "settings.json");
         writeFileSync(path, JSON.stringify(LOOSE));
         const orgPolicy = await holder(policy([]));
-        const store = fileSandboxSettingsStore(path, settingsPin(orgPolicy, drifts().report));
+        const store = fileSandboxSettingsStore(path, settingsPin(orgPolicy, drifts().report, actionKeys));
         expect((await store.get()).commandJudge).toBe("off");
         await orgPolicy.accept(policy(["judge"], 2));
         expect((await store.get()).commandJudge).toBe("on");
@@ -154,9 +159,9 @@ describe("the privacy shield's policy edited outside the routes", () => {
 describe("a person's save that would undo a pin", () => {
     it("is refused by the settings route and the privacy route, naming the pinned items", async () => {
         const orgPolicy = await holder(policy(["judge", "privacy"]));
-        expect(await settingsPinRefusal(orgPolicy, LOOSE)).toMatchObject({ reason: "org-pinned", items: ["commandJudge"], org: "Urząd Gminy" });
+        expect(await settingsPinRefusal(orgPolicy, LOOSE, actionKeys)).toMatchObject({ reason: "org-pinned", items: ["commandJudge"], org: "Urząd Gminy" });
         // A save that keeps the pinned judge goes through; the default alone would not, since the judge is off by default.
-        expect(await settingsPinRefusal(orgPolicy, SandboxSettingsSchema.parse({ commandJudge: "on" }))).toBeUndefined();
+        expect(await settingsPinRefusal(orgPolicy, SandboxSettingsSchema.parse({ commandJudge: "on" }), actionKeys)).toBeUndefined();
         const off = PrivacyShieldPolicySchema.parse({ mode: "off" });
         expect(await privacyPinRefusal(orgPolicy, off, async () => false)).toMatchObject({ reason: "org-pinned", items: ["privacy.mode"] });
         const client = clientFor(createApp(services({ orgPolicy })));
@@ -166,13 +171,13 @@ describe("a person's save that would undo a pin", () => {
 
     it("is not refused on a personal sandbox", async () => {
         const orgPolicy = await holder(undefined);
-        expect(await settingsPinRefusal(orgPolicy, LOOSE)).toBeUndefined();
+        expect(await settingsPinRefusal(orgPolicy, LOOSE, actionKeys)).toBeUndefined();
         expect(await privacyPinRefusal(orgPolicy, PrivacyShieldPolicySchema.parse({ mode: "off" }), async () => false)).toBeUndefined();
     });
 
     it("reports a pinned group this daemon does not know instead of refusing the policy", async () => {
         const orgPolicy = await holder(policy(["judge", "biometrics"]));
         expect(await orgPolicy.state()).toMatchObject({ bound: true, unenforced: ["biometrics"] });
-        expect(pinSettings(LOOSE, await orgPolicy.current()).value.commandJudge).toBe("on");
+        expect(pinSettings(LOOSE, await orgPolicy.current(), ACTION_KEYS).value.commandJudge).toBe("on");
     });
 });

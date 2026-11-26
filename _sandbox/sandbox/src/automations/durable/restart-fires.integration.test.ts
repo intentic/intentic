@@ -5,10 +5,8 @@ import type { AgentOrigin, AgentTurn } from "@intentic/sandbox-contract/schemas/
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { automationConfig } from "../../harness/route-stores.testing.js";
 import type { Services } from "../../composition.js";
-import { WEBCHAT_PROVIDER } from "../../webchat/webchat-config.js";
-import { outboxKeyOf } from "../../webchat/webchat-outbox.js";
 import type { AutomationRecord } from "../automations-store.js";
-import { answeringWake, bootAutomations, daemonOn, hangingWake } from "./restart.testing.js";
+import { answeringWake, bootAutomations, daemonOn, hangingWake, type TestDaemon } from "./restart.testing.js";
 import { automationIdle, fireAutomation, recordHeldWake, runHeldWake } from "../fire/automation-fire.js";
 import { createAutomationsScheduler } from "../scheduler.js";
 
@@ -16,20 +14,16 @@ import { createAutomationsScheduler } from "../scheduler.js";
 // what a daemon had at the moment it died, kills it, and boots a second daemon on the same history with nothing of the
 // first in memory, through the boot's own passes.
 
-const visitor = (automationId: string, n: number): AgentOrigin => ({ automationId, provider: WEBCHAT_PROVIDER, channelId: `visitor-${n}` });
+// A chat's visitor: a channel whose answer goes to its extension's gateway (restart.testing.ts bakes one).
+const visitor = (automationId: string, n: number): AgentOrigin => ({ automationId, provider: "webchat", channelId: `visitor-${n}` });
 
 // The payload line a wake was handed, which names the fire in these tests.
 const payloadOf = (prompt: string): string => /--- Event payload ---\n(\S+)/.exec(prompt)?.[1] ?? "";
 const answerTo = (prompt: string): string => `answer:${payloadOf(prompt)}`;
 
-// What a visitor's next poll would collect.
-const repliesFor = async (services: Services, origin: AgentOrigin): Promise<string[]> => {
-    const key = outboxKeyOf(origin);
-    if (key === undefined) {
-        throw new Error("not a Visitor chat origin");
-    }
-    return (await services.webchatOutbox.since(key, 0, Date.now())).replies.map((reply) => reply.text);
-};
+// What reached the visitor's channel through its gateway.
+const repliesFor = (daemon: TestDaemon, origin: AgentOrigin): string[] =>
+    daemon.delivered().filter((reply) => reply.channelId === origin.channelId).map((reply) => reply.text);
 
 // The record as the manifest holds it now; a test that names one it never saved is broken.
 const recordOf = async (services: Services, id: string): Promise<AutomationRecord> => {
@@ -76,7 +70,7 @@ test("fires queued behind a running one, an approved hold among them, come back 
     expect(ran[0]?.conversationId).toBe(cut[0]?.conversationId);
     // An answer is written as its turn ends, a moment after the fire lets its lane go: what the visitor's next poll finds.
     for (const [n, word] of ["one", "two", "three", "four"].entries()) {
-        await waitFor(async () => expect(await repliesFor(after.services, visitor("desk", n + 1))).toEqual([`answer:${word}`]), SETTLES);
+        await waitFor(async () => expect(repliesFor(after, visitor("desk", n + 1))).toEqual([`answer:${word}`]), SETTLES);
     }
     expect(await after.services.turnJournal.list()).toEqual([]);
     const runs = (await after.services.automations.get("desk"))?.runs ?? [];
@@ -105,7 +99,7 @@ test("an approved hold whose release died before taking it out of the queue runs
 
     expect(payloadOf(ran[0]?.prompt ?? "")).toBe("approved");
     expect(await after.services.heldWakes.list()).toEqual([]);
-    await waitFor(async () => expect(await repliesFor(after.services, visitor("gate", 1))).toEqual(["answer:approved"]), SETTLES);
+    await waitFor(async () => expect(repliesFor(after, visitor("gate", 1))).toEqual(["answer:approved"]), SETTLES);
     expect(await after.services.turnJournal.list()).toEqual([]);
 });
 

@@ -6,7 +6,7 @@ import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/protocol/head
 import { isVaulted } from "@intentic/sandbox-contract/policy/capability-secrets";
 import { implement, ORPCError } from "@orpc/server";
 import type { CapabilityInstanceLike } from "@intentic/capability-catalog";
-import { contributionDiscriminator } from "@intentic/extension-manifest";
+import { contributionDiscriminator, extensionIdOf } from "@intentic/extension-manifest";
 import { forkedExec } from "@intentic/base/git";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import { listenerIn } from "../auth/proofs/listener.js";
@@ -41,6 +41,8 @@ import { capabilitiesDocument } from "./capabilities-store.js";
 import { applyAndStore, convergeAfterConnectionChange, uninstallConnection, versionManifest } from "../hub/connection-install.js";
 import { storeRefreshToken } from "./refresh-token.js";
 import { mintPlatformAccess, platformDoor } from "./oauth-access.js";
+import { askOutward, type OutwardDoorDeps, recordOutward } from "./broker/outward-door.js";
+import { runningTurnOf } from "../agent/run/turn/turn-pulse.js";
 import { stateRelPath } from "../state-paths.js";
 
 // roles-store.ts's document, named by its contract-checked state path rather than imported: roles reaches
@@ -219,6 +221,33 @@ const extensionCaller = (services: Services, context: OrpcContext): ReturnType<t
     return caller;
 };
 
+// The outward-action door's seams (broker/outward-door.ts): the card and who contributes it, the owner's rules through the
+// daemon's own settings (organisation pins applied), the approvals queue, and Activity.
+const outwardDoorOf = (services: Services): OutwardDoorDeps => ({
+    card: async (id) => {
+        const capability = await services.capabilities.get(id);
+        const resolved = capability?.kind === "cli" ? contributionFor(await contributionRegistry(services), "cli", capability.config) : undefined;
+        if (capability === undefined || resolved?.spec.kind !== "cli") {
+            return undefined;
+        }
+        return { id: capability.id, spec: resolved.spec, extension: resolved.extension.id, performer: extensionIdOf(resolved.extension.manifest) };
+    },
+    actionRules: async () => (await services.sandboxSettings.get()).actionRules,
+    propose: (item) => services.approvals.upsert(item),
+    record: (row) => services.activity.append(row),
+    runningTurn: runningTurnOf,
+});
+
+// Only an extension's own backend asks the outward-action door: a person, a panel or an agent carries out nothing with a
+// card's credential, so has nothing to ask.
+const backendCaller = (services: Services, context: OrpcContext): string => {
+    const caller = extensionCaller(services, context);
+    if (context.identity !== undefined || caller === undefined) {
+        throw new ORPCError("FORBIDDEN", { message: "the outward-action door serves extension backends, never a signed-in browser" });
+    }
+    return caller.id;
+};
+
 // `probeDockerGpu` is handed in: asking the host needs the device hub, and capabilities must not import hosts.
 export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (services: Services) => Promise<CapabilityProbe>) => {
     const i = implement(capabilitiesContract).$context<OrpcContext>();
@@ -392,6 +421,12 @@ export const createCapabilitiesRoutes = (services: Services, probeDockerGpu: (se
         oauthAccess: i.oauthAccess.handler(async ({ input, context }) => {
             const caller = extensionCaller(services, context);
             return mintPlatformAccess(services.capabilities, await contributionRegistry(services), platformDoor(services.config), input.id, caller?.id);
+        }),
+        // An extension's backend about to send with one of its cards: the owner's rule decided here (broker/outward-door.ts).
+        outwardAction: i.outwardAction.handler(async ({ input, context }) => askOutward(outwardDoorOf(services), backendCaller(services, context), input)),
+        outwardActionOutcome: i.outwardActionOutcome.handler(async ({ input, context }) => {
+            await recordOutward(outwardDoorOf(services), backendCaller(services, context), input);
+            return { ok: true } as const;
         }),
         // Replaces one secret field and re-runs the idempotent apply; no composeEnvironment, since a secret can't
         // change a fragment. Apply runs before upsert, so a failed apply keeps the old secret stored.

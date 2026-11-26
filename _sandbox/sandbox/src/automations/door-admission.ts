@@ -3,8 +3,8 @@ import { rateWindow } from "../store/rate-window.js";
 
 // THE TWO CEILINGS EVERY DOOR A STRANGER CAN KNOCK ON HOLDS: a per-minute window per caller, so a loop on the other side
 // cannot hammer it, and a per-day budget per automation, since every wake it lets through is billed to the owner. The
-// Visitor chat and bug intake (public-door.ts), the webhook (fire.routes.ts) and channel listeners (listeners.ts) each
-// hold their own pair, built here so the order and the counting cannot drift between them. In memory per daemon, like
+// Visitor chat (public-door.ts), an extension's public doors (extensions/backend/public-door.routes.ts, the bug intake's
+// among them), the webhook (fire.routes.ts) and channel listeners (listeners.ts) each hold their own pair, built here so the order and the counting cannot drift between them. In memory per daemon, like
 // the stores underneath: a restart forgetting the last minute and the day so far beats a counter file written per call.
 
 const RATE_WINDOW_MS = 60_000;

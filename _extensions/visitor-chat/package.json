@@ -1,0 +1,44 @@
+{
+    "name": "@intentic/ext-visitor-chat",
+    "version": "1.0.0",
+    "description": "Visitor chat, the chat widget a website embeds to talk to a sandbox agent, as a built-in intentic extension",
+    "license": "MIT",
+    "private": true,
+    "type": "module",
+    "main": "src/index.ts",
+    "types": "src/index.ts",
+    "exports": {
+        ".": {
+            "types": "./src/index.ts",
+            "default": "./src/index.ts"
+        }
+    },
+    "scripts": {
+        "build": "vite build --config vite.server.config.ts && node scripts/widget.mjs",
+        "typecheck": "vue-tsc --noEmit",
+        "test": "suites"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/connector-runtime": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
+        "@intentic/extension-manifest": "workspace:*",
+        "@intentic/extension-ui": "workspace:*",
+        "@intentic/sandbox-contract": "workspace:*",
+        "@tanstack/vue-query": "catalog:",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:typescript6",
+        "vite": "catalog:",
+        "vue": "catalog:",
+        "vue-tsc": "catalog:"
+    },
+    "peerDependencies": {
+        "vue": "3"
+    }
+}

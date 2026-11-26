@@ -1,4 +1,5 @@
 import { refuseServiceMismatch } from "../access/automation-runs-as.js";
+import { type AutomationSaver, refuseForeignExtensionTarget } from "./watch/extension-target.js";
 import type { Automation, AutomationCatalog } from "@intentic/sandbox-contract/schemas/automations";
 import { cronOptions } from "@intentic/sandbox-contract/time/zone";
 import { isBuiltInRole, VISITOR_CHAT_ROLE } from "@intentic/sandbox-contract/schemas/roles";
@@ -7,12 +8,13 @@ import { Cron } from "croner";
 import { type DoorKind, doorChange } from "../auth/tokens/door-tokens.js";
 import type { Services } from "../composition.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
+import { keyedDoorProviders } from "../extensions/backend/public-door-keys.js";
 import { ensureVisitorChatRole } from "../roles/visitor-chat.js";
-import { automationCatalog, ISSUES_PROVIDER, triggerSourceEvents } from "./catalog.js";
+import { automationCatalog, triggerSourceEvents } from "./catalog.js";
 import { nextRunOf, sandboxZone, zoneOf } from "./schedule-zone.js";
 import { parentOfActor } from "../auth/principal.js";
 import { checkHostPowerFor } from "../hosts/power/host-power.js";
-import { sourceProblem } from "./watch/watch-sources.js";
+import { watchSourceProblem } from "./watch/watch-kinds.js";
 
 // What saving an automation refuses and what it brings into being, shared by the Automations page's upsert route and an
 // agent's proposal approved on its card (needs/kinds/automation-need.ts), so the two can never hold an automation to
@@ -37,7 +39,8 @@ export const refusePastEnd = (automation: Pick<Automation, "expiresAt">, now: nu
 
 // The watch fields' rules across fields, which the schema cannot state one field at a time: one check, not two; a
 // change needs something to compare; a new agent needs a model to run on; a conversation must be there to continue;
-// and a listener answers whoever wrote, so it only ever starts an agent.
+// and a listener answers whoever wrote, so it only ever starts an agent. The source itself is checked against its kind
+// below (watch-kinds.ts), which needs the installed extensions.
 const refuseMisshapenWatch = (services: Services, automation: Automation): void => {
     if (automation.guard !== undefined && automation.source !== undefined) {
         throw new ORPCError("BAD_REQUEST", {
@@ -46,10 +49,6 @@ const refuseMisshapenWatch = (services: Services, automation: Automation): void 
     }
     if (automation.fireOn === "change" && automation.guard === undefined && automation.source === undefined) {
         throw new ORPCError("BAD_REQUEST", { message: "firing only on a change needs a check to compare: give it a guard command or a source" });
-    }
-    const problem = automation.source === undefined ? undefined : sourceProblem(automation.source);
-    if (problem !== undefined) {
-        throw new ORPCError("BAD_REQUEST", { message: problem });
     }
     const target = automation.target ?? { kind: "agent" as const };
     if (target.kind === "agent" && (automation.models === undefined || automation.models.length === 0)) {
@@ -66,13 +65,17 @@ const refuseMisshapenWatch = (services: Services, automation: Automation): void 
 };
 
 // Which door an automation opens, if any: the kind its credential is filed under (auth/tokens/door-tokens.ts).
-// An event trigger is a webhook; a bug intake takes a key from clients with no origin; everything else has no
-// credential to mint.
-export const doorOf = (automation: Automation): DoorKind | undefined => {
+// An event trigger is a webhook; an automation on a listener whose extension's public routes take a key from clients with
+// no origin (`keyed`, extensions/backend/public-door.routes.ts keyedDoorProviders, 2026-11-26) gets an intake key, the
+// bug intake's among them since it moved onto the issues extension's door; everything else has no credential to mint.
+export const doorOf = (automation: Automation, keyed: ReadonlySet<string> = new Set()): DoorKind | undefined => {
     if (automation.trigger.kind === "event") {
         return "automation";
     }
-    return automation.trigger.kind === "listener" && automation.trigger.provider === ISSUES_PROVIDER ? "intake" : undefined;
+    if (automation.trigger.kind !== "listener") {
+        return undefined;
+    }
+    return keyed.has(automation.trigger.provider) ? "intake" : undefined;
 };
 
 // Sender rules match `author.id`, so they are only accepted on a listener whose source promised that id is an identity
@@ -112,10 +115,16 @@ const refuseUnknownRole = async (services: Services, automation: Automation): Pr
 // Everything saving an automation refuses, each refusal a BAD_REQUEST naming what to change: shared by the upsert route
 // and an approved automation need (needs/kinds/automation-need.ts), so an agent's proposal is held to exactly what the
 // Automations page is. `upsert` validates the cron with the scheduler's own parser, so what's accepted is what will fire.
-export const refuseInvalidAutomation = async (services: Services, automation: Automation): Promise<void> => {
+export const refuseInvalidAutomation = async (services: Services, automation: Automation, saver?: AutomationSaver): Promise<void> => {
     refusePastMoment(automation.trigger, Date.now());
     refusePastEnd(automation, Date.now());
     refuseMisshapenWatch(services, automation);
+    // A source no enabled extension checks, or whose parameters its kind does not take, would only ever fail.
+    const problem = automation.source === undefined ? undefined : await watchSourceProblem(services, automation.source);
+    if (problem !== undefined) {
+        throw new ORPCError("BAD_REQUEST", { message: problem });
+    }
+    await refuseForeignExtensionTarget(services, automation, saver);
     await refuseUnknownRole(services, automation);
     await refuseServiceMismatch(services, automation);
     if (automation.trigger.kind === "schedule") {
@@ -169,14 +178,17 @@ export const saveAutomation = async (services: Services, sent: Automation, by: s
     // keeps it, so an edit can't rotate a live credential out from under a shipped caller.
     // A trigger that changed kind drops the credential the old door held.
     // A door file this build cannot read refuses the credential (CONFLICT naming it); the record above is saved.
-    const door = doorOf(automation);
-    await doorChange(
-        Promise.all(
-            (["automation", "intake"] as const).map((kind) =>
-                kind === door ? services.doorTokens.ensure(kind, automation.id) : services.doorTokens.remove(kind, automation.id),
-            ),
-        ),
-    );
+    // An automation still on a listener keeps an intake key its door had while that door's extension is off (2026-11-26):
+    // the key ships inside the owner's apps, and switching the extension on again must not hand them a new one.
+    const door = doorOf(automation, await keyedDoorProviders(services));
+    const settle = async (kind: DoorKind): Promise<void> => {
+        if (kind === door) {
+            await services.doorTokens.ensure(kind, automation.id);
+        } else if (kind !== "intake" || automation.trigger.kind !== "listener") {
+            await services.doorTokens.remove(kind, automation.id);
+        }
+    };
+    await doorChange(Promise.all((["automation", "intake"] as const).map(settle)));
     // A Visitor chat pinned to the Visitor chat role brings that card into being: turnRole denies everything
     // to a named-but-missing card, which would leave a fresh public chat unable to read.
     // Written here so a Visitor chat arriving through any route lands with its role already present; awaited

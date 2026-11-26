@@ -9,8 +9,8 @@
         "integrations": "Integracje",
         "onAnyPageListed": "na każdej stronie, którą wypisałeś powyżej. Uruchamiacz pojawia się w rogu; rozmowy odwiedzających trafiają na Twoją tablicę agentów, gdzie możesz je oglądać i przejmować.",
         "pasteBefore": "Wklej to przed",
-        "visitorChatCreatedDrop": "Recepcja utworzona: wrzuć to na swoją stronę:",
-        "copyEmbedSnippet": "Kopiuj fragment osadzenia dla {id}"
+        "showEmbedCode": "Pokaż kod osadzenia",
+        "visitorChatCreatedDrop": "Recepcja utworzona: wrzuć to na swoją stronę:"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Około sekundy czasu przeglądarki każdego odwiedzającego. Żadnych kluczy.",
@@ -160,28 +160,13 @@
         "whatHasToBeTrue": "Co musi być prawdą najpierw. Do sprawdzenia nie uruchamia się żaden model.",
         "conditionNone": "Zawsze",
         "conditionGuard": "Polecenie",
-        "conditionNpm": "Pakiet npm",
-        "conditionGithub": "Wydanie na GitHubie",
         "conditionUrl": "Strona WWW",
         "conditionCaption": {
             "none": "Nic nie jest sprawdzane: każde uruchomienie idzie dalej.",
             "guard": "Polecenie powłoki uruchamiane najpierw w przestrzeni roboczej. Kod wyjścia 0 przepuszcza, a to, co wypisze, trafia do pobudki; każdy inny jest zapisywany jako pominięcie. $AUTOMATION_STATE wskazuje plik, który może przechowywać między przebiegami, a $AUTOMATION_LAST zawiera to, co wypisało, gdy ostatnio przepuściło.",
-            "npm": "Pakiet w rejestrze npm, sprawdzany przez sam sandbox: bez powłoki, bez tokenu.",
-            "github": "Najnowsze wydanie publicznego repozytorium na GitHubie, sprawdzane przez sam sandbox.",
             "url": "Tekst jednej strony WWW albo ta jego część, którą wskaże wzorzec."
         },
         "guardCommand": "Polecenie, które decyduje, czy idzie dalej",
-        "waitForVersion": "Czekaj na wersję",
-        "followTag": "Śledź tag",
-        "package": "Pakiet",
-        "versionRange": "Zakres wersji",
-        "distTag": "Tag",
-        "npmCaption": {
-            "range": "Przechodzi, gdy opublikowana wersja spełnia zakres; to, co widzi, to ta wersja.",
-            "tag": "Widzi wersję pod tym tagiem, latest, gdy puste. Połącz z „tylko zmiana”, by słyszeć o każdej nowej."
-        },
-        "repository": "Repozytorium",
-        "prereleasesToo": "Licz też wersje przedpremierowe",
         "page": "Strona",
         "onlyWhatMatches": "Tylko to, co pasuje (opcjonalnie)",
         "pageCaption": "Puste obserwuje cały tekst strony. Wyrażenie regularne zawęża go do tego, co pasuje, a jeśli ma grupę, do jej pierwszej grupy.",
@@ -204,7 +189,8 @@
         "targetCaption": {
             "agent": "Nowy agent zaczyna od poniższego promptu i tego, co zobaczyło sprawdzenie.",
             "conversation": "Rozmowa wraca tam, gdzie się zatrzymała, z tym, co zobaczyło sprawdzenie, i poniższym promptem. Działa na własnym modelu.",
-            "notify": "Nie uruchamia się żaden model: twoje urządzenia dostają powiadomienie z tym, co zobaczyło sprawdzenie, albo z poniższymi słowami, gdy nic nie zobaczyło."
+            "notify": "Nie uruchamia się żaden model: twoje urządzenia dostają powiadomienie z tym, co zobaczyło sprawdzenie, albo z poniższymi słowami, gdy nic nie zobaczyło.",
+            "extension": "Żaden model nie działa: budzony jest kod rozszerzenia, przez zarejestrowaną przez nie obsługę. Tylko to rozszerzenie może wskazać automatyzację na siebie."
         },
         "pickConversation": "Wybierz rozmowę",
         "conversationToContinue": "Rozmowa do kontynuowania",
@@ -213,11 +199,12 @@
         "whatNotificationSays": "Co mówi powiadomienie.",
         "notifyPlaceholder": "Obserwowana strona się zmieniła.",
         "guardPlaceholder": "test -n \"$(git status --porcelain)\"",
-        "tagPlaceholder": "latest",
         "aiDisclosure": "Informuj odwiedzających, że odpowiada AI",
         "aiDisclosureText": "Własna informacja (opcjonalnie)",
         "aiDisclosureDefault": "Odpowiedzi pisze asystent AI. Mogą zawierać błędy.",
-        "roleGoneHint": "Ta rola już nie istnieje, więc uruchomienia nie miałyby narzędzi ani kont. Wybierz inną."
+        "roleGoneHint": "Ta rola już nie istnieje, więc uruchomienia nie miałyby narzędzi ani kont. Wybierz inną.",
+        "whatExtensionIsHanded": "Co dostaje obsługa rozszerzenia",
+        "kindOff": "{extension}, które sprawdza te obserwacje, jest wyłączone: ta obserwacja kończy się błędem przy każdym sprawdzeniu, dopóki nie zostanie włączone."
     },
     "automationRow": {
         "alreadyFired": "Już uruchomiona",
@@ -299,7 +286,8 @@
         "roleMissing": "Rola usunięta",
         "roleMissingNote": "{ids} już nie istnieje, więc jej uruchomienia nie mają żadnych narzędzi ani kont. Wybierz inną rolę.",
         "noAccounts": "Bez kont",
-        "noAccountsNote": "Jej uruchomienia nie sięgają żadnego z Twoich zalogowanych kont. Wybierz Wszystkie konta albo rolę, jeśli ma publikować lub przeglądać jako Ty."
+        "noAccountsNote": "Jej uruchomienia nie sięgają żadnego z Twoich zalogowanych kont. Wybierz Wszystkie konta albo rolę, jeśli ma publikować lub przeglądać jako Ty.",
+        "wakesExtension": "Budzi {extension} ({handler})"
     },
     "automationsView": {
         "addAutomation": "Dodaj automatyzację",
@@ -326,7 +314,8 @@
         "readingAutomations": "Odczytywanie Twoich automatyzacji…",
         "runHistoryCantUndone": "i jej historię przebiegów? Tego nie można cofnąć.",
         "showAll": "Pokaż wszystkie ({count})",
-        "takeOneOffersBelow": "Weź jedną z ofert poniżej albo zbuduj własną za pomocą"
+        "takeOneOffersBelow": "Weź jedną z ofert poniżej albo zbuduj własną za pomocą",
+        "visitorChatOff": "Rozszerzenie Czat na stronie nie jest włączone w tej piaskownicy, więc nie można pokazać jego kodu osadzenia. Włącz je w Rozszerzeniach."
     },
     "catalog": {
         "allChannels": "wszystkie kanały",
@@ -349,22 +338,6 @@
         "noRepoMaps": "Żadne repozytorium z przestrzeni roboczej nie jest powiązane z podłączonym kontem GitHub ani GitLab, więc nic nie może tego jeszcze uruchomić.",
         "partlyPolled": "Podpięte dla {wired} z {total} repozytoriów. {names} jest zamiast tego odpytywane i uruchamia się w ciągu {minutes} minut. | Podpięte dla {wired} z {total} repozytoriów. {names} są zamiast tego odpytywane i uruchamiają się w ciągu {minutes} minut. | Podpięte dla {wired} z {total} repozytoriów. {names} są zamiast tego odpytywane i uruchamiają się w ciągu {minutes} minut."
     },
-    "visitorChatInstallDialog": {
-        "allow": "Zezwól",
-        "allowToLoadChat": "Zezwól {origin} na wczytanie tego czatu",
-        "allowedSites": "Dozwolone witryny",
-        "askedTurnedAway": "pytał i został odprawiony · {lastSeenAt}",
-        "checking": "Sprawdzanie…",
-        "copyEmbedSnippet": "Kopiuj fragment osadzenia dla {id}",
-        "couldntAddSite": "Nie udało się dodać tej witryny.",
-        "done": "Gotowe",
-        "install": "Zainstaluj",
-        "loadCount": "{count} wczytanie | {count} wczytania | {count} wczytań",
-        "loaded": "Czy się wczytało?",
-        "noBrowserLoadedWidget": "Żadna przeglądarka nie wczytała jeszcze tego widżetu. Wklej fragment, otwórz swoją stronę, a to zaktualizuje się samo w ciągu kilku sekund.",
-        "noSitesAllowed": "Nie ma jeszcze dozwolonych witryn, więc każdy odwiedzający zostaje odprawiony. Dodaj jedną poniżej albo edytuj automatyzację.",
-        "pasteIntoSiteBefore": "Wklej to na swojej stronie, przed"
-    },
     "runStrip": {
         "cutOff": "Przerwane",
         "failed": "Nieudane",
@@ -385,14 +358,12 @@
         "pickModel": "Wybierz przynajmniej jeden model: automatyzacja działa, gdy nikt nie patrzy, więc nic nie zostanie wybrane za nią.",
         "promptRequired": "Prompt jest wymagany.",
         "guardRequired": "Wpisz polecenie albo wybierz inny warunek.",
-        "packageRequired": "Podaj nazwę pakietu, np. bun albo {'@'}scope/name.",
-        "rangeRequired": "Podaj zakres wersji, np. >=1.4.3, albo śledź tag.",
-        "repoFormat": "Podaj repozytorium jako właściciel/nazwa, np. oven-sh/bun.",
         "pageUrl": "Podaj pełny adres strony, zaczynający się od http:// lub https://.",
         "selectInvalid": "Ten wzorzec się nie kompiluje: {problem}",
         "pickEndDate": "Wybierz datę i godzinę zakończenia albo ją wyczyść.",
         "endPassed": "Ta data zakończenia już minęła.",
-        "pickConversation": "Wybierz rozmowę do kontynuowania."
+        "pickConversation": "Wybierz rozmowę do kontynuowania.",
+        "kindUnknown": "Żadne rozszerzenie tutaj nie sprawdza już obserwacji {kind}: zainstaluj lub włącz to, które to robi, albo wybierz inny warunek."
     },
     "cronSchedule": {
         "afterSessions": "{label} · po {count} sesji | {label} · po {count} sesjach | {label} · po {count} sesjach",
@@ -450,9 +421,6 @@
         }
     },
     "watch": {
-        "npm": "npm {spec}",
-        "releases": "Wydania {repo}",
-        "releasesWithPre": "Wydania {repo}, też przedpremierowe",
         "pageMatching": "{url}, pasujące do {select}",
         "checked": "Sprawdzono {when}",
         "notChecked": "Jeszcze nie sprawdzono",

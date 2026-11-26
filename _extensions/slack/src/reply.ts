@@ -1,11 +1,11 @@
 import {
+    type CardView,
     type ChatReply,
     type ChatReplyDeps,
-    type CardView,
     type ChatSurface,
     createChatReply,
+    declaredMessageLimit,
     type Logger,
-    MESSAGE_LIMITS,
     type ProgressDetail,
     type ReplyMark,
     type ReplyRegistry,
@@ -23,7 +23,7 @@ import { streamChunks, type StreamShown, streamShown } from "./stream.js";
 // shortcode, Slack's own "is working…" status in the thread, the card as Block Kit, and the answer as Markdown blocks,
 // which Slack renders as written (headings, lists, code with its language, tables) rather than as its own mrkdwn.
 
-const SLACK_MAX = MESSAGE_LIMITS.slack;
+const SLACK_MAX = declaredMessageLimit(new URL("../intentic-extension.json", import.meta.url), "slack");
 
 // Slack's reactions API takes a shortcode, not the emoji.
 export const REACTIONS = {

@@ -13,7 +13,10 @@ import type { Services } from "../../composition.js";
 import { type ExtensionHost, extensionGranted, type InstalledExtension } from "../../capabilities/extension-inventory/installed-extensions.js";
 import { BACKEND_CARD_HEADER, BACKEND_HOST_HEADER } from "./backend-host-config.js";
 import { forwardToBackend } from "./backend-proxy.js";
+import type { ToolRequest } from "./backend-tools.js";
 import { extensionProcessKey } from "../../capabilities/extension-dirs.js";
+import { opt } from "../../opt.js";
+import { toolGrantsOf, type TurnTickets, turnTickets } from "../turn/tool-grants.js";
 
 // An extension's tools (`contributes.tools`, or a cli card's `mcp`, its alias for one release), mounted into every turn
 // granted them at the daemon's one MCP door on the turn's lease, like peer bridges: the door checks the turn's bearer against
@@ -128,12 +131,65 @@ export const backendDown = (backend: Services["extensionBackend"]): string => {
     return `extension backends are ${status.state}${status.detail !== undefined ? `, ${status.detail}` : ""}`;
 };
 
-type ToolsDeps = Pick<Services, "extensionBackend" | "capabilities"> & ExtensionHost;
+type ToolsDeps = Pick<Services, "extensionBackend" | "capabilities" | "credentialGates" | "credentialGrants"> &
+    Partial<Pick<Services, "accountSignInUrls">> &
+    ExtensionHost;
+
+// A card the owner put behind a named person (a credential gate) whose tools would use its credential: refused on use
+// unless this conversation holds a release, as the gateway refuses a gated card's request and the turn's environment
+// leaves out a gated card's variables (secrets/credential-gating.ts). (2026-11-26) A card's tools are handed its
+// credential, and since the IMAP and Microsoft 365 cards keep theirs in the backend, this is where their gate holds.
+const gateRefusal = async (services: ToolsDeps, card: string, conversationId: string | undefined): Promise<string | undefined> => {
+    const gate = await services.credentialGates.forCapability(card);
+    if (gate === undefined) {
+        return undefined;
+    }
+    await services.credentialGrants.ready;
+    if (conversationId !== undefined && services.credentialGrants.has(conversationId, card) !== undefined) {
+        return undefined;
+    }
+    return `"${card}" needs approval from ${gate.approvers.join(" or ")} before it is used: run \`secrets request ${card} --why "…"\`, and use it from the next turn once one of them releases it`;
+};
+
+// One message to the backend host's tools door, and its answer, or why there is none.
+const askHost = async (
+    backend: { readonly port: number; readonly hostToken: string },
+    extension: string,
+    body: ToolRequest,
+    signal: AbortSignal,
+): Promise<{ readonly answer: RpcMessage | undefined } | { readonly refusal: string }> => {
+    try {
+        const answered = await fetch(`http://127.0.0.1:${backend.port}/tools/${encodeURIComponent(extension)}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", [BACKEND_HOST_HEADER]: backend.hostToken },
+            body: JSON.stringify(body),
+            signal,
+        });
+        if (!answered.ok) {
+            return { refusal: `${extension} answered ${answered.status}: ${await answered.text()}` };
+        }
+        return { answer: ((await answered.json()) as { answer: RpcMessage | null }).answer ?? undefined };
+    } catch (error) {
+        return { refusal: `${extension} did not answer: ${errorMessage(error)}` };
+    }
+};
+
+// (2026-11-26) A tools/call's standing on its turn (tool-grants.ts): what the turn holds, and a ticket minted for this
+// extension and this call, released once the backend answered. Nothing for any other message.
+const callStanding = async (services: ToolsDeps, tickets: TurnTickets, target: { readonly extension: string }, message: RpcMessage, call: MountCall) => {
+    if (message.method !== "tools/call") {
+        return undefined;
+    }
+    const grants = await toolGrantsOf(services, target.extension, call.turn);
+    const minted = tickets.mint({ extension: target.extension, conversationId: call.conversationId, grants, turn: call.turn });
+    return { turn: { ticket: minted.ticket, grants }, release: minted.release };
+};
 
 // The door's tools endpoint: one JSON-RPC message to the backend host, which answers it from the extension's
-// `api.tools.serve`, handed the card's settings with it. No headers deadline: the host owns each call's own.
+// `api.tools.serve`, handed the card's settings with it, and (2026-11-26) a call its turn's grants and its ticket. No
+// headers deadline: the host owns each call's own.
 export const createExtensionToolsEndpoint =
-    (services: ToolsDeps): MountEndpoints["tools"] =>
+    (services: ToolsDeps, tickets: TurnTickets = turnTickets): MountEndpoints["tools"] =>
     async (target, message, call) => {
         const refuse = (text: string): RpcMessage | undefined =>
             message.id === undefined ? undefined : { jsonrpc: "2.0", id: message.id, error: { code: -32000, message: text } };
@@ -141,23 +197,21 @@ export const createExtensionToolsEndpoint =
         if (card === "gone") {
             return refuse(`"${target.card ?? ""}" is no longer a connected card of ${target.extension}`);
         }
+        const gated = card === undefined || message.method !== "tools/call" ? undefined : await gateRefusal(services, card.id, call.conversationId);
+        if (gated !== undefined) {
+            return refuse(gated);
+        }
         const backend = await heldTarget(services.extensionBackend, call.signal);
         if (backend === undefined) {
             return refuse(backendDown(services.extensionBackend));
         }
+        const standing = await callStanding(services, tickets, target, message, call);
         try {
-            const answered = await fetch(`http://127.0.0.1:${backend.port}/tools/${encodeURIComponent(target.extension)}`, {
-                method: "POST",
-                headers: { "content-type": "application/json", [BACKEND_HOST_HEADER]: backend.hostToken },
-                body: JSON.stringify({ message, ...(card === undefined ? {} : { card }), ...(call.conversationId === undefined ? {} : { conversationId: call.conversationId }) }),
-                signal: call.signal,
-            });
-            if (!answered.ok) {
-                return refuse(`${target.extension} answered ${answered.status}: ${await answered.text()}`);
-            }
-            return ((await answered.json()) as { answer: RpcMessage | null }).answer ?? undefined;
-        } catch (error) {
-            return refuse(`${target.extension} did not answer: ${errorMessage(error)}`);
+            const body = { message, ...opt("card", card), ...opt("conversationId", call.conversationId), ...opt("turn", standing?.turn) };
+            const answered = await askHost(backend, target.extension, body, call.signal);
+            return "refusal" in answered ? refuse(answered.refusal) : answered.answer;
+        } finally {
+            standing?.release();
         }
     };
 
@@ -173,7 +227,7 @@ const encodeCard = (card: { readonly id: string; readonly config: Record<string,
 // backend namespace (which /x/* itself refuses) or onto a declared process's port, with the card's settings in
 // `x-intentic-card` so the extension need not re-read them.
 export const createExtensionMcpEndpoint =
-    (services: ToolsDeps & Pick<Services, "serviceProcesses">): MountEndpoints["extension"] =>
+    (services: Pick<Services, "extensionBackend" | "capabilities" | "serviceProcesses"> & ExtensionHost): MountEndpoints["extension"] =>
     async (target, c: Context<AppEnv>, call: MountCall) => {
         const card = await cardFor(services, target.extension, target.card);
         if (card === "gone") {

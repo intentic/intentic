@@ -20,7 +20,7 @@ import { provenanceOf, theirs, visibleTo } from "../auth/fleet-scope.js";
 import type { Services } from "../composition.js";
 import { readBoundedJson } from "../http/bounded-body.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
-import { accountOutboxOf, type DropEntry, postToDoor, registerDropDelivery, stagedDirOf } from "../issues/account-outbox.js";
+import { accountOutboxOf, type DropEntry, postToDoor, registerDropDelivery, stagedDirOf } from "./account-outbox.js";
 import { routeCallerOf } from "../links/route-caller.js";
 import { opt } from "../opt.js";
 import { routeAdmissionOf } from "./admit-route.js";

@@ -9,7 +9,7 @@ flowchart LR
     end
     platform(["Platform<br/>directory + notary"])
     subgraph B["Receiving sandbox"]
-      door["/account/report<br/>checks the pass"] --> inbox(["issues inbox"])
+      door["/account/report<br/>checks the pass"] -->|"fires door"| inbox(["issues inbox<br/>the issues extension"])
     end
     outbox -->|"connect token:<br/>who claims this project?"| platform
     platform -->|"address + signed pass"| outbox
@@ -29,7 +29,7 @@ The outbox, the pairings and the inbox are on the history volume, out of the age
 Only the owner, signed in to the platform, writes a claim ([`projects.orpc.ts`](../../_platform/api/src/projects/projects.orpc.ts)). There are three ways to make one:
 
 - **On a card.** An agent proposes one with `projects claim <project>`. That raises a `claim` need in its chat ([`claim-need.ts`](../../_sandbox/sandbox/src/needs/kinds/claim-need.ts)). The owner's press on the card calls the platform from their own browser, then answers the need. The daemon meets the need once the platform lists the project for this sandbox.
-- **From a suggestion.** Settings ▸ Projects lists what the open sandbox's repos could claim. The daemon reads each repo's origin, including a brokered remote, for the upstream it stands for ([`project-suggestions.ts`](../../_sandbox/sandbox/src/issues/project-suggestions.ts), `GET /account/projects/suggest`). `projects suggest` prints the same list.
+- **From a suggestion.** Settings ▸ Projects lists what the open sandbox's repos could claim. The daemon reads each repo's origin, including a brokered remote, for the upstream it stands for ([`project-suggestions.ts`](../../_sandbox/sandbox/src/account-routing/project-suggestions.ts), `GET /account/projects/suggest`). `projects suggest` prints the same list.
 - **By hand**, in Settings ▸ Projects.
 
 A claim another sandbox held moves to the new one.
@@ -40,7 +40,7 @@ A claim another sandbox held moves to the new one.
 - **The answer** is the claiming sandbox's address and a pass. The pass is an Ed25519 statement under the platform's identity key, prefixed `sp1.` so it can never stand in for an identity assertion. It names both sandboxes and the project, and lives ten minutes ([`sandbox-pass.ts`](../../_shared/sandbox-contract/src/protocol/doors/sandbox-pass.ts)).
 - **Checking.** The receiving daemon checks the pass against the key it learned from its own announce.
 
-**The outbox** ([`account-outbox.ts`](../../_sandbox/sandbox/src/issues/account-outbox.ts)). A sandbox that is asleep or offline cannot take a report.
+**The outbox** ([`account-outbox.ts`](../../_sandbox/sandbox/src/account-routing/account-outbox.ts)). A sandbox that is asleep or offline cannot take a report.
 
 - What cannot be delivered waits, one file per entry, on the history volume (`account-outbox/`), out of every turn's reach. It sat in `.intentic/records/outbox/` before 2026-11-24, where an agent could rewrite a queued report before it drained; a boot step moves what waited there.
 - An entry is a `report` or a `drop`, with the one person it routes as when there is one. Each kind is delivered by its own hook; a drop with none registered waits.
@@ -76,12 +76,12 @@ So a sandbox can only ever name its own people, toward sandboxes those people ar
 - Several sandboxes claiming one project answer 409, a refusal naming each of them.
 - A platform without the route answers 404 for the route itself; a report then asks `POST /projects/resolve`, as reports always did.
 
-**The door** ([`account.routes.ts`](../../_sandbox/sandbox/src/issues/account.routes.ts)), `POST /account/report`:
+**The door** ([`account.routes.ts`](../../_sandbox/sandbox/src/account-routing/account.routes.ts)), `POST /account/report`:
 
 - It admits only a report pass addressed to this sandbox, through the admission every pass-admitted door shares (below).
 - A person on the pass is attribution only. Kept on the issue's sender when this sandbox's roster knows them, it puts them on the wake's title ("From ops for ada@acme.test"); otherwise the report is filed without one.
-- It files the report through the issues intake's own pipeline: grouped by fingerprint, waking an agent only when the problem is new or escalated.
-- With no issues intake set up, the report is still recorded, under `account`, and wakes nobody.
+- It hands the report, with the sender the pass names, to the extension that owns the `issues` listener (intentic.issues), through that extension's `account-report` fire handler: the backend host's fires door, which no person's, panel's or agent's token reaches, so the sender stays the platform's word. The extension files it through its intake's own pipeline: grouped by fingerprint, waking an agent only when the problem is new or escalated. With no issues intake set up, it is still recorded, under `account`, and wakes nobody.
+- Nothing is kept at the door. While no extension keeps the inbox (it is not installed or switched off, or its backend is restarting), the door answers 503 and the sending sandbox's outbox keeps the report and tries again for a week, so installing the extension later still delivers it. (2026-11-26: until then the daemon filed it into an inbox of its own, which left the core for the extension.)
 
 **The pairing** ([`pairings-store.ts`](../../_sandbox/sandbox/src/account-routing/pairings-store.ts), [`route-secrets.ts`](../../_sandbox/sandbox/src/account-routing/route-secrets.ts), [`pairing.routes.ts`](../../_sandbox/sandbox/src/account-routing/pairing.routes.ts)). The platform's word alone opens nothing but an inbox: every other scope also needs a secret the person gave the asking sandbox.
 
@@ -175,8 +175,8 @@ So a sandbox can only ever name its own people, toward sandboxes those people ar
 
 - [sandbox-pass.ts](../../_shared/sandbox-contract/src/protocol/doors/sandbox-pass.ts): the pass, its scopes and its checks.
 - [projects.routes.ts](../../_platform/api/src/projects/projects.routes.ts) and [projects.orpc.ts](../../_platform/api/src/projects/projects.orpc.ts): the directory the daemons ask, and the claims the owner writes.
-- [account-outbox.ts](../../_sandbox/sandbox/src/issues/account-outbox.ts), [account-send.routes.ts](../../_sandbox/sandbox/src/issues/account-send.routes.ts), [route-client.ts](../../_sandbox/sandbox/src/account-routing/route-client.ts): the sending side.
-- [account.routes.ts](../../_sandbox/sandbox/src/issues/account.routes.ts), [admit-route.ts](../../_sandbox/sandbox/src/account-routing/admit-route.ts): the receiving door and the checks every pass-admitted door shares.
+- [account-outbox.ts](../../_sandbox/sandbox/src/account-routing/account-outbox.ts), [account-send.routes.ts](../../_sandbox/sandbox/src/account-routing/account-send.routes.ts), [route-client.ts](../../_sandbox/sandbox/src/account-routing/route-client.ts): the sending side.
+- [account.routes.ts](../../_sandbox/sandbox/src/account-routing/account.routes.ts), [admit-route.ts](../../_sandbox/sandbox/src/account-routing/admit-route.ts): the receiving door, its hand-off to the issues inbox, and the checks every pass-admitted door shares.
 - [person-tasks.ts](../../_sandbox/sandbox/src/links/person-tasks.ts), [person-task.routes.ts](../../_sandbox/sandbox/src/links/person-task.routes.ts), [linked-destinations.ts](../../_sandbox/sandbox/src/links/linked-destinations.ts): a task routed as a person, on both sides.
 - [redirect-need.ts](../../_sandbox/sandbox/src/needs/kinds/redirect-need.ts), [person-opening.ts](../../_sandbox/sandbox/src/account-routing/person-opening.ts), [NeedRedirectBody.vue](../../_editor/web/src/features/needs/routing/NeedRedirectBody.vue): a message sent on to the sandbox it was meant for.
 - [drop.routes.ts](../../_sandbox/sandbox/src/account-routing/drop.routes.ts), [inbox.routes.ts](../../_sandbox/sandbox/src/account-routing/inbox.routes.ts), [read.routes.ts](../../_sandbox/sandbox/src/account-routing/read.routes.ts): a drop, the inbox it lands in, and a read as the person.

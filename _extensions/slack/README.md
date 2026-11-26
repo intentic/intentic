@@ -17,6 +17,10 @@ flowchart LR
   to the file by `src/app-manifest.test.ts`), and its Test asks `auth.test`, whose answer is 200 either way, so the
   probe reads `ok`. The skill (`skills/slack/SKILL.md`) teaches the agent Slack's Web API with `curl`. The gateway is a
   `processes` entry the daemon runs while a Slack card or Slack automation exists.
+- The card declares what its Web API methods do (`broker.actions`: posting, editing and deleting a message, adding and
+  removing a reaction, and the history reads), so the sandbox's credential gateway records each call in Activity with
+  its channel and text, and holds it to the owner's action rules (`slack.message.send` and the rest) before the token
+  is attached.
 - The gateway holds one Socket Mode socket per Slack app, and only while an enabled Slack automation exists; the
   daemon holds no Slack connection. Socket Mode is an outbound WebSocket, so no public URL is needed, for events and
   for button presses alike. A revoked token is fatal and pauses reconnecting for a backoff period.
@@ -32,6 +36,8 @@ flowchart LR
   edited in place with the current step, the checklist, the elapsed time, **Stop** and **Open in Intentic**. The
   answer itself is posted as `markdown` blocks, which Slack renders as standard Markdown (headings, code with its
   language, tables), never streamed by edits. The message ends ✅, ❌, ⏹️, or ✋ while a hold waits for the owner.
+- The card states the one-message limit a reply is split at (`channel.messageLimit`, 4,000, Slack's own advice) and
+  where people's data goes for the Data protection page (`processors`: Slack Technologies (Salesforce), US).
 - Slack's own thread status ("is working on it…", `assistant.threads.setStatus`, which only needs `chat:write`)
   stands in for "typing…". An app Slack refuses it for is not asked again.
 - The card's "How the work shows" setting offers Slack's own streaming instead ([src/stream.ts](src/stream.ts)): one

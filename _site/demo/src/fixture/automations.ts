@@ -1,10 +1,12 @@
-import type {
-    Automation,
-    AutomationApproval,
-    AutomationCatalog,
-    AutomationSummary,
-    WatchCheckResult,
-    WatchSource,
+import {
+    type Automation,
+    type AutomationApproval,
+    type AutomationCatalog,
+    type AutomationSummary,
+    BUILT_IN_WATCH_KINDS,
+    isUrlSource,
+    type WatchCheckResult,
+    type WatchSource,
 } from "@intentic/sandbox-contract/schemas/automations";
 import { LATENCY_AGENT_ID } from "./fleet";
 import { demoQuiet } from "../mode";
@@ -301,8 +303,10 @@ const seed = (now: number): AutomationSummary[] => [
     },
 ];
 
-// Subset of what a real sandbox merges, trimmed to what acme-shop has connected (github, discord).
+// Subset of what a real sandbox merges, trimmed to what acme-shop has connected (github, discord). Its watch kinds are the
+// connectors extension's, as the contract records them.
 const catalog: AutomationCatalog = {
+    watchKinds: [...BUILT_IN_WATCH_KINDS],
     sources: [
         {
             provider: `webchat`,
@@ -464,19 +468,21 @@ const catalog: AutomationCatalog = {
 
 export const automationCatalog = (): AutomationCatalog => catalog;
 
-// What "Check now" answers in the demo: the daemon would ask the registry, GitHub or the page; the demo has no network
-// to ask, so it answers what the fixture's own watches saw.
+// What "Check now" answers in the demo: the sandbox would ask the page, or the extension whose watch kind it is (the
+// connectors extension asks the registry or GitHub); the demo has no network to ask, so it answers what the fixture's
+// own watches saw.
 export const checkDemoSource = (source: WatchSource): WatchCheckResult => {
-    switch (source.kind) {
-        case `npm`:
-            return source.range === undefined
-                ? { pass: true, saw: `${source.package}@8.16.3` }
-                : { pass: false, saw: `no published version of ${source.package} satisfies ${source.range} yet (latest is 8.16.3)` };
-        case `github-release`:
-            return { pass: true, saw: `v8.16.3 (node-postgres 8.16.3)\nhttps://github.com/${source.repo}/releases/tag/v8.16.3` };
-        case `url`:
-            return { pass: true, saw: `All systems operational` };
+    if (isUrlSource(source)) {
+        return { pass: true, saw: `All systems operational` };
     }
+    if (source.kind === `github-release`) {
+        return { pass: true, saw: `v8.16.3 (node-postgres 8.16.3)\nhttps://github.com/${String(`repo` in source ? source.repo : ``)}/releases/tag/v8.16.3` };
+    }
+    const name = `package` in source ? String(source.package) : source.kind;
+    const range = `range` in source ? source.range : undefined;
+    return range === undefined
+        ? { pass: true, saw: `${name}@8.16.3` }
+        : { pass: false, saw: `no published version of ${name} satisfies ${String(range)} yet (latest is 8.16.3)` };
 };
 
 let automations: AutomationSummary[] | undefined;

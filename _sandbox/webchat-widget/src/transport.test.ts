@@ -109,7 +109,7 @@ test(`the message posts to the automation's own path`, async () => {
         }),
     );
     await sendMessage(ENDPOINT, MESSAGE, { delta: () => {}, pending: () => {}, failed: () => {} });
-    expect(urls).toEqual([`https://sandbox-abc.example/webchat/support/message`]);
+    expect(urls).toEqual([`https://sandbox-abc.example/door/intentic.visitor-chat/support/message`]);
 });
 
 test(`the poll names the visitor's thread and its cursor, so one browser never collects another's replies`, async () => {
@@ -125,7 +125,7 @@ test(`the poll names the visitor's thread and its cursor, so one browser never c
     expect(pending.replies).toEqual([{ seq: 3, at: 1, text: `a person wrote back` }]);
     expect(pending.cursor).toBe(3);
     // The conversation id is a stored value, not a literal: an unescaped one would address a different thread.
-    expect(urls).toEqual([`https://sandbox-abc.example/webchat/support/messages?conversation=v%201%2F2&after=2`]);
+    expect(urls).toEqual([`https://sandbox-abc.example/door/intentic.visitor-chat/support/messages?conversation=v%201%2F2&after=2`]);
 });
 
 test(`a refused poll carries the server's own sentence, so a misconfigured origin is legible`, async () => {
@@ -136,4 +136,23 @@ test(`a refused poll carries the server's own sentence, so a misconfigured origi
     const error = await fetchPending(ENDPOINT, `v-1`, 0).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(EmbedError);
     expect((error as EmbedError).message).toBe(`origin not allowed`);
+});
+
+test(`a message goes to the chat's door, and one carrying a proof of work to the route that checks it, in its headers`, async () => {
+    const calls: { url: string; pow: string | null; caller: string | null; body: string }[] = [];
+    stubGlobal(
+        `fetch`,
+        jest.fn(async (url: string, init: RequestInit) => {
+            const headers = new Headers(init.headers);
+            calls.push({ url, pow: headers.get(`x-intentic-pow`), caller: headers.get(`x-intentic-pow-caller`), body: String(init.body) });
+            return new Response(bodyOf([`event: done\ndata: \n\n`]), { status: 200 });
+        }),
+    );
+    const sink = { delta: () => undefined, pending: () => undefined, failed: () => undefined };
+    await sendMessage(ENDPOINT, MESSAGE, sink);
+    await sendMessage(ENDPOINT, { ...MESSAGE, powNonce: `salt:42` }, sink);
+    expect(calls).toEqual([
+        { url: `https://sandbox-abc.example/door/intentic.visitor-chat/support/message`, pow: null, caller: null, body: JSON.stringify(MESSAGE) },
+        { url: `https://sandbox-abc.example/door/intentic.visitor-chat/support/proven`, pow: `salt:42`, caller: `v-1`, body: JSON.stringify(MESSAGE) },
+    ]);
 });

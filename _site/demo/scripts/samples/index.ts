@@ -11,7 +11,6 @@ import { auditSamples } from "./audit.samples.ts";
 import { browserSamples } from "./browser.samples.ts";
 import { automationsSamples } from "./automations.samples.ts";
 import { capabilitiesSamples } from "./capabilities.samples.ts";
-import { choresSamples } from "./chores.samples.ts";
 import { ciSamples } from "./ci.samples.ts";
 import { complianceSamples } from "./compliance.samples.ts";
 import { diffSamples } from "./diff.samples.ts";
@@ -79,7 +78,6 @@ export const samplesOf = (fixtures: SampleFixtures, now: number): Samples => {
         offload: offloadSamples(context),
         runs: runsSamples(context),
         ci: ciSamples(context),
-        chores: choresSamples(context),
         automations: automationsSamples(context),
         workflows: workflowsSamples(context),
         loops: loopsSamples(context),

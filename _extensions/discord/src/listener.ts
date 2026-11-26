@@ -1,6 +1,7 @@
 import {
-    type Delivered,
+    declaredMessageLimit,
     deliverChunked,
+    type Delivered,
     type GatewayCtx,
     GatewayRefusal,
     HISTORY_LIMIT,
@@ -8,7 +9,6 @@ import {
     type ListenerHistoryEntry,
     type ListenerMessage,
     type ListenerStop,
-    MESSAGE_LIMITS,
     progressDetailOf,
     recentKeys,
     type ReplyTiming,
@@ -27,7 +27,7 @@ import { createMessageReply, type ReplyDeps } from "./reply.js";
 // in its own thread, with a status card and reactions (reply.ts); the card's Stop button comes back here.
 
 // Discord's per-message content limit; a longer reply spills into follow-up messages.
-const DISCORD_MAX = MESSAGE_LIMITS.discord;
+const DISCORD_MAX = declaredMessageLimit(new URL("../intentic-extension.json", import.meta.url), "discord");
 
 // The parts of a discord.js message the dispatch reads, structural so a test can hand one in without a client.
 export interface DispatchedMessage {

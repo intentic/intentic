@@ -34,7 +34,14 @@ describe(`usePlatformCatalog`, () => {
             ],
         });
         const catalog = usePlatformCatalog();
-        expect([...catalog.value]).toEqual([[`x`, { name: `X`, logo: `x` }]]);
+        expect([...catalog.value]).toEqual([[`x`, { name: `X`, logo: `x`, messageLimit: undefined }]]);
         expect(specs[0]?.queryKey).toEqual([`extensions.list`, `sbx-1`]);
+    });
+
+    it(`carries the one-message limit a card declares, the number a post is counted against`, () => {
+        bound({
+            extensions: [{ enabled: true, manifest: { contributes: { capabilities: [{ id: `x`, catalog: { name: `X` }, channel: { messageLimit: 280 } }] } } }],
+        });
+        expect(usePlatformCatalog().value.get(`x`)).toEqual({ name: `X`, logo: undefined, messageLimit: 280 });
     });
 });

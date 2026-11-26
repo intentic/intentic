@@ -84,6 +84,7 @@ export const calendarCommands: Commands = {
             method: "POST",
             body: event,
             summary: `Create "${event.subject ?? "(no title)"}", ${when(event)}`,
+            channel: attendees(event),
             details: [
                 `New event "${event.subject ?? "(no title)"}"`,
                 `When: ${when(event)}`,
@@ -103,6 +104,7 @@ export const calendarCommands: Commands = {
             method: "PATCH",
             body: changes,
             summary: `Change "${before.subject ?? "(no title)"}", ${when(before)}`,
+            channel: attendees(before),
             details: [
                 `Change "${before.subject ?? "(no title)"}" (${when(before)})`,
                 `Attendees who may be notified: ${attendees(before)}`,
@@ -121,6 +123,7 @@ export const calendarCommands: Commands = {
             method: "POST",
             body: request,
             summary: `Cancel "${before.subject ?? "(no title)"}", ${when(before)}`,
+            channel: attendees(before),
             details: [
                 `Cancel "${before.subject ?? "(no title)"}" (${when(before)})`,
                 `A cancellation goes to: ${attendees(before)}`,

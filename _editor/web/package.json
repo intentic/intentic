@@ -36,6 +36,7 @@
         "@intentic/ext-preview": "workspace:*",
         "@intentic/ext-repo-apps": "workspace:*",
         "@intentic/ext-viewers": "workspace:*",
+        "@intentic/ext-visitor-chat": "workspace:*",
         "@intentic/extension-api": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/extension-ui": "workspace:*",

@@ -15,6 +15,7 @@
         "@huggingface/hub": "catalog:",
         "@intentic/base": "workspace:*",
         "@intentic/connector-runtime": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "discord.js": "catalog:",
         "mediaplex": "catalog:"

@@ -1,6 +1,6 @@
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
 import type { Services } from "../../composition.js";
-import type { OutboxSink } from "../../webchat/webchat-outbox.js";
+import type { OutboxSink } from "../../extensions/listener/listener-outbox.js";
 import type { AutomationRecord } from "../automations-store.js";
 import { opt } from "../../opt.js";
 import { perDaemon } from "../durable/daemon-memory.js";
@@ -236,9 +236,9 @@ const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined)
 // message resumes it. Shared by both releases, the approve route and the countdown scan; it takes only a hold one of them
 // let out of the queue after checking its proof (held-wakes-store.ts, ReleasedWake).
 export const runHeldWake = async (services: Services, automation: AutomationRecord, held: ReleasedWake): Promise<void> => {
-    // The requester's own stream closed when the wake was held, so the answer has nowhere live to go: a Visitor chat's is
-    // queued where their next page load collects it, a gateway channel's is posted into its thread once the turn ends.
-    const sink = services.outboxStreamFor(held.origin) ?? channelAnswerSink(services, held.origin);
+    // The requester's own stream closed when the wake was held, so the answer has nowhere live to go: it is posted into its
+    // channel's thread once the turn ends, through the channel's gateway (a Visitor chat's keeps it for the visitor).
+    const sink = channelAnswerSink(services, held.origin);
     // The snapshot carries the thread's own key: an origin cannot name it, since a thread is keyed by lane too.
     await fireOnThread(services, automation, { key: held.thread, conversationId: held.conversationId, sessionId: held.sessionId }, heldWakeOptions(held, sink));
     // Before the release is over: the approve route answers its caller here, and the visitor polling a moment later

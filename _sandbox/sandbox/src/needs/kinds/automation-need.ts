@@ -1,6 +1,7 @@
-import type { Automation } from "@intentic/sandbox-contract/schemas/automations";
+import type { Automation, WatchKind, WatchSource } from "@intentic/sandbox-contract/schemas/automations";
 import type { AutomationFirstCheck, AutomationNeed, Need, NeedAsk, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
 import { ORPCError } from "@orpc/server";
+import { opt } from "../../opt.js";
 import type { AskContext, Met, NeedKindHandler, Resolved } from "../need-kinds.js";
 
 // An automation an agent proposes (docs/architecture/needs.md): "tell me when Bun 1.4.3 ships", "pick this back up when
@@ -16,6 +17,8 @@ export interface AutomationNeedDeps {
     readonly exists: (id: string) => Promise<boolean>;
     // A ready-made source checked once, for the card; undefined for a guard command, which is never run before approval.
     readonly firstCheck: (automation: Automation) => Promise<AutomationFirstCheck | undefined>;
+    // The declaration of the kind a source names, when an extension declares it, so the card says it in the kind's words.
+    readonly watchKind?: (source: WatchSource) => Promise<WatchKind | undefined>;
 }
 
 // The placeholder the CLI sends for "the conversation asking": resolved here, from the raising turn, rather than trusted
@@ -57,11 +60,13 @@ export const automationNeed = (deps: AutomationNeedDeps): NeedKindHandler => {
         }
         const replaces = await deps.exists(automation.id);
         const firstCheck = await deps.firstCheck(automation);
+        const watchKind = automation.source === undefined ? undefined : await deps.watchKind?.(automation.source);
         const subject: AutomationNeed = {
             kind: "automation",
             automation,
             ...(replaces ? { replaces } : {}),
             ...(firstCheck === undefined ? {} : { firstCheck }),
+            ...opt("watchKind", watchKind),
         };
         return { kind: "raise", subject, title: titleOf(automation, replaces) };
     };

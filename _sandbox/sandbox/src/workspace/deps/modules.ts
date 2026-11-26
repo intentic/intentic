@@ -9,7 +9,7 @@ import { readTextIfExists } from "@intentic/base/fs";
 import { parseJsonOr } from "@intentic/base/json";
 
 // Modules of a repo: every directory with a self-naming manifest (package.json, or a Rust crate's Cargo.toml), as
-// repo-relative dirs, used to group changed files in review panels. A filesystem walk, not package-graph.ts's
+// repo-relative dirs, used to group changed files in review panels. A filesystem walk, not workspace-manifests.ts's
 // pnpm-workspace globs: grouping is about where a file lives, not a dependency edge. Bounded, and prunes nested repos too, which carry their own {repo} id.
 
 // packages/<group>/<pkg> is the deepest layout worth walking; past that isn't what anyone means by module.

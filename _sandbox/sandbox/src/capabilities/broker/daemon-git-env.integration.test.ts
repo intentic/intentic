@@ -129,7 +129,7 @@ const startGateway = async (card: Capability, ask: () => never) => {
     }
     const handler = createGateway({
         sessions,
-        card: async (id) => (id === card.id ? { config: card.config, broker, name: spec.catalog.name } : undefined),
+        card: async (id) => (id === card.id ? { config: card.config, broker, name: spec.catalog.name, provider: card.config.provider } : undefined),
         ownerRules: async () => undefined,
         hostGuards: async () => [],
         credentialGate: { check: async () => ({ allow: true }) },

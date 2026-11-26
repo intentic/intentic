@@ -1,5 +1,7 @@
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
+import { CONNECT_TOKEN_HEADER, EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/protocol/headers";
+import { EXTENSION_CALLER_HEADER, PUBLIC_DOOR_HEADER } from "@intentic/sandbox-contract/extension-protocol";
 import { forwardHeaders, REQUEST_REFRAMED, RESPONSE_REFRAMED } from "../../http/forward-headers.js";
 import { BACKEND_CARD_HEADER, BACKEND_HOST_HEADER } from "./backend-host-config.js";
 
@@ -19,21 +21,42 @@ const HEADERS_DEADLINE_MS = 20_000;
 // reporting the sandbox itself as slow.
 export const stall = (extension: string, path: string, error: string) => ({ error, extension, path });
 
-// Also the MCP door's way in to an extension (extension-mcp.ts), with `url` rewritten onto the card's path and a
-// deadline of its own. Whatever credential or daemon-only header the caller sent is dropped; only `target.headers`
-// (the host token, a door's card) go on.
-export const forwardToBackend = async (
-    c: Context<AppEnv>,
-    target: { readonly port: number; readonly headers: Readonly<Record<string, string>> },
-    url: URL,
-    extension: string,
-    headersDeadlineMs = HEADERS_DEADLINE_MS,
-): Promise<Response> => {
-    const headers = forwardHeaders(c.req.raw.headers, [...REQUEST_REFRAMED, "authorization", BACKEND_HOST_HEADER, BACKEND_CARD_HEADER]);
+// Every credential a caller may present to the daemon (the bearer, a session cookie, each grant's header and the
+// connect token) and every header only the daemon may set for a backend (the host token, a door's card, the caller's
+// assertion, a public door's verification): none of them reaches an extension's code from the caller. (2026-11-26) Only
+// `authorization` was dropped before, so a panel's or a control token's own header rode on into the backend.
+const NEVER_FORWARDED: readonly string[] = [
+    "authorization",
+    "cookie",
+    "x-intentic-panel",
+    "x-intentic-agent",
+    "x-intentic-control",
+    "x-intentic-sync",
+    EXTENSION_TOKEN_HEADER,
+    CONNECT_TOKEN_HEADER,
+    BACKEND_HOST_HEADER,
+    BACKEND_CARD_HEADER,
+    EXTENSION_CALLER_HEADER,
+    PUBLIC_DOOR_HEADER,
+];
+
+export interface BackendTarget {
+    readonly port: number;
+    // What the daemon sets on the way (the host token, a door's card, the caller's assertion, a door's verification).
+    readonly headers: Readonly<Record<string, string>>;
+    // A body the daemon already read and checked (a public door's), sent in place of the caller's stream.
+    readonly body?: Uint8Array<ArrayBuffer> | string | undefined;
+}
+
+// Also the MCP door's and the public doors' way in to an extension (extension-mcp.ts, public-door.routes.ts), with `url`
+// rewritten onto the path the door answers and a deadline of its own. Whatever credential or daemon-only header the
+// caller sent is dropped (NEVER_FORWARDED); only `target.headers` go on.
+export const forwardToBackend = async (c: Context<AppEnv>, target: BackendTarget, url: URL, extension: string, headersDeadlineMs = HEADERS_DEADLINE_MS): Promise<Response> => {
+    const headers = forwardHeaders(c.req.raw.headers, [...REQUEST_REFRAMED, ...NEVER_FORWARDED]);
     for (const [name, value] of Object.entries(target.headers)) {
         headers.set(name, value);
     }
-    const body = c.req.method === "GET" || c.req.method === "HEAD" ? undefined : c.req.raw.body;
+    const body = c.req.method === "GET" || c.req.method === "HEAD" ? undefined : (target.body ?? c.req.raw.body);
     const stalled = new AbortController();
     const deadline = setTimeout(() => stalled.abort(), headersDeadlineMs);
     // Node's fetch streams a request body only with `duplex: "half"`, which the DOM's RequestInit does not declare.

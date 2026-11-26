@@ -30,6 +30,9 @@ const said = computed(() => {
     if (form.target === `conversation`) {
         return form.conversationId === `` ? t(`thenProperty.pickConversation`) : t(`automationRow.continues`, { conversation: titleOf(form.conversationId) });
     }
+    if (form.target === `extension`) {
+        return t(`automationRow.wakesExtension`, { extension: form.extension, handler: form.handler });
+    }
     return CHOICES.value.find((choice) => choice.value === form.target)?.title ?? ``;
 });
 const shownError = computed(() => (touched.has(`conversation`) ? conversationError.value : undefined));

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AUTO_MODEL_GUIDANCE_MAX } from "@intentic/sandbox-contract/schemas/settings";
-import { MODEL_ROLE_IDS, type ModelRole } from "@intentic/sandbox-contract/models/model-roles";
+import type { ModelRole, ModelRoleEntry } from "@intentic/sandbox-contract/models/model-roles";
 import type { ModelPin } from "@intentic/sandbox-contract/schemas/agent";
 import type { SetupSettings } from "@intentic/sandbox-contract/models/model-setups";
 import { Button, MarkdownDocument, Modal, Notice, ResponsiveOverlay, RowGroup, Section } from "@intentic/ui";
@@ -26,6 +26,8 @@ import {
     withSuggestedPlaces,
 } from "./modelSetups";
 import ModelJobPanel from "./ModelJobPanel.vue";
+import { coreRoles, shownRoles } from "../../../../models/jobs/modelRoles";
+import { useModelRoles } from "../../../../models/jobs/useModelRoles";
 import ModelPinPicker from "./ModelPinPicker.vue";
 import SetupCard from "./SetupCard.vue";
 import { roleLabel, setupName } from "./roleWords";
@@ -43,13 +45,18 @@ const t = useT();
 
 // A refused write is put back on screen by useSandboxSettings; `refusal` says why here, or the press reads as nothing.
 const { settings, patch, save, refusal } = useSandboxSettings();
-const loaded = computed(() => settings.value !== undefined);
+// The jobs: the sandbox's own and its extensions', as its daemon serves them (useModelRoles.ts). Every one is placed when a
+// map is first written, so a switched-off extension's job keeps its place; only those switched on are drawn.
+const { roles } = useModelRoles();
+const known = computed<readonly ModelRoleEntry[]>(() => roles.value ?? coreRoles());
+const shown = computed(() => shownRoles(known.value));
+const loaded = computed(() => settings.value !== undefined && roles.value !== undefined);
 
 // The presets are worked out from each connected provider's catalog, so the page reads them as it opens.
 readConnectedCatalogs();
 
-const stored = computed<SetupSettings>(() => ({ modelSetups: settings.value?.modelSetups ?? [], roleSetups: settings.value?.roleSetups ?? {} }));
-const view = computed<SetupsView>(() => setupsView(stored.value, roleSources.value));
+const stored = computed<SetupSettings>(() => ({ modelSetups: settings.value?.modelSetups ?? [], roleSetups: settings.value?.roleSetups }));
+const view = computed<SetupsView>(() => setupsView(stored.value, roleSources.value, shown.value));
 const write = (fields: SetupsWrite | undefined): void => {
     if (fields !== undefined) {
         patch(fields);
@@ -90,6 +97,7 @@ provide(JOB_STATE, {
         }
         return undefined;
     },
+    spec: (role: ModelRole): ModelRoleEntry | undefined => known.value.find((entry) => entry.id === role),
 });
 
 /* MOVING A JOB: by drag, or from its panel. One write either way. */
@@ -97,19 +105,20 @@ provide(JOB_STATE, {
 const pinsOf = (role: ModelRole): readonly ModelPin[] => view.value.setups.find((setup) => setup.roles.includes(role))?.pins ?? [];
 const move = (role: ModelRole, target: DropTarget): void => {
     if (target.kind === `new`) {
-        write(withJobOnNewSetup(stored.value, role, newName, pinsOf(role)));
+        write(withJobOnNewSetup(stored.value, known.value, role, newName, pinsOf(role)));
         return;
     }
     const id = target.kind === `unassigned` ? undefined : target.id;
     const already =
         id === undefined ? view.value.unassigned.includes(role) : view.value.setups.find((setup) => setup.id === id)?.roles.includes(role) === true;
     if (!already) {
-        write(withJobOn(stored.value, role, id));
+        write(withJobOn(stored.value, known.value, role, id));
     }
 };
 
 const drag = useJobDrag(move);
-const placeSuggested = (): void => write(withSuggestedPlaces(stored.value, view.value.unassigned));
+const placeSuggested = (): void =>
+    write(withSuggestedPlaces(stored.value, known.value, shown.value.filter((role) => view.value.unassigned.includes(role.id))));
 
 const jobOpen = shallowRef<{ readonly role: ModelRole; readonly anchor: HTMLElement } | undefined>(undefined);
 const openJob = (role: ModelRole, anchor: HTMLElement): void => {
@@ -142,7 +151,7 @@ const openGuidance = (): void => {
 const route = useRoute();
 const router = useRouter();
 watch(
-    [loaded, () => MODEL_ROLE_IDS.find((role) => role === route.query[`job`])],
+    [loaded, () => shown.value.find((role) => role.id === route.query[`job`])?.id],
     async ([isLoaded, role]) => {
         if (!isLoaded || role === undefined) {
             return;
@@ -204,7 +213,10 @@ const configure = (pin: ModelPin): void => {
 };
 
 const cardProps = computed(() => ({ disabled: !loaded.value, loaded: loaded.value, dropping: drag.dragging.value, activeJob: jobOpen.value?.role }));
-const draggedName = computed(() => (drag.dragged.value === undefined ? `` : roleLabel({ id: drag.dragged.value })));
+const draggedName = computed(() => {
+    const dragged = drag.dragged.value === undefined ? undefined : known.value.find((role) => role.id === drag.dragged.value);
+    return dragged === undefined ? (drag.dragged.value ?? ``) : roleLabel(dragged);
+});
 </script>
 
 <template>

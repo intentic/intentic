@@ -26,7 +26,21 @@
         ]
     },
     "contributes": {
+        "modelRoles": [
+            { "id": "pipeline-fix", "label": "Pipeline fixes", "explanation": "The agent started by Fix on a failed pipeline.", "icon": "wave-pulse", "setup": "high" }
+        ],
         "views": [{ "id": "pipelines", "label": "Pipelines", "surface": "rail", "badge": true }],
-        "sideViews": [{ "id": "run", "label": "CI run", "links": true }]
+        "sideViews": [{ "id": "run", "label": "CI run", "links": true }],
+        "automationTemplates": [
+            {
+                "id": "fix-failing-ci",
+                "title": "Fix failing CI",
+                "icon": "bolt",
+                "requires": ["github", "gitlab"],
+                "trigger": { "kind": "listener", "provider": "ci", "eventType": "pipeline_broken" },
+                "prompt": "A CI pipeline that was passing just failed: each payload line is one JSON event with the workspace repo, branch, sha, run url and the failed job names. Fetch the failing jobs' logs with your GitHub/GitLab capability, reproduce the failure locally in that repo, fix the cause, verify the failing checks pass, and push the fix to the branch that failed.",
+                "note": "the moment a branch starts failing"
+            }
+        ]
     }
 }

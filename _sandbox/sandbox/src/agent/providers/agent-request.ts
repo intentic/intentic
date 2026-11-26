@@ -3,6 +3,7 @@ import type { HookTimer } from "../run/hook-timing.js";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionMode } from "@intentic/sandbox-contract/schemas/agent";
 import type { AdmissionRule } from "@intentic/sandbox-contract/schemas/command-admission";
+import type { DeclaredCommand } from "../../activity/outbound.js";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentEvent } from "@intentic/sandbox-contract/events/agent-events";
 import type { CommandJudgeMode } from "@intentic/sandbox-contract/policy/safety-policy";
@@ -113,8 +114,10 @@ export interface TurnPolicy {
     readonly disallowedTools?: readonly string[];
     // Where this role's file tools may point, when its card limits them; absent wires no hook.
     readonly roleScope?: RoleScope;
-    // Sniffer's rulebook, verdicts per outbound call, enforced by the PreToolUse gate; empty wires no gate.
+    // The owner's action rules on outward actions, enforced by every runtime's command gate; empty wires no gate.
     readonly actionRules?: Readonly<Record<string, AdmissionRule>>;
+    // The outward commands the enabled extensions declare, which those rules are read against (outbound-guard.ts).
+    readonly outwardCommands?: readonly DeclaredCommand[];
     // Owner's safety policy the judge applies to a flagged command; absent uses the shipped default, always wired.
     readonly safetyPolicy?: string;
     // How much of the command gate is on: 'on' full design, 'watch' records only, 'off' skips the judge.

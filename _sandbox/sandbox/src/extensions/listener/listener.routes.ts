@@ -13,6 +13,7 @@ import type { Context } from "hono";
 import { DEBOUNCE_MS, dispatchListenerMessage, listenerOriginOf, reportListenerFailure, stopChannelTurn } from "../../automations/listeners.js";
 import { PAYLOAD_MAX } from "../../automations/fire/run-fire.js";
 import type { TurnStream } from "../../automations/fire/fire-options.js";
+import { opt } from "../../opt.js";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
 import { callingExtension, type ExtensionGrant } from "../../auth/grants.js";
@@ -22,10 +23,13 @@ import { setListenerStatus } from "../../capabilities/status/listener-status.js"
 import { defineRawRoutes } from "../../http/raw-route-server.js";
 import { admitOnce } from "./dispatch-keys.js";
 import { channelAnswerSink } from "./listener-outbox.js";
+import { VisitorIdentityAskSchema, verifyVisitor } from "./visitor-identity.js";
+import { strangersOf } from "../../automations/fire/wake-source.js";
 
 // Control surface for an extension's listener gateway; the gateway holds the provider connection, not the daemon.
-// Five routes: /state (reconcile), /dispatch (inbound events, optional ndjson stream), failure/status reports, and /stop
-// (a person in the channel stopping a turn the channel started).
+// Six routes: /state (reconcile), /dispatch (inbound events, optional ndjson stream), failure/status reports, /stop
+// (a person in the channel stopping a turn the channel started), and /identity (who a stranger who signed in is, for a
+// listener strangers reach, visitor-identity.ts).
 // Each answers only the extension token of the extension that owns this provider's listener (listener-state.ts): /state
 // hands back connector credentials, and the others would let a stranger fake inbound messages that wake turns, or mark
 // that provider's automations. Declaring the provider is not enough, since a second extension can declare it too; the
@@ -34,6 +38,8 @@ import { channelAnswerSink } from "./listener-outbox.js";
 
 // A stop names a conversation and a person: a few hundred bytes, never more than this.
 const STOP_BODY_MAX = 4_096;
+// An identity ask is a client id and one ID token.
+const IDENTITY_BODY_MAX = 16_384;
 
 // The calling extension when it owns this provider's listener; a Response refusing it otherwise.
 const listenerCaller = async (services: Services, c: Context<AppEnv, "/listeners/:provider">): Promise<ExtensionGrant | Response> => {
@@ -76,7 +82,7 @@ const streamedDispatch = async (services: Services, message: ListenerMessage, ke
             opened: (turn) => write({ automationId, opened: turn }),
             step: (step) => write({ automationId, step }),
             plan: (plan) => write({ automationId, plan }),
-            held: (reason) => write({ automationId, held: reason }),
+            held: (reason, wake) => write({ automationId, held: reason, ...opt("heldWake", wake) }),
             queued: (reason) => write({ automationId, queued: reason }),
             steered: () => write({ automationId, steered: true }),
             end: () => {
@@ -168,6 +174,26 @@ export const createListenerRoutes = (services: Services) => ({
         return c.json(answer);
     },
 
+    // (2026-11-26) Who a stranger who signed in is, as the sandbox knows them: a Google ID token verified against the
+    // site's own client id, and whether that address is the owner's or a member's. Only for a listener anyone on the
+    // internet reaches (its `strangers` declaration), and only to the extension that owns it.
+    identity: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
+        const caller = await listenerCaller(services, c);
+        if (caller instanceof Response) {
+            return caller;
+        }
+        if ((await strangersOf(services, c.req.param("provider"))) === undefined) {
+            return c.json({ error: "only a listener anyone on the internet reaches asks who a stranger is" }, 403);
+        }
+        const read = await readBoundedJson(c.req.raw, IDENTITY_BODY_MAX);
+        const ask = read.kind === "ok" ? VisitorIdentityAskSchema.safeParse(read.value) : undefined;
+        if (ask === undefined || !ask.success) {
+            return c.json({ error: "invalid identity ask" }, 400);
+        }
+        const verified = await verifyVisitor(services, ask.data);
+        return verified === undefined ? c.json({ error: "the token did not verify" }, 401) : c.json(verified);
+    },
+
     // Gateway's periodic live status, into the map /activity/status reads; the daemon can't probe it directly.
     status: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => {
         const caller = await listenerCaller(services, c);
@@ -197,5 +223,6 @@ export const listenerRawRoutes = defineRawRoutes((services: Services) => {
         "POST /listeners/{provider}/failure": listenerRoutes.failure,
         "POST /listeners/{provider}/status": listenerRoutes.status,
         "POST /listeners/{provider}/stop": listenerRoutes.stop,
+        "POST /listeners/{provider}/identity": listenerRoutes.identity,
     };
 });

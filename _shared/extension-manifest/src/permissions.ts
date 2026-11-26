@@ -91,10 +91,80 @@ export const sandboxRouteAllowed = (permissions: readonly string[], method: stri
     });
 };
 
-// The routes every extension's own token reaches without declaring them: what the host tells an extension about
-// itself, its own settings (secrets included) and its own event stream. Each answers only about the extension asking,
-// so declaring them would grant nothing a reviewer could weigh.
-export const EXTENSION_OWN_ROUTES: readonly string[] = ["GET /extension/settings", "GET /extension/events"];
+// The routes every extension's own token reaches without listing them in `permissions.daemon`: what the host tells an
+// extension about itself, its own settings (secrets included) and its own event stream, and the two doors the rest of
+// its `permissions` open, holding work in flight (`work`) and running a command under a workload class (`exec`). Each
+// answers only about the extension asking, and a door checks its own declaration, so listing them would grant nothing
+// a reviewer could weigh.
+// (2026-11-26) And the doors an agent tool's call opens onto the turn that made it (`permissions.turn`): each answers only
+// a call ticket the daemon minted for that extension's own tool call, or a job that call started.
+export const EXTENSION_OWN_ROUTES: readonly string[] = [
+    "GET /extension/settings",
+    "GET /extension/events",
+    "POST /extension/work/hold",
+    "POST /extension/exec",
+    "POST /extension/turn/browser",
+    "POST /extension/turn/owner-browser",
+    "POST /extension/jobs",
+    "POST /extension/jobs/*",
+];
+
+// (2026-11-26) What an extension's own code may hear, hold and run beyond its routes, each a power its manifest declares
+// under `permissions` and the daemon refuses undeclared (core-and-extensions.md, the gaps these close). Kept here, free
+// of zod, since the contract's extension protocol and the SDK's runtime read the same words.
+
+// Events a backend hears only by declaring them (`permissions.events`): `run`, a run ending in a conversation the
+// extension itself started through POST /agent with its own token; `activity`, whether any agent turn runs in the
+// sandbox. Its settings and the workspace's file, ref and repository changes need no declaration.
+export const EXTENSION_DECLARED_EVENTS = ["run", "activity"] as const;
+export type ExtensionDeclaredEvent = (typeof EXTENSION_DECLARED_EVENTS)[number];
+
+// The workload classes `api.exec` runs a command under (`permissions.exec`): `command`, admitted and ranked as an agent's
+// shell command is; `toolchain`, a heavy tool (a build, a test run, an analyser over a repository), which also takes a
+// slot in the sandbox's heavy-command queue, taking turns with every agent's builds.
+export const EXTENSION_EXEC_CLASSES = ["command", "toolchain"] as const;
+export type ExtensionExecClass = (typeof EXTENSION_EXEC_CLASSES)[number];
+
+// A handler an automation may fire (`permissions.fires`): a lowercase word, as the automation's target names it.
+export const EXTENSION_FIRE_HANDLER = /^[a-z0-9][a-z0-9-]{0,63}$/u;
+
+// (2026-11-26) What an extension's agent tools may do with the grants of the turn that calls them (`permissions.turn`):
+// `browser`, drive the sandbox's signed-in browser of an account the turn holds, on that account's own sites;
+// `owner-browser`, call the owner's own browser when the turn holds it; `jobs`, start a background job in the calling
+// conversation that the agent collects with `wait`. Never more than the turn holds, whatever is declared.
+export const EXTENSION_TURN_POWERS = ["browser", "owner-browser", "jobs"] as const;
+export type ExtensionTurnPower = (typeof EXTENSION_TURN_POWERS)[number];
+
+// The rest of an extension's declared reach, read off its manifest's `permissions`.
+export interface ExtensionDeclaredReach {
+    readonly events: readonly ExtensionDeclaredEvent[];
+    // Whether it may hold work in flight, which keeps the sandbox awake and a restart waiting.
+    readonly work: boolean;
+    readonly exec: readonly ExtensionExecClass[];
+    readonly fires: readonly string[];
+    // What its agent tools may do with the calling turn's grants.
+    readonly turn: readonly ExtensionTurnPower[];
+}
+
+// The fields of a manifest's `permissions` this reads, as parsed.
+export interface DeclaredPermissions {
+    readonly events?: readonly ExtensionDeclaredEvent[] | undefined;
+    readonly work?: boolean | undefined;
+    readonly exec?: readonly ExtensionExecClass[] | undefined;
+    readonly fires?: readonly string[] | undefined;
+    readonly turn?: readonly ExtensionTurnPower[] | undefined;
+}
+
+export const declaredReachOf = (permissions: DeclaredPermissions | undefined): ExtensionDeclaredReach => ({
+    events: permissions?.events ?? [],
+    work: permissions?.work === true,
+    exec: permissions?.exec ?? [],
+    fires: permissions?.fires ?? [],
+    turn: permissions?.turn ?? [],
+});
+
+// Nothing declared: what an extension with no such `permissions` holds.
+export const NO_DECLARED_REACH: ExtensionDeclaredReach = declaredReachOf(undefined);
 
 // What an extension token's reach is judged by: the manifest's `permissions.daemon`, and the provider its
 // `contributes.listener` names, when the extension owns that listener.

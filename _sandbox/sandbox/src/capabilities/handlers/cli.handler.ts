@@ -1,4 +1,4 @@
-import type { CliConfig } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { CapabilityStatus, CliConfig } from "@intentic/sandbox-contract/schemas/capabilities";
 import { envSuffix } from "@intentic/sandbox-contract/policy/capability-env";
 import { extensionRuntimeAbsent, RUNTIME_ABSENT_DETAIL } from "../extension-inventory/extension-readiness.js";
 import { listenerStatus } from "../status/listener-status.js";
@@ -25,31 +25,34 @@ import { brokerOf, brokerRoutes } from "../broker/broker-routes.js";
 // this handler is generic plumbing over it. `apply` templates the connector's skill per instance ($VAR to $VAR_<ID>)
 // and runs its optional core hook. The credential is injected into the agent's env each turn, never written to a file.
 
-// The phone's own menu text, so the entry and handset read as one instruction.
-const PHONE_STEPS = "on the phone: WhatsApp → Linked devices → Link a device → Link with phone number instead";
-
-// Whether a phone ever linked, read from the gateway's snapshot; the default is pending, not active. A silent gateway
-// covers both a fresh add and one that has stopped: neither is a paired phone.
-const whatsappStatus = (id: string): { state: "active" | "pending"; detail?: string; code?: string; settling?: true } => {
-    const status = listenerStatus("whatsapp", Date.now());
+// A card whose status its listener reports (`status: { from: "listener" }`, the WhatsApp card's linked phone): whether it
+// ever linked is known to the gateway alone, read from its snapshot; the default is pending, not active. A silent gateway
+// covers both a fresh add and one that has stopped: neither is a paired device. Replaced (2026-11-26) a WhatsApp-only
+// branch here; the card declares where its code is typed (`pairingSteps`).
+const listenerCardStatus = (
+    provider: string,
+    id: string,
+    card: { readonly name: string; readonly pairingSteps?: string | undefined },
+): CapabilityStatus => {
+    const status = listenerStatus(provider, Date.now());
     if (status === undefined) {
-        return { state: "pending", detail: "starting the WhatsApp connection…", settling: true };
+        return { state: "pending", detail: `starting the ${card.name} connection…`, settling: true };
     }
     const pairing = status.pairing?.[id];
     if (pairing === undefined) {
         // No ceremony entry means either already paired or never started; the ready connections tell them apart.
         return status.connections.some((connection) => connection.capabilityId === id && connection.gateway === "ready")
             ? { state: "active" }
-            : { state: "pending", detail: "reconnecting to WhatsApp…", settling: true };
+            : { state: "pending", detail: `reconnecting to ${card.name}…`, settling: true };
     }
     if (pairing.state === "failed") {
-        // WhatsApp's refusal message reaches the owner verbatim; the retry behind it stays silent.
-        return { state: "pending", detail: `WhatsApp refused that number: ${pairing.detail ?? "unknown error"}` };
+        // The service's refusal reaches the owner verbatim; the retry behind it stays silent.
+        return { state: "pending", detail: `${card.name} refused it: ${pairing.detail ?? "unknown error"}` };
     }
     if (pairing.state === "code" && pairing.code !== undefined) {
-        return { state: "pending", detail: `Type this code ${PHONE_STEPS}.`, code: pairing.code, settling: true };
+        return { state: "pending", detail: `Type this code ${card.pairingSteps ?? `where ${card.name} asks for it`}.`, code: pairing.code, settling: true };
     }
-    return { state: "pending", detail: "waiting for WhatsApp to issue a pairing code…", settling: true };
+    return { state: "pending", detail: `waiting for ${card.name} to issue a pairing code…`, settling: true };
 };
 
 // What every brokered card's skill says first, generated from its declaration so no connector has to remember it: which
@@ -183,9 +186,10 @@ export const cliHandler: CapabilityHandler = {
         if (cliConfig.provider === "npm" && !(await npmAuthWired())) {
             return { state: "pending", detail: "npm auth needs a re-add" };
         }
-        // whatsapp's config is just a phone number anyone can type; only the gateway knows whether one ever linked.
-        if (cliConfig.provider === "whatsapp") {
-            return whatsappStatus(id);
+        // A card whose settings anyone could type (a phone number) works only once its gateway says it linked.
+        const spec = connector?.spec;
+        if (spec?.kind === "cli" && spec.status?.from === "listener") {
+            return listenerCardStatus(spec.id, id, { name: spec.catalog.name, pairingSteps: spec.status.pairingSteps });
         }
         return { state: "active" };
     },

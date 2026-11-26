@@ -331,7 +331,6 @@ COPY _extensions/automations/intentic-extension.json /opt/extensions/automations
 COPY _extensions/git-history/intentic-extension.json /opt/extensions/git-history/
 COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY _extensions/preview/intentic-extension.json /opt/extensions/preview/
-COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/
 COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
 # onlyoffice is both: its viewer is compiled into the web bundle like the rows above, and its dist is what the daemon's
 # extension host runs and serves: the backend (`server.js`: the browser engine's bundle download, the document server's
@@ -340,6 +339,18 @@ COPY _extensions/viewers/intentic-extension.json /opt/extensions/viewers/
 # excludes every dist. A manifest here without the dist shows as `absent` on the Extensions tab.
 COPY _extensions/onlyoffice/intentic-extension.json /opt/extensions/onlyoffice/
 COPY --from=trees extensions/onlyoffice/dist /opt/extensions/onlyoffice/dist
+# repo-apps is both in the same way: its views are compiled into the web bundle, and its dist is the backend
+# (`server.js`) that reads a monorepo's package graph and one package's layers for the Dependencies view.
+COPY _extensions/repo-apps/intentic-extension.json /opt/extensions/repo-apps/
+COPY --from=trees extensions/repo-apps/dist /opt/extensions/repo-apps/dist
+# connectors' dist is its backend (`server.js`): the npm and GitHub release watch kinds' checks. Its cards, skills and
+# image fragments come with the COPY of the whole directory above, which .dockerignore leaves the dist out of.
+COPY --from=trees extensions/connectors/dist /opt/extensions/connectors/dist
+# visitor-chat is both too (2026-11-26, the daemon's own webchat/ until then): its install panel is compiled into the web
+# bundle, and its dist is the backend (`server.js`: the widget, a chat's settings, a message streamed back and the poll),
+# its gateway process (`gateway.js`: a visitor's late replies into their outbox) and the widget itself (`widget.js`).
+COPY _extensions/visitor-chat/intentic-extension.json /opt/extensions/visitor-chat/
+COPY --from=trees extensions/visitor-chat/dist /opt/extensions/visitor-chat/dist
 # ---- packs:post-trees ---- (spliced by compose-image-dockerfile.mjs — packs that read the daemon tree or
 # COPY from the trees context land here, below every tree COPY they depend on)
 # Image-baked agent skills (the daemon runs as root; the agent's settingSources loads /root/.claude). The

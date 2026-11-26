@@ -1,4 +1,5 @@
-import { agentCommand, commandSegments, shellScriptOf } from "../providers/agent-installs.js";
+import { agentCommand, shellScriptOf } from "../providers/agent-installs.js";
+import { commandSegments } from "../../safety/shell-words.js";
 
 // Which stages of a command's last pipeline only filter what an earlier stage printed. grep and its kin exit 1 when
 // nothing matched, which says the filter found nothing, not that the check before it failed. 2026-11-17, the

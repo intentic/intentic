@@ -1,5 +1,6 @@
 import {
     type ChatReply,
+    declaredMessageLimit,
     deliverChunked,
     type GatewayCtx,
     GatewayRefusal,
@@ -7,7 +8,6 @@ import {
     joinedThreads,
     type ListenerHistoryEntry,
     type ListenerMessage,
-    MESSAGE_LIMITS,
     progressDetailOf,
     recentKeys,
     type ReplyTiming,
@@ -26,7 +26,7 @@ import { createSlackReply, type SlackReplyDeps, statusStyleOf } from "./reply.js
 // The card's Stop button comes back here as an `interactive` envelope.
 
 // A longer reply spills into follow-up messages in the thread.
-const SLACK_MAX = MESSAGE_LIMITS.slack;
+const SLACK_MAX = declaredMessageLimit(new URL("../intentic-extension.json", import.meta.url), "slack");
 
 // How long an event's ack may wait for what it carries to be kept: under the three seconds Slack allows before it
 // redelivers, with room for the ack's own round trip.

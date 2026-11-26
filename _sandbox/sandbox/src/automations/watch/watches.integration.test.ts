@@ -65,7 +65,6 @@ const fakeServices = (root: string, registry: readonly PersistedAgent[] = [], pu
         }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {}, info: () => {} }),
-        outboxStreamFor: () => undefined,
     });
 
 const recordingWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>

@@ -229,8 +229,9 @@ export const presetLabel = (item: PresetItem): string => {
     return t(`sandbox.dataProtection.presetItem.${keyOf(item.id)}`);
 };
 
-// Proper names, the same in every language. A service is its action keys' first segment (OUTWARD_ACTION_KEYS): e-mail is
-// the IMAP extension's sender, so `imap`.
+// Proper names, the same in every language. A service is its action keys' first segment, the card id its extension
+// declares the action under: e-mail is the IMAP extension's sender, so `imap`. One this editor does not know reads as
+// that id.
 const SERVICE_NAMES = new Map([
     [`discord`, `Discord`],
     [`slack`, `Slack`],
@@ -243,8 +244,14 @@ const SERVICE_NAMES = new Map([
 ]);
 export const serviceName = (service: string): string => SERVICE_NAMES.get(service) ?? service;
 
-// What one action does, by its key less the service (`message.send`, `document.register-incoming`).
-export const actionLabel = (action: string): string => t(`sandbox.dataProtection.action.${keyOf(action)}`);
+// What one action does, by its key less the service (`message.send`, `document.register-incoming`). An extension declares
+// its own actions, so one this editor has no words for (a newer extension's) reads as its key; `*`, a stored wildcard
+// rule, as every action of the service.
+export const actionLabel = (action: string): string => {
+    const path = `sandbox.dataProtection.action.${action === `*` ? `all` : keyOf(action)}` as const;
+    const words = t(path);
+    return words === path ? action : words;
+};
 
 const SWITCHES = new Set([`audit.recordReads`, `productAnalytics`, `aiNotice.show`]);
 const DAY_COUNTS = new Set([`audit.retentionDays`]);

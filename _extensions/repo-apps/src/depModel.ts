@@ -5,7 +5,7 @@ import type {
     WorkspacePackage,
 } from "@intentic/sandbox-contract/schemas/workspace/workspace-graph";
 
-// What the Dependencies view computes from the daemon's package graph, kept out of the components so it is testable:
+// What the Dependencies view computes from the backend's package graph, kept out of the components so it is testable:
 // which edges a longer path already implies, which packages so many others use that they are better shown as chips than
 // as lines, the areas packages group into and the order they stack in, and the findings the declared edges and their
 // usage add up to. All of it is derived, none of it is configured.

@@ -5,7 +5,10 @@ import type { VoicesView } from "@intentic/sandbox-contract/schemas/voice";
 import { type RawContext, type RawRoutes, refuse } from "@intentic/contract-serve";
 import { workspaceRoutes } from "./workspace/workspace.routes";
 import { workspaceRaw } from "./workspace/rawFile";
-import { webchatRoutes } from "./extensions/webchat.routes";
+import { repoAppsBackend } from "./workspace/graph";
+import { maintenanceBackend } from "./extensions/maintenance.backend";
+import { issuesBackend } from "./extensions/issues.backend";
+import { visitorChatBackend } from "./extensions/visitor-chat.backend";
 import { linksRoutes } from "./machine/links.routes";
 import { machineRoutes } from "./machine/machine.routes";
 import { signInRoutes } from "./account/signIn.routes";
@@ -40,7 +43,7 @@ import { conversationBundle } from "./board/bundle";
 import { STARTED_AT } from "./board/roster";
 
 // The routes the daemon serves outside oRPC that the app reaches here: file bytes, the members roster, control
-// tokens, model keys found on the owner's devices, and the knowledge extension's own namespace.
+// tokens, model keys found on the owner's devices, and the knowledge and repo-apps extensions' own namespaces.
 
 // The document's bytes, as a viewer parses them: a picture of text would not do.
 const documentBytes = (bytes: Uint8Array<ArrayBuffer>): Response =>
@@ -128,6 +131,9 @@ const knowledge: Readonly<Record<string, (context: RawContext) => Response | Pro
     // The demo knowledge base already started, so this only ever answers nothing to write.
     [`POST ${KNOWLEDGE_BASE}/seed`]: () => json({ written: [] }),
 };
+
+// Every extension backend the demo stands in for, by method and path.
+const backends: typeof knowledge = { ...knowledge, ...repoAppsBackend, ...maintenanceBackend, ...issuesBackend, ...visitorChatBackend };
 
 // The API keys the visitor's laptop holds, for GET /arrivals/keys: the hint and digest only, as the daemon answers.
 const DEMO_KEYS = [
@@ -225,11 +231,10 @@ export const raw = {
             failed: ids.filter((id) => !known.includes(id)).map((id) => ({ id, error: `that key is no longer on a connected device` })),
         });
     },
-    // Knowledge shares the same namespace its real backend uses.
-    "ALL /x/*": (context) => knowledge[`${context.request.method} ${context.url.pathname}`]?.(context),
+    // Knowledge, repo-apps, maintenance, issues and the Visitor chat answer in the same namespaces their real backends use.
+    "ALL /x/*": (context) => backends[`${context.request.method} ${context.url.pathname}`]?.(context),
     // Each area's routes from a file of its own (`<area>/<name>.routes.ts`), so they can be answered without touching this table.
     ...workspaceRoutes,
-    ...webchatRoutes,
     ...linksRoutes,
     ...machineRoutes,
     ...signInRoutes,

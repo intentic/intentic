@@ -21,7 +21,6 @@ import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js"
 import { createRolesRoutes } from "./roles/roles.routes.js";
 import { createBrowserToolsRoutes } from "./browser/window-tools.routes.js";
 import { createOrgRoutes } from "./org/org.routes.js";
-import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
 import { createComplianceRoutes } from "./compliance/compliance.routes.js";
 import { createDiffRoutes } from "./git/changes/diff-derived.js";
@@ -38,7 +37,6 @@ import { createBrowsingSystemRoutes } from "./browser/history/browsing.routes.js
 import { createBookmarksRoutes } from "./browser/bookmarks/bookmarks.routes.js";
 import { createAccountsRoutes } from "./agent/routes/accounts.routes.js";
 import { createHistoryRoutes } from "./history/history.routes.js";
-import { createIssuesRoutes } from "./issues/issues.routes.js";
 import { createLogsRoutes } from "./logs/logs.routes.js";
 import { createLoopsRoutes } from "./loops/loops.routes.js";
 import { createWorkflowsRoutes } from "./workflows/workflows.routes.js";
@@ -182,7 +180,6 @@ export const createRouter = (services: Services): SandboxRouter => ({
     bookmarks: createBookmarksRoutes(services),
     browser: createBrowserToolsRoutes(services),
     capabilities: createCapabilitiesRoutes(services, probeDockerGpu),
-    chores: createChoresRoutes(services),
     ci: createCiRoutes(services),
     compliance: createComplianceRoutes(services),
     diff: createDiffRoutes(services),
@@ -217,7 +214,6 @@ export const createRouter = (services: Services): SandboxRouter => ({
         ...createWorkspaceMediaRoutes(services),
         ...createWorkspaceFollowRoutes(services),
     },
-    issues: createIssuesRoutes(services),
     logs: createLogsRoutes(services),
     loops: createLoopsRoutes(services),
     workflows: createWorkflowsRoutes(services),

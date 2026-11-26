@@ -1,4 +1,5 @@
 import type { ExtensionHealth } from "@intentic/extension-api";
+import type { ExtensionDeclaredReach } from "@intentic/extension-manifest";
 
 // The daemon-to-backend-host contract: one JSON value passed via env, not argv (world-readable on /proc).
 
@@ -29,6 +30,11 @@ export interface BackendHostExtension {
     // The manifest's permissions.daemon, the same list the token is scoped to: api.daemon.rpc refuses outside it before
     // sending, while the daemon's grant stays what enforces it.
     readonly daemonPermissions: readonly string[];
+    // The rest of its manifest's `permissions` (events, work, exec, fires): what its runtime asks for on the event stream
+    // and refuses undeclared, and the fire handlers it may register.
+    readonly declared: ExtensionDeclaredReach;
+    // (2026-11-26) The ids of the watch kinds its manifest declares (`contributes.watchKinds`): the checks it may serve.
+    readonly watchKinds: readonly string[];
 }
 
 export interface BackendDeviceConfig {

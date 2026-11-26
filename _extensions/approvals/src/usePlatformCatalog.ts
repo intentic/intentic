@@ -2,10 +2,12 @@ import { computed, type ComputedRef } from "vue";
 import { host } from "./host";
 
 // What a capability catalog entry tells a draft row: the platform's display name and brand slug, including
-// the detail nothing here could guess (X's mark is black, so its entry forces a light one).
+// the detail nothing here could guess (X's mark is black, so its entry forces a light one), and (2026-11-26) the longest
+// one message may be there, as the card declares it (`channel.messageLimit`).
 export interface PlatformCatalogEntry {
     readonly name: string;
     readonly logo?: string | undefined;
+    readonly messageLimit?: number | undefined;
 }
 
 /* WHO POSTS IT, from the manifest that owns that fact. */
@@ -21,7 +23,13 @@ export function usePlatformCatalog(): ComputedRef<Map<string, PlatformCatalogEnt
                 (query.data.value?.extensions ?? [])
                     .filter((extension) => extension.enabled)
                     .flatMap((extension) => extension.manifest.contributes?.capabilities ?? [])
-                    .map((contribution) => [contribution.id, { name: contribution.catalog.name, logo: contribution.catalog.logo }] as const),
+                    .map(
+                        (contribution) =>
+                            [
+                                contribution.id,
+                                { name: contribution.catalog.name, logo: contribution.catalog.logo, messageLimit: contribution.channel?.messageLimit },
+                            ] as const,
+                    ),
             ),
     );
 }

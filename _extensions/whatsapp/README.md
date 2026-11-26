@@ -21,8 +21,17 @@ flowchart LR
   `gateway.url` file under the workspace's runtime directory. A chat can be named by JID, phone number or contact
   name; an ambiguous name is refused with the candidates rather than guessed. Like every agent-facing CLI here it
   prints errors to stdout and exits 2 on any failure, since an agent drops stderr.
+- The card declares which of the CLI's commands act outward (`commandActions`: `send`, `reply`, `send-file` and
+  `send-voice` send a message, `react` adds a reaction), so the sandbox's command guard holds each to the owner's action
+  rules (`whatsapp.message.send`, `whatsapp.reaction.add`) before it runs, and the turn records it in Activity with its
+  chat and text.
 - Unlike the other messaging gateways it connects as soon as the card exists, because pairing starts then. The card
-  shows a pairing code the owner enters on the phone, refreshed while unpaired.
+  shows a pairing code the owner enters on the phone, refreshed while unpaired. Its status is the gateway's report, as
+  the card declares (`status: { from: "listener", pairingSteps }`): pending until a phone links and the connection
+  reads ready, with the code and the phone's menu path while it pairs (2026-11-26: until then a WhatsApp branch in the
+  daemon's cli handler said this).
+- The card states the one-message limit a linked device sends at (`channel.messageLimit`, 65,536, which the gateway
+  and the approvals inbox both read) and where people's data goes (`processors`: WhatsApp Ireland (Meta), EU/US).
 - The device presents itself as Chrome on Ubuntu, using the current WhatsApp Web version. WhatsApp refuses a link-code
   request that names a made-up OS, and will not finish linking a client that reports a stale version. Baileys returns
   the code before WhatsApp has answered, so the client waits for that answer before the card shows the code, and shows

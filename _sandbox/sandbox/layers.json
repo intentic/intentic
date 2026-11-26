@@ -62,8 +62,6 @@
                 "panels",
                 "public",
                 "share",
-                "webchat",
-                "issues",
                 "account-routing",
                 "definition"
             ]
@@ -75,14 +73,13 @@
         },
         {
             "name": "orchestration",
-            "about": "what starts and steers turns on its own: automations, loops, workflows, CI repair, chores, needs, settings, and what reconciles the connections hub",
+            "about": "what starts and steers turns on its own: automations, loops, workflows, CI repair, needs, settings, and what reconciles the connections hub",
             "units": [
                 "automations",
                 "compliance",
                 "loops",
                 "workflows",
                 "ci",
-                "chores",
                 "links",
                 "needs",
                 "approvals",

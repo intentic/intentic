@@ -15,6 +15,8 @@ const USAGE = `automations — what this sandbox runs on its own, and how to ask
   automations                     every automation: on or off, when, what it checks, where it goes, what it saw last
   automations show <id>           one automation whole, with its recent runs
   automations check <source>      run a ready-made check once now and print what it sees (exit 0 passes, 1 does not)
+  automations kinds               the ready-made checks this sandbox has: each watch kind, what it looks at, and what
+                                  it takes (--with), as the extension that checks it declares it
   automations sources             what can wake an agent the moment something arrives (new mail, a chat message, a
                                   CI run): each listener's provider id, its events, and whether it names senders
   automations propose <id> <source | --guard '<cmd>' | --webhook> --prompt "…" --why "…" [options]
@@ -27,10 +29,11 @@ const USAGE = `automations — what this sandbox runs on its own, and how to ask
                                   minute. Prefer it to a --guard that polls the same service.
 
 Sources (no shell, no model, no token needed):
-  --npm <package>[@<range|tag>]   a version on npm: with a range (bun@>=1.4.3) it passes once one is published;
-                                  with a tag or nothing it sees that tag's version, for --fire-on change
-  --github <owner/repo> [--prereleases]   the newest release of a public GitHub repository
-  --url <address> [--select <regex>]      a page's text, or what the pattern matches on it
+  --watch <kind> --with <key>=<value> [--with …]
+                                  a watch kind an extension checks, its parameters as \`automations kinds\` lists
+                                  them; a switch is --with <key>. Like --watch npm --with package=bun --with
+                                  'range=>=1.4.3', or --watch github-release --with repo=oven-sh/bun --with prereleases
+  --url <address> [--select <regex>]      a page's text, or what the pattern matches on it (the sandbox's own check)
   --guard '<command>'             your own shell check instead: exit 0 passes, and what it prints goes with the wake.
                                   Test it in your shell first; it is never run before approval. $AUTOMATION_STATE names a
                                   file it may keep between runs, $AUTOMATION_LAST holds what it printed last time.
@@ -110,17 +113,33 @@ const firstLine = (text, max = 100) => {
     return line.length <= max ? line : `${line.slice(0, max - 1)}…`;
 };
 
-// A source in a few words, as the daemon labels it.
-const sourceText = (source) => {
-    if (source.kind === "npm") {
-        const spec = source.range ?? source.tag;
-        return `npm ${source.package}${spec === undefined ? "" : `@${spec}`}`;
-    }
-    if (source.kind === "github-release") {
-        return `GitHub releases of ${source.repo}${source.prereleases === true ? " (prereleases too)" : ""}`;
-    }
-    return source.select === undefined ? source.url : `${source.url} (matching ${source.select})`;
+// What fills a kind's sentence: `{key}` puts a parameter in; a `[…]` segment is left out when one it names is absent or
+// off (extension-manifest's watchSentence, said again here since this command runs with no package of the sandbox's).
+const present = (value) => value !== undefined && value !== false && value !== "";
+const fillSentence = (sentence, params) => {
+    const fill = (text) => text.replace(/\{([a-zA-Z0-9]+)\}/g, (_whole, key) => (typeof params[key] === "string" ? params[key] : ""));
+    const segments = sentence.replace(/\[([^[\]]*)\]/g, (_whole, inner) =>
+        [...inner.matchAll(/\{([a-zA-Z0-9]+)\}/g)].every((match) => present(params[match[1]])) ? inner : "",
+    );
+    return fill(segments).trim();
 };
+
+// A source in a few words: a page by its address, any other kind by its declaration's sentence, and a kind nothing here
+// declares any more by its id and its parameters, so the line still says what it watched.
+const sourceText = (source, kinds) => {
+    if (source.kind === "url") {
+        return source.select === undefined ? source.url : `${source.url} (matching ${source.select})`;
+    }
+    const kind = kinds.find((each) => each.id === source.kind);
+    if (kind !== undefined) {
+        return `${fillSentence(kind.sentence, source)}${kind.enabled ? "" : ` [${kind.extension}, which checks it, is off]`}`;
+    }
+    const named = Object.entries(source).filter(([key, value]) => key !== "kind" && present(value));
+    return `${source.kind} ${named.map(([key, value]) => (value === true ? key : `${key}=${value}`)).join(" ")} [no extension here checks it]`.trim();
+};
+
+// The watch kinds this sandbox's extensions declare, from the catalogue every save is checked against.
+const watchKinds = async () => (await get("/automations/catalog")).watchKinds ?? [];
 
 const triggerText = (trigger) => {
     switch (trigger.kind) {
@@ -144,9 +163,9 @@ const targetText = (target) => {
     return target.kind === "notify" ? "a notification only" : `continues ${target.conversationId}`;
 };
 
-const conditionText = (automation) =>
+const conditionText = (automation, kinds) =>
     automation.source !== undefined
-        ? sourceText(automation.source)
+        ? sourceText(automation.source, kinds)
         : automation.guard !== undefined
           ? `guard: ${firstLine(automation.guard, 80)}`
           : "no check";
@@ -173,7 +192,7 @@ const sendersText = (senders) => {
 };
 
 const list = async () => {
-    const { automations } = await get("/automations");
+    const [{ automations }, kinds] = await Promise.all([get("/automations"), watchKinds()]);
     if (automations.length === 0) {
         process.stdout.write("No automations. `automations propose` asks the owner for one.\n");
         return;
@@ -186,7 +205,7 @@ const list = async () => {
             process.stdout.write(`  ${automation.note}\n`);
         }
         process.stdout.write(
-            `  checks ${conditionText(automation)}${automation.fireOn === "change" ? " (on change)" : ""} → ${targetText(automation.target)}\n`,
+            `  checks ${conditionText(automation, kinds)}${automation.fireOn === "change" ? " (on change)" : ""} → ${targetText(automation.target)}\n`,
         );
         if (automation.source !== undefined || automation.guard !== undefined) {
             process.stdout.write(`  ${watchText(automation.watch)}\n`);
@@ -200,7 +219,7 @@ const latestDetail = (run) => {
 };
 
 const show = async (id) => {
-    const { automations } = await get("/automations");
+    const [{ automations }, kinds] = await Promise.all([get("/automations"), watchKinds()]);
     const automation = automations.find((entry) => entry.id === id);
     if (automation === undefined) {
         return die(COMMAND, `no automation named ${id}: \`automations\` lists them`);
@@ -209,7 +228,7 @@ const show = async (id) => {
         `${automation.id} — ${automation.enabled ? "on" : "off"}`,
         ...(automation.note === undefined ? [] : [`note: ${automation.note}`]),
         `trigger: ${triggerText(automation.trigger)}${automation.nextRun === undefined ? "" : ` (next ${inTime(automation.nextRun)})`}`,
-        `check: ${automation.source !== undefined ? sourceText(automation.source) : (automation.guard ?? "none")}`,
+        `check: ${automation.source !== undefined ? sourceText(automation.source, kinds) : (automation.guard ?? "none")}`,
         `fires: ${automation.fireOn === "change" ? "only when what it sees changes" : "on every passing check"}${automation.until === "first-fire" ? ", then switches off" : ""}`,
         ...(automation.expiresAt === undefined ? [] : [`ends: ${new Date(automation.expiresAt).toISOString()}`]),
         `goes to: ${targetText(automation.target)}`,
@@ -234,40 +253,86 @@ const show = async (id) => {
     process.stdout.write(`${lines.join("\n")}\n`);
 };
 
-// `bun@>=1.4.3`, `@scope/pkg@canary`, `left-pad`: the last @ past the first character splits name from spec; a spec that
-// reads like a dist-tag (a word starting with a letter) is a tag, anything else a semver range the daemon validates.
-const npmSource = (spec) => {
-    const at = spec.lastIndexOf("@");
-    const name = at > 0 ? spec.slice(0, at) : spec;
-    const version = at > 0 ? spec.slice(at + 1) : undefined;
-    if (name === "") {
-        return die(COMMAND, "--npm needs a package name");
+const SOURCE_FLAGS = ["watch", "url", "select", "npm", "github"];
+
+// `--with key=value` as the kind's fields take it: a switch named alone, or set to true or false; text as typed.
+const paramsOf = (kind, given) => {
+    const params = {};
+    for (const pair of given) {
+        const at = pair.indexOf("=");
+        const key = at < 0 ? pair : pair.slice(0, at);
+        const field = kind.fields.find((each) => each.key === key);
+        if (field === undefined) {
+            const takes = kind.fields.map((each) => each.key).join(", ");
+            return die(COMMAND, `a ${kind.id} watch has no ${key}${takes === "" ? "" : `: it takes ${takes}`}`);
+        }
+        if ((field.type ?? "text") === "switch") {
+            const raw = at < 0 ? "true" : pair.slice(at + 1);
+            if (raw !== "true" && raw !== "false") {
+                return die(COMMAND, `--with ${key} is a switch: give it alone, or as ${key}=true or ${key}=false`);
+            }
+            if (raw === "true") {
+                params[key] = true;
+            }
+            continue;
+        }
+        const value = at < 0 ? "" : pair.slice(at + 1).trim();
+        if (value === "") {
+            return die(COMMAND, `--with ${key}=<value>: ${field.label} needs a value${field.placeholder === undefined ? "" : `, like ${field.placeholder}`}`);
+        }
+        if (field.pattern !== undefined && !new RegExp(field.pattern, "u").test(value)) {
+            return die(COMMAND, `${field.label} must look like ${field.patternHint ?? field.pattern}`);
+        }
+        params[key] = value;
     }
-    if (version === undefined || version === "") {
-        return { kind: "npm", package: name };
-    }
-    return /^[a-z][a-z0-9._-]*$/i.test(version) && !/^v?\d/.test(version)
-        ? { kind: "npm", package: name, tag: version }
-        : { kind: "npm", package: name, range: version };
+    const missing = kind.fields.find((field) => field.required === true && params[field.key] === undefined);
+    return missing === undefined ? params : die(COMMAND, `a ${kind.id} watch needs --with ${missing.key}=<${missing.label.toLowerCase()}>`);
 };
 
-const SOURCE_FLAGS = ["npm", "github", "url", "select"];
+// The spellings from before watch kinds were an extension's (2026-11-26): said once, with what replaced them.
+const RETIRED = {
+    npm: "--npm is now --watch npm --with package=<name> [--with range=<semver range> | --with tag=<dist-tag>]",
+    github: "--github is now --watch github-release --with repo=<owner/name> [--with prereleases]",
+};
 
-const sourceOf = (flags) => {
-    const named = ["npm", "github", "url"].filter((flag) => flags[flag] !== undefined);
-    if (named.length > 1) {
-        return die(COMMAND, "name one source: --npm, --github or --url");
+const sourceOf = async (flags) => {
+    const retired = Object.keys(RETIRED).find((flag) => flags[flag] !== undefined);
+    if (retired !== undefined) {
+        return die(COMMAND, RETIRED[retired]);
     }
-    if (flags.npm !== undefined) {
-        return npmSource(flags.npm);
-    }
-    if (flags.github !== undefined) {
-        return { kind: "github-release", repo: flags.github, ...(flags.prereleases === true ? { prereleases: true } : {}) };
+    if (flags.watch !== undefined && flags.url !== undefined) {
+        return die(COMMAND, "name one source: --watch <kind> or --url");
     }
     if (flags.url !== undefined) {
         return { kind: "url", url: flags.url, ...(flags.select === undefined ? {} : { select: flags.select }) };
     }
-    return undefined;
+    if (flags.watch === undefined) {
+        return (flags.with ?? []).length > 0 ? die(COMMAND, "--with gives a watch kind its parameters: name the kind with --watch <kind>") : undefined;
+    }
+    const kinds = await watchKinds();
+    const kind = kinds.find((each) => each.id === flags.watch);
+    if (kind === undefined || !kind.enabled) {
+        const offered = kinds.filter((each) => each.enabled).map((each) => each.id);
+        return die(
+            COMMAND,
+            `${kind === undefined ? `no extension here checks ${flags.watch} watches` : `${kind.extension}, which checks ${flags.watch} watches, is switched off`}${offered.length === 0 ? "" : `: the kinds here are ${offered.join(", ")}`} (\`automations kinds\`)`,
+        );
+    }
+    return { kind: kind.id, ...paramsOf(kind, flags.with ?? []) };
+};
+
+// Every watch kind, and how to name one: what `--watch` and `--with` take, read off each kind's declaration.
+const kindsList = async () => {
+    const kinds = await watchKinds();
+    process.stdout.write("url — a web page (the sandbox's own)\n  --url <address> [--select <regex>]\n");
+    for (const kind of kinds.toSorted((a, b) => a.id.localeCompare(b.id))) {
+        const state = kind.enabled ? "" : " [its extension is off]";
+        process.stdout.write(`${kind.id} — ${kind.label}, from ${kind.extension}${state}\n  ${kind.description}\n  --watch ${kind.id}\n`);
+        for (const field of kind.fields) {
+            const spell = (field.type ?? "text") === "switch" ? `--with ${field.key}` : `--with ${field.key}=<${field.placeholder ?? "value"}>`;
+            process.stdout.write(`    ${spell}  ${field.label}${field.required === true ? " (required)" : ""}${field.hint === undefined ? "" : `: ${field.hint}`}\n`);
+        }
+    }
 };
 
 // What can wake an agent when something arrives: the same catalogue the Automations page offers, which saving is
@@ -297,10 +362,10 @@ const sources = async () => {
 };
 
 const check = async (args) => {
-    const { flags } = parseArgs(COMMAND, args, { values: SOURCE_FLAGS, switches: ["prereleases"] });
-    const source = sourceOf(flags);
+    const { flags } = parseArgs(COMMAND, args, { values: SOURCE_FLAGS, repeated: ["with"] });
+    const source = await sourceOf(flags);
     if (source === undefined) {
-        return die(COMMAND, "check what? --npm <package>[@range], --github <owner/repo> or --url <address>");
+        return die(COMMAND, "check what? --watch <kind> --with <key>=<value> (`automations kinds` lists them) or --url <address>");
     }
     const { status, text } = await call(COMMAND, "POST", "/automations/check", JSON.stringify({ source }));
     if (status < 200 || status >= 300) {
@@ -443,14 +508,14 @@ const propose = async (args) => {
             "wait",
             "signed",
         ],
-        switches: ["prereleases", "mentioned", "webhook"],
-        repeated: ["model", "from"],
+        switches: ["mentioned", "webhook"],
+        repeated: ["model", "from", "with"],
     });
     const [id] = rest;
     if (id === undefined || !/^[a-z0-9][a-z0-9-]{0,59}$/.test(id)) {
         return die(COMMAND, "propose needs an id: lowercase letters, digits and dashes, like bun-1-4-3");
     }
-    const source = sourceOf(flags);
+    const source = await sourceOf(flags);
     const listens = flags.on !== undefined;
     if (source !== undefined && flags.guard !== undefined) {
         return die(COMMAND, "give it a source or a --guard command, not both");
@@ -463,14 +528,14 @@ const propose = async (args) => {
     }
     if (listens) {
         if (source !== undefined || flags.every !== undefined || flags.cron !== undefined || flags.tz !== undefined) {
-            return die(COMMAND, "--on listens for what arrives, so it takes no --npm, --github, --url, --every or --cron: drop them, or drop --on for a watch");
+            return die(COMMAND, "--on listens for what arrives, so it takes no --watch, --url, --every or --cron: drop them, or drop --on for a watch");
         }
         if (flags.target !== undefined && flags.target !== "new") {
             return die(COMMAND, "--on answers whoever wrote, so it can only start a new agent: drop --target, or give --target new");
         }
     } else {
         if (source === undefined && flags.guard === undefined && flags.webhook !== true) {
-            return die(COMMAND, "a watch needs something to check: --npm, --github, --url or --guard, or --on <provider> to listen instead");
+            return die(COMMAND, "a watch needs something to check: --watch <kind>, --url or --guard, or --on <provider> to listen instead");
         }
         const stray = [...LISTENER_FLAGS.filter((flag) => flags[flag] !== undefined), ...(flags.mentioned === true ? ["mentioned"] : []), ...((flags.from ?? []).length > 0 ? ["from"] : [])];
         if (stray.length > 0) {
@@ -545,6 +610,10 @@ const main = async () => {
     }
     if (command === "sources") {
         await sources();
+        return;
+    }
+    if (command === "kinds") {
+        await kindsList();
         return;
     }
     if (command === "propose") {

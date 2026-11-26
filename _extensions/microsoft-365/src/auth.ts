@@ -1,17 +1,10 @@
-import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { sleep } from "@intentic/base/async";
-import { parseJsonOr } from "@intentic/base/json";
-import { readTextIfExists } from "@intentic/base/fs";
-import { type AgentStoreOptions, storeRefreshTokenAsAgent } from "@intentic/connector-runtime";
-import { extensionStateDir } from "@intentic/sandbox-contract/workspace-state";
-import { type Account, bindingOf, cloudOf, DEFAULT_AUTHORITY, scopesFor } from "./accounts.js";
+import { type Account, cloudOf, scopesFor } from "./accounts.js";
 
-// Sign-in and token upkeep for one card. The refresh token lives only on the card (the daemon's vault) and in this
-// process's memory: a sign-in or a rotation is written back through the daemon's oauth-token route, never printed and
-// never put in a file. What is cached on disk is the one-hour access token, as google-workspace's `gw` does, so a run of
-// commands does not mint (and rotate) on every call.
+// Sign-in and token upkeep for one card. The refresh token lives only on the card (the daemon's vault) and in the memory
+// of the extension's own processes, its backend and its inbox watcher: a sign-in or a rotation is written back through
+// the daemon's oauth-token route, never printed and never put in a file. The backend keeps each card's one-hour access
+// token in memory, so a run of commands does not mint (and rotate) on every call (server.ts).
 
 export type Http = (url: string, init?: RequestInit) => Promise<Response>;
 // Stores a new refresh token on the card. `previous` is the token this process held: the daemon refuses a write from
@@ -66,69 +59,16 @@ const refusal = (error: string): string => {
     return `Microsoft refused to sign in (${error})`;
 };
 
-// The agent's CLI stores through the daemon with the agent token every agent-side CLI carries. A rotation another
-// process stored first is fine: Microsoft keeps the older token valid, and the card's newer one stands.
-export const saveToVault =
-    (account: Account, options: AgentStoreOptions = {}): SaveToken =>
-    async (refreshToken, previous, login) => {
-        await storeRefreshTokenAsAgent({ id: account.id, binding: bindingOf(account), previous, refreshToken, login: login === true }, options);
-    };
-
-// One hour of access token, on disk 0600 under the extension's runtime tree, keyed by a hash of the credential so a
-// rotated or re-entered card simply stops matching.
-export interface TokenCache {
-    readonly read: (fingerprint: string, now: number) => Promise<string | undefined>;
-    readonly write: (fingerprint: string, token: string, until: number) => Promise<void>;
-}
-
-const fingerprintOf = (account: Account): string =>
-    createHash("sha256")
-        .update(
-            JSON.stringify([
-                account.tenantId,
-                account.clientId,
-                account.authority || DEFAULT_AUTHORITY,
-                account.access ?? "",
-                account.refreshToken ?? "",
-            ]),
-        )
-        .digest("hex")
-        .slice(0, 16);
-
-export const fileTokenCache = (root: string, account: Account): TokenCache => {
-    const path = join(root, extensionStateDir("intentic.microsoft-365"), account.id.replaceAll(/[^a-z0-9_-]/g, "_"), "token.json");
-    return {
-        read: async (fingerprint, now) => {
-            // No file, or a truncated one, is simply no cached token.
-            const text = await readTextIfExists(path);
-            // SAFETY: only this function writes the file; a hand-edited one fails the fingerprint and expiry checks.
-            const cached = text === undefined ? undefined : (parseJsonOr(text, undefined) as { fingerprint?: string; token?: string; until?: number } | null | undefined);
-            return cached?.fingerprint === fingerprint && (cached.until ?? 0) > now ? cached.token : undefined;
-        },
-        write: async (fingerprint, token, until) => {
-            // allow(silent-catch): best effort, a full or read-only disk must not stop a command holding a good token
-            await mkdir(dirname(path), { recursive: true, mode: 0o700 }).catch(() => undefined);
-            // allow(silent-catch): as above; the next command simply mints again
-            await writeFile(path, JSON.stringify({ fingerprint, token, until }), { mode: 0o600 }).catch(() => undefined);
-        },
-    };
-};
-
-const NO_CACHE: TokenCache = { read: async () => undefined, write: async () => undefined };
-
 export interface TokenSessionOptions {
     readonly http?: Http;
     readonly now?: () => number;
-    readonly cache?: TokenCache;
 }
 
-// The bearer for this hour: from memory, else the cache, else minted from the refresh token. Concurrent callers share
-// one mint; a rotated refresh token is stored before it is used.
+// The bearer for this hour: from memory, else minted from the refresh token. Concurrent callers share one mint; a
+// rotated refresh token is stored before it is used.
 export const tokenSession = (account: Account, save: SaveToken, options: TokenSessionOptions = {}): (() => Promise<string>) => {
     const http = options.http ?? fetch;
     const now = options.now ?? Date.now;
-    const cache = options.cache ?? NO_CACHE;
-    const fingerprint = fingerprintOf(account);
     let refresh = account.refreshToken ?? "";
     let cached: { token: string; until: number } | undefined;
     let pending: Promise<string> | undefined;
@@ -156,18 +96,13 @@ export const tokenSession = (account: Account, save: SaveToken, options: TokenSe
         }
         // A token about to expire would fail mid-command, so it counts as gone a minute early.
         cached = { token: answer.access_token, until: now() + Math.max(0, (answer.expires_in ?? 3600) - 60) * 1000 };
-        await cache.write(fingerprint, cached.token, cached.until);
         return cached.token;
-    };
-    const current = async (): Promise<string> => {
-        const stored = await cache.read(fingerprint, now());
-        return stored ?? mint();
     };
     return () => {
         if (cached !== undefined && now() < cached.until) {
             return Promise.resolve(cached.token);
         }
-        pending ??= current().finally(() => {
+        pending ??= mint().finally(() => {
             pending = undefined;
         });
         return pending;

@@ -13,9 +13,11 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/connector-runtime": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "imapflow": "catalog:",
-        "mailparser": "catalog:"
+        "mailparser": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",

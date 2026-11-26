@@ -1,20 +1,22 @@
 import { errnoCode, errorMessage } from "@intentic/base/errors";
-import type { ApprovedAction, ApprovedActionOutcome } from "@intentic/extension-api/runtime";
+import type { ApprovedAction, ApprovedActionOutcome, ApprovedPost } from "@intentic/extension-api/runtime";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { ActionApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
+import type { ActionApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import { cachedEnabledExtensions } from "../capabilities/contributions.js";
 import type { Services } from "../composition.js";
 import { approvalRequestBody, ApprovedActionOutcomeSchema } from "../extensions/backend/backend-approvals.js";
 import { BACKEND_HOST_HEADER } from "../extensions/backend/backend-host-config.js";
 import { backendDown, heldTarget } from "../extensions/backend/extension-mcp.js";
 import type { ExtensionHost } from "../capabilities/extension-inventory/installed-extensions.js";
+import { opt } from "../opt.js";
 import type { SpentApproval } from "./approval-decisions.js";
 
-// An approved action that names a `performer`, handed to that extension's backend instead of an agent turn. Called by the
-// executor alone, after the person's yes was matched against the item and spent (approval-decisions.ts), so the backend
-// host's door (`POST /approvals/<id>`, extensions/backend/backend-host.ts) is reached only with an authorised item. The
-// door is behind the host token, which no /x route, panel or agent token carries; the extension holds its credentials
-// itself, read from the daemon, and recomputes the digest over what it is about to send.
+// An approved action that names a `performer`, or (2026-11-26) a post on a platform an extension's card publishes on,
+// handed to that extension's backend instead of an agent turn. Called by the executor alone, after the person's yes was
+// matched against the item and spent (approval-decisions.ts), so the backend host's door (`POST /approvals/<id>`,
+// extensions/backend/backend-host.ts) is reached only with an authorised item. The door is behind the host token, which
+// no /x route, panel or agent token carries; the extension holds its credentials itself, read from the daemon, and
+// recomputes the digest over what it is about to send.
 //
 // What comes back keeps three outcomes apart: done; refused, when nothing reached the outside world and a new yes may
 // run it again; uncertain, when the request may have reached it, which the queue never retries by itself.
@@ -22,6 +24,9 @@ import type { SpentApproval } from "./approval-decisions.js";
 export type PerformerDeps = Pick<Services, "extensionBackend" | "sandboxSettings"> & ExtensionHost;
 
 export type PerformedAction = ActionApprovalSummary & { readonly performer: NonNullable<ActionApprovalSummary["performer"]> };
+
+// A post a backend publishes: one with a target its card's pattern addressed.
+export type PublishedPost = PostApprovalSummary & { readonly target: string };
 
 // How long the door may take: an office upload over a slow link is ordinary, and a call past this is an unknown outcome.
 const DOOR_DEADLINE_MS = 10 * 60_000;
@@ -57,11 +62,13 @@ const outcomeOf = async (answered: Response): Promise<ApprovedActionOutcome> => 
     return uncertain(`the extension's backend failed while carrying it out (HTTP ${answered.status}: ${text.slice(0, 300)})`);
 };
 
-export const performApprovedAction = async (deps: PerformerDeps, item: PerformedAction, yes: SpentApproval): Promise<ApprovedActionOutcome> => {
-    const performer = await performerOf(deps, item.performer.extension);
-    if (performer === undefined) {
-        return refused(`no enabled extension "${item.performer.extension}" with a backend carries this out`);
-    }
+// One authorised item to the backend host's door for the extension installed under `extensionId`, whose backend
+// answers it; `body` names what it is (`approvalRequestBody`), the action rules read here.
+const askBackend = async (
+    deps: PerformerDeps,
+    extensionId: string,
+    body: (actionRules: Readonly<Record<string, string>>) => string,
+): Promise<ApprovedActionOutcome> => {
     const signal = AbortSignal.timeout(DOOR_DEADLINE_MS);
     const backend = await heldTarget(deps.extensionBackend, signal);
     if (backend === undefined) {
@@ -69,20 +76,11 @@ export const performApprovedAction = async (deps: PerformerDeps, item: Performed
     }
     // Read through the daemon's own settings, so organisation pins apply: a key set to deny after the yes still refuses.
     const { actionRules } = await deps.sandboxSettings.get();
-    const action: ApprovedAction = {
-        id: item.id,
-        digest: item.performer.digest,
-        summary: item.summary,
-        details: item.details ?? "",
-        approver: yes.approver,
-        approvedAt: yes.approvedAt,
-        actionRules: { ...actionRules },
-    };
     try {
-        const answered = await fetch(`http://127.0.0.1:${backend.port}/approvals/${encodeURIComponent(performer.id)}`, {
+        const answered = await fetch(`http://127.0.0.1:${backend.port}/approvals/${encodeURIComponent(extensionId)}`, {
             method: "POST",
             headers: { "content-type": "application/json", [BACKEND_HOST_HEADER]: backend.hostToken },
-            body: approvalRequestBody(action),
+            body: body({ ...actionRules }),
             signal,
         });
         return await outcomeOf(answered);
@@ -93,3 +91,39 @@ export const performApprovedAction = async (deps: PerformerDeps, item: Performed
             : uncertain(`the extension's backend did not answer (${errorMessage(error)})`);
     }
 };
+
+export const performApprovedAction = async (deps: PerformerDeps, item: PerformedAction, yes: SpentApproval): Promise<ApprovedActionOutcome> => {
+    const performer = await performerOf(deps, item.performer.extension);
+    if (performer === undefined) {
+        return refused(`no enabled extension "${item.performer.extension}" with a backend carries this out`);
+    }
+    return askBackend(deps, performer.id, (actionRules) => {
+        const action: ApprovedAction = {
+            id: item.id,
+            digest: item.performer.digest,
+            summary: item.summary,
+            details: item.details ?? "",
+            approver: yes.approver,
+            approvedAt: yes.approvedAt,
+            actionRules,
+        };
+        return approvalRequestBody({ action });
+    });
+};
+
+// (2026-11-26) A post whose platform a card of `extensionId` publishes on (post-channels.ts publisherOf), handed to its
+// backend's `api.approvals.publish` the same way: only from the executor, after the yes was matched and spent.
+export const publishApprovedPost = (deps: PerformerDeps, extensionId: string, item: PublishedPost, yes: SpentApproval): Promise<ApprovedActionOutcome> =>
+    askBackend(deps, extensionId, (actionRules) => {
+        const post: ApprovedPost = {
+            id: item.id,
+            platform: item.platform.toLowerCase(),
+            content: item.content,
+            target: item.target,
+            approver: yes.approver,
+            approvedAt: yes.approvedAt,
+            actionRules,
+            ...opt("title", item.title),
+        };
+        return approvalRequestBody({ post });
+    });

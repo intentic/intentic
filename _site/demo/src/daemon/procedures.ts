@@ -11,7 +11,6 @@ import { areasDoors } from "./account/areas.handler";
 import { auditDoors } from "./account/audit.handler";
 import { automationsDoors } from "./board/automations.handler";
 import { capabilitiesDoors } from "./account/capabilities.handler";
-import { choresDoors } from "./board/chores.handler";
 import { ciDoors } from "./board/ci.handler";
 import { complianceDoors } from "./account/compliance.handler";
 import { diffDoors } from "./git/diff.handler";
@@ -20,7 +19,6 @@ import { extensionsDoors } from "./extensions/extensions.handler";
 import { gitDoors } from "./git/git.handler";
 import { historyDoors } from "./git/history.handler";
 import { hubDoors } from "./account/hub.handler";
-import { issuesDoors } from "./extensions/issues.handler";
 import { logsDoors } from "./machine/logs.handler";
 import { loopsDoors } from "./board/loops.handler";
 import { needsDoors } from "./board/needs.handler";
@@ -74,7 +72,6 @@ export const procedures = {
     offload: offloadDoors,
     runs: runsDoors,
     ci: ciDoors,
-    chores: choresDoors,
     automations: automationsDoors,
     workflows: workflowsDoors,
     loops: loopsDoors,
@@ -109,6 +106,5 @@ export const procedures = {
     seal: sealDoors,
     // Connections kept on the owner's computer for their other sandboxes, and taken from there (hub.handler.ts).
     hub: hubDoors,
-    issues: issuesDoors,
     logs: logsDoors,
 } satisfies FixtureRouter;

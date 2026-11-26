@@ -12,6 +12,7 @@ import { sqliteTurnJournal } from "../store/journals/turn-journal.js";
 import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore, THREAD_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
+import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { threadKey } from "../seams/thread-key.js";
 import { unstubbed } from "@intentic/testing";
 import { fileAutomationsStore } from "./automations-store.js";
@@ -43,7 +44,9 @@ const fakeServices = (root: string, settings: z.input<typeof SandboxSettingsSche
         senders: fileSendersStore(join(root, "senders.json")),
         heldWakes: fileHeldWakesStore(join(root, "history")),
         // The automation inboxes (durable/inbox-store.ts) live beside the holds.
-        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history") }),
+        // No extension installed: a wake's admission floor reads the listener's declaration off the inventory (wake-source.ts).
+        config: unstubbed<Services["config"]>("config", { historyRoot: join(root, "history"), extensionsDir: "" }),
+        files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),

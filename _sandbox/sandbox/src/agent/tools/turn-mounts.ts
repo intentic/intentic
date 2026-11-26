@@ -85,6 +85,14 @@ export interface TurnLease {
 // Takes the turn's watchdog hold; the returned release gives it back, once.
 export type TurnHold = () => () => void;
 
+// (2026-11-26) What the turn behind a request holds: the capabilities it was granted (its role and the reach of the people
+// it is for), and what it mounted, read live, so a lease released since reaches nothing. How an extension tool's call is
+// told the turn's grants and reaches its browser (extensions/turn/tool-grants.ts), never more than the turn holds.
+export interface TurnHolding {
+    readonly granted: readonly string[];
+    readonly mounted: () => ReadonlyMap<string, MountTarget>;
+}
+
 // What the door resolved a request to, or why it would not.
 export type MountReach =
     | {
@@ -93,6 +101,7 @@ export type MountReach =
           readonly cleanOutput?: false;
           readonly hold?: TurnHold;
           readonly clientCeilingMs?: number;
+          readonly turn?: TurnHolding;
       }
     // unknown: no live bearer by that value; unleased: a live bearer whose turn holds no server by that name right now.
     | { readonly refused: "unknown" | "unleased" };
@@ -106,6 +115,8 @@ export interface LeaseOptions {
     // The longest this runtime's MCP client waits on one call, for a runtime whose client cannot be told a longer
     // timeout (Cursor: 60 s). A peer answering through the door shortens what it does to fit (webext-peer.ts).
     readonly clientCeilingMs?: number;
+    // The capability ids the turn was granted (TurnHolding); none when absent.
+    readonly granted?: readonly string[];
 }
 
 export interface TurnMounts {
@@ -114,6 +125,12 @@ export interface TurnMounts {
     // Whether a live turn of this conversation holds a mount on exactly this target: how a shell route the agent calls
     // (not its MCP door) is held to what the turn was planned to reach, role and all.
     readonly reaches: (conversationId: string, target: { readonly kind: PeerKind; readonly id: string }) => boolean;
+    // What the conversation's live turns hold, by mounted name: how a shell route reaches the same server the turn's MCP
+    // door does (a card's tools, for that card's own CLI), and nothing the turn was not planned to reach.
+    readonly mountedIn: (conversationId: string) => ReadonlyMap<string, MountTarget>;
+    // What the conversation's live turns hold together, for a shell route reaching a server the turn mounted (a card's
+    // tools from its CLI); undefined when no turn of it runs.
+    readonly holdingIn: (conversationId: string) => TurnHolding | undefined;
     readonly closeAll: () => void;
 }
 
@@ -122,6 +139,7 @@ interface Lease {
     readonly clientCeilingMs?: number;
     readonly targets: Map<string, MountTarget>;
     readonly openedAt: number;
+    readonly granted: readonly string[];
     hold?: TurnHold;
 }
 
@@ -164,10 +182,14 @@ const closeLease = (lease: Lease): void => {
 const newLease = (openedAt: number, options: LeaseOptions, hold: TurnHold | undefined): Lease => ({
     targets: new Map(),
     openedAt,
+    granted: options.granted ?? [],
     ...opt("cleanOutput", options.cleanOutput === false ? (false as const) : undefined),
     ...opt("clientCeilingMs", options.clientCeilingMs),
     ...opt("hold", hold),
 });
+
+// What one lease holds, read live: its targets map is emptied when it is released.
+const holdingOf = (lease: Lease): TurnHolding => ({ granted: lease.granted, mounted: () => lease.targets });
 
 // Resolve the server and its cleaning policy from the same live lease.
 const reachOf = (mount: Mount, name: string): MountReach => {
@@ -191,6 +213,7 @@ const reachOf = (mount: Mount, name: string): MountReach => {
               ...opt("cleanOutput", cleanOutput),
               ...opt("hold", holder?.hold),
               ...opt("clientCeilingMs", holder?.clientCeilingMs),
+              ...opt("turn", holder === undefined ? undefined : holdingOf(holder)),
           };
 };
 
@@ -200,6 +223,34 @@ const targetReaches = (target: MountTarget, wanted: Parameters<TurnMounts["reach
         return wanted.kind === "device" && target.ids.includes(wanted.id);
     }
     return isPeerKind(target.kind) && "id" in target && target.kind === wanted.kind && target.id === wanted.id;
+};
+
+// Every target a live turn of the conversation holds, by its mounted name (TurnMounts.mountedIn).
+const conversationTargets = (mounts: Iterable<Mount>, conversationId: string): ReadonlyMap<string, MountTarget> => {
+    const found = new Map<string, MountTarget>();
+    for (const mount of mounts) {
+        if (mount.conversationId !== conversationId) {
+            continue;
+        }
+        for (const lease of mount.leases.values()) {
+            for (const [name, target] of lease.targets) {
+                found.set(name, target);
+            }
+        }
+    }
+    return found;
+};
+
+// What the conversation's live turns hold together (TurnMounts.holdingIn), read live like one lease's.
+const conversationHolding = (mounts: Iterable<Mount>, conversationId: string): TurnHolding | undefined => {
+    const leases = [...mounts].filter((mount) => mount.conversationId === conversationId).flatMap((mount) => [...mount.leases.values()]);
+    if (leases.length === 0) {
+        return undefined;
+    }
+    return {
+        granted: [...new Set(leases.flatMap((lease) => lease.granted))],
+        mounted: () => new Map(leases.flatMap((lease) => [...lease.targets])),
+    };
 };
 
 // Whether a live turn of the conversation holds a mount on exactly this peer (TurnMounts.reaches).
@@ -353,6 +404,8 @@ export const createTurnMounts = (deps: {
             return reachOf(mount, name);
         },
         reaches: (conversationId, wanted) => conversationReaches(mounts.values(), conversationId, wanted),
+        mountedIn: (conversationId) => conversationTargets(mounts.values(), conversationId),
+        holdingIn: (conversationId) => conversationHolding(mounts.values(), conversationId),
         closeAll: () => {
             // Deleting the entry being visited is safe for a Map iterator.
             for (const key of mounts.keys()) {

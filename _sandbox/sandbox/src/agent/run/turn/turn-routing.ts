@@ -19,7 +19,7 @@ const pinnedKnobs = (turn: AgentTurn, pin: ModelPin): Partial<AgentTurn> =>
         PIN_KNOBS.filter((knob) => turn[knob] === undefined && pin[knob] !== undefined && pin[knob] !== "").map((knob) => [knob, pin[knob]]),
     );
 
-// The pin answers for a turn nobody picked a model for, whoever is watching it: `runRole` and `actsAs` are the only
+// The pin answers for a turn nobody picked a model for, whoever is watching it: its job and `actsAs` are the only
 // things that can answer, so an ordinary chat carrying neither is left alone by that alone. Whether anyone is watching
 // (`unattended`) is a separate question and not one this pin may read.
 const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): Promise<T> => {
@@ -29,11 +29,12 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
     if (turn.model !== undefined || turn.agent !== undefined) {
         return turn;
     }
-    const pinned =
-        (await roleRunModel(services, turn.actsAs)) ?? (turn.runRole === undefined ? undefined : await runRoleModel(services, turn.runRole));
+    // `job` names any job, an extension's included; `runRole` the ones every daemon knows (model-roles.ts RunRoleSchema).
+    const job = turn.job ?? turn.runRole;
+    const pinned = (await roleRunModel(services, turn.actsAs)) ?? (job === undefined ? undefined : await runRoleModel(services, job));
     if (pinned === undefined) {
         // A job the sandbox started with no pin runs on a provider that can serve it, never on one nobody connected.
-        const fallback = turn.runRole === undefined ? undefined : await unpinnedRunProvider(services);
+        const fallback = job === undefined ? undefined : await unpinnedRunProvider(services);
         return fallback === undefined ? turn : { ...turn, agent: fallback };
     }
     // The pin's provider must travel with its model: a model id is only meaningful to the provider that vends it.

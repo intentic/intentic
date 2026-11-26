@@ -71,8 +71,7 @@ export const memoryThreadSessionsStore = (archived: ArchivedConversation): Threa
     };
 };
 
-// `archived`: whether the fleet the suite stands up has archived a conversation. `outboxStreamFor` is composed by the
-// harness, since webchat already reaches this subsystem.
+// `archived`: whether the fleet the suite stands up has archived a conversation.
 export const automationsSliceFake = (archived: ArchivedConversation) =>
     ({
         automations: memoryAutomationsStore(),

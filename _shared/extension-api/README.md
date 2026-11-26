@@ -16,8 +16,9 @@ flowchart LR
   enabled extension, and reaches daemon routes only as far as `permissions.daemon` allows. The browser half reaches
   its own backend through `api.backend`, by a path relative to its namespace, never by spelling `/x/<id>`.
 - The backend api is one shape wherever an extension's Node code runs. `./runtime` builds it: `createServerApi` for the
-  daemon's backend host, and `connectExtensionProcess` for a declared process, which gets the same api less the two
-  slots only the host serves (`ExtensionProcessApi`: no `routes`, `tools` or `approvals`). Besides the daemon it carries the
+  daemon's backend host, and `connectExtensionProcess` for a declared process, which gets the same api less the
+  slots only the host serves (`ExtensionProcessApi`: no `routes`, `tools`, `approvals`, `automations`, nor the turn's
+  `browser`, `ownerBrowser` and `jobs`). Besides the daemon it carries the
   extension's own `stateDir` and `cacheDir` (keyed by its identity, made before its code runs, deleted with it),
   `document` (a JSON file there, evolved by the same `conversions` as `sandboxDocument`), `settings` (its own values,
   secrets included, and `onDidChange`) and `workspace` (file, ref and repository changes). Settings and events ride two
@@ -31,7 +32,9 @@ flowchart LR
 - `./testing` holds `fakeExtensionApi`: the real backend api on a fake daemon that judges every call by the reach rule
   the daemon's grant applies (extension-manifest's `extensionRouteReach`), answers the extension's own settings and
   event stream, and hands the rest to the test. A backend's activation, routes, tools, health and deactivate run as the
-  host runs them.
+  host runs them, and so do its holds (`holds`), its commands (`exec`, answered by the test's `exec`, kept in `execs`),
+  its fire handlers (`fire`), the caller a request carries (`route(path, init, { caller })`) and its public routes
+  (`publicRoute`), each refused undeclared as the daemon refuses it.
 - An extension gives the agent tools one way: `contributes.tools`, served by `api.tools.serve((card) => [...])` in
   the backend. The host owns the MCP transport, each call's deadline and the card lookup, and hands the card's
   settings with every call; the daemon mounts the server into every turn on every runtime. Each tool may declare its
@@ -44,6 +47,76 @@ flowchart LR
   `/x` route reaches, after the daemon matched a person's recorded yes against the item and spent it. The handler gets
   the pinned digest, the details as approved, who approved and when, and the daemon's action rules; it answers `done`,
   `refused` (nothing went out) or `uncertain` (it may have), and holds its credentials itself.
+  `api.approvals.publish(handler)` is the same door for a post (2026-11-26, 2.54.0): a post whose `platform` names a card
+  of the extension declaring `channel.publish`, with a target its pattern matches and no attachments, reaches the
+  handler as `ApprovedPost` (its words, title and target exactly as approved, the yes and the action rules), in place of
+  an agent turn driving the logged-in browser. `fakeExtensionApi`'s `publish(post)` hands one over as the daemon does.
+- A card states what the core used to keep in tables keyed by provider name (2026-11-26, 2.54.0): `channel.messageLimit`
+  (the approvals inbox counts a post against it; a gateway reads its own with connector-runtime's
+  `declaredMessageLimit`), `channel.publish` and `channel.posting` (what a publishing turn reads about the platform),
+  `processors` (where it sends people's data, for the Data protection page) and, on a cli card, `status: { from:
+  "listener" }` (its status is its listener's report, with where a pairing code is typed). A public route may require a
+  Cloudflare Turnstile token (`turnstile.secret`, verified by the daemon; `PublicRouteVerification.turnstile`), let an
+  automation that opts in admit an unlisted browser with its key (`keyFromBrowsers`), or, GET-only, count no day
+  (`dailyMax: "none"`). A listener message may name the one automation that hears it (`automationId`), and a streamed
+  dispatch names a held wake and the conversation it will run in (`heldWake`).
+- Four calls let a backend do what only the daemon's own engines could (2026-11-26, 2.50.0), each a power the manifest
+  declares under `permissions`, refused by the runtime before anything is sent and by the daemon when asked:
+  `api.events.onRunSettled` hears a run end in a conversation the extension itself started through POST /agent with
+  its own token (`events: ["run"]`), and `api.events.onActivity` whether any agent turn runs (`events: ["activity"]`),
+  over the same stream as `api.workspace`; `api.work.hold(label)` keeps the sandbox awake and an update or restart
+  waiting until it is disposed or the backend dies (`work: true`); `api.exec(argv, { class })` runs one command under a
+  workload class, admitted by the memory budget and, for `toolchain`, queued with every agent's builds (`exec`); and
+  `api.automations.onFire(name, handler)` (backend only) is woken by an automation whose target is
+  `{ kind: "extension", extension, handler }`, which only the extension itself saves (`fires`). A fire the backend
+  could not take is kept and handed over once it is back, `coalesced` counting the fires it stands for, with the same
+  `id` on every try. A process gets the first three, its declarations read from `INTENTIC_EXTENSION_DECLARED`.
+- A backend checks the watch kinds its manifest declares (`contributes.watchKinds`, 2026-11-26, 2.51.0):
+  `api.checks.serve(kind, handler)` answers one `WatchCheck` (the source's parameters, what the last pass saw, and the
+  credential-gateway addresses of the extension's own cards the kind names, never a credential) with
+  `{ pass: true, output }` or `{ pass: false, detail }`. The daemon's automations engine alone reaches it, through a
+  host door no `/x` route reaches; serving an undeclared kind throws. `fakeExtensionApi(...).check(kind, check)` hands
+  one over as the engine does. A process serves none.
+- An extension declares the jobs it starts agent runs for (`contributes.modelRoles`, 2026-11-26, 2.52.0): an id, a
+  label, an explanation, an icon and the setup it is suggested. The owner puts each on a model setup in Sandbox ▸ Agent
+  ▸ Models beside the sandbox's own jobs, a run the extension starts through POST /agent names its job as `job` (one of the ids the sandbox's own table held
+  until then may ride as `runRole`, which an older sandbox reads too),
+  and `api.models.agentRun(role)` (and the kit's `useAgentRunPick`) take its id to name the model a press will spend.
+  Switched off, its jobs leave that page and the owner's choices for them are kept. The ids the core's table held for
+  the pipelines, deployments, maintenance, documentation and acceptance extensions are theirs now, unchanged.
+- Three doors the core kept to its own features (2026-11-26, 2.53.0). A request through `/x/<id>` carries who is
+  calling: `api.caller(request)` answers a person signed in (their tier, area ids, and the workspace `folders` those
+  come to, with `reaches(path)`), a panel, a program's control token, another extension, or nobody on a sandbox without
+  sign-in, read off an assertion the daemon mints for that extension alone, signed with a key no extension holds and
+  good for two minutes. `api.daemon.asCaller(caller)` hands it back: POST /agent then starts the turn as that person,
+  held to their access as the roster has it then; a panel, an agent or a person's own bearer cannot present one, and
+  every other route answers by the extension's own reach. `contributes.publicRoutes` declares routes anyone on the
+  internet may call at `/door/<id>/<path>`, each a power the owner approves: the daemon checks a call against the route's
+  declaration (size, per-minute window, daily ceiling, an automation's allowed origins or its door key, proof of work, a
+  provider's signature with a sandbox secret the extension never sees, a redelivery answered `duplicate`) before
+  `api.publicRoutes.serve(handler)` hears it with a `PublicRouteVerification` saying what was checked; never through
+  `/x`. And `contributes.listener.strangers` (`visitor` or `report`) holds a source anyone on the internet reaches to the
+  owner's floor for those wakes. `fakeExtensionApi` models them: `route(path, init, { caller, mintedAgoMs })` attaches
+  an assertion, its fake daemon believes only those it minted and records the caller a call carried (`calls[].caller`),
+  and `publicRoute(path, init, verified)` refuses a path no declared route answers, as the daemon does.
+- An agent tool acts within the turn calling it (2026-11-26, 2.55.0), each power declared under `permissions.turn`,
+  refused by the runtime before anything is sent when undeclared and by the daemon for anything the turn does not
+  hold. A call's `ToolCallContext` carries `grants` (the sandbox browser accounts the turn holds, each with the sites it
+  signs in on; the owner's browsers it holds; the cards of the extension's own kinds it holds) and a `ticket` good while
+  the call runs. `api.browser.call(context, { account, tool, args })` drives the turn's own signed-in browser for an
+  account it holds (`browser`), with the page's own tools only (`EXTENSION_BROWSER_TOOLS` in the contract's
+  extension protocol) and only on the account's sites; `api.ownerBrowser.call(context, { browser, tool, args })` calls
+  the owner's browser the turn holds through its peer door (`owner-browser`); `api.jobs.start(context, spec)` files a
+  background job in the calling conversation (`jobs`), optionally in a lane of the extension's own, answers its id at
+  once (the agent's `wait` collects it), and runs `spec.run(job)` in the backend once its turn comes, the job's `say`,
+  `signal` (aborted on a stop) and its own ticket on the same grants in hand. Each rejects with the daemon's words when
+  refused; a credential never comes back. `fakeExtensionApi` hands a call `grants` (the options' or the context's) and a
+  ticket, answers `browser` and `ownerBrowser` calls with the test's handlers (`browserCalls`, `ownerBrowserCalls`),
+  and runs jobs at once (`jobs`, `jobEnd(id)`, `stopJob(id)`), refusing what the daemon refuses.
+- A cli card's `commandActions` entry says who decides its rule: `gatedBy: "sandbox"` (the default, the command guard
+  refuses a denied or held command before it runs) or `"backend"` (the card's backend carries it out and asks the
+  outward-action door, which decides, records it and drafts the approval on a hold), and what it comes to while no rule
+  names it, `unruled: "allow"` (the default) or `"hold"` (2.52.0). `selfGated: true` is deprecated and read as both.
 - This package is published to npm, and its API only grows within a major. `extensionApiVersion` moves
   with every surface change (additive is a minor), and a manifest's `engines.intentic` range is matched against it at
   load, failing closed. The editor's `surface-guard.test.ts` fails when the surface moves without a new entry in
@@ -83,7 +156,8 @@ flowchart LR
   on one path shares one write queue), SSE and ndjson stream reading, and the
   payload for `api.workspace.openDiff`.
 - Contribution points: `agent`, `automationTemplates`, `bin`, `capabilities`, `commands`, `documents`,
-  `environment`, `files`, `listener`, `processes`, `settings`, `sideViews`, `tools`, `viewers` and `views`, plus the
+  `environment`, `files`, `listener`, `modelRoles`, `processes`, `publicRoutes`, `settings`, `sideViews`, `tools`,
+  `viewers`, `views` and `watchKinds`, plus the
   manifest's top-level fields, all read off `CONTRIBUTION_POINTS` in
   [extension-manifest](../extension-manifest/src/points/index.ts).
 - A side view (`sideViews`, `api.sideViews`) is something an extension shows in the editor's side panel for one input,

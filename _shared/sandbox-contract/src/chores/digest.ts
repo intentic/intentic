@@ -1,3 +1,4 @@
+// FROZEN (2026-11-26): the maintenance extension owns this; kept unchanged for the extension wire until 3.0.0 (index.ts).
 // A run records a hash of the evidence that provoked it: a matching digest means already spent a turn on this, a
 // different one means the rail may speak. FNV-1a because it must run identically in the daemon and the browser, no
 // dependency, no crypto import.

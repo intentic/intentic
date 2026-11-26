@@ -9,19 +9,37 @@ await registerExtensionMessages(extensionIdOf(manifest), messages);
 // No mocks: pure functions over a post's own fields, so the page can ask the same question from four sections.
 
 describe("limitOf", () => {
-    it("answers for platforms with a hard cap and stays quiet for the rest", () => {
-        expect(limitOf(`x`)).toBe(280);
-        expect(limitOf(`X`)).toBe(280);
-        expect(limitOf(`discord`)).toBe(2_000);
+    // The cards as a daemon with today's extensions serves them: each limit is the one its own card declares.
+    const declared = new Map([
+        [`x`, { name: `X`, messageLimit: 280 }],
+        [`discord`, { name: `Discord`, messageLimit: 2_000 }],
+        [`whatsapp`, { name: `WhatsApp`, messageLimit: 65_536 }],
+        [`reddit`, { name: `Reddit` }],
+    ]);
+
+    it("answers what the platform's card declares and stays quiet for the rest", () => {
+        expect(limitOf(`x`, declared)).toBe(280);
+        expect(limitOf(`X`, declared)).toBe(280);
+        expect(limitOf(`discord`, declared)).toBe(2_000);
         // Reddit's cap is far past anything written; an unknown platform has none either, so both get a plain count.
-        expect(limitOf(`reddit`)).toBeUndefined();
-        expect(limitOf(`some-new-network`)).toBeUndefined();
+        expect(limitOf(`reddit`, declared)).toBeUndefined();
+        expect(limitOf(`some-new-network`, declared)).toBeUndefined();
+        expect(limitOf(`constructor`, declared)).toBeUndefined();
+        // A platform no installed card names has no cap once any card declares one, whatever the old table said.
+        expect(limitOf(`bluesky`, declared)).toBeUndefined();
     });
 
     it("counts a WhatsApp post against the linked-device ceiling the gateway sends at, not the Business API's", () => {
         // Was 4,096 here while the gateway sent up to 60,000: an inbox that refused what the gateway would have posted.
-        expect(limitOf(`whatsapp`)).toBe(65_536);
-        expect(limitOf(`constructor`)).toBeUndefined();
+        expect(limitOf(`whatsapp`, declared)).toBe(65_536);
+    });
+
+    it("against a daemon whose cards declare no limits (before extension API 2.54.0), counts by the table it counted by", () => {
+        const older = new Map([[`x`, { name: `X` }]]);
+        expect(limitOf(`x`, older)).toBe(280);
+        expect(limitOf(`bluesky`, older)).toBe(300);
+        expect(limitOf(`some-new-network`, older)).toBeUndefined();
+        expect(limitOf(`constructor`, new Map())).toBeUndefined();
     });
 });
 

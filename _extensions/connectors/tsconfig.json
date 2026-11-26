@@ -1,0 +1,15 @@
+/* The backend's source and tests, type-checked only: vite bundles `src/server/server.ts` into dist/server.js (vite.server.config.ts). */
+{
+    "compilerOptions": {
+        "types": ["node", "bun", "@intentic/testing/globals"],
+        "noEmit": true,
+        "composite": false,
+        "declaration": false,
+        "declarationMap": false,
+        "rootDir": ".",
+        "tsBuildInfoFile": "./.cache/tsbuildinfo",
+        "resolveJsonModule": true
+    },
+    "include": ["./src/**/*.ts", "./intentic-extension.json"],
+    "extends": "@intentic/tsconfig/tsconfig.base.json"
+}

@@ -8,6 +8,7 @@ import { t } from "@intentic/ui/i18n";
 import { useAudience } from "../../app/useAudience";
 import { useVocabulary } from "../../workbench/views/vocabulary";
 import { plainToolWords } from "../../lib/toolWords/toolWords";
+import type { OriginSource } from "./originSources";
 import { isSealed, sealedTitle } from "./sealView";
 import { type AgentStanding, type ClientAgentStatus, memoryHeld } from "./agentStatus-standing";
 
@@ -133,12 +134,10 @@ export const agentDisplayTitle = (
 // The same two-level fold for what happens when a turn breaks lives in models/conversations/endings/turnBreak.ts (`effectivePolicy`),
 // beside the words for each answer: one question per ending, asked in one vocabulary by every surface.
 
-// Sources an agent can be opened by, keyed on `AgentOrigin.provider` (an open string; listener sources are
-// extension-declared), so an unrecognized one falls back to its own name rather than disappearing.
+// The sandbox's own sources an agent can be opened by, keyed on `AgentOrigin.provider` (an open string). A source an
+// extension's listener supplies is named by its declaration instead (originSources.ts, passed in as `listeners`), and an
+// unrecognized one falls back to its own name rather than disappearing.
 const originSources = (): Record<string, { icon: IconName; label: string }> => ({
-    discord: { icon: `comments`, label: `Discord` },
-    slack: { icon: `comments`, label: `Slack` },
-    imap: { icon: `envelope`, label: t(`agents.agentStatus.email`) },
     webchat: { icon: `globe`, label: t(`agents.agentStatus.visitorChat`) },
     webhook: { icon: `bolt`, label: t(`agents.agentStatus.webhook`) },
     // An automation's own clock or check, which names no sender: the daemon's fire-sessions.ts ownOrigin.
@@ -152,11 +151,15 @@ const originSources = (): Record<string, { icon: IconName; label: string }> => (
 // answer. The hint carries only what OriginMark doesn't already print (source and sender), so nothing is said
 // twice. A fire nobody sent (a schedule, a webhook, a watch) names the automation where a sender would stand, since that
 // is the one name the card of an automation's runs is known by.
-export const originMeta = (origin: AgentOrigin): { icon: IconName; label: string; detail: string | undefined; hint: string } => {
-    const source = originSources()[origin.provider] ?? { icon: `wave-pulse` as IconName, label: origin.provider };
+export const originMeta = (
+    origin: AgentOrigin,
+    listeners: ReadonlyMap<string, OriginSource> = new Map(),
+): { icon: IconName; logo?: string | undefined; label: string; detail: string | undefined; hint: string } => {
+    const source: OriginSource = originSources()[origin.provider] ?? listeners.get(origin.provider) ?? { icon: `wave-pulse`, label: origin.provider };
     const where = origin.channelId !== undefined ? t(`agents.agentStatus.inChannel`, { channel: origin.channelId }) : ``;
     return {
         icon: source.icon,
+        logo: source.logo,
         label: source.label,
         detail: origin.author ?? (origin.channelId === undefined ? origin.automationId : undefined),
         hint: t(`agents.agentStatus.openedByAutomationFirst`, { automationId: origin.automationId, where }),

@@ -1,4 +1,4 @@
-import type { AutomationTemplate, TriggerSource } from "@intentic/sandbox-contract/schemas/automations";
+import { type AutomationTemplate, type TriggerSource, type WatchKind, watchKindsOf } from "@intentic/sandbox-contract/schemas/automations";
 import type { CapabilityFacts } from "@intentic/extension-api";
 import type { IconName } from "@intentic/extension-ui";
 import { computed } from "vue";
@@ -104,6 +104,12 @@ export function useCatalog() {
     return {
         sources: computed<readonly TriggerSource[]>(() => (query.data.value?.sources ?? NO_SOURCES).map(sourceWords)),
         templates: computed<readonly AutomationTemplate[]>(() => query.data.value?.templates ?? NO_TEMPLATES),
+        // (2026-11-26) The ready-made checks besides a page, each an installed extension's; a daemon from before they were
+        // contributed serves none, and the ones it checked itself stand in (watchKindsOf).
+        watchKinds: computed<readonly WatchKind[]>(() => watchKindsOf(query.data.value)),
         error,
     };
 }
+
+/** Just the watch kinds, from the same cached read: what a row, a check's section and the condition's fields draw from. */
+export const useWatchKinds = () => useCatalog().watchKinds;

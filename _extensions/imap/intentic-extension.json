@@ -8,11 +8,18 @@
     "engines": {
         "intentic": "^2.0.0"
     },
+    "server": "dist/server.js",
     "permissions": {
-        "daemon": ["POST /capabilities/*/oauth-token"]
+        "daemon": [
+            "POST /capabilities/*/oauth-token",
+            "POST /capabilities/*/outward-action",
+            "POST /capabilities/*/outward-action/outcome",
+            "GET /capabilities/*/connection"
+        ]
     },
     "contributes": {
         "bin": "bin",
+        "tools": { "perCard": "imap" },
         "listener": {
             "provider": "imap",
             "events": [
@@ -191,19 +198,14 @@
                     "IMAP_HOST": "${host}",
                     "IMAP_PORT": "${port}",
                     "IMAP_USERNAME": "${username}",
-                    "IMAP_PASSWORD": "${password}",
                     "SMTP_HOST": "${smtpHost}",
                     "SMTP_PORT": "${smtpPort}",
                     "SMTP_SECURITY": "${smtpSecurity}",
                     "SMTP_USERNAME": "${smtpUsername}",
-                    "SMTP_PASSWORD": "${smtpPassword}",
                     "IMAP_AUTH_MODE": "${authMode}",
                     "IMAP_OAUTH_PROVIDER": "${oauthProvider}",
                     "IMAP_OAUTH_TENANT": "${oauthTenant}",
-                    "IMAP_OAUTH_CLIENT_ID": "${oauthClientId}",
-                    "IMAP_OAUTH_CLIENT_SECRET": "${oauthClientSecret}",
-                    "IMAP_OAUTH_REFRESH_TOKEN": "${oauthRefreshToken}",
-                    "IMAP_ACCESS_TOKEN": "${accessToken}"
+                    "IMAP_OAUTH_CLIENT_ID": "${oauthClientId}"
                 },
                 "refreshToken": {
                     "field": "oauthRefreshToken",
@@ -217,8 +219,15 @@
                     }
                 },
                 "hosts": ["${host}", "${smtpHost}", "login.microsoftonline.com", "oauth2.googleapis.com"],
+                "processors": [
+                    { "flow": "email-imap", "hostField": "host" },
+                    { "flow": "email-smtp", "hostField": "smtpHost" }
+                ],
                 "skill": "skills/imap/SKILL.md",
-                "probe": { "connect": "imap", "host": "${host}", "port": "${port}", "user": "${username}", "password": "${password}" }
+                "probe": { "connect": "imap", "host": "${host}", "port": "${port}", "user": "${username}", "password": "${password}" },
+                "commandActions": [
+                    { "action": "message.send", "command": ["imap", "send"], "content": { "arg": 0 }, "gatedBy": "backend", "unruled": "hold" }
+                ]
             }
         ]
     }

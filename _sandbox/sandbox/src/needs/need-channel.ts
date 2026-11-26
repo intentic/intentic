@@ -1,15 +1,17 @@
+import type { ListenerStrangers } from "@intentic/extension-manifest";
 import type { AgentOrigin } from "@intentic/sandbox-contract/schemas/agent";
 import type { Need } from "@intentic/sandbox-contract/schemas/needs";
-import { outboxKeyOf } from "../webchat/webchat-outbox.js";
 
 // A need raised in a conversation that came from a channel (Slack, Telegram, Discord…) is said there too
 // (docs/architecture/needs.md): the person who started it from the channel may never open the editor, and the card
 // alone would leave them wondering why nothing happens. The answer itself is only ever given in Intentic, where the
 // card's masked field and its verified identity are.
 
-// A channel a person started the conversation from; never a visitor's chat, whose stranger can answer none of it.
-export const needChannelOf = (origin: AgentOrigin | undefined): AgentOrigin | undefined =>
-    origin?.channelId !== undefined && outboxKeyOf(origin) === undefined ? origin : undefined;
+// A channel a person started the conversation from; never one of a source anyone on the internet reaches (a visitor's
+// chat, a bug report), whose stranger can answer none of it. `strangers` is what the origin's source declares
+// (automations/fire/wake-source.ts); (2026-11-26) the Visitor chat's provider name decided it before.
+export const needChannelOf = (origin: AgentOrigin | undefined, strangers: ListenerStrangers | undefined): AgentOrigin | undefined =>
+    origin?.channelId !== undefined && strangers === undefined ? origin : undefined;
 
 // The ask in words and where it is answered; for a secret, the one warning a channel needs, since the instinct is to
 // paste it straight into the chat, where it would stay in the channel's history.

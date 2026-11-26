@@ -3,6 +3,8 @@ import { BROKER_PORT } from "@intentic/constants";
 import type { Logger } from "pino";
 import { contributionFor, contributionRegistry } from "../contributions.js";
 import type { Services } from "../../composition.js";
+import { opt } from "../../opt.js";
+import type { GatewayOutbound } from "./broker-actions.js";
 import { createGateway, type GatewayCard, type GatewayUse } from "./broker-gateway.js";
 import { brokerOf } from "./broker-routes.js";
 import { reachAllows } from "../../secrets/credential-reach.js";
@@ -28,7 +30,7 @@ const gatewayCard =
         if (connector === undefined || broker === undefined || (await services.credentialPolicy.of(capability)).delivery === "raw") {
             return undefined;
         }
-        return { config: card.config, broker, name: `${connector.spec.catalog.name} (${capability})` };
+        return { config: card.config, broker, name: `${connector.spec.catalog.name} (${capability})`, provider: connector.spec.id };
     };
 
 const useRecorder = (services: Services): ((use: GatewayUse) => void) => {
@@ -54,12 +56,39 @@ const useRecorder = (services: Services): ((use: GatewayUse) => void) => {
     };
 };
 
+// The turn a conversation is running now, if one is: the agent's own record of it, handed in by whoever starts the
+// gateway, since that record sits in a layer above this one.
+export type RunningTurn = (conversationId: string) => string | undefined;
+
+// A request's Activity row, filed under the turn its conversation is running, if one is: a gateway address names the
+// conversation it was minted for, and a request made between turns (a background job still running) has no turn.
+const outboundRecorder =
+    (services: Services, runningTurn: RunningTurn) =>
+    (row: GatewayOutbound): void => {
+        const { conversationId } = row;
+        void services.activity
+            .append({
+                ...row.call,
+                direction: "out",
+                ...opt("conversationId", conversationId),
+                ...opt("turnId", conversationId === undefined ? undefined : runningTurn(conversationId)),
+                ...opt("outcome", row.outcome),
+                ...opt("error", row.error),
+            })
+            .catch((error: Error) => services.logger.warn({ err: error, provider: row.call.provider }, "credential gateway: activity append failed"));
+    };
+
 export interface CredentialGatewayHandle {
     readonly stop: () => Promise<void>;
 }
 
 /** Binds the gateway on loopback; a port already taken is a logged fault, and brokered cards then refuse rather than leak. */
-export const startCredentialGateway = async (services: Services, logger: Logger, port: number = BROKER_PORT): Promise<CredentialGatewayHandle> => {
+export const startCredentialGateway = async (
+    services: Services,
+    logger: Logger,
+    runningTurn: RunningTurn,
+    port: number = BROKER_PORT,
+): Promise<CredentialGatewayHandle> => {
     const handle = createGateway({
         sessions: services.brokerSessions,
         card: gatewayCard(services),
@@ -68,6 +97,9 @@ export const startCredentialGateway = async (services: Services, logger: Logger,
         credentialGate: services.credentialGate,
         prompts: services.rulePrompts,
         used: useRecorder(services),
+        actionRules: async () => (await services.sandboxSettings.get()).actionRules,
+        outbound: outboundRecorder(services, runningTurn),
+        warn: (message, error) => services.logger.warn({ err: error }, message),
         reaches: async (conversationId, capability) => reachAllows(await services.credentialReach(conversationId), "capability", capability),
     });
     const server = createAdaptorServer({ fetch: handle, hostname: "127.0.0.1", port });

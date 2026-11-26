@@ -110,9 +110,59 @@
                             "env": "TELEGRAM_FILE_URL",
                             "pathPrefix": "/file/bot${botToken}"
                         }
+                    ],
+                    "actions": [
+                        { "action": "message.send", "paths": ["/sendMessage"], "channel": { "field": "chat_id" }, "content": { "field": "text" } },
+                        {
+                            "action": "message.send",
+                            "paths": [
+                                "/sendDocument",
+                                "/sendPhoto",
+                                "/sendVideo",
+                                "/sendAudio",
+                                "/sendVoice",
+                                "/sendAnimation",
+                                "/sendVideoNote",
+                                "/sendMediaGroup",
+                                "/sendSticker",
+                                "/sendLocation",
+                                "/sendVenue",
+                                "/sendContact",
+                                "/sendPoll",
+                                "/sendDice",
+                                "/forwardMessage",
+                                "/forwardMessages",
+                                "/copyMessage",
+                                "/copyMessages"
+                            ],
+                            "channel": { "field": "chat_id" },
+                            "content": { "field": "caption" }
+                        },
+                        {
+                            "action": "message.edit",
+                            "paths": ["/editMessageText"],
+                            "channel": { "field": "chat_id" },
+                            "content": { "field": "text" }
+                        },
+                        {
+                            "action": "message.edit",
+                            "paths": ["/editMessageCaption", "/editMessageMedia", "/editMessageReplyMarkup", "/editMessageLiveLocation"],
+                            "channel": { "field": "chat_id" },
+                            "content": { "field": "caption" }
+                        },
+                        { "action": "message.delete", "paths": ["/deleteMessage", "/deleteMessages"], "channel": { "field": "chat_id" } },
+                        {
+                            "action": "reaction.add",
+                            "paths": ["/setMessageReaction"],
+                            "channel": { "field": "chat_id" },
+                            "content": { "field": "reaction" }
+                        },
+                        { "action": "file.read", "read": true, "paths": ["/getFile"] }
                     ]
                 },
-                "hosts": ["api.telegram.org"]
+                "hosts": ["api.telegram.org"],
+                "channel": { "messageLimit": 4096 },
+                "processors": [{ "flow": "team-chat", "operator": "Telegram", "thirdCountry": true, "hosts": ["api.telegram.org"] }]
             }
         ],
         "automationTemplates": [

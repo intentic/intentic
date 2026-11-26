@@ -32,7 +32,7 @@ import { passwordWakeOf } from "../needs/password-wake.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
-import { startAccountOutbox } from "../issues/account-outbox.js";
+import { startAccountOutbox } from "../account-routing/account-outbox.js";
 import { startPoolSignalsFor } from "../agent/providers/accounts/pool-signals.js";
 import { fixerSettled, resumeMainFixer } from "../ci/main-fixer.js";
 import { ownerStepSettled } from "../ci/owner-steps.js";
@@ -271,7 +271,7 @@ const startCi = ({ role, services, logger, shutdown }: Pick<BootPhase, "role" | 
 };
 
 // What crosses to the owner's other sandboxes: reports one could not take yet, retried until they land
-// (issues/account-outbox.ts), and the run-outs they met on the accounts this one holds, heard every five minutes
+// (account-routing/account-outbox.ts), and the run-outs they met on the accounts this one holds, heard every five minutes
 // (agent/providers/accounts/pool-signals.ts).
 const startAcrossSandboxes = (services: BootPhase["services"], shutdown: BootPhase["shutdown"]): void => {
     shutdown.push(startAccountOutbox(services));
@@ -354,11 +354,9 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     const originFollow = createOriginFollow(originFollowDeps(services, logger));
     shutdown.push(originFollow.stop);
 
-    shutdown.push(() => services.probeRunner.stop());
     shutdown.push(() => services.driftSweep.stop());
     if (role.container) {
-        // Both idle-only, allowed to fail, unref'd; the probe runner also waits out the boot's own pnpm install.
-        inBackground("probe-runner", () => services.probeRunner.start());
+        // Idle-only, allowed to fail, unref'd.
         inBackground("drift-sweep", () => services.driftSweep.start());
         inBackground("follow-origin", () => originFollow.start());
     }

@@ -29,11 +29,14 @@ TREES="
 @intentic/ext-microsoft-365:$out/extensions/microsoft-365
 "
 # The extensions whose dist the image needs: onlyoffice's backend bundle (dist/server.js, the manifest's `server`) and
-# the browser engine's editor page it serves (dist/editor/editor.js),
-# which the daemon's extension host runs in every sandbox. The feature backends (deployments, knowledge) are not
-# here: they moved to their own repositories and install from the registry, as e-urzad and prawo did. The copy loop
-# below carries each entry.
-BUNDLES="onlyoffice"
+# the browser engine's editor page it serves (dist/editor/editor.js), repo-apps' backend bundle (dist/server.js,
+# the package graph the Dependencies view reads), and connectors' backend bundle (dist/server.js, the npm and GitHub
+# release watch checks) and visitor-chat's (dist/server.js, the Visitor chat's public door and the install panel's reads;
+# dist/gateway.js, the process that keeps a visitor's late replies; dist/widget.js, the widget a customer's page loads,
+# copied in from @intentic/webchat-widget by its build), which the daemon's extension host runs in every sandbox. The feature
+# backends (deployments, knowledge) are not here: they moved to their own repositories and install from the registry,
+# as e-urzad and prawo did. The copy loop below carries each entry.
+BUNDLES="onlyoffice repo-apps connectors visitor-chat"
 
 filters=()
 for entry in $TREES; do filters+=(--filter="${entry%%:*}"); done

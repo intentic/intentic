@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The in-sandbox projects command: account-level report routing from the agent's shell. Report a problem you saw about
-// a project to whichever sandbox on the owner's account claims it (the daemon's issues/account-outbox.ts): delivered
+// a project to whichever sandbox on the owner's account claims it (the daemon's account-routing/account-outbox.ts): delivered
 // now, or kept and retried while that sandbox is asleep or offline. It lands in that sandbox's issues inbox, grouped
 // with every other report of the same problem, and wakes its agent only by the inbox's own rule.
 
@@ -102,7 +102,7 @@ const outbox = async () => {
 };
 
 // Remotes of the workspace's repos, normalized the way the platform keys claims (github.com/owner/repo), read by the
-// daemon (issues/project-suggestions.ts) so Settings ▸ Projects offers the same list.
+// daemon (account-routing/project-suggestions.ts) so Settings ▸ Projects offers the same list.
 const suggest = async () => {
     const { projects } = await getJson("/account/projects/suggest");
     if (projects.length === 0) {

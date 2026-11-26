@@ -6,11 +6,11 @@
         "codeChores": "Code-Hausarbeiten",
         "copyWebhookUrl": "Webhook-URL für {id} kopieren",
         "done": "Fertig",
-        "visitorChatCreatedDrop": "Empfang angelegt: legen Sie das in Ihre Website:",
         "integrations": "Integrationen",
         "onAnyPageListed": "auf jeder Seite, die Sie oben aufgeführt haben. Der Launcher erscheint in der Ecke; Besucher-Unterhaltungen tauchen auf Ihrem Agenten-Board auf, wo Sie mitlesen und übernehmen können.",
         "pasteBefore": "Fügen Sie es ein vor",
-        "copyEmbedSnippet": "Einbettungs-Schnipsel für {id} kopieren"
+        "showEmbedCode": "Einbettungscode zeigen",
+        "visitorChatCreatedDrop": "Empfang angelegt: legen Sie das in Ihre Website:"
     },
     "automationFields": {
         "aboutSecondEachVisitors": "Etwa eine Sekunde Browserzeit pro Besucher. Keine Schlüssel.",
@@ -160,28 +160,13 @@
         "whatHasToBeTrue": "Was zuerst zutreffen muss. Zur Prüfung läuft kein Modell.",
         "conditionNone": "Immer",
         "conditionGuard": "Befehl",
-        "conditionNpm": "npm-Paket",
-        "conditionGithub": "GitHub-Release",
         "conditionUrl": "Webseite",
         "conditionCaption": {
             "none": "Nichts wird geprüft: Jedes Auslösen geht durch.",
             "guard": "Ein Shell-Befehl, der zuerst im Workspace läuft. Exit 0 geht durch, und seine Ausgabe geht mit dem Wecken mit; alles andere wird als übersprungen erfasst. $AUTOMATION_STATE nennt eine Datei, die er zwischen Läufen behalten darf, und $AUTOMATION_LAST enthält, was er beim letzten Bestehen ausgegeben hat.",
-            "npm": "Ein Paket in der npm-Registry, von der Sandbox selbst geprüft: keine Shell, kein Token.",
-            "github": "Das neueste Release eines öffentlichen GitHub-Repositorys, von der Sandbox selbst geprüft.",
             "url": "Der Text einer Webseite oder der Teil davon, den ein Muster herausgreift."
         },
         "guardCommand": "Befehl, der entscheidet, ob es weitergeht",
-        "waitForVersion": "Auf eine Version warten",
-        "followTag": "Einem Tag folgen",
-        "package": "Paket",
-        "versionRange": "Versionsbereich",
-        "distTag": "Tag",
-        "npmCaption": {
-            "range": "Besteht, sobald eine veröffentlichte Version den Bereich erfüllt; gesehen wird diese Version.",
-            "tag": "Sieht die Version unter diesem Tag, latest, wenn leer. Kombinieren Sie es mit „Nur eine Änderung“, um von jeder neuen zu erfahren."
-        },
-        "repository": "Repository",
-        "prereleasesToo": "Auch Vorabversionen zählen",
         "page": "Seite",
         "onlyWhatMatches": "Nur, was passt (optional)",
         "pageCaption": "Leer beobachtet den ganzen Text der Seite. Ein regulärer Ausdruck grenzt ihn auf das ein, was passt, bzw. auf seine erste Gruppe, falls es eine gibt.",
@@ -204,7 +189,8 @@
         "targetCaption": {
             "agent": "Ein neuer Agent startet mit dem Prompt unten und dem, was die Prüfung gesehen hat.",
             "conversation": "Die Unterhaltung macht dort weiter, wo sie aufgehört hat, und erfährt, was die Prüfung gesehen hat, sowie den Prompt unten. Sie läuft auf ihrem eigenen Modell.",
-            "notify": "Kein Modell läuft: Ihre Geräte bekommen eine Benachrichtigung mit dem, was die Prüfung gesehen hat, oder mit dem Text unten, wenn sie nichts gesehen hat."
+            "notify": "Kein Modell läuft: Ihre Geräte bekommen eine Benachrichtigung mit dem, was die Prüfung gesehen hat, oder mit dem Text unten, wenn sie nichts gesehen hat.",
+            "extension": "Kein Modell läuft: Der eigene Code der Erweiterung wird über den von ihr registrierten Handler geweckt. Nur diese Erweiterung kann eine Automatisierung auf sich selbst richten."
         },
         "pickConversation": "Unterhaltung wählen",
         "conversationToContinue": "Fortzusetzende Unterhaltung",
@@ -213,11 +199,12 @@
         "whatNotificationSays": "Was die Benachrichtigung sagt.",
         "notifyPlaceholder": "Die beobachtete Seite hat sich geändert.",
         "guardPlaceholder": "test -n \"$(git status --porcelain)\"",
-        "tagPlaceholder": "latest",
         "aiDisclosure": "Besucher über KI-Antworten informieren",
         "aiDisclosureText": "Eigener Hinweis (optional)",
         "aiDisclosureDefault": "Die Antworten stammen von einem KI-Assistenten und können Fehler enthalten.",
-        "roleGoneHint": "Diese Rolle existiert nicht mehr, daher liefen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere."
+        "roleGoneHint": "Diese Rolle existiert nicht mehr, daher liefen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere.",
+        "whatExtensionIsHanded": "Was der Handler der Erweiterung erhält",
+        "kindOff": "{extension}, die diese Beobachtungen prüft, ist ausgeschaltet: Diese Beobachtung schlägt bei jeder Prüfung fehl, bis sie wieder an ist."
     },
     "automationRow": {
         "alreadyFired": "Bereits ausgelöst",
@@ -299,7 +286,8 @@
         "roleMissing": "Rolle fehlt",
         "roleMissingNote": "{ids} existiert nicht mehr, daher laufen die Weckrufe ohne Werkzeuge und ohne Konten. Wähle eine andere Rolle.",
         "noAccounts": "Keine Konten",
-        "noAccountsNote": "Die Weckrufe erreichen keines Ihrer angemeldeten Konten. Wählen Sie Alle Konten oder eine Rolle, wenn sie als Sie posten oder surfen soll."
+        "noAccountsNote": "Die Weckrufe erreichen keines Ihrer angemeldeten Konten. Wählen Sie Alle Konten oder eine Rolle, wenn sie als Sie posten oder surfen soll.",
+        "wakesExtension": "Weckt {extension} ({handler})"
     },
     "automationsView": {
         "addAutomation": "Eine Automation hinzufügen",
@@ -326,7 +314,8 @@
         "readingAutomations": "Ihre Automationen werden gelesen…",
         "runHistoryCantUndone": "und ihre Lauf-Historie? Das lässt sich nicht rückgängig machen.",
         "showAll": "Alle {count} anzeigen",
-        "takeOneOffersBelow": "Nehmen Sie eines der Angebote unten, oder bauen Sie Ihr eigenes mit"
+        "takeOneOffersBelow": "Nehmen Sie eines der Angebote unten, oder bauen Sie Ihr eigenes mit",
+        "visitorChatOff": "Die Erweiterung Besucher-Chat ist in dieser Sandbox nicht eingeschaltet, daher lässt sich ihr Einbettungscode nicht zeigen. Schalten Sie sie unter Erweiterungen ein."
     },
     "catalog": {
         "allChannels": "alle Kanäle",
@@ -341,22 +330,6 @@
     },
     "extension": {
         "automations": "Automationen"
-    },
-    "visitorChatInstallDialog": {
-        "allow": "Erlauben",
-        "allowToLoadChat": "{origin} erlauben, diesen Chat zu laden",
-        "allowedSites": "Erlaubte Websites",
-        "askedTurnedAway": "hat gefragt und wurde abgewiesen · {lastSeenAt}",
-        "checking": "Wird geprüft…",
-        "copyEmbedSnippet": "Einbettungs-Schnipsel für {id} kopieren",
-        "couldntAddSite": "Diese Website ließ sich nicht hinzufügen.",
-        "done": "Fertig",
-        "install": "Installieren",
-        "loadCount": "{count} Aufruf | {count} Aufrufe",
-        "loaded": "Ist es geladen?",
-        "noBrowserLoadedWidget": "Noch hat kein Browser dieses Widget geladen. Fügen Sie den Schnipsel ein, öffnen Sie Ihre Website, dann aktualisiert sich das hier innerhalb weniger Sekunden von selbst.",
-        "noSitesAllowed": "Noch ist keine Website erlaubt, daher wird jeder Besucher abgewiesen. Fügen Sie unten eine hinzu oder bearbeiten Sie die Automation.",
-        "pasteIntoSiteBefore": "Fügen Sie das in Ihre Website ein, vor"
     },
     "useCiDelivery": {
         "allPolled": "Webhooks sind nicht eingerichtet, daher werden Pipelines stattdessen abgefragt: Das löst innerhalb von {minutes} Minuten aus statt sofort.",
@@ -385,14 +358,12 @@
         "pickModel": "Wählen Sie mindestens ein Modell: Eine Automation läuft, während niemand zusieht, daher wird nichts für sie ausgewählt.",
         "promptRequired": "Prompt ist erforderlich.",
         "guardRequired": "Schreiben Sie den Befehl oder wählen Sie eine andere Bedingung.",
-        "packageRequired": "Nennen Sie das Paket, etwa bun oder {'@'}scope/name.",
-        "rangeRequired": "Nennen Sie einen Versionsbereich, etwa >=1.4.3, oder folgen Sie stattdessen einem Tag.",
-        "repoFormat": "Nennen Sie das Repository als owner/name, etwa oven-sh/bun.",
         "pageUrl": "Geben Sie die vollständige Adresse der Seite an, beginnend mit http:// oder https://.",
         "selectInvalid": "Dieses Muster lässt sich nicht kompilieren: {problem}",
         "pickEndDate": "Wählen Sie Enddatum und -uhrzeit oder leeren Sie das Feld.",
         "endPassed": "Dieses Enddatum ist schon vorbei.",
-        "pickConversation": "Wählen Sie die fortzusetzende Unterhaltung."
+        "pickConversation": "Wählen Sie die fortzusetzende Unterhaltung.",
+        "kindUnknown": "Keine Erweiterung hier prüft mehr {kind}-Beobachtungen: Installiere oder aktiviere die passende, oder wähle eine andere Bedingung."
     },
     "cronSchedule": {
         "afterSessions": "{label} · nach {count} Session | {label} · nach {count} Sessions",
@@ -450,9 +421,6 @@
         }
     },
     "watch": {
-        "npm": "npm {spec}",
-        "releases": "Releases von {repo}",
-        "releasesWithPre": "Releases von {repo}, auch Vorabversionen",
         "pageMatching": "{url}, passend zu {select}",
         "checked": "Geprüft {when}",
         "notChecked": "Noch nicht geprüft",
