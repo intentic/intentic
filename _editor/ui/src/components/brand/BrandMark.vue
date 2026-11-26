@@ -100,8 +100,10 @@ const palette = computed(() => brand.value?.palette ?? (drawing.value === undefi
         }"
         aria-hidden="true"
     >
-        <!-- `object-cover`, not `contain`: this is a tile, not a framed picture, so it should meet the rounded corners like an app icon. -->
-        <img v-if="drawing !== undefined" :src="drawing" alt="" class="h-full w-full object-cover" draggable="false" />
+        <!-- `object-cover`, not `contain`: this is a tile, not a framed picture, so it should meet the rounded corners like an app icon.
+             Out of flow, so it fills the box without sizing it: in flow, a flush mark (whose size comes from the row it stretches
+             along) takes the drawing's own pixel size instead, and a 512px SVG turns a tile's band into a giant square. -->
+        <img v-if="drawing !== undefined" :src="drawing" alt="" class="absolute inset-0 h-full w-full object-cover" draggable="false" />
         <template v-else-if="brand === undefined">
             <Icon
                 v-if="glyph !== undefined"
