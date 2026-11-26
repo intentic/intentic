@@ -1,11 +1,13 @@
 /* Every deriver against a real file its real parser accepts, in a temp tree. */
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { requires } from "@intentic/testing/requires";
 import { onPath } from "./lib/tools.js";
 import { archiveDeriver } from "./lib/derivers/archive.js";
+import { mammothInput } from "./lib/derivers/docx-math.js";
 import { docxDeriver } from "./lib/derivers/docx.js";
 import { epubDeriver } from "./lib/derivers/epub.js";
 import { htmlDeriver } from "./lib/derivers/html.js";
@@ -22,6 +24,7 @@ import { rtfDeriver, rtfParagraphs } from "./lib/derivers/rtf.js";
 import { xlsxDeriver } from "./lib/derivers/xlsx.js";
 import { detectFormat } from "./lib/formats.js";
 import {
+    docxBodyBytes,
     docxBytes,
     epubBytes,
     gzipBytes,
@@ -67,6 +70,32 @@ describe("docx", () => {
     test("magic bytes recognize the container", async () => {
         const path = fixture("plan2.docx", docxBytes("T", ["x"]));
         expect(await detectFormat(path)).toBe("docx");
+    });
+
+    // The equations of markitdown's equations.docx (tests/test_files, MIT), one inline and two display, as Word writes
+    // them, its run properties left out.
+    const r = (text: string): string => `<m:r><m:t>${text}</m:t></m:r>`;
+    const fraction = (num: string, den: string): string => `<m:f><m:fPr/><m:num>${num}</m:num><m:den>${den}</m:den></m:f>`;
+    const EQUATIONS = [
+        `<w:p><w:r><w:t xml:space="preserve">For </w:t></w:r><m:oMath>${r("m")}${r("=1")}</m:oMath><w:r><w:t>,</w:t></w:r></w:p>`,
+        `<w:p><m:oMathPara><m:oMath>${r("sin\u2061")}${r("θ")}${r("=")}${fraction(r("mλ"), r("a"))}${r("=")}${fraction(
+            `${r("(1)")}<m:d><m:dPr/><m:e>${r("550×")}<m:sSup><m:e>${r("10")}</m:e><m:sup>${r("-6")}</m:sup></m:sSup>${r(" mm")}</m:e></m:d>`,
+            r("2.5 mm"),
+        )}</m:oMath></m:oMathPara></w:p>`,
+        `<w:p><w:r><w:t xml:space="preserve">The angle is </w:t></w:r><m:oMath>${r("θ=")}<m:sSup><m:e>${r("sin")}</m:e><m:sup>${r("-1")}</m:sup></m:sSup>${r("(2.2×10)")}</m:oMath><w:r><w:t>.</w:t></w:r></w:p>`,
+    ].join("");
+
+    test("equations read as LaTeX, $…$ inline and $$…$$ on their own, where mammoth alone dropped them", async () => {
+        const doc = await docxDeriver.derive(fixture("equations.docx", docxBodyBytes(EQUATIONS)));
+        expect(doc.markdown).toContain("For $m=1$,");
+        expect(doc.markdown).toContain("$$sinθ=\\frac{mλ}{a}=\\frac{(1)\\left(550×10^{-6} mm\\right)}{2.5 mm}$$");
+        expect(doc.markdown).toContain("The angle is $θ=sin^{-1}(2.2×10)$.");
+        expect(doc.notes.join(" ")).not.toContain("oMath");
+    });
+
+    test("a document without an equation reaches mammoth by its path, so it converts exactly as it always did", async () => {
+        const path = fixture("no-math.docx", docxBytes("Plain", ["No equations, though m=1 is written here."]));
+        expect(await mammothInput(path)).toEqual({ path });
     });
 });
 
@@ -114,6 +143,81 @@ describe("xlsx", () => {
         expect(doc.markdown).toContain("## Totals");
         expect(doc.markdown).not.toContain("#DIV/0!");
         expect(doc.markdown).toContain("## Spare\n\n(empty sheet)");
+    });
+});
+
+// markitdown's own PDF test files (fixtures/markitdown/ATTRIBUTION), read against the expectations of its
+// tests/test_pdf_tables.py and test_pdf_masterformat.py.
+const markitdown = (name: string): string => fileURLToPath(new URL(`../fixtures/markitdown/${name}`, import.meta.url));
+
+// Each of `needles` found, in the order given.
+const inOrder = (text: string, needles: readonly string[]): number[] => needles.map((needle) => text.indexOf(needle));
+
+describe("pdf tables (markitdown's fixtures)", () => {
+    test("a borderless table keeps every value in its own column, between the prose around it", async () => {
+        const { markdown } = await pdfDeriver.derive(markitdown("SPARSE-2024-INV-1234_borderless_table.pdf"));
+        for (const header of ["Report ID: SPARSE-2024-INV-1234", "Warehouse: Distribution Center East", "Prepared By: Sarah Martinez"]) {
+            expect(markdown).toContain(header);
+        }
+        // Page 1's sparse rows: which column a value sits in is the whole of what it means.
+        expect(markdown).toContain(
+            [
+                "| Product Code | Location | Expected | Actual | Variance | Status |",
+                "| --- | --- | --- | --- | --- | --- |",
+                "| SKU-8847 | A-12 | 450 |  |  |  |",
+                "|  | B-07 |  | 289 | -23 |  |",
+                "| SKU-9201 |  | 780 | 778 |  | OK |",
+                "|  | C-15 |  |  | +15 |  |",
+            ].join("\n"),
+        );
+        // Page 2: "Critical" is a note, not a last audit date.
+        expect(markdown).toContain("| SKU-4563 | Software | $120.00 | $18,720.00 |  | Critical |");
+        expect(markdown).toContain("| SKU-6678 | Software | $200.00 | $42,000.00 | 2024-10-25 | High Value |");
+        const positions = inOrder(markdown, [
+            "INVENTORY RECONCILIATION REPORT",
+            "| Product Code | Location",
+            "Variance Analysis:",
+            "## Page 2",
+            "Extended Inventory Review:",
+            "| Product Code | Category",
+            "Recommendations:",
+        ]);
+        expect(positions.every((position) => position >= 0)).toBe(true);
+        expect(positions).toEqual(positions.toSorted((a, b) => a - b));
+        expect(markdown.split("SKU-8847").length - 1).toBeLessThanOrEqual(4);
+    });
+
+    test("a booking order's tables come out whole, a wrapped title and a footer drawn across rows included", async () => {
+        const { markdown } = await pdfDeriver.derive(markitdown("movie-theater-booking-2024.pdf"));
+        for (const expected of ["BOOKING ORDER", "2024-12-5678", "Holiday Movie Marathon Package", "12/20/2024 - 12/31/2024", "CUST-98765", "December 2024"]) {
+            expect(markdown).toContain(expected);
+        }
+        expect(markdown).toContain("| Start Date | End Date | # Shows | Gross Amount | Net Amount |\n| --- | --- | --- | --- | --- |\n| 12/20/24 | 12/31/24 | 48 | $12,500.00 | $11,250.00 |");
+        expect(markdown).toContain("| 1 | SCR-1 | 12/20/24 | 12/25/24 | Holiday Spectacular | IMAX 3D | 7:00 PM | Daily | 12 | $250 | PM | $3,000 |");
+        expect(markdown).toContain("|  |  |  |  | (Runtime: 142 min); Holiday Season Premium |  |  |  |  |  |  |  |");
+        expect(markdown).toContain(
+            [
+                "| 1 | SCR-1 | 12/20-12/25 | Holiday Spectacular | 7:00 PM | Daily | PM | $250 | $3,000 |",
+                "| 2 | SCR-2 | 12/20-12/31 | Winter Wonderland | 4:30 PM | Daily | MT | $150 | $3,600 |",
+                "| 3 | SCR-1 | 12/26-12/31 | New Year Mystery | 9:30 PM | Daily | PM | $300 | $3,600 |",
+            ].join("\n"),
+        );
+        expect(markdown).toContain("This booking order is subject to cinema availability and standard terms.");
+    });
+
+    test("a receipt's formatted text stays text, in reading order", async () => {
+        const { markdown } = await pdfDeriver.derive(markitdown("RECEIPT-2024-TXN-98765_retail_purchase.pdf"));
+        expect(markdown).not.toContain("|");
+        const positions = inOrder(markdown, ["TECHMART ELECTRONICS", "TXN: TXN-98765-2024", "Wireless Noise-Cancelling", "SUBTOTAL", "PAYMENT METHOD", "REWARDS MEMBER", "RETURN POLICY"]);
+        expect(positions.every((position) => position >= 0)).toBe(true);
+        expect(positions).toEqual(positions.toSorted((a, b) => a - b));
+    });
+
+    test("partial numbering stays on the line it numbers", async () => {
+        const { markdown } = await pdfDeriver.derive(markitdown("masterformat_partial_numbering.pdf"));
+        expect(markdown).toContain(".1 The intent of this Request for Proposal");
+        expect(markdown.split("\n").filter((each) => /^\.\d+$/.test(each.trim()))).toEqual([]);
+        expect(markdown).not.toContain("|");
     });
 });
 

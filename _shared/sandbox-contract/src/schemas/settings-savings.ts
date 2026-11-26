@@ -23,6 +23,35 @@ export const InputSavingsSchema = z.object({
     holdout: z.object({ cleaned: z.number(), heldOut: z.number(), measuredSavedPct: z.number().optional() }),
     // Grouped by command text: worth a handler is judged by total tokens across runs, not one outlier's size.
     gaps: z.array(z.object({ command: z.string(), commands: z.number(), tokens: z.number() })),
+    // Harm: per stage, of the commands it trimmed, how many the model came back for (retrieve-output of the run's raw
+    // file, or the same command again within K), next to the held-out conversations' own re-run share. Absent when the
+    // ledger has no per-conversation rows.
+    harm: z
+        .object({
+            K: z.number(),
+            perStage: z.array(
+                z.object({
+                    id: z.string(),
+                    trimmed: z.number(),
+                    retrieved: z.number(),
+                    reRun: z.number(),
+                    followedUp: z.number(),
+                    harmRate: z.number(),
+                }),
+            ),
+            heldOutReRun: z.object({ commands: z.number(), reRunRate: z.number() }).optional(),
+            caveat: z.string().optional(),
+        })
+        .optional(),
+    // Arm comparison: per-conversation tool calls and emitted bytes, cleaned vs held-out. Absent when fewer
+    // than 5 conversations per arm carry conversationHash.
+    arms: z
+        .object({
+            cleaned: z.object({ conversations: z.number(), medianCommands: z.number(), medianEmittedBytes: z.number() }),
+            heldOut: z.object({ conversations: z.number(), medianCommands: z.number(), medianEmittedBytes: z.number() }),
+            emittedBytesDeltaPct: z.number().optional(),
+        })
+        .optional(),
 });
 export type InputSavings = z.infer<typeof InputSavingsSchema>;
 // One arm of a turn-level experiment; mean is per turn, since the two arms never hold the same count.

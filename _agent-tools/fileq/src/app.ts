@@ -41,7 +41,10 @@ Not fileq's business: plain text (read it directly), the open web (webq),
 files needing OCR or transcription (later tiers say so in their sidecars).
 
 Exit codes: 0 content, 1 nothing derivable (check: an error found), 2 broken
-invocation or install (render: a tool it needs is missing).`;
+invocation or install (render: a tool it needs is missing). A failure is one
+line, \`fileq: error: <code>: <message>\` (usage, not_found, unsupported,
+too_large, unreadable, missing_tool, internal), then \`fileq: next: <step>\`.
+A cut read ends with the saved file's line to continue from.`;
 
 export const app = buildApplication(
     buildRouteMap({

@@ -14,11 +14,11 @@ import { pathToFileURL } from "node:url";
 import { filterOutput } from "../src/agent-output-filter.mjs";
 import { parseCleaners } from "../src/cleaners.mjs";
 import { parseStatsFile, summarizeStats } from "../src/stats/filter-stats.mjs";
+import { estimateTokens } from "../src/token-estimate.mjs";
 
-// ~4 chars/token, the same heuristic as @intentic/base/format's estimateTokens.
+// Tokens are the filter's own estimate (src/token-estimate.mjs, @intentic/base's), the one its ledger rows record.
 // Simulate the runtime's raw-output handle without writing corpus contents to disk.
 const retain = () => "/bench/raw";
-const estimateTokens = (text) => Math.ceil(text.length / 4);
 const pad = (value, width) => String(value).padEnd(width);
 const percent = (part, whole) => (whole === 0 ? "0%" : `${Math.round((part / whole) * 100)}%`);
 

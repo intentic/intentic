@@ -6,7 +6,7 @@ Trims a coding agent's Bash output before the model reads it, keeps the raw text
 flowchart LR
     pane["Sandbox<br/>tmux-run pane pipeline"] --> run(["filterRun"])
     run --> out["Trimmed output<br/>+ retrieve-output footer"]
-    run --> logs["logsDir<br/>raw-output · output-cache · filter-stats.jsonl"]
+    run --> logs["logsDir<br/>raw-output · output-cache · filter-stats.jsonl · retrieve-stats.jsonl"]
     logs --> stats(["summarizeStats"])
     stats --> daemon["Daemon savings route"]
 ```
@@ -40,12 +40,43 @@ flowchart LR
   them by hit count. Heading mode, line numbers, columns and `-C` context are recognised. Diagnostic lines get priority.
   Wide runs shrink before sampling, and hit-prefix folding runs after it. Unrecognised output, or file names alone
   exceeding the byte budget, falls back to the ordinary cap.
+- `probes` ([src/search-probes.mjs](src/search-probes.mjs)) answers an empty search: a simple `rg PATTERN [PATH…]` or
+  `grep -r PATTERN [PATH…]` (leading `cd DIR &&`s and one trailing `| head`/`| tail` allowed) that exited 1 with nothing
+  printed is run again as count-only probes with one switch changed: any case, ignored and hidden files in (rg only:
+  `grep -r` reads them already), the pattern as plain text, each only where it could differ. They run one after another
+  within 1.5 s, and the matches become one line, `--- no matches. Would match: case-insensitive (-i) → 2 files (src/a.ts,
+  src/b.ts)`. A line it does not fully read (any other pipe or operator, a variable, a subshell, an unquoted glob, a flag
+  outside its tables) is never probed: a wrong probe is worse than none. It copies `@intentic/text-search`'s probes
+  (`src/probes.ts`, which the daemon runs for the Grep tool and the search box), held to them by
+  `src/tests/search-probes.test.mjs`. On `/work/intentic` it added 20 to 60 ms to an empty search with a warm cache
+  (2026-11-26).
 - Each stage has its own ledger name and settings switch. Template folds and search sampling request the same raw
   retrieval footer as a cut inside a wide line, including folds below the usual 20-dropped-line threshold. If a raw
   handle cannot be kept, or the complete footer would grow the output, those summaries are skipped. A cap after
   JSON compaction also requests retrieval, even when the original JSON occupied only one line.
 - `filter-stats.mjs` is the only reading of the ledger: the daemon's savings route and the cleaner bench both call
   `summarizeStats`, so the two cannot disagree.
+- The Bash holdout is drawn per conversation, not per command: a stable SHA-256 hash of the conversation id
+  (`INTENTIC_TURN_OWNER`) puts the entire conversation into one arm, so cleaned and held-out commands never
+  interleave within the same conversation and downstream effects (extra tool calls, re-runs) can be attributed.
+  The same hash function as MCP (`mcp-output.ts`'s `mcpHeldOut`) is used, so a conversation is in the same arm
+  on both paths. Without a conversation id the holdout falls back to per-command random.
+- Each ledger row carries `conversationHash` (a 12-hex-char prefix of the SHA-256 of the conversation id) when a
+  conversation id is known, and `runName` (the raw-output file name) so retrievals can be linked back. A
+  conversation's rows order by `ts`.
+- `retrieve-output` logs each call to `retrieve-stats.jsonl` in the same logs directory (run name, conversation,
+  timestamp), so the harm metric can count how often a trimmed output is later retrieved.
+- Harm metric: `summarizeStats` accepts an optional `retrievals` array (from `retrieve-stats.jsonl`) and reports, per
+  stage, how many of the commands it trimmed the model came back for: a `retrieve-output` of that run's raw file, or
+  the same command run again, word for word, within the conversation's next K (default 5) commands. Re-runs are
+  matched on the whole command, not the gap signature, which folds arguments away. Agents re-run commands for their
+  own reasons too, so the held-out conversations' re-run share is reported beside it (`heldOutReRun`) as the
+  baseline. Absent when no rows carry a conversation. headroom's idea (toin.py ~460), not its code.
+- Old rows without the new fields aggregate exactly as before: harm and arms are simply absent.
+- Each ledger row records the estimated tokens of the raw output and of what the model was handed (`rawTokens`,
+  `emittedTokens`), so padding and base64 count at what they cost rather than at four bytes a token; a row from before
+  them counts four bytes a token. The estimate is `token-estimate.mjs`, a copy of `@intentic/base`'s (base is not
+  importable from `/usr/local/bin`), held to the original by `src/tests/token-estimate.test.mjs`.
 - Secret values come from the sandbox's own stores (`secretValues`), the ones `SECRET_STORES` lists, all in the auth
   root: `sandbox-secrets.json`, the capability vault, `keyring-copies.json` (entries a keyring on the owner's computer shares in `copy` mode) and
   `keyring-released.json` (values a keyring released for one use into a shell or a script, which the daemon writes only
@@ -117,7 +148,8 @@ The daemon keeps originals in the same `logs/raw-output/` directory and uses the
 as Bash: the newest 500 files within 200 MB, subject to the daemon’s normal log retention. MCP keeps the whole
 original at save time; Bash retains its two-million-character per-file ceiling. A save failure leaves the result whole. Savings, including the footer cost, enter `filter-stats.jsonl` under `mcp`, grouped by tool.
 The master `outputCleaners` off switch disables MCP cleaning; `outputHoldout` leaves a stable share of
-MCP conversations raw and records them as the control. The dedup, wide and cap selections apply to MCP too; it does not use command-specific cleaners or the repeat cache.
+MCP conversations raw and records them as the control. The Bash holdout uses the same SHA-256 conversation hash,
+so a conversation is in the same arm on both paths. The dedup, wide and cap selections apply to MCP too; it does not use command-specific cleaners or the repeat cache.
 
 ## Key files
 
@@ -136,6 +168,7 @@ MCP conversations raw and records them as the control. The dedup, wide and cap s
 - [src/test-runs.mjs](src/test-runs.mjs), [src/test-outcomes.mjs](src/test-outcomes.mjs), [src/test-digest.mjs](src/test-digest.mjs) and
   [src/rust-diagnostics.mjs](src/rust-diagnostics.mjs) — test runs read as tests, their record and digest, and folded rustc diagnostics.
 - [src/retrieve-output.mjs](src/retrieve-output.mjs) — reads back what a footer said was elided.
+- [src/search-probes.mjs](src/search-probes.mjs) — what an empty shell `rg` or `grep -r` would have found with one switch changed.
 - [bench/cleaner-bench.mjs](bench/cleaner-bench.mjs) — replays fixtures or real transcripts through cleaner configs.
 
 ## Commands

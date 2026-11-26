@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { anySignal, sleep } from "@intentic/base/async";
-import { FILES_MAX_LISTED, findFiles, findText, TEXT_MAX_HITS, type TextFind } from "@intentic/text-search";
+import {
+    FILES_MAX_LISTED,
+    findFiles,
+    findText,
+    probeFound,
+    probeNote,
+    type ProbeLabels,
+    TEXT_MAX_HITS,
+    type TextFind,
+    type TextScanOptions,
+} from "@intentic/text-search";
 import type {
     WorkspaceSearchFrame,
     WorkspaceSearchGroup,
@@ -123,6 +133,18 @@ const pageOf = (groups: readonly WorkspaceSearchGroup[], offset: number, page: T
     return { groups: shown, shown: hits };
 };
 
+// An answer that found nothing says what one of the box's switches would have found (@intentic/text-search's probes),
+// named as the box names them. The box waits on it, so it gets little time: a probe still walking when it runs out says
+// what it found so far.
+const BOX_LABELS = { case: "with Match case off", ignored: "with Search ignored files on", literal: "as plain text" } as const satisfies ProbeLabels;
+const BOX_PROBE_MS = 600;
+
+const probed = async (options: TextScanOptions, found: TextFind): Promise<TextFind> => {
+    // No onGroup: what the probes find is told in the note, never streamed as the answer's own files.
+    const note = probeNote(await probeFound({ ...options, onGroup: undefined }, found, BOX_PROBE_MS), BOX_LABELS);
+    return note === undefined ? found : { ...found, note: found.note === undefined ? note : `${found.note} · ${note}` };
+};
+
 // What the answer says beside its lines: what was done unasked, where the ceiling cut it, a file that could not be read.
 const noteOf = (found: TextFind): string | undefined => {
     const parts = [
@@ -191,7 +213,7 @@ export const createTextSearch = ({ rgPath, now = Date.now }: { readonly rgPath: 
                 };
             }
             const from = performance.now();
-            const found = await findText({
+            const options: TextScanOptions = {
                 root: query.root,
                 pattern: query.query,
                 literal: query.literal,
@@ -204,7 +226,8 @@ export const createTextSearch = ({ rgPath, now = Date.now }: { readonly rgPath: 
                 rgPath,
                 signal,
                 onGroup,
-            });
+            };
+            const found = await probed(options, await findText(options));
             // A cursor whose answer was let go is served from a fresh scan, at the offset it asked for.
             const id = keep(key, found);
             return {

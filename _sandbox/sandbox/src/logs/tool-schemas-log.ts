@@ -2,6 +2,7 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { undefinedIfMissing } from "@intentic/base/errors";
+import { estimateTokens } from "@intentic/base/format";
 import { logsRoot } from "../seams/logs-root.js";
 import { opt } from "../opt.js";
 
@@ -13,14 +14,13 @@ import { opt } from "../opt.js";
    it hands the CLI (agent/run/harness/claude-code-runner.ts). `diagnostics tools` reads them back as the mount set of a
    conversation's latest turn, heaviest server first.
 
-   The cost is an estimate: the serialized JSON of {name, description, inputSchema} per tool, in characters, divided by
-   four for tokens. No tokenizer runs here; chars/4 is close for English prose and JSON. Whether those tokens reach the
+   The cost is an estimate: the serialized JSON of {name, description, inputSchema} per tool, in characters and in
+   tokens by @intentic/base's estimateTokens (no tokenizer runs here; four characters a token was a fifth off on JSON,
+   text/tokens.ts has the numbers). Rows written before 2026-11-26 carry chars/4. Whether those tokens reach the
    context depends on the runtime: a Claude Code turn with tool search defers MCP schemas behind ToolSearch and pays only
    for the names until one is loaded, every other runtime pays for every schema on every request. */
 
 const TOOL_SCHEMAS_FILE = "tool-schemas.jsonl";
-
-const CHARS_PER_TOKEN = 4;
 
 // The heaviest tools a line names, so a fat description can be found without listing the server again.
 const HEAVIEST_KEPT = 3;
@@ -45,12 +45,12 @@ export type ToolListing = z.infer<typeof ToolListingSchema>;
 
 /** What one tools/list result costs. */
 export const schemaCostOf = (listing: ToolListing): ToolSchemaCost => {
-    const sized = listing.tools.map(({ name, description, inputSchema }) => ({ name, chars: JSON.stringify({ name, description, inputSchema }).length }));
-    const chars = sized.reduce((sum, tool) => sum + tool.chars, 0);
+    const serialized = listing.tools.map(({ name, description, inputSchema }) => ({ name, json: JSON.stringify({ name, description, inputSchema }) }));
+    const sized = serialized.map(({ name, json }) => ({ name, chars: json.length }));
     return {
         tools: sized.length,
-        chars,
-        tokens: Math.ceil(chars / CHARS_PER_TOKEN),
+        chars: sized.reduce((sum, tool) => sum + tool.chars, 0),
+        tokens: serialized.reduce((sum, tool) => sum + estimateTokens(tool.json), 0),
         heaviest: sized.toSorted((a, b) => b.chars - a.chars).slice(0, HEAVIEST_KEPT),
     };
 };
@@ -122,11 +122,15 @@ const latestMountSet = (lines: readonly ToolSchemaLine[], conversationId: string
 const thousands = (n: number): string => n.toLocaleString("en-US");
 
 const renderSet = (set: readonly ToolSchemaLine[], conversationId: string): string => {
-    const total = set.reduce((sum, line) => ({ tools: sum.tools + line.tools, chars: sum.chars + line.chars }), { tools: 0, chars: 0 });
+    const total = set.reduce((sum, line) => ({ tools: sum.tools + line.tools, chars: sum.chars + line.chars, tokens: sum.tokens + line.tokens }), {
+        tools: 0,
+        chars: 0,
+        tokens: 0,
+    });
     const when = new Date(Math.max(...set.map((line) => line.at))).toISOString();
     return [
         `Tool schemas by server for ${conversationId}'s latest turn (listed ${when}): ${set.length} servers, ${total.tools} tools, ` +
-            `${thousands(total.chars)} chars, ~${thousands(Math.ceil(total.chars / CHARS_PER_TOKEN))} tokens (chars/4, no tokenizer).`,
+            `${thousands(total.chars)} chars, ~${thousands(total.tokens)} tokens (estimated, no tokenizer).`,
         "",
         ...set.map(
             (line) =>

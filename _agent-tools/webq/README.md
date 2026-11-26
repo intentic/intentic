@@ -13,7 +13,13 @@ flowchart LR
 
 - A raw page is mostly navigation and script, and one docs page can fill a context window. `webq fetch` prints a
   capsule (title, final URL, token cost, cache, network or browser), then the page with its chrome pruned and clipped
-  to `--budget`, and saves the whole page as markdown with front matter.
+  to `--budget`, and saves the whole page as markdown with front matter. A cut names the saved file's line the rest
+  starts on, past the front matter, so an agent reads on from there instead of from the top.
+- A failure is one line with a stable code, `webq: error: <code>: <message>`, and usually `webq: next: <step>`
+  (agent-cli's [errors](../agent-cli/README.md) has the codes). An HTTP error status prints that line before the
+  capsule and still shows the error page, exit 1: 404 and 410 are `not_found`; 401, 403, 407, 429 and 451 are
+  `blocked`; the rest are `fetch_failed`. A fetch that got no answer is `fetch_failed` or `timeout`, exit 2, and a
+  crawl that saved no pages says why with one of them, exit 1.
 - `--query` keeps only the blocks relevant to a question (BM25). On a crawl it also visits matching links first.
 - When the static HTML is an empty app shell, the page renders in the image's Chromium if that feature pack is
   installed; without it webq says so and serves the static HTML.

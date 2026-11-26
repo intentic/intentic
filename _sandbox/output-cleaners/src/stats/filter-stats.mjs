@@ -1,10 +1,20 @@
 // Aggregates agent-output-filter's telemetry (filter-stats.jsonl) into the savings report: the one implementation, read by
 // the sandbox daemon's savings route and the cleaner bench alike. Row shape:
-// { rawBytes, emittedBytes, matched: string[], heldOut: boolean, command, stageBytes: { [id]: bytesRemoved } }; tokens
-// are ~4 chars/token, matching @intentic/base/format's estimateTokens.
+// { rawBytes, emittedBytes, rawTokens, emittedTokens, matched: string[], heldOut: boolean, command, stageBytes: { [id]:
+// bytesRemoved }, conversationHash?, runName? }. Tokens are what the filter estimated (@intentic/base's estimate,
+// src/token-estimate.mjs); a row from before 2026-11-26 has none and counts four bytes a token.
+// Retrieval rows (retrieve-stats.jsonl): { ts, runName, conversationId?, pattern? }.
 
 const sum = (rows, key) => rows.reduce((total, row) => total + (row[key] ?? 0), 0);
-const tokens = (bytes) => Math.round(bytes / 4);
+// A row's tokens: what the filter recorded, else four bytes a token.
+const rowTokens = (row, side) => row[`${side}Tokens`] ?? (row[`${side}Bytes`] ?? 0) / 4;
+const sumTokens = (rows, side) => rows.reduce((total, row) => total + rowTokens(row, side), 0);
+// Bytes some stage removed from a row, in tokens at that row's own raw rate, so a stage that strips padding is credited
+// with the few tokens padding costs; four bytes a token without a row or its counts.
+const tokens = (bytes, row) => {
+    const rate = row === undefined || !(row.rawBytes > 0) || row.rawTokens === undefined ? 1 / 4 : row.rawTokens / row.rawBytes;
+    return bytes * rate;
+};
 
 // Verbs that hand back the bytes the model named by name: nothing in them is for a handler to strip, and none will ever
 // be written. Tested against the SIGNATURE and not the line, so `rg … | head -30` stays a gap in `rg` while `head -20
@@ -113,40 +123,201 @@ const summarizeGaps = (cleaned) => {
         if (READ_VERBS.has(signature)) {
             continue;
         }
-        const current = byCommand.get(signature) ?? { commands: 0, bytes: 0 };
-        byCommand.set(signature, { commands: current.commands + 1, bytes: current.bytes + (row.emittedBytes ?? 0) });
+        const current = byCommand.get(signature) ?? { commands: 0, tokens: 0 };
+        byCommand.set(signature, { commands: current.commands + 1, tokens: current.tokens + rowTokens(row, "emitted") });
     }
     return [...byCommand.entries()]
-        .map(([command, entry]) => ({ command, commands: entry.commands, tokens: tokens(entry.bytes) }))
+        .map(([command, entry]) => ({ command, commands: entry.commands, tokens: Math.round(entry.tokens) }))
         .toSorted((a, b) => b.tokens - a.tokens)
         .slice(0, 15);
 };
 
-export const summarizeStats = (rows) => {
+// Harm metric: per stage, of the outputs that stage trimmed, the share the model came back for: (a) a retrieve-output of
+// that run's raw file, at any later point (an explicit "I needed what was cut"), or (b) the same command run again within
+// K of the conversation's next commands. headroom's idea (toin.py ~460: a retrieval rate past 0.5 means compress less),
+// written from scratch. A re-run is matched on the whole command, not on `commandSignature`: the signature folds the
+// argument away on purpose (`rg a` and `rg b` are one gap), which would count every next search as a re-run. Agents re-run
+// commands for their own reasons too (tests after a fix), so the held-out conversations' own re-run rate is reported
+// next to it as the baseline a stage's re-run share has to beat before it means anything.
+const DEFAULT_FOLLOWUP_WINDOW = 5;
+const MIN_HARM_COMMANDS = 5;
+const SMALL_N = 30;
+
+// The command as the model would retype it: whitespace runs folded, so a re-run with other spacing still matches.
+const sameCommand = (command) => String(command ?? "").trim().replaceAll(/\s+/g, " ");
+
+// Each conversation's rows in the order they ran; rows without a conversation cannot be placed and are left out.
+const byConversationOf = (rows) => {
+    const byConversation = new Map();
+    for (const row of rows) {
+        if (row.conversationHash === undefined) {
+            continue;
+        }
+        const list = byConversation.get(row.conversationHash) ?? [];
+        list.push(row);
+        byConversation.set(row.conversationHash, list);
+    }
+    for (const list of byConversation.values()) {
+        list.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+    }
+    return byConversation;
+};
+
+// Whether the command at `index` runs again, word for word, within the next K commands of its conversation.
+const reRunWithin = (conversationRows, index, K) => {
+    const command = sameCommand(conversationRows[index].command);
+    if (command === "") {
+        return false;
+    }
+    const end = Math.min(index + K + 1, conversationRows.length);
+    for (let next = index + 1; next < end; next++) {
+        if (sameCommand(conversationRows[next].command) === command) {
+            return true;
+        }
+    }
+    return false;
+};
+
+// The held-out conversations' own re-run share: what (b) reads when no cleaner touched anything.
+const heldOutReRunRate = (byConversation, K) => {
+    let held = 0;
+    let reRun = 0;
+    for (const conversationRows of byConversation.values()) {
+        for (let index = 0; index < conversationRows.length; index++) {
+            if (conversationRows[index].heldOut !== true) {
+                continue;
+            }
+            held++;
+            if (reRunWithin(conversationRows, index, K)) {
+                reRun++;
+            }
+        }
+    }
+    return held >= MIN_HARM_COMMANDS ? { commands: held, reRunRate: Math.round((reRun / held) * 1000) / 1000 } : undefined;
+};
+
+// Adds one cleaned command's outcome to every stage that trimmed it.
+const tallyStages = (stageHarm, row, retrieved, reRun) => {
+    for (const [stageId, bytes] of Object.entries(row.stageBytes ?? {})) {
+        if (bytes <= 0) {
+            continue;
+        }
+        const entry = stageHarm.get(stageId) ?? { trimmed: 0, retrieved: 0, reRun: 0, followedUp: 0 };
+        entry.trimmed++;
+        entry.retrieved += retrieved ? 1 : 0;
+        entry.reRun += reRun ? 1 : 0;
+        entry.followedUp += retrieved || reRun ? 1 : 0;
+        stageHarm.set(stageId, entry);
+    }
+};
+
+export const summarizeHarm = (rows, retrievals = [], K = DEFAULT_FOLLOWUP_WINDOW) => {
+    const byConversation = byConversationOf(rows);
+    if (byConversation.size === 0) {
+        return undefined;
+    }
+    const retrievedRuns = new Set(retrievals.map((retrieval) => retrieval.runName).filter((name) => name !== undefined && name !== ""));
+    const stageHarm = new Map();
+    for (const conversationRows of byConversation.values()) {
+        conversationRows.forEach((row, index) => {
+            if (row.heldOut !== true) {
+                tallyStages(stageHarm, row, row.runName !== undefined && retrievedRuns.has(row.runName), reRunWithin(conversationRows, index, K));
+            }
+        });
+    }
+    const perStage = [...stageHarm.entries()]
+        .filter(([, entry]) => entry.trimmed >= MIN_HARM_COMMANDS)
+        .map(([id, entry]) => ({ id, ...entry, harmRate: Math.round((entry.followedUp / entry.trimmed) * 1000) / 1000 }))
+        .toSorted((a, b) => b.harmRate - a.harmRate);
+    if (perStage.length === 0) {
+        return undefined;
+    }
+    const summary = { K, perStage };
+    const baseline = heldOutReRunRate(byConversation, K);
+    if (baseline !== undefined) {
+        summary.heldOutReRun = baseline;
+    }
+    if (perStage.some((stage) => stage.trimmed < SMALL_N)) {
+        summary.caveat = `fewer than ${SMALL_N} trimmed commands behind some stages' rates`;
+    }
+    return summary;
+};
+
+// Arm comparison: per-conversation tool calls and emitted bytes, medians for cleaned vs held-out conversations.
+// A "cleaned" conversation has at least one non-held-out command; a "held-out" conversation has all commands held out.
+const MIN_ARM_CONVERSATIONS = 5;
+
+export const summarizeArms = (rows) => {
+    const byConversation = byConversationOf(rows);
+    if (byConversation.size === 0) {
+        return undefined;
+    }
+
+    const cleanedConversations = [];
+    const heldOutConversations = [];
+    for (const [, conversationRows] of byConversation) {
+        const allHeldOut = conversationRows.every((r) => r.heldOut === true);
+        const summary = {
+            commands: conversationRows.length,
+            emittedBytes: sum(conversationRows, "emittedBytes"),
+        };
+        if (allHeldOut) {
+            heldOutConversations.push(summary);
+        } else {
+            cleanedConversations.push(summary);
+        }
+    }
+
+    if (cleanedConversations.length < MIN_ARM_CONVERSATIONS || heldOutConversations.length < MIN_ARM_CONVERSATIONS) {
+        return undefined;
+    }
+
+    const cleanedCommands = cleanedConversations.map((c) => c.commands).toSorted((a, b) => a - b);
+    const heldOutCommands = heldOutConversations.map((c) => c.commands).toSorted((a, b) => a - b);
+    const cleanedBytes = cleanedConversations.map((c) => c.emittedBytes).toSorted((a, b) => a - b);
+    const heldOutBytes = heldOutConversations.map((c) => c.emittedBytes).toSorted((a, b) => a - b);
+
+    const result = {
+        cleaned: { conversations: cleanedConversations.length, medianCommands: median(cleanedCommands), medianEmittedBytes: median(cleanedBytes) },
+        heldOut: { conversations: heldOutConversations.length, medianCommands: median(heldOutCommands), medianEmittedBytes: median(heldOutBytes) },
+    };
+
+    // Apply Mann-Whitney to emitted bytes per conversation if both arms are large enough.
+    if (cleanedConversations.length >= MIN_HELD_COMMANDS && heldOutConversations.length >= MIN_HELD_COMMANDS) {
+        const z = mannWhitneyZ(cleanedBytes, heldOutBytes);
+        if (Math.abs(z) > Z_95) {
+            result.emittedBytesDeltaPct = Math.round((1 - median(cleanedBytes) / median(heldOutBytes)) * 100);
+        }
+    }
+
+    return result;
+};
+
+export const summarizeStats = (rows, retrievals = []) => {
     // Held-out commands bypassed cleaning (the measurement control); excluded from saved-% and gaps.
     const cleaned = rows.filter((row) => row.heldOut !== true);
     const held = rows.filter((row) => row.heldOut === true);
 
-    const cleanedRaw = sum(cleaned, "rawBytes");
-    const cleanedEmitted = sum(cleaned, "emittedBytes");
+    const cleanedRaw = sumTokens(cleaned, "raw");
+    const cleanedEmitted = sumTokens(cleaned, "emitted");
     const savedPct = cleanedRaw === 0 ? 0 : Math.round(((cleanedRaw - cleanedEmitted) / cleanedRaw) * 100);
 
-    // Per-stage bytes removed, summed over commands it ran on; sequential, so these sum to raw − emitted. A stage
-    // counted in `commands` but removing nothing differs from one that never ran, flagging a handler that stopped
-    // matching.
+    // Per-stage bytes removed, in tokens at each row's raw rate, summed over commands it ran on; sequential, so these sum
+    // to about raw − emitted. A stage counted in `commands` but removing nothing differs from one that never ran,
+    // flagging a handler that stopped matching.
     const stages = new Map();
     for (const row of cleaned) {
         for (const [id, bytes] of Object.entries(row.stageBytes ?? {})) {
-            const current = stages.get(id) ?? { commands: 0, bytes: 0 };
-            stages.set(id, { commands: current.commands + 1, bytes: current.bytes + bytes });
+            const current = stages.get(id) ?? { commands: 0, tokens: 0 };
+            stages.set(id, { commands: current.commands + 1, tokens: current.tokens + tokens(bytes, row) });
         }
     }
     const perCleaner = [...stages.entries()]
-        .map(([id, entry]) => ({ id, commands: entry.commands, savedTokens: tokens(entry.bytes) }))
+        .map(([id, entry]) => ({ id, commands: entry.commands, savedTokens: Math.round(entry.tokens) }))
         .toSorted((a, b) => b.savedTokens - a.savedTokens);
 
-    // The only estimate here (`savedPct` above is each command's own exact raw vs emitted): median ratio (means are
-    // skewed by heavy-tailed sizes), gated by Mann-Whitney.
+    // The holdout's measure (`savedPct` above is each command's own raw vs emitted tokens), in bytes: median ratio (means
+    // are skewed by heavy-tailed sizes), gated by Mann-Whitney.
     const heldRaw = sortedBytes(held, "rawBytes");
     const cleanedEmittedSorted = sortedBytes(cleaned, "emittedBytes");
     const measurable = held.length >= MIN_HELD_COMMANDS && median(heldRaw) > 0 && Math.abs(mannWhitneyZ(cleanedEmittedSorted, heldRaw)) > Z_95;
@@ -157,15 +328,31 @@ export const summarizeStats = (rows) => {
     if (measuredSavedPct !== undefined) {
         holdout.measuredSavedPct = measuredSavedPct;
     }
-    return {
+
+    const result = {
         commands: rows.length,
-        rawTokens: tokens(sum(rows, "rawBytes")),
-        emittedTokens: tokens(sum(rows, "emittedBytes")),
+        rawTokens: Math.round(sumTokens(rows, "raw")),
+        emittedTokens: Math.round(sumTokens(rows, "emitted")),
         savedPct,
         perCleaner,
         holdout,
         gaps: summarizeGaps(cleaned),
     };
+
+    // Harm metric: per stage, the share of trimmed commands followed by a retrieval or re-run. Only present when
+    // enough rows carry conversationHash to be meaningful.
+    const harm = summarizeHarm(rows, retrievals);
+    if (harm !== undefined) {
+        result.harm = harm;
+    }
+
+    // Arm comparison: per-conversation tool calls and emitted bytes, cleaned vs held-out conversations.
+    const arms = summarizeArms(rows);
+    if (arms !== undefined) {
+        result.arms = arms;
+    }
+
+    return result;
 };
 
 // Parses a filter-stats.jsonl file into rows, skipping blank or corrupt lines.

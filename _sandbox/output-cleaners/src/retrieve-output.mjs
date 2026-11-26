@@ -7,7 +7,8 @@
 // The agent-CLI contract (@intentic/agent-cli's run.ts): everything, errors included, goes to stdout, since an agent
 // drops stderr; exit 0 is output, 1 a pattern that matched no line, 2 anything else (usage, an unreadable log).
 
-import { readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 const BUDGET_TOKENS = 2000; // ~4 chars/token; keep a retrieval bounded: the agent narrows further with a pattern.
 const MAX_CHARS = BUDGET_TOKENS * 4;
@@ -18,6 +19,29 @@ if (logPath === undefined) {
     process.exit(2);
 }
 
+// Log this retrieval so the harm metric can link it back to the command that was trimmed.
+const logRetrieval = () => {
+    try {
+        // The raw-output file sits under <logsDir>/raw-output/<runName>; the ledger is at <logsDir>/retrieve-stats.jsonl.
+        const rawDir = dirname(logPath);
+        const logsDir = dirname(rawDir);
+        if (!rawDir.endsWith("raw-output")) {
+            return;
+        }
+        const row = {
+            ts: Date.now(),
+            runName: basename(logPath),
+            conversationId: process.env["INTENTIC_TURN_OWNER"],
+            pattern: pattern !== undefined ? pattern.slice(0, 200) : undefined,
+        };
+        mkdirSync(logsDir, { recursive: true });
+        appendFileSync(join(logsDir, "retrieve-stats.jsonl"), `${JSON.stringify(row)}\n`);
+    } catch {
+        // allow(silent-catch): retrieval logging is best-effort telemetry; a full disk or a read-only dir must
+        // cost the row, never the retrieval.
+    }
+};
+
 let text;
 try {
     text = readFileSync(logPath, "utf8");
@@ -25,6 +49,8 @@ try {
     process.stdout.write(`retrieve-output: cannot read ${logPath}: ${error instanceof Error ? error.message : String(error)}\n`);
     process.exit(2);
 }
+
+logRetrieval();
 
 let lines = text.split("\n");
 if (pattern !== undefined && pattern !== "") {

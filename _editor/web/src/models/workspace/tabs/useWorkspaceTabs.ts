@@ -21,6 +21,7 @@ import {
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useEditBuffers } from "../files/useEditBuffers";
 import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspaceSnapshot";
+import { rememberFile } from "../search/recentFilesStore";
 
 // Workspace editor's open tabs, a module-level singleton (like useChat/useLayout) surviving navigation between
 // areas. The editor is two panes; `tabs`, `activeId`, `activeTab` and `previewId` are the focused pane's, so most
@@ -180,6 +181,8 @@ const place = (which: EditorPane, tab: WorkspaceTab, mode: OpenMode): void => {
 const openFile = (path: string, mode: OpenMode = `keep`, target?: EditorPane): void => {
     const which = target ?? paneOf(strip.value, path) ?? focused.value;
     place(which, { kind: `file`, id: path, path }, mode);
+    // A peek counts: quick-open lists what was looked at, not only what was kept.
+    rememberFile(path);
     if (mode === `keep`) {
         keepTab(path);
     }

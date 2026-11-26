@@ -1,10 +1,11 @@
 /* `webq crawl <url>`: a bounded same-site crawl into a directory of markdown files plus an index. */
 import { join } from "node:path";
 import { toolOutDir } from "@intentic/agent-cli/env";
+import { failure, shellWord } from "@intentic/agent-cli/errors";
 import { countParser } from "@intentic/agent-cli/flags";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { DEFAULT_MAX_AGE_S } from "../lib/cache.js";
-import { crawl } from "../lib/crawl.js";
+import { crawl, type CrawlReport } from "../lib/crawl.js";
 import { sharedFlagParameters, type SharedFlags, urlParser } from "../lib/flags.js";
 import { slugFor } from "../lib/output.js";
 
@@ -21,6 +22,20 @@ type CrawlFlags = SharedFlags & {
     readonly include?: string[];
     readonly exclude?: string[];
     readonly delay: number;
+};
+
+// A crawl that saved nothing, as its failure line: the start page failed, robots.txt refused it, or the flags left
+// nothing to visit. The crawl line under it still counts every skip.
+const emptyCrawl = (report: CrawlReport, url: string): string => {
+    const message = `crawl of ${url} saved no pages`;
+    const first = report.failures[0];
+    if (first !== undefined || (report.skipped["http-errors"] ?? 0) > 0) {
+        return failure("webq", "fetch_failed", first === undefined ? `${message}: the start page answered an HTTP error` : `${message}: ${first.reason}`, `webq fetch ${shellWord(url)}`);
+    }
+    if ((report.skipped["robots"] ?? 0) > 0) {
+        return failure("webq", "blocked", `${message}: robots.txt disallows it`, `webq crawl ${shellWord(url)} --ignore-robots, if crawling it anyway is yours to decide`);
+    }
+    return failure("webq", "usage", `${message}: its flags left nothing to visit`, "webq crawl --help");
 };
 
 export const crawlCommand = buildCommand({
@@ -64,6 +79,9 @@ export const crawlCommand = buildCommand({
             this.process.stdout.write(`${JSON.stringify(report)}\n`);
             process.exitCode = report.pages.length > 0 ? 0 : 1;
             return;
+        }
+        if (report.pages.length === 0) {
+            this.process.stdout.write(emptyCrawl(report, url));
         }
         const totalTokens = report.pages.reduce((sum, page) => sum + page.tokens, 0);
         const skipLine = Object.entries(report.skipped)

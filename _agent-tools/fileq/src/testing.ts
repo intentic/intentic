@@ -22,13 +22,9 @@ const RELS = (target: string): string =>
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="${target}"/>
 </Relationships>`;
 
-/** A one-heading, N-paragraph Word document mammoth accepts. */
-export const docxBytes = (heading: string, paragraphs: readonly string[]): Uint8Array => {
-    const body = [
-        `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${xmlEscape(heading)}</w:t></w:r></w:p>`,
-        ...paragraphs.map((text) => `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r></w:p>`),
-    ].join("");
-    return zipSync({
+/** A Word document mammoth accepts whose body is `body`, raw WordprocessingML; Office Math is declared as `m:`. */
+export const docxBodyBytes = (body: string): Uint8Array =>
+    zipSync({
         "[Content_Types].xml": strToU8(
             CONTENT_TYPES(
                 '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>',
@@ -37,10 +33,18 @@ export const docxBytes = (heading: string, paragraphs: readonly string[]): Uint8
         "_rels/.rels": strToU8(RELS("word/document.xml")),
         "word/document.xml": strToU8(
             `<?xml version="1.0" encoding="UTF-8"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`,
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:body>${body}</w:body></w:document>`,
         ),
     });
-};
+
+/** A one-heading, N-paragraph Word document mammoth accepts. */
+export const docxBytes = (heading: string, paragraphs: readonly string[]): Uint8Array =>
+    docxBodyBytes(
+        [
+            `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>${xmlEscape(heading)}</w:t></w:r></w:p>`,
+            ...paragraphs.map((text) => `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r></w:p>`),
+        ].join(""),
+    );
 
 const slideXml = (lines: readonly string[]): string =>
     `<?xml version="1.0" encoding="UTF-8"?>

@@ -4,6 +4,8 @@
 // delete content, so they are left out.
 // A line is furniture when it sits near a page edge AND recurs at that same edge on most pages (verbatim, or with its
 // numbers counting with the pages), or it is a page number. Content is never judged by what it says.
+// A markdown table row (pdf-tables.ts) is never furniture: a table carried over pages repeats its header row and
+// separator at the top of each, and taking them would leave the rows below without the header that makes them a table.
 
 // How many non-blank lines at each edge of a page can be furniture.
 const EDGE_LINES = 3;
@@ -100,6 +102,9 @@ export const stripRunningFurniture = (pages: readonly string[]): Destripped => {
             (running: Set<string>) =>
             (index: number): boolean => {
                 const line = (lines[index] ?? "").trim();
+                if (line.startsWith("|")) {
+                    return false;
+                }
                 const folio = offset !== undefined && BARE_NUMBER.test(line) && Number(line) - page === offset;
                 return folio || signaturesOf(line, page).some((signature) => running.has(signature)) || PAGE_NUMBER.some((shape) => shape.test(line));
             };

@@ -10,7 +10,7 @@
 # Fast path (no Node): the file's shadow at <root>/.intentic/local/cache/derived/<path>.md, when its recorded
 # source_size and source_mtime are the file's own (one `stat`). Otherwise `fileq read --plain`, which derives it
 # (or answers from its content cache) and leaves a shadow for next time. A file that is not a document is passed
-# through unchanged; one fileq cannot read prints nothing. Wired by `fileq ripgrep-config` (RIPGREP_CONFIG_PATH).
+# through unchanged; one fileq cannot read prints nothing (its error lines are not document text). Wired by `fileq ripgrep-config` (RIPGREP_CONFIG_PATH).
 
 file=$1
 [ -n "$file" ] || exit 0
@@ -62,5 +62,9 @@ case $abs in
 esac
 
 command -v fileq >/dev/null 2>&1 || exit 0
-WORKSPACE_ROOT=$root fileq read --plain "$abs" 2>/dev/null | awk -v want= "$MARK"
+# Through a file, not a pipe: fileq prints its refusal (`fileq: error: …` and a `next:` step) on stdout like every agent
+# CLI, and only its exit code tells that apart from a document's text, which rg would otherwise search as content.
+body=$(mktemp) || exit 0
+trap 'rm -f -- "$body"' EXIT
+WORKSPACE_ROOT=$root fileq read --plain "$abs" >"$body" 2>/dev/null && awk -v want= "$MARK" "$body"
 exit 0

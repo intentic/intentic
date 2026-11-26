@@ -49,6 +49,15 @@ describe("stripRunningFurniture", () => {
         expect(stripRunningFurniture(questions).removed).toBe(0);
     });
 
+    test("keeps a table's header row and separator that every page repeats, while the running header above them goes", () => {
+        const pages = [1, 2, 3, 4].map((n) =>
+            ["Inventory report", "| SKU | Bin | Count |", "| --- | --- | --- |", `| SKU-${n} | A-${n} | ${n * 10} |`, `Closing note ${WORDS[n]}.`].join("\n"),
+        );
+        const { pages: kept, removed } = stripRunningFurniture(pages);
+        expect(removed).toBe(4);
+        expect(kept[1]).toBe("| SKU | Bin | Count |\n| --- | --- | --- |\n| SKU-2 | A-2 | 20 |\nClosing note beta.");
+    });
+
     test("a page holding only furniture comes back empty, and the others keep their places", () => {
         const pages = [1, 2, 3, 4, 5].map((n) => page(n, `Body of ${WORDS[n]}.`));
         pages[3] = "RFC 9110 HTTP Semantics June 2022\nFielding, et al. Standards Track [Page 4]";

@@ -112,11 +112,14 @@ export const WorkspaceSearchResultSchema = z.object({
             "At least one file had more matches than are kept per file, so the total is a floor. Different from the page being truncated: a complete page can still count partially.",
         ),
     cursor: z.string().optional().describe("Pass this back as `after` to get the next page."),
-    // What the search did unasked: a pattern rerun as literal, or escapes rewritten.
+    // What the search did unasked (a pattern rerun as literal, escapes rewritten), and for an empty answer what one
+    // changed switch would have found.
     note: z
         .string()
         .optional()
-        .describe("What the search did that you did not ask for: a pattern rerun as plain text because it was not valid, or escapes rewritten."),
+        .describe(
+            "What the search did that you did not ask for: a pattern rerun as plain text because it was not valid, or escapes rewritten. When nothing matched, what would have with one switch changed: any case, ignored files, plain text.",
+        ),
 });
 export type WorkspaceSearchResult = z.infer<typeof WorkspaceSearchResultSchema>;
 // What /workspace/search/stream sends: the files a text search has found so far, as it finds them, then its answer.

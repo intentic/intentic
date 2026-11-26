@@ -14,7 +14,8 @@ import { logsRoot } from "./log-files.js";
 // Report for the ledger the cleaners write; the caller's window is applied on the ledger's own calendar (UTC day per
 // row).
 export const readInputSavings = async (historyRoot: string, window: DayWindowQuery): Promise<InputSavings> => {
-    const path = join(logsRoot(historyRoot), "filter-stats.jsonl");
+    const logsDir = logsRoot(historyRoot);
+    const path = join(logsDir, "filter-stats.jsonl");
     const all = await readFile(path, "utf8").then(parseStatsFile, () => []);
     // A row with no timestamp is dropped once a window is set; it cannot be placed in time.
     const rows = all.filter((row) => {
@@ -27,10 +28,13 @@ export const readInputSavings = async (historyRoot: string, window: DayWindowQue
         const day = utcDay(row.ts);
         return (window.from === undefined || day >= window.from) && (window.to === undefined || day <= window.to);
     });
+    // Retrieval log: same directory, sibling file. Missing is normal (no retrievals yet).
+    const retrievalPath = join(logsDir, "retrieve-stats.jsonl");
+    const retrievals = await readFile(retrievalPath, "utf8").then(parseStatsFile, () => []);
     // Newest row's own timestamp, not mtime: pruning (log-files.ts) touches mtime without a command running.
     const updatedAt = rows.reduce<number | undefined>(
         (newest, row) => (typeof row.ts === "number" && row.ts > (newest ?? 0) ? row.ts : newest),
         undefined,
     );
-    return { ...(updatedAt !== undefined ? { updatedAt } : {}), ...summarizeStats(rows) };
+    return { ...(updatedAt !== undefined ? { updatedAt } : {}), ...summarizeStats(rows, retrievals) };
 };

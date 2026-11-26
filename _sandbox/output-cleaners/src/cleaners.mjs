@@ -182,6 +182,8 @@ export const CLEANERS = [
     "cap",
     "redact",
     "cache",
+    // Not a trim: what an empty rg/grep would have found with one switch changed (search-probes.mjs).
+    "probes",
 ];
 
 // Known secret VALUES (from the daemon's own env) mask exactly, with no per-field upkeep; the name patterns (short-secrets.mjs) are a

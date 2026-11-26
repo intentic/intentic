@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import { tokensOfChars } from "@intentic/base/format";
+import { estimateTokens } from "@intentic/base/format";
 import { type AgentProvider, type AgentTurn, withRuntimeDefaults } from "@intentic/sandbox-contract/schemas/agent";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import {
@@ -70,7 +70,7 @@ export const handoffOfferOf = async (
     const summary = (await roleModelIsSet(services, "handoff-summary"))
         ? {
               tokens: (trim?.overhead ?? FRESH_OVERHEAD_TOKENS) + params.handoffTokens + SUMMARY_TOKENS,
-              reads: tokensOfChars(renderRecord(params.rows, Number.POSITIVE_INFINITY).length),
+              reads: estimateTokens(renderRecord(params.rows, Number.POSITIVE_INFINITY)),
           }
         : undefined;
     const offered: Pick<HandoffOffer, HandoffMode> = {

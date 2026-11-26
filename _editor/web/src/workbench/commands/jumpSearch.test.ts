@@ -63,6 +63,15 @@ it(`drops rows worth less than half the best answer, so near-misses cannot pad a
     ]);
 });
 
+it(`keeps a remembered row below the floor, since having just opened it is evidence of its own`, () => {
+    const remembered: ScoredRow = { kind: `file`, score: 0.3, remembered: true };
+    const groups = groupJumpRows([remembered, row(`file`, 1), row(`file`, 0.3), row(`agent`, 0.8)], UNSCOPED_CAP);
+    expect(groups.map((group) => [group.kind, group.rows.map((kept) => kept.score)])).toEqual([
+        [`file`, [0.3, 1]],
+        [`agent`, [0.8]],
+    ]);
+});
+
 it(`keeps every row when the whole list scores the same, including the unqueried palette`, () => {
     expect(groupJumpRows([row(`file`, 0), row(`file`, 0), row(`agent`, 0)], UNSCOPED_CAP).map((group) => group.rows.length)).toEqual([1, 2]);
 });

@@ -11,11 +11,15 @@ export const sizeLabel = (bytes: number): string => {
     return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${SIZE_UNITS[index]}`;
 };
 
-// ~4 chars/token, no tokenizer: every budget in the product (fileq/webq's caps, the daemon's savings report, its
-// context and handoff budgets, the privacy gateway's result clearing) is the same estimate, rounded up, so they agree. cleaner-bench.mjs keeps its own copy, build-step-free.
+// Tokens of a text, no tokenizer: every budget that holds the text (fileq/webq's caps and clip's cut, the daemon's
+// context gate and handoff sizes, the output ledger) counts it with this estimate, so they agree. text/tokens.ts has the
+// method and its measured error; output-cleaners keeps a build-step-free copy its tests hold to it.
+export { estimateTokens, sliceToTokens } from "./text/tokens.js";
+
+// Where only a length is known (a budget turned into a character room before the text exists), four characters to a
+// token: close for prose and code, under for Bash output (text/tokens.ts has the numbers).
 export const CHARS_PER_TOKEN = 4;
 export const tokensOfChars = (chars: number): number => Math.ceil(chars / CHARS_PER_TOKEN);
-export const estimateTokens = (text: string): number => tokensOfChars(text.length);
 // The characters a budget of `tokens` holds, by the same rate.
 export const charsOfTokens = (tokens: number): number => tokens * CHARS_PER_TOKEN;
 

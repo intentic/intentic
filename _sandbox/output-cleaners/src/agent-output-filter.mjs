@@ -6,6 +6,7 @@
 // the daemon's env).
 
 import { appendFileSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import {
     ANSI,
@@ -24,8 +25,10 @@ import {
 } from "./cleaners.mjs";
 import { pointCutMarkers } from "./output-cap.mjs";
 import { rustcStage } from "./rust-diagnostics.mjs";
+import { withSearchProbes } from "./search-probes.mjs";
 import { testDigest } from "./test-digest.mjs";
 import { OUTCOMES_DIR } from "./test-outcomes.mjs";
+import { estimateTokens } from "./token-estimate.mjs";
 
 // Lines a trim must drop before the footer adds the retrieval handle, not just the counts.
 const RETRIEVAL_MIN_DROPPED = 20;
@@ -370,6 +373,48 @@ const withTestDigest = (raw, filtered, { command, outcomes, now }) => {
 // `filter-stats.jsonl` (the savings ledger); undefined keeps none of them. `runName` names this run's raw-output file
 // and must be unique per command; `sessionKey` scopes the cache. Never throws: any failure answers with the raw text, and redaction
 // runs on every path.
+// Per-conversation holdout: same SHA-256 bucket as MCP (mcp-output.ts's mcpHeldOut), so a conversation is in the same
+// arm on both paths. Falls back to per-command random when no conversation id is present.
+export const conversationHeldOut = (conversationId, holdout, random = Math.random) => {
+    if (holdout <= 0) {
+        return false;
+    }
+    if (conversationId === undefined || conversationId === "") {
+        return random() < holdout;
+    }
+    const bucket = createHash("sha256").update(conversationId).digest().readUInt32BE(0) / 0x1_0000_0000;
+    return bucket < holdout;
+};
+
+// The ledger's row for one command. `conversationHash` (a short stable id, never the id itself) groups a conversation's
+// rows, which order by `ts`: every command runs in a process of its own, so no in-process counter outlives one.
+// `runName` links a later retrieve-output of this run's raw file back to the row.
+const ledgerRow = (raw, out, { command, exitCode, durationS, enabled, heldOut, stages, conversationId, runName, now }) => {
+    const matched = matchedCleaners(command, enabled);
+    const row = {
+        ts: now(),
+        command: command.slice(0, 200),
+        exit: exitCode,
+        durationS: Number(durationS),
+        rawBytes: raw.length,
+        emittedBytes: out.length,
+        // Estimated tokens of what came in and what the model was handed, by base's estimate (token-estimate.mjs).
+        rawTokens: estimateTokens(raw),
+        emittedTokens: estimateTokens(out),
+        cleaners: [...enabled],
+        matched: out.startsWith(CACHE_MARKER) ? [...matched, "cache"] : matched,
+        heldOut,
+        stageBytes: Object.fromEntries(stages.map((stage) => [stage.id, stage.saved])),
+    };
+    if (conversationId !== undefined && conversationId !== "") {
+        row.conversationHash = createHash("sha256").update(conversationId).digest("hex").slice(0, 12);
+    }
+    if (runName !== undefined && runName !== "") {
+        row.runName = runName;
+    }
+    return row;
+};
+
 export const filterRun = (
     raw,
     {
@@ -382,6 +427,7 @@ export const filterRun = (
         logsDir,
         runName,
         sessionKey,
+        conversationId,
         values = [],
         outcomes,
         random = Math.random,
@@ -393,19 +439,20 @@ export const filterRun = (
     let stages = [];
     let heldOut = false;
     try {
-        // Holdout: a random fraction of commands skip cleaning, giving the savings report a real raw baseline.
-        heldOut = holdout > 0 && random() < holdout;
+        // Holdout: stable per conversation (same SHA-256 bucket as MCP), falling back to per-command random
+        // when no conversation id is present.
+        heldOut = conversationHeldOut(conversationId, holdout, random);
         // Held-out commands never open the cache: they must not teach it a body the model never saw collapsed.
         const cacheStore =
             !heldOut && enabled.has("cache") && logsDir !== undefined && sessionKey !== undefined ? openCacheStore(logsDir, sessionKey) : undefined;
         if (!heldOut) {
             const retain =
                 logsDir !== undefined && runName !== undefined && runName !== "" ? retainIn(join(logsDir, "raw-output"), runName, values) : undefined;
-            const filtered = withTestDigest(raw, filterOutput(raw, { command, exitCode, durationS, retain, enabled, cacheStore, values, pipeline }), {
-                command,
-                outcomes,
-                now,
-            });
+            const filtered = withSearchProbes(
+                raw,
+                withTestDigest(raw, filterOutput(raw, { command, exitCode, durationS, retain, enabled, cacheStore, values, pipeline }), { command, outcomes, now }),
+                { command, exitCode, pipeline, enabled },
+            );
             out = filtered.out;
             stages = filtered.stages;
         }
@@ -417,19 +464,7 @@ export const filterRun = (
     // stageBytes to the mechanism. Own try: a ledger that cannot be written costs the ledger, never the trim.
     if (logsDir !== undefined) {
         try {
-            const matched = matchedCleaners(command, enabled);
-            const stat = {
-                ts: now(),
-                command: command.slice(0, 200),
-                exit: exitCode,
-                durationS: Number(durationS),
-                rawBytes: raw.length,
-                emittedBytes: out.length,
-                cleaners: [...enabled],
-                matched: out.startsWith(CACHE_MARKER) ? [...matched, "cache"] : matched,
-                heldOut,
-                stageBytes: Object.fromEntries(stages.map((stage) => [stage.id, stage.saved])),
-            };
+            const stat = ledgerRow(raw, out, { command, exitCode, durationS, enabled, heldOut, stages, conversationId, runName, now });
             mkdirSync(logsDir, { recursive: true });
             appendFileSync(join(logsDir, "filter-stats.jsonl"), `${JSON.stringify(stat)}\n`);
             // allow(silent-catch): the tool result below is the product and the ledger only accounts for it, so a
@@ -486,6 +521,8 @@ const main = async () => {
         runName: logPath === "" ? undefined : basename(logPath),
         // Every command of a session runs in a new pane, so the session is the pane log's name minus the pane.
         sessionKey: sessionKeyFromLog(logPath),
+        // The conversation running this command: the holdout arm and the harm metric's grouping depend on it.
+        conversationId: process.env["INTENTIC_TURN_OWNER"],
         values,
         outcomes: testOutcomesOf(terminalsDir),
     });

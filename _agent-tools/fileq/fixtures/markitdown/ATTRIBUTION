@@ -1,0 +1,5 @@
+These PDFs are markitdown's own test files, copied unchanged from
+https://github.com/microsoft/markitdown (packages/markitdown/tests/test_files/,
+read at b8f79c57ebc0044be41323d89b2a45d3fda8460e), under markitdown's MIT
+License; fileq's NOTICE (../../NOTICE) carries its text. fileq's PDF table tests
+(src/derivers.integration.test.ts) read them.

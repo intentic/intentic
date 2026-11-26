@@ -8,6 +8,7 @@ import { runInOcrSlot } from "../ocr-slots.js";
 import { onPath } from "../tools.js";
 import type { DerivedDoc, Deriver } from "./deriver.js";
 import { stripRunningFurniture } from "./pdf-furniture.js";
+import { pageText } from "./pdf-tables.js";
 
 // PDF text layer, per page, via unpdf's serverless pdf.js build (no worker, canvas or DOM shims needed for text
 // extraction).
@@ -116,19 +117,14 @@ const recognisePages = async (absPath: string, totalPages: number, cap: number):
 type PdfDocument = Awaited<ReturnType<typeof getDocumentProxy>>;
 
 // Each page's text, one page at a time and each let go once read: unpdf's extractText asks for every page at once,
-// and pdf.js holds them all until the end (a 5000-page text pdf peaked at 699 MB that way, 286 MB this way).
+// and pdf.js holds them all until the end (a 5000-page text pdf peaked at 699 MB that way, 286 MB this way). A page's
+// items are joined in drawing order, its column-aligned regions as markdown tables (pdf-tables.ts).
 const pageTexts = async (pdf: PdfDocument): Promise<string[]> => {
     const pages: string[] = [];
     for (let number = 1; number <= pdf.numPages; number++) {
         const page = await pdf.getPage(number);
         const content = await page.getTextContent();
-        pages.push(
-            content.items
-                .map((item) => ("str" in item ? item.str + (item.hasEOL ? "\n" : "") : ""))
-                .join("")
-                .replaceAll(/[ \t]+/g, " ")
-                .trim(),
-        );
+        pages.push(pageText(content.items.filter((item) => "str" in item)));
         page.cleanup();
     }
     return pages;
@@ -189,7 +185,7 @@ export const pdfDeriver: Deriver = {
     get name(): string {
         return ocrAvailable() ? "pdf+ppocr" : "pdf";
     },
-    version: 2,
+    version: 3,
     derive: async (absPath): Promise<DerivedDoc> => {
         const pdf = await getDocumentProxy(new Uint8Array(await readFile(absPath)));
         // One fileq run derives a batch of files, so each document is let go before the next.

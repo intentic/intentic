@@ -29,6 +29,7 @@ import { useTerminalsQuery } from "../../models/terminal/terminalsQuery";
 import { useTerminalPanel } from "../../models/terminal/useTerminalPanel";
 import { fuzzyScore } from "@intentic/base/fuzzy";
 import { useFuzzyFiles } from "../../models/workspace/search/useFuzzyFiles";
+import { recentFiles } from "../../models/workspace/search/recentFilesStore";
 import { useWorkspaceTabs } from "../../models/workspace/tabs/useWorkspaceTabs";
 import { here, page } from "../../lib/routes/links";
 
@@ -60,12 +61,13 @@ export interface JumpSection {
 }
 
 // One file as a row: ranked against the query, or listed with a score of 0 when it is an open tab offered below the
-// search floor.
-const fileRow = (path: string, text: string, recent: boolean, open: (path: string) => void): PaletteRow => ({
+// search floor. `remembered` is a match useFuzzyFiles lifted for having been opened recently.
+const fileRow = (path: string, text: string, recent: boolean, open: (path: string) => void, remembered = false): PaletteRow => ({
     kind: `file`,
     key: `file:${path}`,
     // Clamped: fuzzyScore's short-path bonus can exceed 1, which would outrank every other kind by arithmetic.
     score: recent ? 0 : Math.min(1, fuzzyScore(text, path) ?? 0),
+    remembered,
     title: basename(path),
     detail: parentDir(path),
     icon: iconForEntry(basename(path), `file`, false),
@@ -222,8 +224,12 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
         if (!wants(`file`)) {
             return [];
         }
-        const paths = listingTabs.value ? tabs.value.flatMap((tab) => (tab.kind === `file` ? [tab.path] : [])) : filePaths.value;
-        return paths.map((path) => fileRow(path, text.value, listingTabs.value, openFile));
+        if (listingTabs.value) {
+            return tabs.value.flatMap((tab) => (tab.kind === `file` ? [fileRow(tab.path, text.value, true, openFile)] : []));
+        }
+        // Every remembered file among the matches is one useFuzzyFiles lifted to the head.
+        const remembered = new Set(recentFiles());
+        return filePaths.value.map((path) => fileRow(path, text.value, false, openFile, remembered.has(path)));
     });
 
     const terminalRows = computed<readonly PaletteRow[]>(() => {

@@ -19,6 +19,8 @@ export interface WalkScope {
     // admits every file), none of these.
     readonly globs?: readonly string[] | undefined;
     readonly notGlobs?: readonly string[] | undefined;
+    // More of the walk pruned, as rg globs (`!**/node_modules`): a probe's walk, kept short (probes.ts).
+    readonly prune?: readonly string[] | undefined;
     readonly rgPath?: string | undefined;
     // The caller letting go: the rg child is killed, so a superseded search stops spending the machine.
     readonly signal?: AbortSignal | undefined;
@@ -32,7 +34,7 @@ const WALK_ARGS = ["--no-config", "--hidden", "--no-ignore-global", "--no-ignore
 export const walkArgs = (scope: WalkScope): string[] => [
     ...WALK_ARGS,
     ...(scope.ignored === true ? ["--no-ignore"] : []),
-    ...[...scannerPruneGlobs(scope.ignored === true), ...DENIED_GLOBS].flatMap((glob) => ["-g", glob]),
+    ...[...scannerPruneGlobs(scope.ignored === true), ...DENIED_GLOBS, ...(scope.prune ?? [])].flatMap((glob) => ["-g", glob]),
 ];
 
 const exists = async (path: string): Promise<boolean> => {

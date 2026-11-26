@@ -46,6 +46,17 @@ beforeAll(async () => {
             req.socket.destroy();
             return;
         }
+        // An answer slower than any deadline a test gives it.
+        if (req.url === "/slow") {
+            setTimeout(() => res.end("late"), 3000).unref();
+            return;
+        }
+        // One paragraph on one long line: no line boundary falls inside a budget.
+        if (req.url === "/wall") {
+            res.writeHead(200, { "content-type": "text/html" });
+            res.end(page("Wall", `<h1>Wall</h1><p>${"an unbroken paragraph of words that never once breaks its line ".repeat(200)}</p>`));
+            return;
+        }
         const route = routes()[(req.url ?? "/").split("?")[0] ?? "/"];
         if (route === undefined) {
             res.writeHead(404, { "content-type": "text/html" });
@@ -75,11 +86,29 @@ describe("webq fetch", () => {
         expect(exitCode).toBe(0);
         expect(out).toContain("webq: Alpha");
         expect(out).toContain("· network");
-        expect(out).toContain("[cut at 60 of");
         const path = /saved: (\S+)/.exec(out)?.[1] ?? "";
         const file = readFileSync(path, "utf8");
         expect(file).toContain(`url: ${base}/a`);
         expect(file).toContain("alpha paragraph 11");
+        // The cut names the saved file's line the rest starts on, counted past its front matter.
+        const resume = Number(/ from line (\d+), or raise --budget\]\n$/.exec(out)?.[1]);
+        expect(out).toContain(`continue with Read ${path} from line ${resume}, or raise --budget]`);
+        const printed = out.slice(out.indexOf("\n---\n") + 5, out.indexOf("\n[cut ")).split("\n").slice(0, -1);
+        const lines = file.split("\n");
+        const firstLine = resume - printed.length;
+        expect(lines[firstLine - 2]).toBe("---");
+        expect(lines.slice(firstLine - 1, resume - 1)).toEqual(printed);
+    });
+
+    it("a page that is one long line is cut inside it, never printed empty", async () => {
+        const { out } = await webq("fetch", `${base}/wall`, "--budget", "50");
+        const path = /saved: (\S+)/.exec(out)?.[1] ?? "";
+        const line = Number(/characters into line (\d+) of/.exec(out)?.[1]);
+        const shown = out.slice(out.indexOf("\n---\n") + 5, out.indexOf("\n\n[cut ")).split("\n").at(-1) ?? "";
+        expect(shown).toContain("an unbroken paragraph of words");
+        // The line it names is the one the cut is in, as the saved file numbers it.
+        expect(readFileSync(path, "utf8").split("\n")[line - 1]?.startsWith(shown)).toBe(true);
+        expect(out).toContain(`continue with Read ${path} from line ${line}, or raise --budget]`);
     });
 
     it("serves the second fetch from cache", async () => {
@@ -104,9 +133,28 @@ describe("webq fetch", () => {
         expect(out).toContain('"hello"');
     });
 
-    it("exits 1 on an HTTP error page", async () => {
-        const { exitCode } = await webq("fetch", `${base}/gone`, "--budget", "0");
+    it("exits 1 on an HTTP error page, and says so first, with its code", async () => {
+        const { out, exitCode } = await webq("fetch", `${base}/gone`, "--budget", "0");
         expect(exitCode).toBe(1);
+        expect(out.startsWith(`webq: error: not_found: HTTP 404 from ${base}/gone\nwebq: next: check the URL; `)).toBe(true);
+    });
+
+    it("a host that refuses the connection is fetch_failed, exit 2, with no stack", async () => {
+        const { out, exitCode } = await webq("fetch", "http://127.0.0.1:1/", "--fresh");
+        expect(exitCode).toBe(2);
+        expect(out).toBe("webq: error: fetch_failed: http://127.0.0.1:1/: ECONNREFUSED\nwebq: next: check the URL's host and port: nothing is listening there\n");
+    });
+
+    it("a page slower than --timeout is a timeout, with a longer one as the next step", async () => {
+        const { out, exitCode } = await webq("fetch", `${base}/slow`, "--timeout", "1", "--fresh");
+        expect(exitCode).toBe(2);
+        expect(out).toBe(`webq: error: timeout: ${base}/slow did not answer within 1s\nwebq: next: webq fetch ${base}/slow --timeout 60\n`);
+    });
+
+    it("a mistyped flag is a usage error pointing at the verb's help", async () => {
+        const { err, exitCode } = await webq("fetch", `${base}/a`, "--max-pages", "3");
+        expect(exitCode).toBe(2);
+        expect(err).toBe("webq: error: usage: No flag registered for --max-pages\nwebq: next: webq fetch --help\n");
     });
 
     it("emits machine-readable output under --json", async () => {
@@ -143,15 +191,17 @@ describe("webq crawl", () => {
         expect(out).toContain("beyond-cap");
     });
 
-    it("exits 1 when nothing could be crawled", async () => {
-        const { exitCode } = await webq("crawl", `${base}/gone`, "--max-pages", "2", "--out", join(home, "crawl-empty"), "--fresh");
+    it("exits 1 when nothing could be crawled, with the failure line first", async () => {
+        const { out, exitCode } = await webq("crawl", `${base}/gone`, "--max-pages", "2", "--out", join(home, "crawl-empty"), "--fresh");
         expect(exitCode).toBe(1);
+        expect(out.startsWith(`webq: error: fetch_failed: crawl of ${base}/gone saved no pages: the start page answered an HTTP error\nwebq: next: webq fetch ${base}/gone\n`)).toBe(true);
     });
 
     it("names each page that failed, and why, beside the count", async () => {
         const { out, exitCode } = await webq("crawl", `${base}/cut`, "--max-pages", "1", "--out", join(home, "crawl-cut"), "--fresh");
         expect(out).toContain("skipped: errors 1");
         expect(out).toMatch(new RegExp(`failed: ${base}/cut: \\S`));
+        expect(out).toMatch(new RegExp(`^webq: error: fetch_failed: crawl of ${base}/cut saved no pages: \\S`));
         expect(exitCode).toBe(1);
     });
 });

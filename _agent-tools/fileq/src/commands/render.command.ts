@@ -1,8 +1,9 @@
 /* `fileq render <file>`: a document's pages (a deck's slides) as PNG files, one path per line, for an agent to look at with its image reader. */
 import { basename, resolve } from "node:path";
+import { type ErrorCode, failure } from "@intentic/agent-cli/errors";
 import { countParser } from "@intentic/agent-cli/flags";
 import { capsule } from "@intentic/agent-cli/output";
-import { errorMessage } from "@intentic/base/errors";
+import { errnoCode, errorMessage } from "@intentic/base/errors";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { workspaceRoot } from "../lib/env.js";
 import { ConvertFailed, ToolMissing } from "../lib/render/convert.js";
@@ -16,16 +17,37 @@ interface RenderFlags {
     readonly json: boolean;
 }
 
+interface Failure {
+    readonly exit: number;
+    readonly code: ErrorCode;
+    readonly message: string;
+    readonly next?: string;
+}
+
 // What went wrong, as the exit code the agent-CLI contract gives it: a missing tool or a bad flag is the invocation's
-// fault (2); a document that cannot be drawn is "nothing here" (1).
-const failure = (cause: unknown): { code: number; message: string } | undefined => {
-    if (cause instanceof ToolMissing || cause instanceof BadPages) {
-        return { code: 2, message: cause.message };
+// fault (2); a document that cannot be drawn is "nothing here" (1). Anything else is fileq's own failure (2).
+const failureOf = (cause: unknown): Failure => {
+    const message = errorMessage(cause);
+    if (cause instanceof ToolMissing) {
+        // convert.ts words it `<what is missing> … here: <how to get it>`; the second half is the step.
+        const at = message.indexOf(" here: ");
+        return at === -1
+            ? { exit: 2, code: "missing_tool", message }
+            : { exit: 2, code: "missing_tool", message: message.slice(0, at + " here".length), next: message.slice(at + " here: ".length) };
     }
-    if (cause instanceof NotRenderable || cause instanceof ConvertFailed) {
-        return { code: 1, message: cause.message };
+    if (cause instanceof BadPages) {
+        return { exit: 2, code: "usage", message };
     }
-    return undefined;
+    if (cause instanceof NotRenderable) {
+        return { exit: 1, code: "unsupported", message };
+    }
+    if (cause instanceof ConvertFailed) {
+        return { exit: 1, code: "unreadable", message };
+    }
+    // A file system's refusal (an --out it cannot write) names itself; only a bug is worth reporting.
+    return errnoCode(cause) === undefined
+        ? { exit: 2, code: "internal", message, next: "this is fileq's own failure, not an empty answer: report it with the command that was run" }
+        : { exit: 2, code: "internal", message };
 };
 
 const summary = (file: string, result: RenderResult): string => {
@@ -62,9 +84,9 @@ export const renderCommand = buildCommand({
             const size = Math.max(64, Math.round(flags.size));
             result = await renderDocument({ absPath, pages, outDir: flags.out === undefined ? undefined : resolve(flags.out), size }, workspaceRoot());
         } catch (cause) {
-            const known = failure(cause);
-            this.process.stdout.write(`fileq: cannot render ${absPath}: ${known?.message ?? errorMessage(cause)}\n`);
-            process.exitCode = known?.code ?? 2;
+            const failed = failureOf(cause);
+            this.process.stdout.write(failure("fileq", failed.code, `cannot render ${absPath}: ${failed.message}`, failed.next));
+            process.exitCode = failed.exit;
             return;
         }
         process.exitCode = result.images.length > 0 ? 0 : 1;

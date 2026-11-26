@@ -115,12 +115,19 @@ describe("read", () => {
         expect(out).toContain(sidecarOf("notes.docx"));
     });
 
-    it("clips at the budget and points at the sidecar for the rest", async () => {
+    it("clips at the budget and names the sidecar line the rest starts on", async () => {
         const long = Array.from({ length: 200 }, (_, i) => `Paragraph ${i} with a good number of words in it to cost tokens.`);
         writeFileSync(join(root, "long.docx"), docxBytes("Long", long));
         const { out } = await fileq("read", join(root, "long.docx"), "--budget", "100");
-        expect(out).toContain("[cut at 100 of");
-        expect(out).toContain("for the whole document]");
+        const resume = Number(/ from line (\d+), or raise --budget\]\n$/.exec(out)?.[1]);
+        expect(out).toContain(`continue with Read ${sidecarOf("long.docx")} from line ${resume}, or raise --budget]`);
+        // What was printed is the sidecar's body from its first line, and the line named is the first one left out.
+        const printed = out.slice(out.indexOf("\n---\n") + 5, out.indexOf("\n[cut ")).split("\n").slice(0, -1);
+        const sidecar = readFileSync(sidecarOf("long.docx"), "utf8").split("\n");
+        const firstLine = resume - printed.length;
+        expect(sidecar[firstLine - 2]).toBe("---");
+        expect(sidecar.slice(firstLine - 1, resume - 1)).toEqual(printed);
+        expect(out).toContain(`[cut at line ${resume} of ${sidecar.length - 1}, ~`);
     });
 
     it("--plain prints the markdown alone, whole, with no capsule to strip", async () => {
@@ -152,11 +159,23 @@ describe("read", () => {
         expect(out).toContain("fileq:");
     });
 
-    it("answers 1, not a stack, for a file nothing derives", async () => {
+    it("answers 1, not a stack, for a file nothing derives, with the code and where the formats are listed", async () => {
         writeFileSync(join(root, "data.bin"), Buffer.from([0, 1, 2, 3]));
         const { out, exitCode } = await fileq("read", join(root, "data.bin"));
         expect(exitCode).toBe(1);
-        expect(out).toContain("unsupported");
+        expect(out).toBe("fileq: error: unsupported: cannot read data.bin: unsupported\nfileq: next: fileq --help lists the formats it reads; read a text file directly\n");
+    });
+
+    it("a path that is not there is not_found, with where to look", async () => {
+        const { out, exitCode } = await fileq("read", join(root, "nowhere.docx"));
+        expect(exitCode).toBe(1);
+        expect(out).toBe(`fileq: error: not_found: cannot read nowhere.docx: missing\nfileq: next: ls ${root}\n`);
+    });
+
+    it("a mistyped flag is a usage error pointing at the verb's help", async () => {
+        const { err, exitCode } = await fileq("read", join(root, "notes.docx"), "--budgt", "5");
+        expect(exitCode).toBe(2);
+        expect(err).toBe("fileq: error: usage: No flag registered for --budgt, did you mean --budget?\nfileq: next: fileq read --help\n");
     });
 
     it("answers 1 with the reason, not a stack, for a corrupt file outside the workspace", async () => {
@@ -164,7 +183,7 @@ describe("read", () => {
         writeFileSync(join(outside, "broken.ipynb"), "{ this is not json");
         const { out, exitCode } = await fileq("read", join(outside, "broken.ipynb"));
         expect(exitCode).toBe(1);
-        expect(out).toContain("derive-failed (ipynb)");
+        expect(out).toContain(`fileq: error: unreadable: cannot read ${join(outside, "broken.ipynb")}: derive-failed (ipynb)`);
         expect(out).not.toContain("    at ");
         rmSync(outside, { recursive: true, force: true });
     });
@@ -278,10 +297,13 @@ describe("check", () => {
         writeFileSync(join(root, "picture.png"), pngBytes());
         const unsupported = await fileq("check", join(root, "picture.png"));
         expect(unsupported.exitCode).toBe(2);
-        expect(unsupported.out).toBe(`fileq: cannot check ${join(root, "picture.png")}: fileq check reads docx, pptx, xlsx, pdf; this is image (fileq read shows what it holds)\n`);
+        expect(unsupported.out).toBe(
+            `fileq: error: unsupported: cannot check ${join(root, "picture.png")}: fileq check reads docx, pptx, xlsx, pdf; this is image\n` +
+                `fileq: next: fileq read ${join(root, "picture.png")} shows what it holds\n`,
+        );
         const missing = await fileq("check", join(root, "nowhere.docx"));
         expect(missing.exitCode).toBe(2);
-        expect(missing.out).toBe(`fileq: cannot check ${join(root, "nowhere.docx")}: no such file\n`);
+        expect(missing.out).toBe(`fileq: error: not_found: cannot check ${join(root, "nowhere.docx")}: no such file\nfileq: next: ls ${root}\n`);
     });
 
     it("a file with a document's extension that is not one gets that format's answer", async () => {

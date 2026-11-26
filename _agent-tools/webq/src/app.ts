@@ -21,8 +21,11 @@ serves the static HTML. Crawls obey robots.txt (--ignore-robots is on you), stay
 (--external follows out), and report every skipped-URL count — a capped crawl never poses as a complete one.
 
 Read the capsule first: title · final URL · token cost · fit/raw · cache|network|browser. The saved file
-carries front matter (url, title, fetched_at) so it stays self-describing when found later.
-Exit codes: 0 content, 1 none (HTTP error / empty crawl), 2 broken invocation.`;
+carries front matter (url, title, fetched_at) so it stays self-describing when found later. A cut page ends
+with the saved file's line to continue from: Read it from there.
+Exit codes: 0 content, 1 none (HTTP error / empty crawl), 2 broken invocation. A failure is one line,
+\`webq: error: <code>: <message>\` (usage, not_found, fetch_failed, blocked, timeout, missing_tool,
+internal), then \`webq: next: <step>\`.`;
 
 export const app = buildApplication(
     buildRouteMap({

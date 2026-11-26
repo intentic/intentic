@@ -118,7 +118,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
             sdk().tool(
                 "tools",
                 "What the tool definitions a turn was given cost its context, by MCP server: tools, characters and estimated tokens " +
-                    "(chars/4) of each server's names, descriptions and input schemas, heaviest first, for one conversation's latest " +
+                    "of each server's names, descriptions and input schemas, heaviest first, for one conversation's latest " +
                     "turn. Reach for it when a turn starts with a large context before anyone typed, or to see what a mount costs.",
                 DiagnosticsToolsArgs,
                 async (args) => answer(deps, { query: "tools", ...args }),

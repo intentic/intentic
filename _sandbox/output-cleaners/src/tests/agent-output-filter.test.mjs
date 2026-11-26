@@ -1,7 +1,8 @@
 import { describe, it, expect } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
-import { filterOutput, maskedFailure } from "../agent-output-filter.mjs";
+import { conversationHeldOut, filterOutput, maskedFailure } from "../agent-output-filter.mjs";
 
 // A retain that keeps nothing on disk and answers with `log`: the path the footer should then name.
 const keptAt = (log) => (log === "" ? undefined : () => log);
@@ -249,5 +250,43 @@ describe("the image's copy of the filter", () => {
         const copied = copiedToBin();
         const misplaced = [...reached(entry)].filter((file) => copied.get(file) !== posix.join(BIN, posix.dirname(file)));
         expect(misplaced.map((file) => `${file} -> ${copied.get(file) ?? "not copied"}`)).toEqual([]);
+    });
+});
+
+describe("conversationHeldOut", () => {
+    it("is stable across calls for the same conversation id", () => {
+        const a = conversationHeldOut("conv-abc", 0.5);
+        const b = conversationHeldOut("conv-abc", 0.5);
+        expect(a).toBe(b);
+    });
+
+    it("returns false when holdout is 0", () => {
+        expect(conversationHeldOut("conv-abc", 0)).toBe(false);
+    });
+
+    it("falls back to random when no conversation id is present", () => {
+        // With random returning 0.1 and holdout 0.5, should be held out.
+        expect(conversationHeldOut(undefined, 0.5, () => 0.1)).toBe(true);
+        // With random returning 0.9 and holdout 0.5, should not be held out.
+        expect(conversationHeldOut(undefined, 0.5, () => 0.9)).toBe(false);
+    });
+
+    it("falls back to random when conversation id is empty string", () => {
+        expect(conversationHeldOut("", 0.5, () => 0.1)).toBe(true);
+    });
+
+    it("produces different results for different conversation ids", () => {
+        // With enough ids, some must differ (this is a probabilistic check but with 100 ids and holdout 0.5
+        // the chance of all same is negligible).
+        const results = new Set(Array.from({ length: 100 }, (_, i) => conversationHeldOut(`conv-${i}`, 0.5)));
+        expect(results.size).toBe(2);
+    });
+
+    it("uses the same SHA-256 bucket as MCP's mcpHeldOut", () => {
+        // Reproduce the exact computation MCP does (sha256 of the id, readUInt32BE / 2^32).
+        const conversationId = "test-conv-42";
+        const bucket = createHash("sha256").update(conversationId).digest().readUInt32BE(0) / 0x1_0000_0000;
+        const expected = bucket < 0.5;
+        expect(conversationHeldOut(conversationId, 0.5)).toBe(expected);
     });
 });

@@ -111,11 +111,22 @@ test("a stale shadow (other bytes) is passed over rather than shown as this vers
 
 test("fileq's refusal comes back as the reason, and nothing is kept for it", async () => {
     const exec: ExecFn = async (_command, args) => {
-        throw Object.assign(new Error("fileq failed"), { code: 1, stdout: `fileq: cannot read ${args.at(-1)}: derive-failed (docx): not a zip\n` });
+        throw Object.assign(new Error("fileq failed"), {
+            code: 1,
+            stdout: `fileq: error: unreadable: cannot read ${args.at(-1)}: derive-failed (docx): not a zip\nfileq: next: fileq check ${args.at(-1)}\n`,
+        });
     };
     const side = await deriveBytes(root, Buffer.from("garbage"), { name: "broken.docx" }, exec);
     expect(side).toEqual({ present: false, reason: "derive-failed (docx): not a zip" });
     await expect(readdir(join(root, DERIVED_BLOBS_DIR))).rejects.toThrow();
+});
+
+test("a refusal from a fileq older than its error codes still comes back as the reason", async () => {
+    const exec: ExecFn = async (_command, args) => {
+        throw Object.assign(new Error("fileq failed"), { code: 1, stdout: `fileq: cannot read ${args.at(-1)}: unsupported or missing\n` });
+    };
+    const side = await deriveBytes(root, Buffer.from("garbage"), { name: "odd.bin" }, exec);
+    expect(side).toEqual({ present: false, reason: "unsupported or missing" });
 });
 
 test("a sandbox without the binary blames the sandbox, not the file", async () => {

@@ -184,7 +184,8 @@ export interface TextFind extends TextScan {
     readonly note: string | undefined;
 }
 
-// A pattern rg cannot read runs again as plain text.
+// A pattern rg cannot read runs again as plain text, and its answer says so.
+export const RAN_LITERAL_NOTE = "pattern isn't valid rust regex: ran as literal text";
 const scanOrLiteral = async (options: TextScanOptions): Promise<TextFind> => {
     try {
         return { ...(await scanText(options)), note: undefined };
@@ -192,7 +193,7 @@ const scanOrLiteral = async (options: TextScanOptions): Promise<TextFind> => {
         if (options.literal === true || !(error instanceof TextPatternError)) {
             throw error;
         }
-        return { ...(await scanText({ ...options, literal: true })), note: "pattern isn't valid rust regex: ran as literal text" };
+        return { ...(await scanText({ ...options, literal: true })), note: RAN_LITERAL_NOTE };
     }
 };
 

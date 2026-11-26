@@ -3,6 +3,8 @@ import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract/schemas/work
 import type { Ref } from "vue";
 import { computed, ref } from "vue";
 import { pathRanker } from "./fuzzyPaths";
+import { recentFirst } from "./recentFiles";
+import { recentFiles } from "./recentFilesStore";
 import { type SearchScope, useWorkspaceSearch } from "./useWorkspaceSearch";
 import { useSearchOptions } from "./useSearchOptions";
 import { useWorkspaceTree } from "../tree/useWorkspaceTree";
@@ -11,6 +13,7 @@ import { reachesScope, withinScope } from "../../../app/projectScope";
 // Ranked filename matching for quick-open surfaces (Ctrl/Cmd+P palette, chat @-mention picker). Client-ranked by
 // default: the tree already holds every visible path and scores fast enough for no debounce. Falls back to the
 // daemon's `files` search only for include-ignored or a tree truncated past its 5k cap (daemon sweeps to 100k).
+// Either way, files opened recently that the query matches come first (recentFiles.ts).
 // Both paths answer within the open project (app/projectScope.ts): here by skipping what is outside it, and on the
 // daemon by the `dir` the search route takes.
 
@@ -68,11 +71,21 @@ export function useFuzzyFiles(query: Ref<string>, active: Ref<boolean>) {
     // The shortest query that can produce matches: the daemon's contract floors at 2 chars, client ranking at 1.
     const floor = computed(() => (serverMode.value ? 2 : 1));
 
+    // What a remembered file must be among to be lifted: the tree's files, or what the daemon answered (whose list is not
+    // here to check against). Built once per tree, not per keystroke.
+    const treeFiles = computed<ReadonlySet<string>>(() => new Set(clientTree.value.paths));
+
     const paths = computed<readonly string[]>(() => {
         if (!active.value || trimmed.value.length < floor.value) {
             return [];
         }
-        return serverMode.value ? server.groups.value.map((group) => group.path) : rank(trimmed.value, clientTree.value.paths);
+        if (serverMode.value) {
+            const answered = server.groups.value.map((group) => group.path);
+            const listed = new Set(answered);
+            return recentFirst(trimmed.value, answered, recentFiles(), (path) => listed.has(path), LIMIT);
+        }
+        const files = treeFiles.value;
+        return recentFirst(trimmed.value, rank(trimmed.value, clientTree.value.paths), recentFiles(), (path) => files.has(path), LIMIT);
     });
 
     return {

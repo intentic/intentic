@@ -84,7 +84,9 @@ cached by content, so a repeat read of unchanged content is instant.
 ## Read a file
 \`fileq <file>\` (or \`fileq read <file> --budget 8000\`)
 - Prints a capsule (format, token cost), the content up to the budget, and \`saved:\` — the markdown file
-  carrying the whole thing. Over budget, the cut is announced with that exact path to Read.
+  carrying the whole thing. Over budget, the last line says where the rest starts: \`[cut at line 212 of 1480,
+  ~19,100 of 23,100 tokens left: continue with Read <file> from line 212, or raise --budget]\`. Read that file
+  from that line rather than from the top.
 - Formats: docx and odt (headings, lists, tables), xlsx (capped tables), pptx (slides + speaker notes),
   pdf (text layer; ${OCR_FORMAT[host]}, and the note says the words are
   recognised, not exact), epub (chapters in reading order), ipynb (cells, fenced code, capped outputs),
@@ -106,7 +108,10 @@ ${OCR_REFUSAL[host]}
 - Plain text (md, csv, txt, code) is not fileq's business: Read it directly — but see below for the big ones.
 - Web pages belong to \`webq\`; images for a vision model belong to the Read tool, which shows the pixels.
 
-${SEARCH[host]}${host === "sandbox" ? TEXTCONV : ""}Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install.
+${SEARCH[host]}${host === "sandbox" ? TEXTCONV : ""}Exit codes: 0 content, 1 nothing derivable, 2 broken invocation or install. A failure is one line,
+\`fileq: error: <code>: <message>\`, often followed by \`fileq: next: <step>\`: do the step. The codes are
+\`usage\`, \`not_found\`, \`unsupported\`, \`too_large\`, \`unreadable\` (damaged, locked or password-protected),
+\`missing_tool\`, \`broken_install\` and \`internal\`; the last two are fileq's fault, never an empty document.
 
 ## After you produce a document
 A deck, report, spreadsheet or PDF made for someone is not finished until you have checked it and looked at it.

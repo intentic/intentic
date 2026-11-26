@@ -33,7 +33,7 @@ log lines around a moment you already know, which a window reaching back from no
   one by one. Only the shell command answers it; there is no `mcp__diagnostics__` tool for it.
 - A turn started with a large context before anyone typed → `mcp__diagnostics__tools` (or `diagnostics tools
   [--conversation <id>]`): what each MCP server's tool definitions cost that conversation's latest turn, by server,
-  in tools, characters and estimated tokens (chars/4), heaviest first.
+  in tools, characters and estimated tokens, heaviest first.
 - Something errored in the daemon (an automation, a sync, a land, a refused provider) → `mcp__diagnostics__errors`
   (`sinceMinutes`; `contains` a conversation id, route or code; `level`). Many matches come back grouped by message
   with a count and first/last time; `group: false` lists every line, `stacks: true` adds the stacks.

@@ -88,8 +88,9 @@ const parseAnswer = (stdout: string): ReadAnswer | undefined => {
     return typeof answer === "object" && answer !== null && typeof (answer as ReadAnswer).path === "string" ? (answer as ReadAnswer) : undefined;
 };
 
-// fileq's own reason for a refusal, from the one line it prints before exiting 1.
-const refusal = (stdout: string): string | undefined => /^fileq: cannot read .*?: (.+)$/m.exec(stdout)?.[1];
+// fileq's own reason for a refusal, from the one line it prints before exiting 1: `fileq: error: <code>: cannot read
+// <path>: <reason>`, or without the code from a fileq older than its error codes.
+const refusal = (stdout: string): string | undefined => /^fileq: (?:error: \w+: )?cannot read .*?: (.+)$/m.exec(stdout)?.[1];
 
 const readerFailure = (error: unknown): string => {
     if (isMissingBinary(error)) {

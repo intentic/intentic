@@ -12,7 +12,7 @@ flowchart LR
     skill["simplify-campaign skill"] --> nav
 ```
 
-- Offline and deterministic. Tokens come from a character-based estimator in `lib/tokens.mjs`: an absolute count is order-of-magnitude, a delta is real. `calibrate` checks the estimator's chars-per-token band; `NAV_TOKENIZER=real` uses `gpt-tokenizer` when installed, and `compare` refuses to mix the two.
+- Offline and deterministic. Tokens come from `@intentic/base`'s estimate (`text/tokens.ts`, re-exported by `lib/tokens.mjs`), the one every budget in the product uses, within a few percent of o200k_base on source code. `calibrate` checks its chars-per-token band; `NAV_TOKENIZER=real` uses `gpt-tokenizer` when installed, and `compare` refuses to mix the two.
 - `targets` ranks files by burn: the tokens spent on a file across every lookup that lands in it.
 - `gate.mjs check` fails when an export that existed at the snapshot is gone or a frozen file (SQL, Prisma, migrations, locales, schemas, OpenAPI, the api and sandbox contracts) changed. Moving an export is free and growth is expected.
 - `baselines/` holds the retained `baseline.json` / `head.json` comparison and ignored local measurements. Workspace search excludes this directory because its historical symbols and paths are not current source. Take a fresh export snapshot for each refactor; the retired September export snapshot and intermediate measurements remain in git history.
@@ -39,7 +39,7 @@ flowchart LR
 - [lib/compare.mjs](lib/compare.mjs) — the before → after rows `compare` prints and the nightly trend renders.
 - [gate.mjs](gate.mjs) — `snapshot` and `check` of the export surface and frozen files.
 - [metrics.mjs](metrics.mjs) — the size, shape and cost numbers.
-- [lib/tokens.mjs](lib/tokens.mjs) — the token estimator and the optional real tokenizer.
+- [lib/tokens.mjs](lib/tokens.mjs) — base's token estimate and the optional real tokenizer.
 - [replay.mjs](replay.mjs) — fixed task measurements; `sandbox-tasks.json` records symbols and sampled session identifiers.
 
 ## Commands

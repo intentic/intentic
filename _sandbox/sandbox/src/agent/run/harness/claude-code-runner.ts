@@ -34,6 +34,7 @@ import { worktreeRedirectHooks } from "../../../conversations/worktrees/worktree
 import { browserSessionHooks } from "../../../browser/sessions/browser-session-hooks.js";
 import { depsNoticeHooks } from "../../tools/notices/agent-deps.js";
 import { searchNoticeHooks } from "../../verification/agent-search.js";
+import { searchProbeHooks } from "../../verification/search-probe-hooks.js";
 import { editDiagnosticsHooks } from "../../verification/agent-diagnostics.js";
 import { createShellEditTracker } from "../../tools/agent-shell-edits.js";
 import { EDIT_TOOL_NAMES } from "../../../rules/edit-tools.js";
@@ -550,6 +551,8 @@ const baseOptions = (
                     : {},
                 // One-time advisories: rg vs grep and an empty result (never rewritten, the regex dialects disagree).
                 namedHooks("search-notice", searchNoticeHooks()),
+                // An empty Grep says what one changed switch would have found, asked where the turn's files are.
+                namedHooks("search-probes", searchProbeHooks(request.spec.isolation)),
                 // Registers a watchable session the moment a browser call launches Chromium; the MCP owns its lifecycle.
                 request.tools.browserPorts !== undefined
                     ? namedHooks("browser-sessions", browserSessionHooks(

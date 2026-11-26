@@ -1,8 +1,10 @@
 // The in-process CLI runner these tools' end-to-end suites drive.
 import { type Application, type CommandContext, run, type StricliProcess } from "@stricli/core";
+import { helpCommand, stricliFailure } from "./errors.js";
 
 export interface CliOutcome {
     readonly out: string;
+    /** What reached stderr, with stricli's refusals in the failure shape the binary prints them in (run.ts). */
     readonly err: string;
     /** Clamped the way the shell clamps it, so a suite reads the code a shell would: 0 content, 1 none, 2 else. */
     readonly exitCode: number;
@@ -19,13 +21,14 @@ const text = (chunk: string | Uint8Array): string => (typeof chunk === "string" 
 export const captureCli = async (app: Application<CommandContext>, args: readonly string[]): Promise<CliOutcome> => {
     let out = "";
     let err = "";
+    const help = helpCommand(app.config.name, app, args);
     const streams = { stdout: process.stdout.write, stderr: process.stderr.write };
     process.stdout.write = ((chunk: string | Uint8Array): boolean => {
         out += text(chunk);
         return true;
     }) as typeof process.stdout.write;
     process.stderr.write = ((chunk: string | Uint8Array): boolean => {
-        err += text(chunk);
+        err += stricliFailure(app.config.name, text(chunk), help) ?? text(chunk);
         return true;
     }) as typeof process.stderr.write;
     // The run gets its own exitCode slot: bun keeps the first number ever written to process.exitCode, so a shared

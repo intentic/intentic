@@ -127,5 +127,7 @@ test("what was composed counts: a big preamble is what tips a borderline window 
     const sandbox = await withEndpoint([{ id: "mid", label: "mid", contextWindow: 24_000 }]);
 
     expect(await shortfallFor(sandbox, turnOn("mid", "hi"))).toBeUndefined();
-    expect(await shortfallFor(sandbox, turnOn("mid", "x".repeat(12_000)))).toMatchObject({ window: 24_000 });
+    // Words, not one run of a letter: 12,000 characters of "word " are 2,401 tokens to o200k_base and to the estimate,
+    // while 12,000 x's are one compressible run (1,500 real tokens) that only a flat four-characters rate called 3,000.
+    expect(await shortfallFor(sandbox, turnOn("mid", "word ".repeat(2_400)))).toMatchObject({ window: 24_000 });
 });

@@ -1450,6 +1450,12 @@ flowchart LR
   read documents through fileq's preprocessor. Claude Code's Grep tool runs its bundled ripgrep with `--no-config`
   (read off 0.3.296's binary), so it would skip documents; the same env sets `USE_BUILTIN_RIPGREP=0`, which makes it
   run the image's `rg` instead.
+- An empty search says what one changed switch would have found (2026-11-26): a Grep that found nothing
+  (`agent/verification/search-probe-hooks.ts`, a PostToolUse hook placed like the edit checks, entering an anchored
+  turn's namespace) and the search box's empty answer (`workspace/text-search.ts`, in its `note`, within 600 ms) run
+  `@intentic/text-search`'s probes: any case, gitignored files, the pattern as plain text, naming up to three files each.
+  Shell `rg` and `grep -r` get the same line from the output filter (output-cleaners' `search-probes.mjs`), for every
+  runtime whose shell runs through the terminal panel; Pi's own `grep` tool is not probed.
 - netd's two sockets (`INTENTIC_NETD_SOCKET`, `INTENTIC_NODE_SOCKET`) leave the daemon's environment once its
   netd door has dialled them, and the tmux server's, so no agent-spawned child inherits them (2026-10-05).
 

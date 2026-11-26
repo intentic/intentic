@@ -13,6 +13,9 @@ import { pruneTree } from "./prune.js";
 
 export type BrowserMode = "auto" | "never" | "force";
 
+/** `--browser force` asked for a render this image has no Chromium for. */
+export class BrowserMissing extends Error {}
+
 export interface FetchPageOptions {
     readonly raw?: boolean;
     readonly query?: string | undefined;
@@ -50,7 +53,7 @@ export const fetchPage = async (url: string, options: FetchPageOptions = {}): Pr
         if (rendered !== undefined) {
             acquired = rendered;
         } else if (acquired === undefined) {
-            throw new Error("browser rendering unavailable (no Chromium in this image) and --browser force was asked for");
+            throw new BrowserMissing("browser rendering unavailable (no Chromium in this image) and --browser force was asked for");
         }
     }
     const { doc, body, finalUrl, status, contentType, source } = acquired;

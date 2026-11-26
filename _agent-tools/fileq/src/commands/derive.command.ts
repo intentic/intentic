@@ -1,5 +1,6 @@
 /* `fileq derive` derives metadata from one input file. */
 import { resolve } from "node:path";
+import { failure } from "@intentic/agent-cli/errors";
 import { countParser } from "@intentic/agent-cli/flags";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { ensureSidecar, type Outcome } from "../lib/derive.js";
@@ -40,12 +41,12 @@ export const deriveCommand = buildCommand({
     async func(this: CommandContext, flags: DeriveFlags, ...files: string[]) {
         const root = workspaceRoot();
         if (root === undefined) {
-            this.process.stdout.write("fileq: derive needs a workspace (WORKSPACE_ROOT is not set); use `fileq read` for one-off files\n");
+            this.process.stdout.write(failure("fileq", "usage", "derive needs a workspace (WORKSPACE_ROOT is not set)", "fileq read <file> reads a one-off file"));
             process.exitCode = 2;
             return;
         }
         if (files.length === 0) {
-            this.process.stdout.write("fileq: derive takes file paths\n");
+            this.process.stdout.write(failure("fileq", "usage", "derive takes file paths", "fileq derive <file…>"));
             process.exitCode = 2;
             return;
         }

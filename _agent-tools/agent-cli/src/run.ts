@@ -2,6 +2,7 @@
 // The reader is an agent, not a terminal: it pipes into `head`, it redirects stderr away, and it cannot tell a
 // crash from a tool that found nothing — so every rule below exists to stop silence from reading as zero results.
 import type { Application, CommandContext, StricliProcess } from "@stricli/core";
+import { failure, helpCommand, stricliFailure } from "./errors.js";
 
 export interface LoadedCli {
     readonly app: Application<CommandContext>;
@@ -22,7 +23,10 @@ export interface AgentCliOptions {
      * must fail inside the catch below, where the fault can be reported, instead of before any handler runs.
      */
     readonly load: () => Promise<LoadedCli>;
-    /** Rewrites what stricli was about to print; `undefined` keeps the text as it is. */
+    /**
+     * Rewrites what was about to reach stderr; `undefined` hands the text on to the shared rewrite, which puts
+     * stricli's own refusals in the failure shape (`<name>: error: usage: …`) and passes anything else as it is.
+     */
     readonly rewriteStderr?: (text: string) => string | undefined;
 }
 
@@ -38,12 +42,9 @@ const exitOnBrokenPipe = (): void => {
 
 // Errors go to STDOUT: `<tool> … 2>/dev/null` is an agent reflex, and it would turn a failure into something
 // indistinguishable from an empty answer. The exit code still says 2, so a script can tell them apart.
-const errorsToStdout = (rewrite: ((text: string) => string | undefined) | undefined): void => {
+const errorsToStdout = (rewrite: (text: string) => string | undefined): void => {
     const emit = process.stdout.write.bind(process.stdout) as (value: string | Uint8Array, ...args: unknown[]) => boolean;
     process.stderr.write = ((chunk: string | Uint8Array, ...rest: unknown[]): boolean => {
-        if (rewrite === undefined) {
-            return emit(chunk, ...rest);
-        }
         const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
         return emit(rewrite(text) ?? chunk, ...rest);
     }) as typeof process.stderr.write;
@@ -53,10 +54,11 @@ const errorsToStdout = (rewrite: ((text: string) => string | undefined) | undefi
 // reads as a search that found nothing, and the agent moves on to a worse tool believing the answer was no.
 const startFault = (name: string, noun: string, error: unknown): string => {
     const detail = error instanceof Error ? error.message.split("\n")[0] : String(error);
-    return (
-        `${name}: cannot start, ${detail}\n` +
-        `${name}: this is a broken install, NOT an empty ${noun}. Do not read it as zero hits or fall back to ` +
-        `another tool silently. Reinstall ${name} (or rebuild its workspace deps) and report it.\n`
+    return failure(
+        name,
+        "broken_install",
+        `cannot start, ${detail}: this is a broken install, NOT an empty ${noun}; do not read it as zero hits or fall back to another tool silently`,
+        `reinstall ${name} (or rebuild its workspace deps) and report it`,
     );
 };
 
@@ -68,13 +70,14 @@ const clampExitCode = (): void => {
 };
 
 /**
- * Runs the app under the shared contract: EPIPE is a clean stop, errors land on stdout, a broken module graph
- * reports itself, and the exit code is 0 content / 1 none / 2 anything else.
+ * Runs the app under the shared contract: EPIPE is a clean stop, errors land on stdout in the failure shape
+ * (errors.ts), a broken module graph reports itself, and the exit code is 0 content / 1 none / 2 anything else.
  */
 export const runAgentCli = async (options: AgentCliOptions): Promise<void> => {
     exitOnBrokenPipe();
-    errorsToStdout(options.rewriteStderr);
     const raw = process.argv.slice(2);
+    let help = `${options.name} --help`;
+    errorsToStdout((text) => options.rewriteStderr?.(text) ?? stricliFailure(options.name, text, help));
 
     let cli: { run: typeof import("@stricli/core").run; loaded: LoadedCli };
     try {
@@ -86,6 +89,7 @@ export const runAgentCli = async (options: AgentCliOptions): Promise<void> => {
     }
 
     const prepared = cli.loaded.prepareArgv?.(raw) ?? { argv: raw, lines: [] };
+    help = helpCommand(options.name, cli.loaded.app, prepared.argv);
     for (const line of prepared.lines) {
         // Also stdout: this is how an absorbed dialect reaches its reader past the usual `2>/dev/null`.
         process.stdout.write(`${options.name}: ${line}\n`);

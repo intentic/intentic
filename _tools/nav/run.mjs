@@ -216,7 +216,7 @@ const calibrate = async () => {
             4.6,
         ],
         ["punctuation-dense", "const x = a?.b?.c ?? (d && e) || [f, g].map((h) => h * 2);", 1.5, 2.8],
-        ["prose comment", "// The marker that identifies the monorepo root, rather than counting directories upward from here.", 3.8, 5.2],
+        ["prose comment", "// The marker that identifies the monorepo root, rather than counting directories upward from here.", 3.8, 5.6],
     ];
     console.log("\nPer-shape ratios (information — each shape has its own honest range):\n");
     for (const [label, text, low, high] of shapes) {

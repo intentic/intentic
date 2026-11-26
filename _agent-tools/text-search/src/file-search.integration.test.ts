@@ -33,7 +33,8 @@ const found = async (query: string, options: Partial<Parameters<typeof findFiles
     (await findFiles({ root, query, limit: 50, ...options })).groups.map((group) => group.path);
 
 test("files rank by the quick-open scorer, ignored and junk files left out, the authored state slice kept", async () => {
-    expect(await found("widget")).toEqual(["docs/widgets.md", "app/src/widget.ts", "app/src/widget.test.ts", `${STATE_DIR}/config/skills/widget/SKILL.md`]);
+    // widget.ts before widgets.md: both names open with the query, and it covers more of the first.
+    expect(await found("widget")).toEqual(["app/src/widget.ts", "docs/widgets.md", "app/src/widget.test.ts", `${STATE_DIR}/config/skills/widget/SKILL.md`]);
     expect(await found("notes")).toEqual([]);
 });
 

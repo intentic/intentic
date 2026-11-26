@@ -16,7 +16,12 @@ flowchart LR
 
 - An agent cannot `cat` a docx or the text layer of a PDF. `fileq <file>` prints a capsule line (title, format,
   token cost, derived or fresh), then the markdown clipped to `--budget` tokens, and names the file that holds the whole
-  text.
+  text. A cut names the line of that file the rest starts on (front matter counted), so the agent reads on from there:
+  the printed body is read back from the saved file, so the numbers are that file's.
+- A failure is one line with a stable code, `fileq: error: <code>: <message>`, and usually `fileq: next: <step>`
+  (agent-cli's [errors](../agent-cli/README.md) has the codes). `read` answers `not_found`, `unsupported`, `too_large`
+  or `unreadable` with exit 1, keeping the `cannot read <path>: <reason>` wording the daemon reads the reason from;
+  `check`, `render` and `derive` answer `usage`, `missing_tool` and the rest as their exit codes did.
 - Renderings are cached by content: keyed by the source's sha256 and the deriver's version stamp, never its path, so
   a repeat read of unchanged content is instant, whether it is the same file, a copy or a move of it, or a file
   outside the workspace. The entries live under `.intentic/local/cache/derived/.by-hash/`, or with no workspace under
@@ -51,6 +56,15 @@ flowchart LR
   locks in `/tmp`, one per eight cores and per 8 GiB, at most two), since a reader holds about 1.5 GiB and four
   threads and fileq is started by many callers at once: `rg` over six unread scans used to start six readers (7 GiB),
   all of which then ran past their time limit. A text layer is read one page at a time, each page let go once read.
+- A PDF page reads as its text in the order the file draws it, except where rows line up in three or more columns (a
+  borderless invoice table, a two-sided form, a table in one column of a paper): that region is put back together by
+  position and printed as a markdown table, set off by blank lines, where the drawing order first reaches it
+  ([src/lib/derivers/pdf-tables.ts](src/lib/derivers/pdf-tables.ts), its heuristic adapted from markitdown's, MIT). A
+  page without one reads byte for byte as before. A review copy's margin line numbers and a page set in two columns are
+  told apart so prose never becomes a table, and a table's repeated header row is never taken for a running header.
+- A Word document's equations, which mammoth skips, come through as LaTeX, `$…$` inline and `$$…$$` for a display
+  equation ([src/lib/derivers/docx-math.ts](src/lib/derivers/docx-math.ts), markitdown's port of dwml's converter); a
+  document without one reaches mammoth untouched.
 - `fileq read` on a path the shadow tree refuses (the reference shelf, an agent's worktree) reads it through the
   content cache alone, as it does a file outside the workspace.
 - `fileq check <file>` lints a docx, pptx, xlsx or pdf an agent produced and names each problem where a reader meets
@@ -86,6 +100,13 @@ the originals, which would clutter people's folders, `git status` and synced fol
 PDFs and 117 code files on a 16-core sandbox, fresh shadows: `rg -n wniosek` took 5 ms with no config and 152 ms with
 the preprocessor (about 0.3 ms per document, run in parallel), and the same search over code alone took 4 ms either
 way, since only document globs reach the preprocessor.
+
+2026-11-26: a PDF table is cut out of the drawing order rather than the page being laid out again by position, as
+`pdftotext -layout` does (and markitdown does to a whole page once it finds a form there): a page without a table keeps
+its exact text, and a table costs fewer tokens than columns padded with spaces. On markitdown's borderless-table PDF all
+76 values land under their headers, where only 18 (the rows with every column filled) could be placed before; its two
+pages cost 271 tokens each against 222 before and 332 with `pdftotext -layout`. On a 560-page text PDF, looking for
+tables costs about 0.2 ms a page, 4 to 5% of reading the text layer.
 
 ## Key files
 

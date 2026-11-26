@@ -54,6 +54,8 @@ export const ON_THIS_COMPUTER_KEY = accountKey(`intentic.onThisComputer`);
 export const chatTabsKey = sandboxKeys(`intentic.chatTabs.`);
 // The last prompts sent, per sandbox (features/chat/drafts/inputHistory.ts).
 export const inputHistoryKey = sandboxKeys(`intentic.inputHistory.`);
+// The files last opened, per sandbox, for quick-open to list first (models/workspace/search/recentFilesStore.ts).
+export const recentFilesKey = sandboxKeys(`intentic.recentFiles.`);
 // This browser's copy of every unsent message, per sandbox (models/conversations/drafts/composerDrafts.ts).
 export const composerDraftsKey = sandboxKeys(`intentic.composerDrafts.`);
 // Where a chat closed unsent kept its words before the sandbox held drafts: read once into the copy above, then removed.

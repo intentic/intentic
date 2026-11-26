@@ -19,11 +19,13 @@ export const INSTR_BUDGETS: readonly Budget[] = [
     },
     {
         name: "fuzzy-typing / fuzzy-rank",
-        // The same 20 keystrokes over the same 20,000 paths, through the ranker quick-open keeps (43% at recording) and
-        // re-ranked from scratch. Sixty percent fails when a keystroke goes back to scoring every path.
+        // The same 20 keystrokes over the same 20,000 paths, through the ranker quick-open keeps and re-ranked from
+        // scratch: 43% at recording, ~66% since scattered matches are aligned by dynamic programming (2026-11-26,
+        // fuzzy.ts), which every surviving candidate pays on each keystroke while both scenarios got faster outright.
+        // Seventy-five percent still fails when a keystroke goes back to scoring every path, which reads near 100%.
         claim: "quick-open's ranker scores only what the previous keystroke matched, so typing costs well under re-ranking every path",
         reads: ["fuzzy-typing", "fuzzy-rank"],
         value: ratio("fuzzy-typing", "fuzzy-rank"),
-        max: 0.6,
+        max: 0.75,
     },
 ];

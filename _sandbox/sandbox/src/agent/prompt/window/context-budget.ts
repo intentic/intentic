@@ -1,4 +1,4 @@
-import { charsOfTokens, tokensOfChars } from "@intentic/base/format";
+import { charsOfTokens, estimateTokens, tokensOfChars } from "@intentic/base/format";
 import type { AgentCapabilities } from "@intentic/sandbox-contract/models/agent-runtimes";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { endpointIdOf, isTrialProvider } from "@intentic/sandbox-contract/models/agent-catalog";
@@ -27,6 +27,10 @@ const withCommas = (value: number): string =>
         .replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
 
 // How many characters of prompt a one-shot helper may spend on a model that declared a window (role-model.ts).
+//
+// Characters at four to a token, not the turn's estimateTokens: the room is handed to a prompt builder before there is a
+// text to estimate (limit-handoff.ts renderRecord, commit-message.ts sizedCommitMessagePrompt), and helperOverflow checks
+// the built prompt by the same rate, so the room and its check agree.
 //
 // The arithmetic is not the turn's below, and deliberately: a helper carries no tools, no session and no transcript
 // (a sealed request, agent/run/sealed/sealed-request.ts, is planned with `tools: {}` and no conversation), so the
@@ -126,7 +130,7 @@ export const contextShortfall = (turn: {
         return undefined;
     }
     const { window, onACard } = turn.declared;
-    const promptTokens = tokensOfChars(turn.prompt.length);
+    const promptTokens = estimateTokens(turn.prompt);
     const needed = floor + OUTPUT_RESERVE_TOKENS + promptTokens;
     if (needed <= window) {
         return undefined;

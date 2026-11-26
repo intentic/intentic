@@ -1,8 +1,10 @@
 import { bodyOf, parseHtml } from "@intentic/webq/dom";
 import { renderMarkdown } from "@intentic/webq/markdown";
 import type { DerivedDoc, Deriver } from "./deriver.js";
+import { mammothInput } from "./docx-math.js";
 
-/* Word documents: mammoth maps the docx to semantic HTML (headings, lists, tables — its whole reason to exist). */
+/* Word documents: mammoth maps the docx to semantic HTML (headings, lists, tables — its whole reason to exist). It skips
+Word's equations, so a document holding any is handed over with each one rewritten as LaTeX text (docx-math.ts). */
 
 // mammoth is 0.26s to load, and only a Word document needs it; see xlsx.ts for why that is loaded inside derive().
 
@@ -33,10 +35,10 @@ export const notesOf = (messages: readonly { readonly message: string }[]): stri
 
 export const docxDeriver: Deriver = {
     name: "docx",
-    version: 2,
+    version: 3,
     derive: async (absPath): Promise<DerivedDoc> => {
         const { default: mammoth } = await import("mammoth");
-        const converted = await mammoth.convertToHtml({ path: absPath });
+        const converted = await mammoth.convertToHtml(await mammothInput(absPath));
         const body = bodyOf(parseHtml(converted.value));
         const markdown = body === undefined ? "" : renderMarkdown(body);
         return { markdown, notes: notesOf(converted.messages) };

@@ -1,7 +1,10 @@
 /* `fileq read <file>` (also the default command): one file as markdown — a capsule line saying what happened, the content up to a token budget; `--plain` is the body alone, whole, for a program (git's textconv) rather than an agent. */
-import { basename, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
+import { type ErrorCode, failure, shellWord } from "@intentic/agent-cli/errors";
 import { countParser } from "@intentic/agent-cli/flags";
-import { capsule, clip } from "@intentic/agent-cli/output";
+import { capsule, clip, type Whole } from "@intentic/agent-cli/output";
 import { estimateTokens } from "@intentic/base/format";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { deriverStamp } from "../lib/derivers/deriver.js";
@@ -52,9 +55,9 @@ export const readCommand = buildCommand({
             this.process.stdout.write(`saved: ${result.savedPath}\n`);
         }
         if (flags.budget > 0 && result.body !== "") {
-            const whole = result.savedPath ?? `the output of \`fileq read --plain ${absPath}\``;
+            const { body, whole } = await printable(result, absPath);
             this.process.stdout.write("---\n");
-            this.process.stdout.write(withFinalNewline(clip(result.body, flags.budget, whole, "document")));
+            this.process.stdout.write(withFinalNewline(clip(body, flags.budget, whole)));
         }
     },
 });
@@ -79,10 +82,10 @@ const readInWorkspace = async (root: string, absPath: string): Promise<ReadResul
     if (outcome.kind === "skipped" && (outcome.reason === "outside-workspace" || outcome.reason === "ignored-path")) {
         return readOutsideWorkspace(root, absPath);
     }
-    return fromOutcome(outcome);
+    return fromOutcome(outcome, absPath);
 };
 
-const fromOutcome = (outcome: Outcome): ReadResult | undefined => {
+const fromOutcome = async (outcome: Outcome, absPath: string): Promise<ReadResult | undefined> => {
     switch (outcome.kind) {
         case "derived":
             return {
@@ -108,10 +111,38 @@ const fromOutcome = (outcome: Outcome): ReadResult | undefined => {
         case "removed":
         case "skipped": {
             const reason = outcome.kind === "removed" ? "missing" : outcome.reason;
-            process.stdout.write(`fileq: cannot read ${outcome.relPath}: ${reason}\n`);
+            process.stdout.write(await refusal(outcome.relPath, absPath, reason));
             return undefined;
         }
     }
+};
+
+// Why a read failed, as a code and the step that gets further. The reasons are derive.ts's: `missing`, `unsupported`,
+// `too-large (N MB)`, `unreadable (EACCES)`, `derive-failed (docx): …`. The daemon reads the reason back off the
+// error line's `cannot read <path>: ` (_sandbox/sandbox/src/derived/derived-blob.ts), so that wording stays.
+const refusal = async (shown: string, absPath: string, reason: string): Promise<string> => {
+    const [code, next] = await refusalKind(absPath, reason);
+    return failure("fileq", code, `cannot read ${shown}: ${reason}`, next);
+};
+
+const refusalKind = async (absPath: string, reason: string): Promise<readonly [ErrorCode, string | undefined]> => {
+    if (reason === "missing") {
+        return ["not_found", `ls ${shellWord(dirname(absPath))}`];
+    }
+    if (reason === "unsupported") {
+        return ["unsupported", "fileq --help lists the formats it reads; read a text file directly"];
+    }
+    if (reason.startsWith("too-large")) {
+        return ["too_large", undefined];
+    }
+    if (reason.startsWith("unreadable")) {
+        return ["unreadable", `ls -l ${shellWord(absPath)}`];
+    }
+    // A document that will not open: a check names what is wrong with it (damaged, password-protected), and is loaded
+    // only on this path.
+    const failed = /^derive-failed \((\w+)\)/.exec(reason)?.[1];
+    const { CHECKABLE } = await import("../lib/check/check.js");
+    return ["unreadable", CHECKABLE.some((format) => format === failed) ? `fileq check ${shellWord(absPath)}` : undefined];
 };
 
 // A file outside the workspace has no sidecar: the content cache alone keeps its rendering, and its entry is what `saved:`
@@ -119,7 +150,9 @@ const fromOutcome = (outcome: Outcome): ReadResult | undefined => {
 const readOutsideWorkspace = async (root: string | undefined, absPath: string): Promise<ReadResult | undefined> => {
     const outcome = await renderByContent(root, absPath);
     if (outcome.kind === "failed") {
-        process.stdout.write(`fileq: cannot read ${absPath}: ${outcome.reason}\n`);
+        // The content cache cannot tell a missing file from one in no format it reads; the file system can.
+        const reason = outcome.reason === "unsupported or missing" ? (existsSync(absPath) ? "unsupported" : "missing") : outcome.reason;
+        process.stdout.write(await refusal(absPath, absPath, reason));
         return undefined;
     }
     return {
@@ -132,6 +165,21 @@ const readOutsideWorkspace = async (root: string | undefined, absPath: string): 
         title: outcome.doc.title,
         notes: outcome.doc.notes,
     };
+};
+
+// The body to print and where its continuation is read: the saved rendering's own text below its front matter, so the
+// line a cut names is the line that file shows there; `--plain`'s output when nothing was saved or it cannot be read back.
+const printable = async (result: ReadResult, absPath: string): Promise<{ body: string; whole: Whole }> => {
+    // allow(silent-catch): a rendering that cannot be read back is still printed, from memory, with `--plain` as its rest.
+    const saved = result.savedPath === undefined ? undefined : await readFile(result.savedPath, "utf8").catch(() => undefined);
+    if (result.savedPath === undefined || saved === undefined) {
+        return { body: result.body, whole: { command: `fileq read --plain ${shellWord(absPath)}` } };
+    }
+    const fence = saved.startsWith("---\n") ? saved.indexOf("\n---\n", 4) : -1;
+    const start = fence === -1 ? 0 : fence + "\n---\n".length;
+    // The front matter's lines, plus one: the line the body starts on.
+    const firstLine = saved.slice(0, start).split("\n").length;
+    return { body: saved.slice(start), whole: { file: result.savedPath, firstLine } };
 };
 
 // A document's last line is content, and a sidecar body need not end in a newline; a clipped one already does.

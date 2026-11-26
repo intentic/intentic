@@ -1,15 +1,17 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { estimateTokens } from "@intentic/base/format";
 import { recordToolSchemas, schemaCostOf, ToolListingSchema, toolSchemasAnswer } from "./tool-schemas-log.js";
 
 const tool = (name: string, description: string) => ({ name, description, inputSchema: { type: "object", properties: {} } });
 const listing = (...tools: ReturnType<typeof tool>[]) => ToolListingSchema.parse({ tools });
 
-test("a listing costs its serialized names, descriptions and schemas, a quarter of the characters in tokens", () => {
+test("a listing costs its serialized names, descriptions and schemas, in characters and in estimated tokens", () => {
     const cost = schemaCostOf(listing(tool("a", "x".repeat(100)), tool("b", "short")));
     const chars = [tool("a", "x".repeat(100)), tool("b", "short")].reduce((sum, one) => sum + JSON.stringify(one).length, 0);
-    expect(cost).toEqual({ tools: 2, chars, tokens: Math.ceil(chars / 4), heaviest: [{ name: "a", chars: expect.any(Number) }, { name: "b", chars: expect.any(Number) }] });
+    const tokens = [tool("a", "x".repeat(100)), tool("b", "short")].reduce((sum, one) => sum + estimateTokens(JSON.stringify(one)), 0);
+    expect(cost).toEqual({ tools: 2, chars, tokens, heaviest: [{ name: "a", chars: expect.any(Number) }, { name: "b", chars: expect.any(Number) }] });
 });
 
 test("the answer is a conversation's latest turn by server, heaviest first, and an older turn's listing is left out", async () => {

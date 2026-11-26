@@ -89,7 +89,7 @@ describe("pdf", () => {
         writeFileSync(join(root, "short.pdf"), pagesPdf(2));
         const { out, exitCode } = await fileq("render", join(root, "short.pdf"), "--pages", "5-9");
         expect(exitCode).toBe(2);
-        expect(out).toBe(`fileq: cannot render ${join(root, "short.pdf")}: the document has 2 pages; --pages names none of them\n`);
+        expect(out).toBe(`fileq: error: usage: cannot render ${join(root, "short.pdf")}: the document has 2 pages; --pages names none of them\n`);
     });
 
     test.skipIf(!raster.runs)(raster.title("a long document draws its first twenty pages and says how to get the rest"), async () => {
@@ -111,7 +111,8 @@ describe("tools", () => {
         process.env["PATH"] = "/nonexistent";
         const { out, exitCode } = await fileq("render", join(root, "plain.pdf"));
         expect(exitCode).toBe(2);
-        expect(out).toContain("rendering pages needs pdftoppm (poppler-utils) or mutool (mupdf-tools) on PATH, and neither is here");
+        expect(out).toContain("fileq: error: missing_tool: cannot render");
+        expect(out).toContain("rendering pages needs pdftoppm (poppler-utils) or mutool (mupdf-tools) on PATH, and neither is here\nfileq: next: install one");
     });
 
     test("in an Intentic sandbox (its environment command on PATH) it prints the command that asks for the office pack", async () => {
@@ -124,7 +125,7 @@ describe("tools", () => {
         const { out, exitCode } = await fileq("render", join(root, "sandboxed.pdf"));
         expect(exitCode).toBe(2);
         expect(out).toContain(
-            'neither is here: ask the owner for the office image pack (LibreOffice and poppler) with `environment propose office --pack --why "to look at the document I made"`',
+            'neither is here\nfileq: next: ask the owner for the office image pack (LibreOffice and poppler) with `environment propose office --pack --why "to look at the document I made"`',
         );
     });
 
@@ -144,7 +145,7 @@ describe("tools", () => {
         writeFileSync(join(root, "photo.png"), pngBytes());
         const { out, exitCode } = await fileq("render", join(root, "photo.png"));
         expect(exitCode).toBe(1);
-        expect(out).toContain("an image is already pixels: Read it directly");
+        expect(out).toBe(`fileq: error: unsupported: cannot render ${join(root, "photo.png")}: an image is already pixels: Read it directly\n`);
     });
 });
 

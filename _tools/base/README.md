@@ -57,6 +57,16 @@ flowchart LR
   `cachedAsync` is the sibling for a reading that costs a round trip: askers share the load in flight, a failure is
   never held, and `maxEntries` caps it. `BoundedMap` is a Map that drops its oldest entry past a limit, for memory kept
   by a key the process cannot bound itself.
+- `fuzzy.ts` ranks paths for quick-open. A query is whitespace- or comma-separated terms, every one required, and a
+  path scores the mean of its terms on the 0..1 axis the palette orders every kind of row on: a contiguous hit 0.75 and
+  up (in the file's own name above its folders, the name's start above a word's start above mid-word), a scattered one
+  at most 0.7, scored by its best alignment (fzf's arithmetic: word starts and runs earn, gaps cost). Case is ignored
+  but read for camelCase humps. A limited ranking allocates only what could make the cut and works out a scattered
+  alignment only when its bound still could. `fuzzy.vscode.test.ts` replays VS Code's own 34 ranking cases as the
+  acceptance bar: 32 pass, and the two that want the path whose case matches the query are missed on purpose
+  (2026-11-26; the greedy walk this replaced took each letter's first occurrence, matched a space literally, and passed
+  16. VS Code's strict tier, any match inside the name above any across the folders, was rejected: it put `affixups.ts`
+  above `fuzzy/paths.ts` for `fp`).
 - `dag.ts` layers a dependency graph by generation for the two graphs extensions draw, workflows and CI pipelines,
   so a cycle or a self-need is handled one way in both: a cycle lands in one final layer.
 - `cloudflare.ts` is the Cloudflare v4 client the platform and the deploy engine's providers both call: a bearer, the
@@ -116,6 +126,11 @@ flowchart LR
   since a checked Content-Length is not a ceiling on a chunked answer.
 - `text/one-line.ts` is outside text as one bounded line: whitespace flattened, control and format characters (ESC,
   BEL, bidi overrides) removed, cut at a character boundary with the `…` inside the limit.
+- `text/tokens.ts` is the token count every budget uses, with no tokenizer: the text is split the way o200k_base splits
+  it, and each piece is priced at what o200k_base charges for that kind of piece. On held-out text it is 4% off on
+  average and 8% on the worst kind of content, where four characters a token was 18% off and 61% under on base64
+  (2026-11-26). `sliceToTokens` cuts by the same count, so a budget turned into a cut keeps what it says. `format.ts`
+  re-exports both. Four characters a token (`charsOfTokens`) remains only where there is no text yet to count.
 - `sqlite.ts`: a store holding a `DatabaseSync` opens it with `openSqlite` (WAL, a busy timeout, foreign keys) and
   groups writes with `immediateTransaction`, which takes the write lock at BEGIN and joins a transaction already open.
 - `workers/worker-calls.ts` is a call-and-answer channel to a worker thread, spawned on first call and again after a

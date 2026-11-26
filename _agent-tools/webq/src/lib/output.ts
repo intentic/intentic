@@ -9,6 +9,8 @@ import type { PageResult } from "./page.js";
 export interface SavedPage {
     readonly path: string;
     readonly tokens: number;
+    /** The 1-based line of the file the markdown starts on, below the front matter: where a cut's line numbers count from. */
+    readonly firstLine: number;
 }
 
 export const slugFor = (url: string): string => {
@@ -44,7 +46,7 @@ export const savePage = async (outDir: string, page: PageResult, fetchedAt: Date
     ].join("\n");
     const content = `${frontMatter}${page.markdown}`;
     await writeFile(path, content);
-    return { path, tokens: estimateTokens(page.markdown) };
+    return { path, tokens: estimateTokens(page.markdown), firstLine: frontMatter.split("\n").length };
 };
 
 export interface IndexEntry {

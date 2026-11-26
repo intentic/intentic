@@ -2,7 +2,9 @@ NOTICE
 ======
 
 fileq is part of the Intentic repository and is MIT-licensed (package.json).
-It includes material adapted from SurfSense, which is covered below.
+It includes material adapted from SurfSense and dwml, both under the Apache
+License, Version 2.0, and from markitdown, under the MIT License; each is
+covered below.
 
 
 SurfSense
@@ -28,6 +30,23 @@ changed:
 
 The code in those files is written for fileq, in TypeScript; what it carries
 over is the rules, their thresholds and the wording of the authoring guidance.
+
+
+dwml
+----
+
+By xilei
+https://github.com/xiilei/dwml (read at 32c5b4fc963c160a0af655c1791f447179f8e77e)
+
+dwml is licensed under the Apache License, Version 2.0, whose full text
+follows; it ships no NOTICE file of its own. Its Office Math to LaTeX converter
+reached fileq through markitdown's adaptation of it (below):
+
+  src/lib/derivers/docx-math.ts          the element handlers, from dwml/omml.py
+  src/lib/derivers/docx-math-symbols.ts  the symbol tables, from dwml/latex_dict.py
+
+The code in those files is written for fileq, in TypeScript; each file's header
+says what it changed.
 
 
                                  Apache License
@@ -206,3 +225,41 @@ over is the rules, their thresholds and the wording of the authoring guidance.
       of your accepting any such warranty or additional liability.
 
    END OF TERMS AND CONDITIONS
+
+
+markitdown
+----------
+
+Copyright (c) Microsoft Corporation.
+https://github.com/microsoft/markitdown (read at b8f79c57ebc0044be41323d89b2a45d3fda8460e)
+
+Adapted from markitdown, each file's header saying what it took and changed:
+
+  src/lib/derivers/pdf-tables.ts         the word-position table heuristic, from
+                                         packages/markitdown/src/markitdown/converters/_pdf_converter.py
+  src/lib/derivers/docx-math.ts          equation pre-processing, from
+                                         .../converter_utils/docx/pre_process.py and math/omml.py
+  src/lib/derivers/docx-math-symbols.ts  the symbol tables, from .../converter_utils/docx/math/latex_dict.py
+  fixtures/markitdown/                   test files, copied unchanged from packages/markitdown/tests/test_files/
+
+    MIT License
+
+    Copyright (c) Microsoft Corporation.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE

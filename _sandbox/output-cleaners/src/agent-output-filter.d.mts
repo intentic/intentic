@@ -34,6 +34,8 @@ export interface FilterRunOptions {
     readonly runName?: string | undefined;
     // Scopes the repeat cache to one session.
     readonly sessionKey?: string | undefined;
+    // The conversation running this command: the holdout arm and the harm metric's grouping depend on it.
+    readonly conversationId?: string | undefined;
     readonly values?: readonly SecretValue[];
     // Test runs: where they are recorded (`dir`, absent to record none), the directory the command started in and who ran
     // it. A test run that failed ends with its digest (test-digest.mjs); absent, no digest is made.
@@ -44,6 +46,10 @@ export interface FilterRunOptions {
 
 // One command's whole pass; never throws, and falls back to the raw text (redacted) on any failure.
 export const filterRun: (raw: string, options?: FilterRunOptions) => { out: string; heldOut: boolean; stages: Stage[] };
+
+// Per-conversation holdout: same SHA-256 bucket as MCP's mcpHeldOut, so a conversation is in the same arm on both
+// paths. Falls back to per-command random when no conversation id is present.
+export const conversationHeldOut: (conversationId: string | undefined, holdout: number, random?: () => number) => boolean;
 
 // Shared raw-output retention: newest 500 files within 200 MB, at most two million characters per file.
 export const retainIn: (dir: string, name: string, values: readonly SecretValue[], maxChars?: number) => (text: string) => string | undefined;

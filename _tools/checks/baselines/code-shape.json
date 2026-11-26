@@ -3102,14 +3102,6 @@
         "count": 23,
         "why": "standing when the check arrived (2026-10-16)"
     },
-    "_tools/nav/lib/tokens.mjs#estimateTokens#cognitive": {
-        "count": 40,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
-    "_tools/nav/lib/tokens.mjs#estimateTokens#cyclomatic": {
-        "count": 23,
-        "why": "standing when the check arrived (2026-10-16)"
-    },
     "_tools/nav/metrics.mjs#measureShape#lines": {
         "count": 101,
         "why": "standing when the check arrived (2026-10-16)"

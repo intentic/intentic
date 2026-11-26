@@ -1,5 +1,6 @@
 /* `fileq check <file>`: a document's structural problems, each with where it is, so an agent can fix what it produced before a person opens it. */
-import { basename, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
+import { failure, shellWord } from "@intentic/agent-cli/errors";
 import { capsule } from "@intentic/agent-cli/output";
 import { neutralizeOutsideText } from "@intentic/base/outside-text";
 import { buildCommand, type CommandContext } from "@stricli/core";
@@ -49,6 +50,15 @@ const tally = (report: CheckReport): string => {
     return [errors > 0 ? counted(errors, "error") : "", warnings > 0 ? counted(warnings, "warning") : ""].filter((part) => part !== "").join(", ");
 };
 
+// check.ts's reasons: `no such file`, `N MB is over the M MB a check reads`, or what opening it threw.
+const unreadable = (absPath: string, reason: string): string => {
+    const message = `cannot check ${absPath}: ${reason}`;
+    if (reason === "no such file") {
+        return failure("fileq", "not_found", message, `ls ${shellWord(dirname(absPath))}`);
+    }
+    return failure("fileq", / MB is over the /.test(reason) ? "too_large" : "unreadable", message);
+};
+
 export const checkCommand = buildCommand({
     docs: { brief: "Lint a docx, pptx, xlsx or pdf for problems a reader would meet; exit 1 on any error" },
     parameters: {
@@ -67,11 +77,16 @@ export const checkCommand = buildCommand({
         const { CHECKABLE, checkFile } = await import("../lib/check/check.js");
         const outcome = await checkFile(absPath);
         if (outcome.kind !== "checked") {
-            const reason =
+            this.process.stdout.write(
                 outcome.kind === "unreadable"
-                    ? outcome.reason
-                    : `fileq check reads ${CHECKABLE.join(", ")}; this is ${outcome.format ?? "none of them"} (fileq read shows what it holds)`;
-            this.process.stdout.write(`fileq: cannot check ${absPath}: ${reason}\n`);
+                    ? unreadable(absPath, outcome.reason)
+                    : failure(
+                          "fileq",
+                          "unsupported",
+                          `cannot check ${absPath}: fileq check reads ${CHECKABLE.join(", ")}; this is ${outcome.format ?? "none of them"}`,
+                          `fileq read ${shellWord(file)} shows what it holds`,
+                      ),
+            );
             process.exitCode = 2;
             return;
         }

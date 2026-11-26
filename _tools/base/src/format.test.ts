@@ -19,11 +19,13 @@ test("a size past the largest unit keeps counting in it", () => {
     expect(sizeLabel(4 * 1024 ** 4)).toBe("4096.0 GB");
 });
 
-test("a token is about four characters, rounded up so nothing reads as free", () => {
+// The measured estimate (text/tokens.ts), not four characters a token: a word is one token whatever its length, and a
+// base64 blob is far denser than a quarter of its characters.
+test("tokens are counted by piece, and nothing reads as free", () => {
     expect(estimateTokens("")).toBe(0);
     expect(estimateTokens("a")).toBe(1);
-    expect(estimateTokens("abcd")).toBe(1);
-    expect(estimateTokens("abcde")).toBe(2);
+    expect(estimateTokens("abcdefgh")).toBe(1);
+    expect(estimateTokens("dGhlIHF1aWNrIGJyb3duIGZveA==")).toBeGreaterThan(Math.ceil(28 / 4));
 });
 
 test("plural: singular when count is 1, auto-suffixed otherwise", () => {

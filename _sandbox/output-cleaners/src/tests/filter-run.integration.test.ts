@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { filterRun, retainIn } from "../agent-output-filter.mjs";
 import { CACHE_MARKER } from "../cleaners.mjs";
 import { parseStatsFile, summarizeStats } from "../stats/filter-stats.mjs";
+import { estimateTokens } from "../token-estimate.mjs";
 
 // filterRun is the sandbox pane pipeline's whole pass, so these
 // pin what it keeps under logsDir and that a keeping failure never costs the trim itself.
@@ -37,6 +38,8 @@ test("keeps the raw text a footer names and ledgers one row per command", () => 
     const rows = parseStatsFile(readFileSync(join(logsDir, "filter-stats.jsonl"), "utf8"));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ ts: 1234, command: "./build.sh", exit: "0", rawBytes: LONG.length, emittedBytes: out.length, heldOut: false });
+    // Tokens as the estimate counts them, so the savings report weighs padding and base64 at what they cost.
+    expect(rows[0]).toMatchObject({ rawTokens: estimateTokens(LONG), emittedTokens: estimateTokens(out) });
 });
 
 test("a held-out command reaches the model untrimmed, keeps no raw copy, and is ledgered as the control", () => {

@@ -68,6 +68,8 @@ export interface ScoredRow {
     // 0..1, the one axis both rankers answer on (commandSearch.nameScore, @intentic/base/fuzzy); 0 for a row listed
     // without a query, which leaves JUMP_KINDS to order the palette.
     readonly score: number;
+    // Opened recently and matched: kept whatever it scores, since having just opened it is evidence of its own.
+    readonly remembered?: boolean;
 }
 
 export interface JumpGroup<Row extends ScoredRow> {
@@ -95,7 +97,7 @@ export const groupJumpRows = <Row extends ScoredRow>(rows: readonly Row[], cap: 
     const floor = Math.max(0, ...rows.map((row) => row.score)) * RELEVANCE;
     return (
         JUMP_KINDS.flatMap((kind) => {
-            const mine = rows.filter((row) => row.kind === kind && row.score >= floor).slice(0, cap);
+            const mine = rows.filter((row) => row.kind === kind && (row.score >= floor || row.remembered === true)).slice(0, cap);
             return mine.length === 0 ? [] : [{ kind, rows: mine }];
         })
             // Stable, so kinds whose best row scores the same keep the precedence above.
