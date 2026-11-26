@@ -129,13 +129,17 @@ const detailsId = useId();
                 <span class="min-w-1 flex-1" />
                 <span v-if="waitClock" class="shrink-0 text-subtle tabular-nums" data-notice-clock>{{ waitClock }}</span>
                 <span v-else-if="time" class="shrink-0 text-subtle tabular-nums">{{ time }}</span>
-                <Icon
-                    v-if="opens"
-                    name="chevron-down"
-                    class="shrink-0 text-2xs text-subtle opacity-0 transition group-hover/line:opacity-100 group-focus-visible/line:opacity-100 max-md:opacity-100"
-                    :class="open && `rotate-180 opacity-100`"
-                    aria-hidden="true"
-                />
+                <!-- Every row keeps the chevron's slot, open or not, so the times stand in one column under the header's own
+                     chevron instead of an openable row's time stepping left. -->
+                <span class="flex w-3 shrink-0 justify-center" data-notice-chevron-slot>
+                    <Icon
+                        v-if="opens"
+                        name="chevron-down"
+                        class="text-2xs text-subtle opacity-0 transition group-hover/line:opacity-100 group-focus-visible/line:opacity-100 max-md:opacity-100"
+                        :class="open && `rotate-180 opacity-100`"
+                        aria-hidden="true"
+                    />
+                </span>
                 <span v-if="opens" class="sr-only">{{ open ? t(`chat.noticeParts.hideDetails`) : t(`chat.noticeParts.showDetails`) }}</span>
             </component>
             <!-- The one follow-up this notice offers, by its action's name (noticeActions.ts), on the same line. -->
