@@ -79,10 +79,11 @@ html[data-variant="desk"] .home.home-focused {
     outline: 2px solid var(--color-accent);
     outline-offset: 3px;
 }
-/* The tab is BASALT, the app's quiet stone (Sanctum's secondary buttons, _editor/web/src/skins/sanctum.css), cut the
-   way its plaques are: a lit upper lip, a dark contact rim, the house grain for tooth. Bronze was tried first and was
-   the loudest thing over the headline, a second Download button; the owner chose basalt over it and over the app's
-   limestone (2026-11-26). On paper it is a pressed, warmer sheet of the canvas with the body's ink. */
+/* The tab is OBSIDIAN: a flat #171717 with a faint hairline, darker than the chip's own fill so it sits in the seal
+   rather than on it. Bronze was tried first and was the loudest thing over the headline, a second Download button;
+   basalt (the app's warm grey stone, with grain and a lit lip) followed and read as a separate grey button. The owner
+   chose obsidian over it and over a pressed warm ink well and a gold-lipped lacquer (2026-11-26). On paper it is a
+   pressed, warmer sheet of the canvas with the body's ink. */
 .home.home-focused .hero-chip-label {
     --cut: 4px;
     position: relative;
@@ -91,14 +92,10 @@ html[data-variant="desk"] .home.home-focused {
     font-weight: var(--font-weight-semibold);
     letter-spacing: 0.02em;
     color: var(--hero-sub-strong);
-    text-shadow: 0 1px 0 rgb(0 0 0 / 0.5);
     white-space: nowrap;
-    background-color: color-mix(in oklab, #efe3cd 8%, #37312a);
-    background-image: var(--house-bronze-grain), linear-gradient(180deg, rgb(255 250 238 / 0.05), transparent 48%, rgb(0 0 0 / 0.14));
+    background-color: #171717;
     box-shadow:
-        inset 0 0 0 1px rgb(239 227 205 / 0.1),
-        inset 0 1px 0 rgb(240 214 168 / 0.12),
-        inset 0 -1px 0 rgb(0 0 0 / 0.3),
+        inset 0 0 0 1px rgb(255 255 255 / 0.06),
         0 1px 2px rgb(0 0 0 / 0.4);
     clip-path: polygon(
         var(--cut) 0,
