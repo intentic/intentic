@@ -138,6 +138,7 @@ const backends: typeof knowledge = { ...knowledge, ...repoAppsBackend, ...mainte
 // The API keys the visitor's laptop holds, for GET /arrivals/keys: the hint and digest only, as the daemon answers.
 const DEMO_KEYS = [
     { id: `key-3f9a2c41d07e8b55`, provider: `openrouter`, label: `OpenRouter`, source: `hermes`, host: `laptop`, hint: `9c2e`, applicable: true },
+    { id: `key-8b1d07e4c95a2f36`, provider: `openai`, label: `OpenAI`, source: `codex`, host: `laptop`, hint: `4f2a`, applicable: true },
 ] as const;
 const demoKeysAdded = new Set<string>();
 
@@ -217,8 +218,9 @@ export const raw = {
         }),
     "POST /system/control/tokens": () => json({ id: `ct_new`, token: `***` }),
     "DELETE /system/control/tokens/{id}": () => json({ ok: true }),
-    // A model key on the visitor's laptop, offered by the connect view's "Found on this computer"; adding it is
-    // remembered for the tab, though no endpoint joins the picker, since the demo serves no models of its own.
+    // Model keys on the visitor's laptop, found by Sandbox ▸ Models' Find API keys: a vendor's (OpenAI, under ChatGPT) and a
+    // gateway's (OpenRouter, under Local models). Adding one is remembered for the tab, though no endpoint joins the
+    // picker, since the demo serves no models of its own.
     "GET /arrivals/keys": () => json({ keys: DEMO_KEYS.map((key) => ({ ...key, added: demoKeysAdded.has(key.id) })) }),
     "POST /arrivals/keys/apply": async ({ request }) => {
         const ids = ProviderKeysApplySchema.safeParse(await request.json()).data?.ids ?? [];

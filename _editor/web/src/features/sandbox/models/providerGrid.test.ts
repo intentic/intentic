@@ -5,6 +5,8 @@ import {
     arrivalTile,
     foundSignIns,
     isFreeTile,
+    keysFoundFor,
+    keyTile,
     landedLine,
     linkArrival,
     LOCAL_TILE,
@@ -75,6 +77,10 @@ test("on arrival the tile whose turn it is opens, else a connected one, else the
     expect(arrivalTile({ live: `cursor`, failed: `kimi`, needing: `codex` })).toBe(`cursor`);
     expect(arrivalTile({ asked: `claude`, live: `cursor` })).toBe(`claude`);
     expect(arrivalTile({ asked: `endpoint/qwen` })).toBe(LOCAL_TILE);
+    // The desktop app's landing names what it found signed in here: that panel's Connect is the one click it came for,
+    // ahead of what is already connected, behind anything that needs a person.
+    expect(arrivalTile({ found: `codex`, connected: `gemini` })).toBe(`codex`);
+    expect(arrivalTile({ needing: `claude`, found: `codex` })).toBe(`claude`);
 });
 
 // The chat's Reconnect lands here for a provider that is connected, one account of it needing a new sign-in: the page
@@ -99,7 +105,7 @@ test("the landed banner names the sandbox the account was connected to", () => {
     expect(landedLine(`ChatGPT`, undefined)).toBe(`Connected. This workspace can run turns now.`);
 });
 
-// The desktop app's `?found=`: the AI tools already signed in on this computer, offered above the grid.
+// The desktop app's `?found=`: the AI tools already signed in on this computer, badged on their tiles.
 test("what this computer is signed in to is offered in grid order, minus what this sandbox already holds", () => {
     expect(foundSignIns([`gemini`, `codex`, `claude`], only())).toEqual([`claude`, `codex`, `gemini`]);
     // One connected here is nothing left to do, and leaves the list.
@@ -125,4 +131,16 @@ test("a device's key is offered when this sandbox can reach its provider and has
     expect(offeredKeys(keys, new Set()).map((entry) => entry.id)).toEqual([`a`]);
     // Added during this visit: the row stays, marked, rather than vanishing under the press.
     expect(offeredKeys(keys, new Set([`d`])).map((entry) => entry.id)).toEqual([`a`, `d`]);
+});
+
+// Find API keys answers on the tiles and in the panels: a vendor's key in the card of the sign-in it is the alternative
+// to, as the endpoint it becomes is filed; a gateway's under Local models.
+test("a found key is offered under its vendor's sign-in, else under Local models, until this sandbox holds it", () => {
+    expect(keyTile({ provider: `anthropic` })).toBe(`claude`);
+    expect(keyTile({ provider: `openai` })).toBe(`codex`);
+    expect(keyTile({ provider: `openrouter` })).toBe(LOCAL_TILE);
+    const keys = [key(`a`, { provider: `anthropic` }), key(`b`), key(`c`, { provider: `anthropic`, added: true })];
+    expect(keysFoundFor(keys, `claude`).map((entry) => entry.id)).toEqual([`a`]);
+    expect(keysFoundFor(keys, LOCAL_TILE).map((entry) => entry.id)).toEqual([`b`]);
+    expect(keysFoundFor(keys, `codex`)).toEqual([]);
 });

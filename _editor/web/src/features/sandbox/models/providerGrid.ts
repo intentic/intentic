@@ -1,5 +1,6 @@
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import { isEndpointProvider, isFreeProvider } from "@intentic/sandbox-contract/models/agent-catalog";
+import { KEY_PROVIDERS } from "@intentic/sandbox-contract/models/key-providers";
 import { NATIVE_PROVIDERS, type NativeProvider } from "@intentic/sandbox-contract/models/provider-specs";
 import type { ProviderKey, ProviderKeySource } from "@intentic/sandbox-contract/state/arrival";
 import { t } from "@intentic/ui/i18n";
@@ -78,9 +79,10 @@ export const tileCount = (facts: TileFacts): number | undefined => (facts.count 
 
 /**
  * The tile open on arrival. The provider a link named, the sign-in in flight or the one that just failed (it is the
- * reader's turn), else whatever needs a person; failing those, the first provider already connected, else the grid's
- * first tile. Some tile is always open, as every master/detail view here arrives with one selected (roles does the
- * same): a grid with an empty detail pane reads as a page that has not finished loading.
+ * reader's turn), else whatever needs a person; then a provider the desktop app just found signed in on this computer
+ * (its panel's Connect is the one click that address was opened for); failing those, the first provider already
+ * connected, else the grid's first tile. Some tile is always open, as every master/detail view here arrives with one
+ * selected (roles does the same): a grid with an empty detail pane reads as a page that has not finished loading.
  */
 export const arrivalTile = (
     facts: {
@@ -88,11 +90,12 @@ export const arrivalTile = (
         readonly live?: AgentProvider;
         readonly failed?: AgentProvider;
         readonly needing?: AgentProvider;
+        readonly found?: AgentProvider;
         readonly connected?: AgentProvider;
     },
     besideOf: BesideOf = besideNone,
 ): TileKey =>
-    [facts.asked, facts.live, facts.failed, facts.needing, facts.connected]
+    [facts.asked, facts.live, facts.failed, facts.needing, facts.found, facts.connected]
         .map((provider) => (provider === undefined ? undefined : tileOf(provider, besideOf)))
         .find((key) => key !== undefined) ?? MODEL_TILES[0]!;
 
@@ -130,20 +133,33 @@ export const landedLine = (label: string, sandboxName: string | undefined): stri
         : t(`connect.connect.landedIn`, { provider: label, sandbox: sandboxName });
 
 /**
- * "Found on this computer": the providers the desktop app found signed in here (`?found=`) that this sandbox does not
- * hold yet, in grid order. One that becomes ready leaves the list.
+ * The providers the desktop app found signed in on this computer (`?found=`) that this sandbox does not hold yet, in grid
+ * order: each tile's corner badge, and the tile open on arrival. One that becomes ready leaves the list.
  */
 export const foundSignIns = (found: readonly AgentProvider[], ready: (provider: AgentProvider) => boolean): readonly NativeProvider[] =>
     NATIVE_PROVIDERS.filter((provider) => found.includes(provider) && !ready(provider));
 
-// The API keys from the owner's devices offered beside them: only ones this sandbox can reach, and not ones an endpoint
-// already held when the view opened. A key added during this visit keeps its row, marked as added, rather than
-// vanishing under the press that added it.
+// The API keys from the owner's devices that a look found: only ones this sandbox can reach, and not ones an endpoint
+// already held when the view opened. A key added during this visit still counts, so the count beside Find API keys does
+// not drop under the press that added it; its panel row gives way to the key's own connection row (keysFoundFor).
 export const offeredKeys = (keys: readonly ProviderKey[], addedHere: ReadonlySet<string>): readonly ProviderKey[] =>
     keys.filter((key) => key.applicable && (!key.added || addedHere.has(key.id)));
 
-// The files a look for API keys reads on each connected computer, as the row under its button names them: the daemon's
-// KEY_FILES and OpenClaw's per-agent profiles (migrations/provider-keys.ts), paths the same in every language.
+/**
+ * The tile a found key is offered under: the sign-in its vendor sells beside it (an Anthropic key under Claude), as the
+ * endpoint it becomes is filed (tileOf with `keyedBeside`), else Local models, where a gateway's key lives.
+ */
+export const keyTile = (key: Pick<ProviderKey, `provider`>): TileKey => {
+    const beside = KEY_PROVIDERS.find((entry) => entry.id === key.provider)?.beside;
+    return beside !== undefined && isProviderTile(beside) ? beside : LOCAL_TILE;
+};
+
+/** The found keys a tile's panel offers and its corner marks: its own, less any this sandbox holds by now. */
+export const keysFoundFor = (keys: readonly ProviderKey[], tile: TileKey): readonly ProviderKey[] =>
+    keys.filter((key) => !key.added && keyTile(key) === tile);
+
+// The files a look for API keys reads on each connected computer, as the grid's (i) names them: the daemon's KEY_FILES
+// and OpenClaw's per-agent profiles (migrations/provider-keys.ts), paths the same in every language.
 export const KEY_FILES_READ = [
     `~/.codex/auth.json`,
     `~/.gemini/.env`,

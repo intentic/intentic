@@ -10,6 +10,8 @@ import { endpointProviders, keyedBeside } from "../../../models/providers/provid
 import { useCapabilities } from "../../../models/capabilities/useCapabilities";
 import ConnectionRow from "../secrets/ConnectionRow.vue";
 import HostServerRows from "./HostServerRows.vue";
+import FoundKeyRows from "./keys/FoundKeyRows.vue";
+import { LOCAL_TILE } from "./providerGrid";
 import LocalModelLane from "./LocalModelLane.vue";
 import { here, page } from "../../../lib/routes/links";
 
@@ -94,6 +96,9 @@ const held = computed(() =>
                 <RouterLink :to="entry.manage" :class="ui.textButton()">{{ t(`connect.modelSources.manage`) }}</RouterLink>
             </template>
         </ConnectionRow>
+
+        <!-- A gateway's key the grid's Find API keys found (OpenRouter, DeepSeek): a vendor's own sits in its sign-in's card. -->
+        <FoundKeyRows :tile="LOCAL_TILE" />
 
         <HostServerRows />
 

@@ -13,20 +13,40 @@ import { isFreeTile, LOCAL_TILE, type TileKey, type TileTone } from "./providerG
 
 const t = useT();
 
-const { tile, selected, line, standing, found, controls } = defineProps<{
+const { tile, selected, line, standing, found, keyFound, controls } = defineProps<{
     tile: TileKey;
     selected: boolean;
     line: { readonly text: string; readonly tone: TileTone } | undefined;
     // What its connections are in, drawn as a dot on the mark; nothing connected, no dot.
     standing: ModelSourceStanding | undefined;
+    // The desktop app found it signed in on this computer.
     found: boolean;
+    // Find API keys found a key for it on the owner's computers, offered in its panel.
+    keyFound: boolean;
     // The panel this tile opens, for assistive tech.
     controls: string;
 }>();
 const emit = defineEmits<{ select: [] }>();
 
-// What the corner mark means, since a glyph alone does not say it.
-const tip = computed(() => (found ? { title: t(`connect.providerGrid.onThisComputer`), note: t(`connect.connect.foundConnectHint`) } : undefined));
+// The corner mark, and what it means, since a glyph alone does not say it. A sign-in found here outranks a key: a key is
+// never the default (keys/ApiKeyOption.vue), so the tile offers the plan first, and the panel holds both.
+const corner = computed(() => {
+    if (found) {
+        return {
+            icon: `desktop` as const,
+            tip: { title: t(`connect.providerGrid.onThisComputer`), note: t(`connect.connect.foundConnectHint`) },
+            said: t(`connect.connect.foundSignedIn`),
+        };
+    }
+    if (keyFound) {
+        return {
+            icon: `key` as const,
+            tip: { title: t(`connect.providerGrid.keyFound`), note: t(`connect.providerGrid.keyFoundHint`) },
+            said: t(`connect.providerGrid.keyFoundOn`),
+        };
+    }
+    return undefined;
+});
 
 const name = computed(() => (tile === LOCAL_TILE ? t(`connect.providerGrid.local`) : (providerSpec(tile)?.accountLabel ?? tile)));
 
@@ -59,13 +79,13 @@ watch(
 
 <template>
     <button
-        v-tooltip.top="tip"
+        v-tooltip.top="corner?.tip"
         type="button"
         class="ui-row-select group relative flex aspect-square min-w-0 flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-5"
         :class="{ 'ui-row-select-on': selected }"
         :aria-pressed="selected"
         :aria-controls="controls"
-        :aria-description="found ? t(`connect.connect.foundSignedIn`) : undefined"
+        :aria-description="corner?.said"
         @click="emit(`select`)"
     >
         <div v-if="isFreeTile(tile)" class="absolute inset-x-1.5 top-1.5 h-4">
@@ -73,8 +93,8 @@ watch(
                 t(`connect.connect.free`)
             }}</span>
         </div>
-        <span v-if="found" class="absolute right-1.5 top-1.5 flex size-4 items-center justify-center text-xs text-accent" aria-hidden="true">
-            <Icon name="desktop" />
+        <span v-if="corner" class="absolute right-1.5 top-1.5 flex size-4 items-center justify-center text-xs text-accent" aria-hidden="true">
+            <Icon :name="corner.icon" />
         </span>
         <!-- The mark itself, no plate: the provider's logo is what the tile is recognised by. -->
         <span

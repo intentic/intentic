@@ -3,10 +3,10 @@ import TourMark from "../../tour/TourMark.vue";
 import type { AgentProvider } from "@intentic/sandbox-contract/schemas/agent";
 import type { KeyedProvider } from "@intentic/sandbox-contract/schemas/providers/provider-subscriptions";
 import { type NativeProvider, providerSpec } from "@intentic/sandbox-contract/models/provider-specs";
-import { Button, Icon, InfoHint, Notice, type NoticeModel, Row, RowGroup, Section } from "@intentic/ui";
+import { Button, Icon, InfoHint, Notice, type NoticeModel, Section } from "@intentic/ui";
 import { useT } from "@intentic/ui/i18n";
 import { lessMotion } from "@intentic/ui/motion";
-import { computed, inject, nextTick, onMounted, onUnmounted, ref, useId, useTemplateRef, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, provide, ref, useId, useTemplateRef, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAccess } from "../../../client/sandbox/access/useAccess";
 import { useTier } from "../../../client/sandbox/useTier";
@@ -16,7 +16,6 @@ import { SANDBOX_SELF_ACCESS } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { HOME_VIEW_HOST } from "../../../lib/routes/homeDetour";
 import { endpointProviders, keyedBeside, runnableReadFailure } from "../../../models/providers/providerCatalog";
-import ProviderLogo from "../../../parts/providers/ProviderLogo.vue";
 import { refreshConnections } from "../../../models/conversations/accounts/useChat-accounts";
 import { holdSignInTab } from "../../../models/conversations/run/signInTab";
 import { holdModelsView, type SignInFailureKind } from "../../../models/conversations/run/signInOutcome";
@@ -32,7 +31,8 @@ import {
     foundSignIns,
     isProviderTile,
     KEY_FILES_READ,
-    KEY_SOURCE_LABELS,
+    keysFoundFor,
+    keyTile,
     type LandedCard,
     landedLine,
     linkArrival,
@@ -45,7 +45,7 @@ import {
 } from "./providerGrid";
 import ProviderTile from "./ProviderTile.vue";
 import { useLocalModelFit } from "./useLocalModelFit";
-import { useFoundKeys } from "./useFoundKeys";
+import { FOUND_KEYS, useFoundKeys } from "./useFoundKeys";
 import { useModelSources } from "./useModelSources";
 import { here, page } from "../../../lib/routes/links";
 
@@ -162,6 +162,7 @@ const tileFacts = computed(() =>
                     count: accessKnown.value ? tileCount(facts) : undefined,
                     standing: accessKnown.value ? standing : undefined,
                     found: accessKnown.value && facts.found && facts.count === 0,
+                    keyFound: keysFoundFor(keyRows.value, tile).length > 0,
                 },
             ];
         }),
@@ -202,6 +203,9 @@ const settleArrival = (): void => {
             live: live.value?.provider,
             failed: signInFailure.value?.provider,
             needing: sources.value.find((source) => source.standing === `attention` || source.standing === `blocked`)?.provider,
+            // Only when the desktop app's own address named them: an offer remembered from an earlier one is a badge, and
+            // does not pull every later visit away from what is connected.
+            found: route.query[`found`] === undefined ? undefined : foundRows.value[0],
             connected: sources.value.find((source) => source.kind !== `trial` && source.standing === `ready`)?.provider,
         },
         keyedBeside,
@@ -375,22 +379,34 @@ const startChatting = async (): Promise<void> => {
     void router.push(here(page.chat()));
 };
 
-// FOUND ON THIS COMPUTER (`?found=`, lib/foundOnComputer.ts): the providers the desktop app found signed in here, each one
-// press that opens the provider's panel with its sign-in started, which the browser already signed in answers. What the
-// address names, else what the desktop app said on an earlier address.
+// FOUND ON THIS COMPUTER (`?found=`, lib/foundOnComputer.ts): the providers the desktop app found signed in here, each a
+// badge on its tile and, on the desktop app's own landing, the tile open on arrival, where its panel's Connect is one
+// press the browser already signed in answers. What the address names, else what the desktop app said on an earlier one.
+// (2026-11-26) They were rows of a section above the grid, which stood there with only the key search in it on most visits.
 const found = computed(() => foundToOffer(route.query[`found`]));
 const foundRows = computed(() => foundSignIns(found.value, providerReady).filter((provider) => mayConnect(provider)));
 
-// And the API keys the owner's devices hold, read only when the owner presses Look (useFoundKeys.ts). A copied key's
-// endpoint is opened and offered, in the card of the sign-in a vendor's key is the alternative to, else under Local models.
-const { keyRows, keyLook, readKeys, adding, keyNotice, addKey } = useFoundKeys((key, endpoint) => {
+// And the API keys the owner's devices hold, read only when the owner presses Find API keys (useFoundKeys.ts): a tool in
+// the grid's header, its files named in the grid's (i), each key it finds a badge on its tile and a row in that tile's
+// panel (keys/FoundKeyRows.vue). A copied key's endpoint is opened and offered there, in the card of the sign-in a vendor's
+// key is the alternative to, else under Local models.
+const foundKeys = useFoundKeys((key, endpoint) => {
     if (endpoint !== undefined) {
         keyEndpointLabels.set(endpoint, t(`connect.connect.foundKeyTitle`, { provider: key.label }));
         landed.value = endpoint;
         arrival.value = undefined;
-        selected.value = tileOf(endpoint, keyedBeside) ?? LOCAL_TILE;
+        // The card the press was made in, where the key's own row now stands.
+        selected.value = keyTile(key);
     }
 });
+provide(FOUND_KEYS, foundKeys);
+const { keyRows, keyLook, readKeys, keyNotice, failedKey } = foundKeys;
+// What the last look came to, beside its button: said only once there was a look.
+const keysFoundLine = computed(() =>
+    keyLook.value !== `looked` ? undefined : keyRows.value.length === 0 ? t(`connect.connect.foundKeysNone`) : t(`connect.connect.foundKeysCount`, { count: keyRows.value.length }, keyRows.value.length),
+);
+// A failed copy is said at its key's row; one whose row is not listed (the look was on an earlier visit) under the grid.
+const keyNoticeUnplaced = computed(() => (keyNotice.value !== undefined && !keyRows.value.some((key) => key.id === failedKey.value) ? keyNotice.value : undefined));
 
 // A key pasted beside a provider's sign-in (keys/ApiKeyOption.vue) lands as a row of the card it was pasted in, said there
 // once the connection list names it (landedFor).
@@ -439,82 +455,31 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
             :of="{ tone: `danger`, title: t(`sandbox.aiAccountSection.couldntListProviders`), detail: runnableReadFailure }"
         />
 
-        <!-- What this computer already holds: the first thing to do when there is any of it, one press each. -->
-        <RowGroup v-if="foundRows.length > 0 || keyRows.length > 0 || canShip" :label="t(`connect.connect.foundTitle`)">
-            <Row
-                v-for="provider in foundRows"
-                :key="provider"
-                :title="providerSpec(provider)?.accountLabel"
-                :description="t(`connect.connect.foundSignedIn`)"
-            >
-                <template #lead="{ mark }">
-                    <span class="flex shrink-0 items-center justify-center text-base text-muted" :style="{ width: `${mark}px` }"
-                        ><ProviderLogo :provider="provider"
-                    /></span>
-                </template>
-                <template #control>
-                    <Button
-                        tier="boring"
-                        size="small"
-                        :label="t(`ui.action.connect`)"
-                        :loading="starting === provider"
-                        :disabled="starting !== undefined || live?.provider === provider"
-                        @click="connect(provider)"
-                    />
-                </template>
-            </Row>
-            <Row
-                v-for="key in keyRows"
-                :key="key.id"
-                icon="key"
-                :title="t(`connect.connect.foundKeyTitle`, { provider: key.label })"
-                :description="t(`connect.connect.foundKeyFrom`, { source: KEY_SOURCE_LABELS[key.source], hint: key.hint })"
-            >
-                <template #control>
-                    <span v-if="key.added" class="flex items-center gap-1 text-2xs text-success"
-                        ><Icon name="check" class="text-2xs" />{{ t(`connect.connect.foundKeyAdded`) }}</span
-                    >
-                    <Button
-                        tier="boring"
-                        v-else
-                        size="small"
-                        :label="t(`ui.action.add`)"
-                        :loading="adding === key.id"
-                        :disabled="adding !== undefined"
-                        @click="addKey(key)"
-                    />
-                </template>
-            </Row>
-            <!-- The owner's own press: credential files on their computers are read for it, never because the page opened. -->
-            <Row
-                v-if="canShip"
-                icon="search"
-                :title="keyLook === `looked` && keyRows.length === 0 ? t(`connect.connect.foundKeysNone`) : t(`connect.connect.foundKeysTitle`)"
-                :description="t(`connect.connect.foundKeysReads`, { files: KEY_FILES_READ })"
-            >
-                <template #control>
-                    <Button
-                        tier="boring"
-                        size="small"
-                        :label="keyLook === `looked` ? t(`connect.connect.foundKeysLookAgain`) : t(`connect.connect.foundKeysLook`)"
-                        :loading="keyLook === `looking`"
-                        :disabled="keyLook === `looking`"
-                        @click="readKeys"
-                    />
-                </template>
-            </Row>
-        </RowGroup>
-        <Notice v-if="keyNotice" :of="keyNotice" />
-
         <!-- The grid: every way in, always the same tiles in the same places; fluid columns, so a scrollbar never reflows it.
              How it works and where what you connect is kept sit behind its (i). -->
         <Section :label="t(`shared.allProviders`)">
             <template #info>
                 <InfoHint :label="t(`sandbox.dataProtection.about`, { name: t(`shared.allProviders`) })">
                     <span class="block text-xs text-content">{{ t(`connect.providerGrid.intro`) }}</span>
+                    <span v-if="canShip" class="mt-2 block text-xs text-muted">{{ t(`connect.connect.foundKeysReads`, { files: KEY_FILES_READ }) }}</span>
                 </InfoHint>
                 <!-- Getting started's mark for connecting a model: this page is where that step is done. -->
                 <TourMark step="models" place="models" :priority="3" side="bottom" />
+            </template>
+            <!-- The owner's own press: credential files on their computers are read for it, never because the page opened.
+                 A tool used when the reader chooses, so boring; what it finds is badged on the tiles below. -->
+            <template v-if="canShip" #actions>
+                <span v-if="keysFoundLine" class="text-xs text-muted" role="status">{{ keysFoundLine }}</span>
+                <Button
+                    tier="boring"
+                    size="small"
+                    :label="keyLook === `looked` ? t(`connect.connect.foundKeysLookAgain`) : t(`connect.connect.foundKeysLook`)"
+                    :loading="keyLook === `looking`"
+                    :disabled="keyLook === `looking`"
+                    @click="readKeys"
+                >
+                    <template #icon><Icon name="search" /></template>
+                </Button>
             </template>
             <div role="group" :aria-label="t(`shared.models`)" class="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-1">
                 <ProviderTile
@@ -525,11 +490,13 @@ watch([accessKnown, () => route.query[`provider`]], settleArrival);
                     :line="tileFacts[tile]?.line"
                     :standing="tileFacts[tile]?.standing"
                     :found="tileFacts[tile]?.found ?? false"
+                    :key-found="tileFacts[tile]?.keyFound ?? false"
                     :controls="panelId"
                     @select="select(tile)"
                 />
             </div>
         </Section>
+        <Notice v-if="keyNoticeUnplaced" :of="keyNoticeUnplaced" />
 
         <!-- The open tile's panel. Nothing until the lists land: an empty provider would claim "not connected". -->
         <div :id="panelId" ref="panelEl" class="scroll-mt-4">

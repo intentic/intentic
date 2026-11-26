@@ -12,10 +12,12 @@ import { refreshConnections } from "../../../../models/conversations/accounts/us
 import { keysBeside } from "../../../../models/providers/providerCatalog";
 import ConnectionRow from "../../secrets/ConnectionRow.vue";
 import ApiKeyOption from "./ApiKeyOption.vue";
+import FoundKeyRows from "./FoundKeyRows.vue";
+import { isProviderTile } from "../providerGrid";
 import { keyRows } from "./providerKeys";
 
 // THE API KEYS A PROVIDER'S CARD HOLDS, as rows after its accounts (ProviderPanel.vue): a key pasted under the sign-in
-// (ApiKeyOption) or copied from the owner's computer is one more way to pay for the same models, so it lives where they
+// (ApiKeyOption) or copied from the owner's computer (FoundKeyRows) is one more way to pay for the same models, so it lives where they
 // do rather than under Local models (the owner, 2026-11-05). Taking one off removes the endpoint it became, as the
 // Capabilities page would; renaming one renames that endpoint, as the Capabilities page would too, which is how two keys
 // under one sign-in ("work", "personal") are told apart. Only a reader who may change connections gets either press. The card's last quiet line offers a
@@ -107,5 +109,7 @@ const renameKey = (capability: string) => async (typed: string): Promise<void> =
             />
         </template>
     </ConnectionRow>
+    <!-- A key the grid's Find API keys found for this vendor, one press from being a row above. -->
+    <FoundKeyRows v-if="offer && isProviderTile(provider)" :tile="provider" />
     <ApiKeyOption v-if="offer" :provider="provider" :another="rows.length > 0" @added="(endpoint, label) => emit(`added`, endpoint, label)" />
 </template>
