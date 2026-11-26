@@ -8,6 +8,7 @@ import {
     SAMPLE_EVERY_MS,
     VM_FLOOR_BYTES,
     vmBytesFromTasklist,
+    vmFromGetProcess,
     withCaps,
     type WslMemoryReading,
     wslMemoryFit,
@@ -173,6 +174,21 @@ test("rog's finding says what was measured and what is proposed", () => {
     expect(fit === undefined ? undefined : fitReason(fit)).toBe("Windows was under its 3.1 GiB low line in 88% of 3.9 hours of readings while the VM held a median 16.2 GiB of 31.4 GiB");
 });
 
+// A VM Windows has trimmed: its working set alone is under a third of the RAM, but what it holds in all is not.
+test("a VM whose working set Windows trimmed is judged by its private bytes, and the finding says how much was pushed out", () => {
+    // 8 GiB of 24 available most of the time, the VM at 7.5 GiB in RAM of the 12 WSL gives it by default.
+    const trimmed = readings({ total: 24 * GIB, pattern: [[2.0, 14.5]] });
+    expect(wslMemoryFit(trimmed, undefined, NOW)).toBeUndefined();
+    const held = trimmed.map((reading) => ({ ...reading, vmPrivateBytes: reading.vmBytes + 4 * GIB }));
+    const fit = wslMemoryFit(held, undefined, NOW);
+    // 24 - 14.5 - 2.4 - 0.5 = 6.6: under the floor, so 8.
+    expect(fit).toMatchObject({ proposedGb: 8, atFloor: true });
+    expect(fit?.text).toContain("while the WSL VM held a median 7.5 GiB in RAM and Windows had pushed a median 4.0 GiB more of it out of RAM;");
+    // Little pushed out says nothing of it.
+    const barely = readings({ pattern: ROG_AFTERNOON }).map((reading) => ({ ...reading, vmPrivateBytes: reading.vmBytes + 0.2 * GIB }));
+    expect(wslMemoryFit(barely, 22, NOW)?.text).toContain("held a median 16.2 GiB in RAM; Windows' own use");
+});
+
 // rog's two sandboxes run with an 18 GiB cap each, past the 15 GB proposed.
 test("sandbox caps larger than the proposed VM are flagged", () => {
     const fit = wslMemoryFit(readings({ pattern: ROG_AFTERNOON }), 22, NOW);
@@ -203,6 +219,13 @@ test("percentile is nearest-rank", () => {
     expect(percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.9)).toBe(9);
     expect(percentile([10, 1, 5], 0.5)).toBe(5);
     expect(outsideVmBytes({ at: 0, availableBytes: 2.3 * GIB, totalBytes: ROG, vmBytes: 16.6 * GIB })).toBeCloseTo(12.5 * GIB, -6);
+});
+
+test("vmmemWSL's working set and private bytes are read from Get-Process, nothing printed being a VM not running", () => {
+    // rog on 2026-11-26.
+    expect(vmFromGetProcess("19576401920 23313350656\r\n")).toEqual({ workingSetBytes: 19_576_401_920, privateBytes: 23_313_350_656 });
+    expect(vmFromGetProcess("\r\n")).toEqual({ workingSetBytes: 0 });
+    expect(vmFromGetProcess("Get-Process : Cannot find a process")).toBeUndefined();
 });
 
 // What rog's tasklist printed on 2026-11-26, and the same in other locales' grouping.

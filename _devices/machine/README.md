@@ -511,14 +511,21 @@ flowchart LR
   it) is adopted and put back to the kernel's boot value. A root that cannot write it leaves the drops as before for
   half an hour. Measured on rog: lowering with 2.7 GB stranded took vmmemWSL's private bytes down 1.6 GB and raised
   Windows' available by 0.8 GB within 16 s (0.9 GB after the compaction), and the stranded mean over minutes fell from
-  1.1-1.7 GB to 0.3 GB. What reporting 16 KiB blocks costs the hypervisor and the host's page tables is not measured,
-  which is why the order is lowered only while Windows is short.
+  1.1-1.7 GB to 0.3 GB. That is for a VM whose memory the host backs with large pages (WSL boots it at 9), where 16 KiB
+  blocks would split them. A VM WSL boots at 5 or lower is backed by 4 KiB pages (`WslCoreVm.cpp` in microsoft/WSL), so
+  there it is lowered as soon as Windows is under a fifth of its memory with more than 1 GiB stranded, and held until
+  the agent stops. Measured on rog (booted at 5): memory re-touched after page reporting took it cost 1390 ns a page
+  against 1137, and rog's VM allocates 25-54 thousand pages a second, so the lower order costs it at most 0.08% of its
+  16 vCPUs.
 - (2026-11-26) **A WSL VM too big for its PC.** Dropping cache could not help rog: its `.wslconfig` gives the VM 22 GB
-  of 31.4 GiB and the VM keeps it. So the same side reads Windows' available memory and vmmemWSL's working set every
-  five minutes (`tasklist`, about 150 ms; `Get-Process` would add private bytes for a PowerShell's 0.35 s of CPU) and
-  keeps four hours of readings in memory ([`environments/wsl-memory-watch.ts`](src/environments/wsl-memory-watch.ts)).
-  When Windows was under its low line in at least 60% of three or more hours of them, while the VM's median working
-  set was a third of the RAM or more and above the size that fits, it proposes `memory=` as the RAM less Windows' own
+  of 31.4 GiB and the VM keeps it. So the same side reads Windows' available memory and vmmemWSL's working set and
+  private bytes every five minutes (`Get-Process`, a PowerShell's 0.35 s of CPU; `tasklist` for the working set alone
+  where PowerShell fails) and keeps four hours of readings in memory ([`environments/wsl-memory-watch.ts`](src/environments/wsl-memory-watch.ts)).
+  The private bytes are what Windows charges the VM, in RAM or pushed out of it: rog's VM held 21.7 GiB against an
+  18.2 GiB working set (2026-11-26), and the heartbeat's `vm` carries both.
+  When Windows was under its low line in at least 60% of three or more hours of them, while the VM's median private
+  bytes (its working set where they were not read) were a third of the RAM or more and above the size that fits, it
+  proposes `memory=` as the RAM less Windows' own
   use outside the VM (its 90th percentile), the low line and 0.5 GiB, rounded down to a whole GB, never under 8 GB
   (the heaviest command the heavy-command queue prices plus the agent running it), and only when that is at least
   2 GB under what the VM may take now ([`environments/wsl-memory-fit.ts`](src/environments/wsl-memory-fit.ts)). On

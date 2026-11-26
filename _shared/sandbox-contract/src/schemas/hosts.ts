@@ -131,6 +131,9 @@ export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 const HostVmMemorySchema = z.object({
     // vmmemWSL's working set: the VM's footprint in Windows' RAM, in bytes. 0: the VM was not running.
     workingSetBytes: z.number().nonnegative(),
+    // vmmemWSL's private bytes: what Windows charges the VM, in RAM or pushed out of it, in bytes. Above the working set
+    // by what Windows has pushed out (3.5 GiB on rog, 2026-11-26). Absent where only the working set was read.
+    privateBytes: z.number().nonnegative().optional(),
     // When it was read, in epoch ms.
     at: z.number(),
 });

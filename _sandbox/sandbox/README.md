@@ -1018,13 +1018,15 @@ flowchart LR
   `memory.reclaim`, with `swappiness=0` (file cache only) while turns run and `swappiness=200` (cold anon into zram too)
   when idle, where the kernel takes the key. Every sandbox on the PC sees the same shortfall, so each takes half of it
   scaled by its own size against half the host's memory, 0.3 of that while turns run, at most 2 GiB, and none while
-  its memory pressure is 15% or more. A minute later the host reading is logged against the one before:
+  its memory pressure is 15% or more. While turns run it also asks for no more than the cgroup's `inactive_file`: past
+  the cold list, the kernel takes the cache those turns are reading. A minute later the host reading is logged against the one before:
   a reclaim Windows did not feel doubles the wait before the next, up to ten minutes. `memory.reclaim` answering EAGAIN
   is a partial reclaim; one that cannot be written at all turns this off until the daemon restarts. Measured on rog
   that day, a 1 GiB reclaim took under 1.1 s and freed that much in the VM, in blocks too small for free page reporting
   to hand to Windows, whose available memory did not move beyond its noise: the machine agent's drop stays the
   fallback (its README). That agent now also lowers the VM's `page_reporting_order` while Windows is short and more
-  than a gigabyte of the VM's free memory is stranded, which lets about two fifths of a reclaim reach Windows instead
+  than a gigabyte of the VM's free memory is stranded (on a VM backed by small pages, rog's, it holds it until the
+  agent stops), which lets about two fifths of a reclaim reach Windows instead
   of a fifteenth, and the heartbeat's `memory` carries the VM's footprint (`vm`) and its free memory split into
   reportable and stranded (`guestFree`) beside Windows' figures, each with when it was read; the fleet advice reads
   both (next note).

@@ -42,6 +42,8 @@ export const VM_FLOOR_BYTES = Math.max(...Object.values(SIZE_BYTES)) + COST_BYTE
 export const MIN_CHANGE_GB = 2;
 // WSL's own default for a `.wslconfig` without `memory=`: half the RAM.
 const WSL_DEFAULT_SHARE = 0.5;
+// Less of the VM pushed out of RAM than this is not worth a clause in the finding.
+const PUSHED_OUT_WORTH_BYTES = 0.5 * GIB;
 
 export interface WslMemoryReading {
     readonly at: number;
@@ -50,6 +52,9 @@ export interface WslMemoryReading {
     readonly totalBytes: number;
     // vmmemWSL's working set: the VM's own footprint in RAM. 0 when the VM was not running.
     readonly vmBytes: number;
+    // vmmemWSL's private bytes: what Windows charges the VM, in RAM or pushed out of it (pagefile, compression store).
+    // Absent where only the working set could be read.
+    readonly vmPrivateBytes?: number;
 }
 
 // Windows' own use outside the VM in one reading: whatever is neither available nor the VM's. Pure.
@@ -82,20 +87,25 @@ const hoursWords = (ms: number): string => {
     return `${hours} ${hours === 1 ? "hour" : "hours"}`;
 };
 
-// The agent's sentence for what was measured and what is proposed. Pure.
-const fitText = (fit: Omit<WslMemoryFit, "text" | "capsOver">): string => {
+// The agent's sentence for what was measured and what is proposed, with the median of the VM Windows had pushed out of RAM
+// where its private bytes were read. Pure.
+const fitText = (fit: Omit<WslMemoryFit, "text" | "capsOver">, pushedOutBytes: number | undefined): string => {
     const now = fit.configuredGb === undefined ? `.wslconfig sets no memory=, so WSL gives the VM half the RAM` : `.wslconfig gives the VM memory=${fit.configuredGb}GB`;
     const proposal = fit.atFloor
         ? `memory=${fit.proposedGb}GB is the least that still runs one sandbox's heaviest work, though Windows would still be short with its own use as it is`
         : `memory=${fit.proposedGb}GB would leave Windows its own use, its low line and ${gib(MARGIN_BYTES)} to spare`;
-    return `Windows had less than its ${gib(fit.lowLineBytes)} low line available in ${Math.round(fit.underLowShare * 100)}% of the readings over the last ${hoursWords(fit.windowMs)} (median ${gib(fit.availableMedianBytes)} of ${gib(fit.totalBytes)}), while the WSL VM held a median ${gib(fit.vmMedianBytes)} in RAM; Windows' own use outside the VM reached ${gib(fit.outsideBytes)} (90th percentile). ${now}; ${proposal}.`;
+    return `Windows had less than its ${gib(fit.lowLineBytes)} low line available in ${Math.round(fit.underLowShare * 100)}% of the readings over the last ${hoursWords(fit.windowMs)} (median ${gib(fit.availableMedianBytes)} of ${gib(fit.totalBytes)}), while the WSL VM held a median ${gib(fit.vmMedianBytes)} in RAM${
+        pushedOutBytes !== undefined && pushedOutBytes >= PUSHED_OUT_WORTH_BYTES ? ` and Windows had pushed a median ${gib(pushedOutBytes)} more of it out of RAM` : ""
+    }; Windows' own use outside the VM reached ${gib(fit.outsideBytes)} (90th percentile). ${now}; ${proposal}.`;
 };
 
 /**
  * Whether the VM is too big for this PC, from the readings of the last FIT_WINDOW_MS before `now` and `memory=` as
  * `.wslconfig` sets it (`configuredGb`, undefined where it sets none), and if so the size that fits. Undefined when the
  * readings are too few or too short to say, when Windows was not short most of the time, when the VM is not what fills
- * it, or when what fits is not at least MIN_CHANGE_GB under what the VM may take now. Pure.
+ * it, or when what fits is not at least MIN_CHANGE_GB under what the VM may take now. What the VM holds is its private
+ * bytes where read: a working set Windows has trimmed (3.5 GiB of rog's 21.7, 2026-11-26) understates it, and a VM
+ * Windows is paging out is too big all the more. Pure.
  */
 export const wslMemoryFit = (readings: readonly WslMemoryReading[], configuredGb: number | undefined, now: number): Omit<WslMemoryFit, "capsOver"> | undefined => {
     const window = windowOf(readings, now);
@@ -109,10 +119,15 @@ export const wslMemoryFit = (readings: readonly WslMemoryReading[], configuredGb
     const lowLineBytes = hostMemoryLowBytes(totalBytes);
     const underLowShare = window.filter((reading) => reading.availableBytes < lowLineBytes).length / window.length;
     const vmMedianBytes = percentile(window.map((reading) => reading.vmBytes), 0.5) ?? 0;
+    const vmHeldMedianBytes = percentile(window.map((reading) => Math.max(reading.vmBytes, reading.vmPrivateBytes ?? 0)), 0.5) ?? 0;
+    const pushedOutBytes = percentile(
+        window.flatMap((reading) => (reading.vmPrivateBytes === undefined ? [] : [Math.max(0, reading.vmPrivateBytes - reading.vmBytes)])),
+        0.5,
+    );
     const outsideBytes = percentile(window.map(outsideVmBytes), OUTSIDE_PERCENTILE) ?? 0;
     const { gb: proposedGb, atFloor } = proposedVmGb(totalBytes, outsideBytes);
     const allowedGb = configuredGb ?? (WSL_DEFAULT_SHARE * totalBytes) / GIB;
-    if (underLowShare < MIN_UNDER_SHARE || vmMedianBytes < VM_LARGE_SHARE * totalBytes || vmMedianBytes <= proposedGb * GIB || allowedGb - proposedGb < MIN_CHANGE_GB) {
+    if (underLowShare < MIN_UNDER_SHARE || vmHeldMedianBytes < VM_LARGE_SHARE * totalBytes || vmHeldMedianBytes <= proposedGb * GIB || allowedGb - proposedGb < MIN_CHANGE_GB) {
         return undefined;
     }
     const fit: Omit<WslMemoryFit, "text" | "capsOver"> = {
@@ -131,7 +146,7 @@ export const wslMemoryFit = (readings: readonly WslMemoryReading[], configuredGb
     if (configuredGb !== undefined) {
         fit.configuredGb = configuredGb;
     }
-    return { ...fit, text: fitText(fit) };
+    return { ...fit, text: fitText(fit, pushedOutBytes) };
 };
 
 /**
@@ -154,6 +169,25 @@ export const withCaps = (fit: Omit<WslMemoryFit, "capsOver">, caps: readonly Wsl
 /** A short why for the line `.wslconfig` gets beside the change: what was measured, in one clause. Pure. */
 export const fitReason = (fit: Pick<WslMemoryFit, "lowLineBytes" | "underLowShare" | "windowMs" | "vmMedianBytes" | "totalBytes">): string =>
     `Windows was under its ${gib(fit.lowLineBytes)} low line in ${Math.round(fit.underLowShare * 100)}% of ${hoursWords(fit.windowMs)} of readings while the VM held a median ${gib(fit.vmMedianBytes)} of ${gib(fit.totalBytes)}`;
+
+// vmmemWSL as one read: its working set, and its private bytes where they could be read.
+export interface VmFootprint {
+    readonly workingSetBytes: number;
+    readonly privateBytes?: number;
+}
+
+/**
+ * vmmemWSL's working set and private bytes from VM_SCRIPT's `<working set> <private bytes>`; nothing printed is a VM not
+ * running. Undefined for anything else. Pure.
+ */
+export const vmFromGetProcess = (stdout: string): VmFootprint | undefined => {
+    const line = stdout.trim();
+    if (line === "") {
+        return { workingSetBytes: 0 };
+    }
+    const match = /^(\d+) (\d+)$/.exec(line);
+    return match === null ? undefined : { workingSetBytes: Number(match[1]), privateBytes: Number(match[2]) };
+};
 
 /** vmmemWSL's working set in bytes from `tasklist /FI "IMAGENAME eq vmmemWSL" /FO CSV /NH`; 0 when it is not listed (the VM is not running). Pure. */
 export const vmBytesFromTasklist = (stdout: string): number => {

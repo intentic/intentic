@@ -16,11 +16,11 @@ const rogWatch = (config: Config = { text: "[wsl2]\nmemory=22GB\n" }) => {
     let capReads = 0;
     const lines: string[] = [];
     const watch = startWslMemoryWatch((line) => void lines.push(line), {
-        // 2.6 GiB available of 31.4, the VM holding 16.3: Windows' own use 12.5.
+        // 2.6 GiB available of 31.4, the VM holding 16.3 in RAM and 19.8 in all: Windows' own use 12.5.
         read: () => ({ availableBytes: 2.6 * GIB, totalBytes: 31.4 * GIB }),
-        vmBytes: async () => {
+        vm: async () => {
             vmReads += 1;
-            return 16.3 * GIB;
+            return { workingSetBytes: 16.3 * GIB, privateBytes: 19.8 * GIB };
         },
         config: async () => config.text,
         caps: async () => {
@@ -55,6 +55,9 @@ test("a reading every five minutes, and the finding once there are hours of them
     // 37 readings over three hours: enough.
     const fit = rog.watch.current()?.fit;
     expect(fit?.proposedGb).toBe(15);
+    expect(fit?.text).toContain("while the WSL VM held a median 16.3 GiB in RAM and Windows had pushed a median 3.5 GiB more of it out of RAM;");
+    // The heartbeat's figure carries both.
+    expect(rog.watch.vm()).toEqual({ workingSetBytes: 16.3 * GIB, privateBytes: 19.8 * GIB, at: START + SAMPLE_EVERY_MS * 37 - 1 });
     expect(fit?.capsOver).toEqual([{ name: "shinobi", memoryBytes: 18 * GIB }]);
     // ic's listing only once there was something to say.
     expect(rog.reads().caps).toBe(1);
@@ -80,7 +83,7 @@ test("a failing read is said once and absorbed", async () => {
     let now = START;
     const watch = startWslMemoryWatch((line) => void lines.push(line), {
         read: () => ({ availableBytes: 2.6 * GIB, totalBytes: 31.4 * GIB }),
-        vmBytes: async () => {
+        vm: async () => {
             throw new Error("tasklist timed out");
         },
         config: async () => undefined,

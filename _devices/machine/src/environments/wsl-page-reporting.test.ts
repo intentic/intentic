@@ -16,6 +16,7 @@ import {
     restoredLine,
     restoreStep,
     shouldLowerOrder,
+    smallPageBacked,
     strandedOf,
 } from "./wsl-page-reporting.js";
 
@@ -87,15 +88,22 @@ test("the scripts wsl.exe hands a login shell hold no $ or quote for it to expan
     expect(orderScript(2, 5, false)).not.toContain("compact_memory");
 });
 
+// The same guest on a VM WSL backed by large pages, which it boots at order 9.
+const largePage = (order: number): GuestProbe => ({ ...parsed(order), bootOrder: 9 });
+
 const lowWindows = { availableBytes: 2.9 * GIB, totalBytes: 31.4 * GIB };
 const tightWindows = { availableBytes: 4.5 * GIB, totalBytes: 31.4 * GIB };
 const easyWindows = { availableBytes: 8 * GIB, totalBytes: 31.4 * GIB };
 
 test("the order is lowered when Windows is low and more than a gigabyte of the VM's free memory is stranded", () => {
     expect(shouldLowerOrder(lowWindows, parsed(5), undefined, false)).toBe(true);
-    // Above the low line, only a due drop (which it stands in for) lowers it.
-    expect(shouldLowerOrder(tightWindows, parsed(5), undefined, false)).toBe(false);
-    expect(shouldLowerOrder(tightWindows, parsed(5), undefined, true)).toBe(true);
+    expect(shouldLowerOrder(lowWindows, largePage(5), undefined, false)).toBe(true);
+    // Above the low line on a large-page VM, only a due drop (which it stands in for) lowers it.
+    expect(shouldLowerOrder(tightWindows, largePage(5), undefined, false)).toBe(false);
+    expect(shouldLowerOrder(tightWindows, largePage(5), undefined, true)).toBe(true);
+    // A small-page VM, rog's, is lowered as soon as Windows is under a fifth of its memory; with room, never.
+    expect(shouldLowerOrder(tightWindows, parsed(5), undefined, false)).toBe(true);
+    expect(shouldLowerOrder(easyWindows, parsed(5), undefined, false)).toBe(false);
     // Held already, or at the lowered order already: nothing to do.
     expect(shouldLowerOrder(lowWindows, parsed(5), { from: 5 }, true)).toBe(false);
     expect(shouldLowerOrder(lowWindows, parsed(2), undefined, true)).toBe(false);
@@ -103,6 +111,19 @@ test("the order is lowered when Windows is low and more than a gigabyte of the V
     const fewStranded = { ...parsed(5), blocks: [1000, 1000, 1000, 1000, 1000, 50_000] };
     expect(strandedOf(fewStranded)).toBeLessThan(GIB);
     expect(shouldLowerOrder(lowWindows, fewStranded, undefined, true)).toBe(false);
+});
+
+test("WSL's boot order says whether the VM is backed by small pages: 5 is, 9 is not", () => {
+    expect(smallPageBacked(parsed(5))).toBe(true);
+    expect(smallPageBacked(largePage(5))).toBe(false);
+    expect(smallPageBacked({})).toBe(false);
+});
+
+test("a small-page VM's lowered order is held however long Windows has room", () => {
+    let step = restoreStep({ from: 5, keep: true }, easyWindows, NOW);
+    expect(step).toEqual({ hold: { from: 5, keep: true }, restore: false });
+    step = restoreStep(step.hold, easyWindows, NOW + 10 * RESTORE_AFTER_MS);
+    expect(step).toEqual({ hold: { from: 5, keep: true }, restore: false });
 });
 
 test("the kernel's order comes back only after Windows has held over a fifth of its memory for ten minutes", () => {
@@ -124,8 +145,9 @@ test("the hold follows the order the guest reads: a restarted VM drops it, an ea
     // The VM restarted, or someone set it: not the agent's to put back.
     expect(adoptHold({ from: 5 }, parsed(5))).toBeUndefined();
     expect(adoptHold({ from: 5, recoveredSince: NOW }, parsed(2))).toEqual({ from: 5, recoveredSince: NOW });
-    // An agent stopped without restoring: the kernel's boot order is what goes back.
-    expect(adoptHold(undefined, parsed(2))).toEqual({ from: 5 });
+    // An agent stopped without restoring: the kernel's boot order is what goes back, held as the lowering was.
+    expect(adoptHold(undefined, parsed(2))).toEqual({ from: 5, keep: true });
+    expect(adoptHold(undefined, largePage(2))).toEqual({ from: 9 });
     const { bootOrder: _, ...unbooted } = parsed(2);
     expect(adoptHold(undefined, unbooted)).toBeUndefined();
     expect(adoptHold(undefined, parsed(5))).toBeUndefined();
@@ -153,7 +175,10 @@ test("lowering and restoring each leave one line with the stranded memory and Wi
     expect(
         loweredLine("archlinux", 5, { windows: lowWindows, strandedBytes: 2.03 * GIB }, { windows: { ...lowWindows, availableBytes: 3.6 * GIB }, strandedBytes: 0.22 * GIB }, 5000),
     ).toBe(
-        "Windows was low on memory (2.9 GiB of 31.4 GiB available) while the WSL VM had 2.0 GiB free in blocks too small to give back (page_reporting_order 5): lowered it to 2 and compacted through archlinux; 0.2 GiB stranded and 3.6 GiB available 5s later.",
+        "Windows had 2.9 GiB of 31.4 GiB available while the WSL VM had 2.0 GiB free in blocks too small to give back (page_reporting_order 5): lowered it to 2 and compacted through archlinux; 0.2 GiB stranded and 3.6 GiB available 5s later.",
+    );
+    expect(loweredLine("archlinux", 5, { windows: tightWindows, strandedBytes: 2.8 * GIB }, { windows: tightWindows, strandedBytes: 0.5 * GIB }, 5000, true)).toBe(
+        "Windows had 4.5 GiB of 31.4 GiB available while the WSL VM had 2.8 GiB free in blocks too small to give back (page_reporting_order 5): lowered it to 2 and compacted through archlinux, to hold until the agent stops since the VM is backed by small pages; 0.5 GiB stranded and 4.5 GiB available 5s later.",
     );
     expect(restoredLine("archlinux", 5, "recovered", { windows: easyWindows, strandedBytes: 0.3 * GIB }, { windows: easyWindows, strandedBytes: 1.1 * GIB }, 5000)).toBe(
         "Windows has had more than a fifth of its memory for 10 min (8.0 GiB of 31.4 GiB available): put the WSL VM's page_reporting_order back from 2 to 5 through archlinux (0.3 GiB stranded before); 1.1 GiB stranded and 8.0 GiB available 5s later.",

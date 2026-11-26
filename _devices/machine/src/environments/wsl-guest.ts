@@ -9,6 +9,7 @@ import {
     GUEST_PROBE_SCRIPT,
     type GuestProbe,
     guestFreeOf,
+    holdFor,
     LOWERED_ORDER,
     loweredLine,
     type OrderHold,
@@ -22,7 +23,8 @@ import {
 } from "./wsl-page-reporting.js";
 
 /* The WSL VM's own side of giving memory back (wsl-page-reporting.ts says why): the guest read through a distro already
-   running, and the page_reporting_order the agent holds lowered while Windows is short. Never boots WSL: only a distro
+   running, and the page_reporting_order the agent holds lowered while Windows is short (on a VM backed by small pages,
+   until the agent stops). Never boots WSL: only a distro
    in `wsl.exe --list --running` is asked. (A distro that stopped in the second between the listing and the call would be
    started again by `wsl -d`; the VM it belongs to was running a second ago, and a sandbox's docker-desktop never stops
    while it runs.) wsl-cache-drop.ts runs it on the resident agent's tick, beside the drop. */
@@ -112,14 +114,17 @@ const lower = async (guest: Guest, distro: string, before: GuestProbe, windows: 
         await guest.asRoot(distro, orderScript(before.order, LOWERED_ORDER, true));
     } catch (error) {
         guest.state.lowerRetryAt = guest.now() + LOWER_RETRY_MS;
-        guest.log(`Windows was low on memory, but lowering the WSL VM's page_reporting_order through ${distro} failed: ${firstLine(errorMessage(error))}`);
+        guest.log(`lowering the WSL VM's page_reporting_order through ${distro} failed: ${firstLine(errorMessage(error))}`);
         return false;
     }
-    guest.state.hold = { from: before.order };
+    const hold = holdFor(before.order, before);
+    guest.state.hold = hold;
     await sleep(guest.settleMs);
     const afterWindows = guest.read() ?? windows;
     const after = await readThrough(guest, distro);
-    guest.log(loweredLine(distro, before.order, { windows, strandedBytes: strandedOf(before) }, { windows: afterWindows, strandedBytes: strandedOrUnread(after) }, guest.settleMs));
+    guest.log(
+        loweredLine(distro, before.order, { windows, strandedBytes: strandedOf(before) }, { windows: afterWindows, strandedBytes: strandedOrUnread(after) }, guest.settleMs, hold.keep === true),
+    );
     return true;
 };
 

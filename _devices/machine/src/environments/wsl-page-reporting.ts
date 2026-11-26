@@ -18,10 +18,23 @@ import { recoveredFromTight } from "./windows-memory.js";
 
    So when Windows goes under its low line with more than STRANDED_WORTH_BYTES stranded, the agent lowers the order to
    LOWERED_ORDER and compacts once, before or beside the sandboxes' first reclaim, and gives the kernel its own order back
-   once Windows has had more than a fifth of its memory for RESTORE_AFTER_MS, and when the agent stops. Reporting smaller
-   blocks costs the hypervisor more work and splits the VM's backing into smaller pages on the host, which may cost TLB
-   misses; that is unmeasured, and why the order is lowered only while Windows is short rather than for good. Pure
-   decisions here; the resident agent acts on them on its tick (wsl-guest.ts, beside the drop in wsl-cache-drop.ts). */
+   once Windows has had more than a fifth of its memory for RESTORE_AFTER_MS, and when the agent stops. That is for a VM
+   whose memory is backed by large pages on the host, where reporting smaller blocks would split them (TLB misses,
+   unmeasured).
+
+   A VM BACKED BY SMALL PAGES KEEPS IT LOWERED (2026-11-26, later). WSL picks the boot order from the host's backing
+   (WslCoreVm.cpp in microsoft/WSL): where Windows can back the VM with 4 KiB pages (build 26100 on, and serviced older
+   builds) it asks for small-page backing with 64 KiB fault clusters and boots at 5; otherwise it boots at 9, 2 MiB. On a
+   small-page VM the lower order changes no host page size; what it costs is the host faulting a reported page back in
+   when the guest uses it again. Measured on rog that day (build 26200, booted at 5): re-touching memory after free page
+   reporting had taken it cost 1390 ns a 4 KiB page against 1137 for memory that had not been reported (median of 12
+   rounds of 32768 pages each), and the same churn over 16 KiB chunks ran 226 ns a page slower at order 2 than at 5.
+   rog's VM allocated 25-54 thousand pages a second under its usual load, so even with every page coming from a reported
+   block the lower order costs at most 13.5 ms of CPU a second: 0.08% of its 16 vCPUs, for 0.8-2.8 GB that would stay
+   stranded otherwise. So on a VM booted at SMALL_PAGE_BOOT_ORDER or lower, the order is lowered whenever Windows is under
+   a fifth of its memory (when the guest is read at all) with more than STRANDED_WORTH_BYTES stranded, and held until the
+   agent stops rather than until Windows recovers. Pure decisions here; the resident agent acts on them on its tick
+   (wsl-guest.ts, beside the drop in wsl-cache-drop.ts). */
 
 const GIB = 1024 ** 3;
 
@@ -30,6 +43,8 @@ const ORDER_PATH = "/sys/module/page_reporting/parameters/page_reporting_order";
 export const LOWERED_ORDER = 2;
 // Less stranded than this is not worth more hypervisor work: Windows' own noise is a few hundred MiB.
 const STRANDED_WORTH_BYTES = 1 * GIB;
+// The highest boot order WSL gives a VM it backs with small pages (5); a large-page VM boots at 9.
+const SMALL_PAGE_BOOT_ORDER = 5;
 // How long Windows stays over a fifth of its memory before the kernel's order is put back: the gap between the low line
 // (a tenth) and a fifth, held this long, keeps a PC hovering at its line from switching the order back and forth.
 export const RESTORE_AFTER_MS = 10 * 60_000;
@@ -134,11 +149,19 @@ export const guestFreeOf = (probe: GuestProbe, at: number, hold: OrderHold | und
     return reading;
 };
 
-// The agent holding the order lowered: what it lowered it from, and since when Windows has been out of tight.
+// The agent holding the order lowered: what it lowered it from, and since when Windows has been out of tight. `keep`: a VM
+// backed by small pages, held until the agent stops.
 export interface OrderHold {
     readonly from: number;
     readonly recoveredSince?: number;
+    readonly keep?: true;
 }
+
+/** Whether WSL booted this VM with small-page backing: a boot order of SMALL_PAGE_BOOT_ORDER or lower. Pure. */
+export const smallPageBacked = (probe: Pick<GuestProbe, "bootOrder">): boolean => probe.bootOrder !== undefined && probe.bootOrder <= SMALL_PAGE_BOOT_ORDER;
+
+/** The hold for an order lowered from `from` on the guest `probe` read. Pure. */
+export const holdFor = (from: number, probe: Pick<GuestProbe, "bootOrder">): OrderHold => (smallPageBacked(probe) ? { from, keep: true } : { from });
 
 /**
  * The hold as the guest reads now. An order that no longer reads LOWERED_ORDER was set by someone else, or the VM
@@ -153,24 +176,25 @@ export const adoptHold = (hold: OrderHold | undefined, probe: GuestProbe): Order
     if (hold !== undefined) {
         return hold;
     }
-    return probe.bootOrder !== undefined && probe.bootOrder > LOWERED_ORDER ? { from: probe.bootOrder } : undefined;
+    return probe.bootOrder !== undefined && probe.bootOrder > LOWERED_ORDER ? holdFor(probe.bootOrder, probe) : undefined;
 };
 
 /**
  * Whether to lower the order now: more than STRANDED_WORTH_BYTES of the guest's free memory sits in blocks too small to
- * report, the order is above LOWERED_ORDER and not held by the agent already, and either Windows is under its low line
- * or a drop is due (`dropDue`): the memory a drop frees would mostly be stranded too, so lowering stands in for it. Pure.
+ * report, the order is above LOWERED_ORDER and not held by the agent already, and either Windows is under its low line,
+ * a drop is due (`dropDue`: the memory a drop frees would mostly be stranded too, so lowering stands in for it), or the
+ * VM is backed by small pages and Windows is under a fifth of its memory. Pure.
  */
 export const shouldLowerOrder = (memory: HostMemory, probe: GuestProbe, hold: OrderHold | undefined, dropDue: boolean): boolean =>
     hold === undefined &&
     probe.order > LOWERED_ORDER &&
     strandedOf(probe) > STRANDED_WORTH_BYTES &&
-    (dropDue || memory.availableBytes < hostMemoryLowBytes(memory.totalBytes));
+    (dropDue || memory.availableBytes < hostMemoryLowBytes(memory.totalBytes) || (smallPageBacked(probe) && !recoveredFromTight(memory)));
 
 /**
  * The hold after a reading of Windows at `now`, and whether to put the kernel's order back: Windows has had more than a
  * fifth of its memory (recoveredFromTight) since `recoveredSince`, for RESTORE_AFTER_MS. Dipping under a fifth again
- * starts that wait over. Pure.
+ * starts that wait over. A hold to `keep` is never put back here, only when the agent stops. Pure.
  */
 export interface RestoreStep {
     readonly hold: OrderHold | undefined;
@@ -178,7 +202,7 @@ export interface RestoreStep {
 }
 
 export const restoreStep = (hold: OrderHold | undefined, memory: HostMemory, now: number): RestoreStep => {
-    if (hold === undefined) {
+    if (hold === undefined || hold.keep === true) {
         return { hold, restore: false };
     }
     if (!recoveredFromTight(memory)) {
@@ -206,9 +230,9 @@ export interface OrderFigures {
 
 const strandedText = (bytes: number | undefined): string => (bytes === undefined ? "an unread amount" : gib(bytes));
 
-/** The one line lowering the order leaves in the agent's log. Pure. */
-export const loweredLine = (distro: string, from: number, before: OrderFigures, after: OrderFigures, afterMs: number): string =>
-    `Windows was low on memory (${gib(before.windows.availableBytes)} of ${gib(before.windows.totalBytes)} available) while the WSL VM had ${strandedText(before.strandedBytes)} free in blocks too small to give back (page_reporting_order ${from}): lowered it to ${LOWERED_ORDER} and compacted through ${distro}; ${strandedText(after.strandedBytes)} stranded and ${gib(after.windows.availableBytes)} available ${Math.round(afterMs / 1000)}s later.`;
+/** The one line lowering the order leaves in the agent's log; `kept`: held until the agent stops (OrderHold `keep`). Pure. */
+export const loweredLine = (distro: string, from: number, before: OrderFigures, after: OrderFigures, afterMs: number, kept = false): string =>
+    `Windows had ${gib(before.windows.availableBytes)} of ${gib(before.windows.totalBytes)} available while the WSL VM had ${strandedText(before.strandedBytes)} free in blocks too small to give back (page_reporting_order ${from}): lowered it to ${LOWERED_ORDER} and compacted through ${distro}${kept ? ", to hold until the agent stops since the VM is backed by small pages" : ""}; ${strandedText(after.strandedBytes)} stranded and ${gib(after.windows.availableBytes)} available ${Math.round(afterMs / 1000)}s later.`;
 
 /** The one line putting the order back leaves: `why` is the agent stopping, or Windows having recovered. Pure. */
 export const restoredLine = (distro: string, to: number, why: "stopping" | "recovered", before: OrderFigures, after?: OrderFigures, afterMs = 0): string => {

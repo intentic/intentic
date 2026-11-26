@@ -225,7 +225,7 @@ test("a low spell with a gigabyte stranded lowers the order and compacts at once
     expect(guest.written).toEqual([expect.stringContaining("compact_memory")]);
     expect(run.dropped).toEqual([]);
     expect(run.lines).toEqual([
-        "Windows was low on memory (2.9 GiB of 31.4 GiB available) while the WSL VM had 1.8 GiB free in blocks too small to give back (page_reporting_order 5): lowered it to 2 and compacted through archlinux; 0.4 GiB stranded and 2.9 GiB available 0s later.",
+        "Windows had 2.9 GiB of 31.4 GiB available while the WSL VM had 1.8 GiB free in blocks too small to give back (page_reporting_order 5): lowered it to 2 and compacted through archlinux, to hold until the agent stops since the VM is backed by small pages; 0.4 GiB stranded and 2.9 GiB available 0s later.",
     ]);
     expect(run.cache.guestFree()).toMatchObject({ reportingOrder: 2, loweredFrom: 5 });
     // Past the grace but inside the cooldown the lowering started: the sandboxes' reclaim, which reaches Windows now, goes first.
@@ -239,9 +239,9 @@ test("a low spell with a gigabyte stranded lowers the order and compacts at once
     expect(guest.written).toHaveLength(1);
 });
 
-test("the kernel's own order comes back once Windows has held a fifth of its memory for ten minutes, and when the agent stops", async () => {
-    // Someone set 4 by hand: 4 is what goes back, not WSL's 5.
-    const guest = fakeGuest(4);
+test("a large-page VM's own order comes back once Windows has held a fifth of its memory for ten minutes, and when the agent stops", async () => {
+    // Someone set 4 by hand on a VM WSL booted at 9: 4 is what goes back.
+    const guest = fakeGuest(4, ROG_BUDDYINFO, 9);
     const run = harness([lowWindows, lowWindows, easyWindows], ["archlinux"], undefined, guest);
     await run.cache.pass();
     expect(guest.order).toBe(2);
@@ -269,8 +269,27 @@ test("the kernel's own order comes back once Windows has held a fifth of its mem
     expect(stopping.written).toHaveLength(2);
 });
 
-test("a VM that restarted with its own order is not the agent's to put back, and an earlier agent's lowered order is", async () => {
+test("a small-page VM is lowered once Windows is tight, and keeps it until the agent stops however long Windows has room", async () => {
     const guest = fakeGuest(5);
+    const run = harness([tightWindows, easyWindows], ["archlinux"], undefined, guest);
+    await run.cache.pass();
+    // Under a fifth but above the low line: lowered, standing in for the early drop.
+    expect(guest.order).toBe(2);
+    expect(run.dropped).toEqual([]);
+    run.advance(3 * RESTORE_AFTER_MS);
+    await run.cache.pass();
+    run.advance(3 * RESTORE_AFTER_MS);
+    await run.cache.pass();
+    expect(guest.order).toBe(2);
+    expect(run.cache.guestFree()).toMatchObject({ reportingOrder: 2, loweredFrom: 5 });
+    await run.cache.restore();
+    expect(guest.order).toBe(5);
+    expect(guest.written).toHaveLength(2);
+});
+
+test("a VM that restarted with its own order is not the agent's to put back, and an earlier agent's lowered order is", async () => {
+    // A large-page VM, so Windows only tight leaves the restarted VM's order alone.
+    const guest = fakeGuest(5, ROG_BUDDYINFO, 9);
     const run = harness([lowWindows, tightWindows], ["archlinux"], undefined, guest);
     await run.cache.pass();
     expect(guest.order).toBe(2);
@@ -297,7 +316,7 @@ test("an order root cannot write leaves the drop to run as before, and is tried 
     guest.refuse = "Permission denied";
     const run = harness([lowWindows], ["archlinux"], undefined, guest);
     await run.cache.pass();
-    expect(run.lines).toEqual(["Windows was low on memory, but lowering the WSL VM's page_reporting_order through archlinux failed: Permission denied"]);
+    expect(run.lines).toEqual(["lowering the WSL VM's page_reporting_order through archlinux failed: Permission denied"]);
     run.advance(RECLAIM_GRACE_MS);
     await run.cache.pass();
     expect(run.dropped).toEqual(["archlinux"]);

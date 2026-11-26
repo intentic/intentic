@@ -50,6 +50,18 @@ test("idle sandbox reclaims more than active one", () => {
     expect(idle).toBeGreaterThan(active);
 });
 
+test("with turns running, a reclaim asks for no more than the cold file cache; idle, it is not held to it", () => {
+    // Host at 1 GiB of 32: a 2.2 GiB shortfall. A 16 GiB sandbox's share is 0.33 GiB with turns running, 1.1 GiB idle.
+    const withInactive = (inactiveGib: number): ReclaimReading => ({ ...cgroup(16), memoryBreakdown: { inactiveFileCacheBytes: inactiveGib * GIB } });
+    expect(reclaimTarget(host(1), cgroup(16), 2)).toBe(Math.round(0.33 * GIB));
+    expect(reclaimTarget(host(1), withInactive(0.2), 2)).toBe(Math.round(0.2 * GIB));
+    expect(reclaimTarget(host(1), withInactive(0.2), 0)).toBe(Math.round(1.1 * GIB));
+    // More cold cache than the share: the share.
+    expect(reclaimTarget(host(1), withInactive(4), 2)).toBe(Math.round(0.33 * GIB));
+    // Almost no cold cache: not worth the write.
+    expect(reclaimTarget(host(1), withInactive(4 / 1024), 2)).toBe(0);
+});
+
 test("larger sandbox reclaims more than smaller one", () => {
     const large = reclaimTarget(host(2), cgroup(8), 0);
     const small = reclaimTarget(host(2), cgroup(2), 0);

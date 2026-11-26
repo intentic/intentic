@@ -23,7 +23,13 @@ import type { HostSource } from "../../workload/resource-budget.js";
    used it again within 4-8 s; vmmemWSL and Windows' Available memory did not move beyond their second-to-second noise
    (±100 MiB) in the 30 s after, with or without `compact_memory` straight after the reclaim. So a reclaim's effect on
    the host is read back a settle later and logged, and one the host did not feel makes the next one wait longer
-   (nextReclaimCooldown), as the machine agent's drops back off: the cache is not churned every minute for nothing. */
+   (nextReclaimCooldown), as the machine agent's drops back off: the cache is not churned every minute for nothing.
+
+   COLD WHILE TURNS RUN (2026-11-26, later). Read on rog that day, 5.95 of the VM's 6.07 GiB of file cache sat in
+   sandbox containers' cgroups (this sandbox 4.56 GiB, 2.86 of it on the active list), so this reclaim reaches nearly all
+   of it. But at swappiness=0 the kernel takes the inactive file list first and, past it, deactivates and takes the
+   active list: the files the running turns are reading. So while turns run, a background reclaim asks for no more than
+   the cgroup's inactive_file; an idle sandbox, with no turn to slow, is not held to it, nor is a person's press. */
 
 const GIB = 1024 ** 3;
 const MIB = 1024 ** 2;
@@ -60,6 +66,8 @@ const mib = (bytes: number): string => `${Math.round(bytes / MIB)} MiB`;
 
 export interface ReclaimReading {
     readonly memoryBytes: number | undefined;
+    // memory.stat's inactive_file, where read: the cold file cache memory.reclaim takes first.
+    readonly memoryBreakdown?: { readonly inactiveFileCacheBytes?: number | undefined } | undefined;
     readonly pressure: { readonly memory?: PressureSnapshot | undefined };
 }
 
@@ -94,8 +102,9 @@ export const reclaimTarget = (
     const sizeWeight = Math.min(1, cgroup.memoryBytes / (host.totalBytes / ASSUMED_TENANTS));
     const share = (shortfall / ASSUMED_TENANTS) * sizeWeight * idleness;
 
-    // Clamp to the reclaimable range.
-    const target = Math.min(MAX_RECLAIM_BYTES, Math.max(0, share));
+    // Clamp to the reclaimable range, and with turns running to the cold file cache (COLD WHILE TURNS RUN, above).
+    const cold = activeTurns > 0 ? cgroup.memoryBreakdown?.inactiveFileCacheBytes : undefined;
+    const target = Math.min(MAX_RECLAIM_BYTES, cold ?? Number.POSITIVE_INFINITY, Math.max(0, share));
     return target < MIN_RECLAIM_BYTES ? 0 : Math.round(target);
 };
 
