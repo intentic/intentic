@@ -290,7 +290,7 @@ const doorOutcome = async (call: () => Promise<unknown>): Promise<string> => {
 test(`only the older Pipelines manifest grants the legacy board routes`, async () => {
     const current = manifestOf(`pipelines`);
     const { server: _server, ...older } = current;
-    const reads = [`GET /ci/runs`, `POST /ci/runs/jobs`];
+    const reads = [`GET /ci/runs`, `POST /ci/runs/jobs`] satisfies [string, string];
     const original = { ...older, permissions: { ...older.permissions, sandbox: reads } };
     const next = hostApiOf(current);
     expect(next.backend.available).toBe(true);
