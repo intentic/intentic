@@ -7,8 +7,8 @@ import type { Doors } from "../doors";
 // A person's screen and terminals on the owner's PC (fixture/devices.ts `ada-pc`, and its Arch Linux side): what each
 // environment can open, as the PC's card's three switches allow (flipped on that card's form, written to the capability
 // store, read back here), two monitors on the Windows side, and the shells already running on each. A screen and a
-// terminal open with a path and a token as the sandbox hands them out; the demo serves no picture or shell behind them,
-// so the views show their own connecting state.
+// terminal open with a path and a token as the sandbox hands them out, and the demo answers both paths as the PC's
+// remoted would: deviceScreen.ts draws its monitors, deviceTerminal.ts its shells.
 
 type RemoteStatus = SandboxHandlerOutput<`remote`, `status`>;
 type RemoteTerminal = RemoteStatus[`terminals`][number];
@@ -37,7 +37,8 @@ const known = (device: string): void => {
     }
 };
 
-const allowed = (): RemoteStatus[`allow`] => {
+/** What the PC's card's three switches allow now: watching its screens, driving them, and its terminals. */
+export const remoteAllowed = (): RemoteStatus[`allow`] => {
     const config = capabilityList().capabilities.find((capability) => capability.id === `ada-pc`)?.config ?? {};
     return { view: config[`remoteView`] === `on`, control: config[`remoteControl`] === `on`, terminal: config[`remoteTerminal`] === `on` };
 };
@@ -48,7 +49,7 @@ const segment = (device: string): string => device.replaceAll(/[^A-Za-z0-9_-]/gu
 export const remoteDoors = {
     status: ({ device }) => {
         known(device);
-        const allow = allowed();
+        const allow = remoteAllowed();
         const native = device === `ada-pc`;
         const status: RemoteStatus = {
             available: allow.view || allow.control || allow.terminal,
@@ -69,7 +70,7 @@ export const remoteDoors = {
             ...token(),
             session,
             path: `/system/device-media/${segment(device)}/${session}`,
-            readOnly: !allowed().control,
+            readOnly: !remoteAllowed().control,
             iceServers: DEFAULT_REMOTE_ICE_SERVERS.map((server) => ({ ...server, urls: [...server.urls] })),
         };
     },

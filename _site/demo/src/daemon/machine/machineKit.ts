@@ -45,6 +45,8 @@ export interface ClientFrame {
     readonly key?: string;
     // A terminal's typing (`{type: "input", data}`).
     readonly data?: string;
+    // A media socket's ping, its sender's clock, which the pong echoes.
+    readonly t?: number;
 }
 
 /** The frame a `client` event carries, or an empty one for a binary frame or one that is not JSON. */

@@ -173,7 +173,7 @@ class DemoSocket extends EventTarget {
 }
 
 export type DemoSession = (socket: DemoSocket) => void;
-export type { DemoSocket };
+export { DemoSocket };
 
 /** Claims the WebSocket URLs of the world's sandboxes (each has its own address); anything else gets a real socket. */
 export const installWebSocket = (session: (url: URL) => DemoSession | undefined, sandboxSocket: (url: URL) => boolean): void => {

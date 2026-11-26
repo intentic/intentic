@@ -1,7 +1,8 @@
 import type { DemoSocket } from "./transport";
 
 // A live picture the way the daemon's videocast.ts sends one: a `ready` naming the codec, then one binary message per
-// encoded frame, tagged keyframe (3) or delta (4). The daemon encodes its display with ffmpeg; the demo draws its own
+// encoded frame, tagged keyframe (3) or delta (4); or, on another wire (CastWire), the way a connected computer's
+// remoted sends its screen on a media socket (deviceScreen.ts). The daemon encodes its display with ffmpeg; the demo draws its own
 // picture on a canvas and encodes it with the browser's WebCodecs, VP8, which every browser that can decode the stream
 // can also encode. The editor reads the codec from `ready`, so it decodes this exactly as it decodes a daemon's H.264.
 
@@ -14,9 +15,28 @@ const CODEC = `vp8`;
 
 export type Painter = (context: OffscreenCanvasRenderingContext2D, now: number) => void;
 
+/** How the picture is said on the socket: the message that opens it, and one encoded frame as its binary message. */
+export interface CastWire {
+    readonly opening: (size: { readonly width: number; readonly height: number }, codec: string) => string;
+    readonly frame: (payload: Uint8Array, key: boolean, index: number) => ArrayBuffer;
+}
+
+// The window socket's own: a `ready`, and each frame behind one byte saying keyframe or delta.
+const READY_WIRE: CastWire = {
+    opening: (size, codec) => JSON.stringify({ type: `ready`, kind: `video`, width: size.width, height: size.height, codec }),
+    frame: (payload, key) => {
+        const wire = new Uint8Array(payload.byteLength + 1);
+        wire[0] = key ? TAG_KEY : TAG_DELTA;
+        wire.set(payload, 1);
+        return wire.buffer;
+    },
+};
+
 export interface VideoCast {
     // Draw and send a frame now, out of turn: an input the picture should answer at once.
     readonly repaint: () => void;
+    // The next frame is a keyframe: a viewer's decoder lost its place.
+    readonly keyframe: () => void;
     readonly pause: () => void;
     readonly resume: () => void;
     readonly stop: () => void;
@@ -25,23 +45,30 @@ export interface VideoCast {
 const canEncode = (): boolean => `VideoEncoder` in globalThis && `OffscreenCanvas` in globalThis;
 
 /** Streams `paint`'s picture on the socket until it closes; a browser that cannot encode is told nothing will paint. */
-export const startVideoCast = (socket: DemoSocket, size: { readonly width: number; readonly height: number }, paint: Painter): VideoCast => {
-    socket.emit(JSON.stringify({ type: `ready`, kind: `video`, width: size.width, height: size.height, codec: CODEC }));
+export const startVideoCast = (
+    socket: DemoSocket,
+    size: { readonly width: number; readonly height: number },
+    paint: Painter,
+    wire: CastWire = READY_WIRE,
+): VideoCast => {
+    socket.emit(wire.opening(size, CODEC));
     if (!canEncode()) {
         socket.emit(JSON.stringify({ type: `error`, message: `This browser cannot encode video, so the demo cannot draw this picture here.` }));
         const idle = (): void => undefined;
-        return { repaint: idle, pause: idle, resume: idle, stop: idle };
+        return { repaint: idle, keyframe: idle, pause: idle, resume: idle, stop: idle };
     }
     const canvas = new OffscreenCanvas(size.width, size.height);
     const context = canvas.getContext(`2d`);
     let frames = 0;
+    let sent = 0;
+    let keyOwed = false;
     let timer: ReturnType<typeof setInterval> | undefined;
     const encoder = new VideoEncoder({
         output: (chunk) => {
-            const wire = new Uint8Array(chunk.byteLength + 1);
-            wire[0] = chunk.type === `key` ? TAG_KEY : TAG_DELTA;
-            chunk.copyTo(wire.subarray(1));
-            socket.emit(wire.buffer);
+            const payload = new Uint8Array(chunk.byteLength);
+            chunk.copyTo(payload);
+            socket.emit(wire.frame(payload, chunk.type === `key`, sent));
+            sent += 1;
         },
         error: () => clearInterval(timer),
     });
@@ -52,7 +79,8 @@ export const startVideoCast = (socket: DemoSocket, size: { readonly width: numbe
         }
         paint(context, Date.now());
         const frame = new VideoFrame(canvas, { timestamp: (frames * 1_000_000) / FPS });
-        encoder.encode(frame, { keyFrame: frames % KEY_EVERY === 0 });
+        encoder.encode(frame, { keyFrame: keyOwed || frames % KEY_EVERY === 0 });
+        keyOwed = false;
         frame.close();
         frames += 1;
     };
@@ -71,5 +99,13 @@ export const startVideoCast = (socket: DemoSocket, size: { readonly width: numbe
     };
     resume();
     socket.addEventListener(`close`, stop);
-    return { repaint: send, pause: () => clearInterval(timer), resume, stop };
+    return {
+        repaint: send,
+        keyframe: () => {
+            keyOwed = true;
+        },
+        pause: () => clearInterval(timer),
+        resume,
+        stop,
+    };
 };

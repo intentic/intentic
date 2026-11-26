@@ -11,6 +11,8 @@ import { readsNote, withReads } from "./reads";
 import { withFloors } from "./floors";
 import { withSeals } from "./daemon/seal/sealGate";
 import { installFetch, installWebSocket, installWebTransport, installXhr } from "./transport";
+import { deviceScreenSocket } from "./deviceScreen";
+import { installMediaWorker } from "./world/mediaWorker";
 import { sandboxAddress, sandboxSocket } from "./world/addresses";
 import { withWorld } from "./world/fresh";
 import { declineLocalShortcut } from "./world/browserSeeds";
@@ -73,6 +75,8 @@ installFetch(handlers);
 installXhr(handlers);
 installWebSocket((url) => SOCKETS.get(url.pathname) ?? deviceTerminalSocket(url), sandboxSocket);
 installWebTransport();
+// A connected computer's screen, dialled from the editor's decode worker rather than the page (world/mediaWorker.ts).
+installMediaWorker(deviceScreenSocket);
 // What the editor hands an element rather than fetching (a media source, a download, a preview's frame), answered from the
 // same handlers through the demo's element worker (world/elements.ts).
 installElementAddresses();
