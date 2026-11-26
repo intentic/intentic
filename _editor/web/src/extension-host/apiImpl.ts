@@ -360,7 +360,7 @@ export const createExtensionApi = (
                 return track({ dispose: () => stop() });
             },
         },
-        backend: extensionBackendApi(backendPath, summary.manifest.server, fromInventory),
+        backend: extensionBackendApi(backendPath, summary, fromInventory),
         sandbox: {
             rpc,
             request: (path, init) => {

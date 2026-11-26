@@ -51,6 +51,66 @@ test(`a daemon whose installed manifest has no server is reached directly at its
     expect(asked).toEqual([`daemon GET /ci/runs`]);
 });
 
+// 2026-11-26: a page that last heard of a daemon from before the backend, which was since rebuilt with it, sent every Fix
+// to the `/ci/fix` the new daemon dropped, and each came back 404. The old route gone sends the call to the backend once.
+test(`a daemon rebuilt with the backend since the host last heard is reached there once its old route is gone`, async () => {
+    const { api, asked } = reader(
+        async () => ({ repos: [], runs: [] }),
+        async () => {
+            throw new Answered(404, `Request failed (404).`);
+        },
+        false,
+    );
+    const body = posting({ repo: `web`, runId: 41 });
+    expect(await backendCall(api, `fix`, () => api.sandbox.json(`/ci/fix`, body), body)).toEqual({ repos: [], runs: [] });
+    expect(asked).toEqual([`daemon POST /ci/fix {"repo":"web","runId":41}`, `backend POST fix`]);
+});
+
+test(`an older daemon's 404 at its own route stands when it has no backend either`, async () => {
+    const missing = new Answered(404, `no run 41 in "web"`);
+    for (const status of [404, 503]) {
+        const { api } = reader(
+            async () => {
+                throw new Answered(status, `no backend for extension "intentic.pipelines"`);
+            },
+            async () => {
+                throw missing;
+            },
+            false,
+        );
+        await expect(backendCall(api, `runs`, () => api.sandbox.json(`/ci/runs`))).rejects.toBe(missing);
+    }
+});
+
+test(`a backend that is there answers for itself once the old route is gone`, async () => {
+    const refused = new Answered(409, `a fix agent already works on this run`);
+    const { api } = reader(
+        async () => {
+            throw refused;
+        },
+        async () => {
+            throw new Answered(404, `Request failed (404).`);
+        },
+        false,
+    );
+    await expect(backendCall(api, `fix`, () => api.sandbox.json(`/ci/fix`))).rejects.toBe(refused);
+});
+
+test(`an old route's refusal other than a 404 is never asked around`, async () => {
+    const fenced = new Answered(403, `outside your access to this workspace`);
+    const { api, asked } = reader(
+        async () => {
+            throw new Error(`unexpected backend probe`);
+        },
+        async () => {
+            throw fenced;
+        },
+        false,
+    );
+    await expect(backendCall(api, `runs`, () => api.sandbox.json(`/ci/runs`))).rejects.toBe(fenced);
+    expect(asked).toEqual([`daemon GET /ci/runs`]);
+});
+
 const refusedBeforeSending = async (): Promise<never> => {
     throw new Error(`extension "intentic.pipelines" called undeclared sandbox route GET /ci/runs`);
 };

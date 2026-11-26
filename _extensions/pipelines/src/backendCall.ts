@@ -17,10 +17,27 @@ export const posting = (body: CiRunParam | CiForgetParam | CiFixParam): RequestI
 
 // The way back (`legacy`): a route the daemon's contract still carries, through its typed client; or one it took off, by
 // its path through `api.sandbox.json`.
-export const backendCall = async <T>(api: BackendCaller, path: string, legacy: () => Promise<T>, init?: RequestInit): Promise<T> => {
-    if (api.backend.available === false) {
+// The installed manifest says there is no backend, so the old route is asked first. A host can have heard that of a daemon
+// since rebuilt with the backend (2026-11-26: every Fix came back 404 from the `/ci/fix` the new daemon dropped), so the
+// old route gone is the cue to ask the backend once; only an answer from a backend that is there outvotes the old route's.
+const legacyFirst = async <T>(api: BackendCaller, path: string, legacy: () => Promise<T>, init?: RequestInit): Promise<T> => {
+    try {
         return await legacy();
+    } catch (legacyError) {
+        if (AnsweredSchema.safeParse(legacyError).data?.status !== 404) {
+            throw legacyError;
+        }
+        try {
+            return await api.backend.json<T>(path, init);
+        } catch (backendError) {
+            const heard = AnsweredSchema.safeParse(backendError).data?.status;
+            throw heard === undefined || NO_BACKEND.has(heard) ? legacyError : backendError;
+        }
     }
+};
+
+// The backend first, and the old route only when no backend answered and the manifest never said one is there.
+const backendFirst = async <T>(api: BackendCaller, path: string, legacy: () => Promise<T>, init?: RequestInit): Promise<T> => {
     try {
         return await api.backend.json<T>(path, init);
     } catch (backendError: unknown) {
@@ -36,3 +53,6 @@ export const backendCall = async <T>(api: BackendCaller, path: string, legacy: (
         }
     }
 };
+
+export const backendCall = async <T>(api: BackendCaller, path: string, legacy: () => Promise<T>, init?: RequestInit): Promise<T> =>
+    api.backend.available === false ? await legacyFirst(api, path, legacy, init) : await backendFirst(api, path, legacy, init);

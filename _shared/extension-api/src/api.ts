@@ -333,7 +333,8 @@ export interface IntenticApi {
     // This extension's own backend (`server`), by a path relative to its namespace: the host adds the routing prefix,
     // which is the extension's install id and not always `publisher.name`, so no extension spells `/x/<id>` itself.
     readonly backend: {
-        /** Whether the daemon's installed manifest declares a server. Unknown on older hosts or without an inventory. */
+        /** Whether the daemon's installed manifest declares a server, as the host heard it last: read again at each access, so it
+         *  follows a daemon rebuilt under an open view. Unknown on older hosts or without an inventory. */
         readonly available?: boolean | undefined;
         request(path: string, init?: RequestInit): Promise<Response>;
         json<T>(path: string, init?: RequestInit): Promise<T>;

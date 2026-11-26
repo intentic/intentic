@@ -259,6 +259,8 @@ jest.mock(`../sandboxUsage`, () => ({
     recordSandboxCall: (_id: string, _permissions: readonly string[], method: string, path: string) => void judged.calls.push(`${method} ${path}`),
 }));
 const { createExtensionApi, deactivateAllExtensions } = await import("../apiImpl");
+const { queryClient } = await import("../../lib/queryPersistence");
+const { rpcKey } = await import("../../lib/queryKeys");
 
 const manifestOf = (name: string): ExtensionManifest =>
     ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(extensionsRoot, name, "intentic-extension.json"), "utf8")));
@@ -302,6 +304,38 @@ test(`only the older Pipelines manifest grants the legacy board routes`, async (
     expect(await doorOutcome(() => previous.sandbox.rpc.ci.runs())).toBe(reads[0]);
     expect(await doorOutcome(() => previous.sandbox.rpc.ci.jobs({ repo: `demo`, runId: 1 }))).toBe(reads[1]);
     expect(hostApiOf(current, false).backend.available).toBeUndefined();
+});
+
+// The list the daemon answers, as the page's own read of it holds it: `extensions.list`, read at `updatedAt`.
+const listRead = (manifest: ExtensionManifest, updatedAt: number): void => {
+    const extensions = [{ id: extensionIdOf(manifest), manifest, commit: `builtin`, source: `builtin` as const, enabled: true }];
+    queryClient.setQueryData(rpcKey(`extensions.list`), { extensions, invalid: [], pending: [] }, { updatedAt });
+};
+
+test(`a daemon rebuilt under an open page answers backend.available from then on, not the one it was activated on`, () => {
+    const current = manifestOf(`pipelines`);
+    const { server: _server, ...older } = current;
+    try {
+        // Activated on the older daemon, whose Pipelines has no backend; the view keeps this api open.
+        const opened = hostApiOf(older);
+        expect(opened.backend.available).toBe(false);
+        // A list hydrated from an earlier visit says nothing about the daemon now.
+        listRead(current, Date.now() - 60_000);
+        expect(opened.backend.available).toBe(false);
+        // The rebuilt daemon's list, read after the activation: its backend is the door now.
+        listRead(current, Date.now() + 1);
+        expect(opened.backend.available).toBe(true);
+        // And the other way, a daemon rolled back to one without it.
+        const rolledBack = hostApiOf(current);
+        listRead(older, Date.now() + 2);
+        expect(rolledBack.backend.available).toBe(false);
+        // A compiled-in extension the activation's list left out is known once a later list names it.
+        const unlisted = hostApiOf(current, false);
+        listRead(current, Date.now() + 3);
+        expect(unlisted.backend.available).toBe(true);
+    } finally {
+        queryClient.removeQueries({ queryKey: rpcKey(`extensions.list`) });
+    }
 });
 
 type Procedures = Readonly<Record<string, Readonly<Record<string, (input: unknown) => Promise<unknown>>>>>;

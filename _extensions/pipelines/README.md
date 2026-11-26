@@ -156,7 +156,7 @@ flowchart LR
 - [src/server/main-fixer.ts](src/server/main-fixer.ts) — main's one fix agent: streaks, handovers, turn limits, hand-backs.
 - [src/server/board.ts](src/server/board.ts) — the board's backend: runs with main's failures, a run's job graph, forget, Fix.
 - [src/server/daemon.ts](src/server/daemon.ts) — every daemon route the backend asks, and nothing else.
-- [src/backendCall.ts](src/backendCall.ts) — a view's call to the backend, or to an older daemon's own route.
+- [src/backendCall.ts](src/backendCall.ts) — a view's call to the backend, or to an older daemon's own route, and back to the backend when that route is gone.
 
 ## Commands
 
