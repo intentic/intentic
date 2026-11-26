@@ -83,8 +83,6 @@ const scrollport = useScrollportHeight(root);
 const viewport = computed(() => (docked.value && scroll === `page` && scrollport.value !== undefined ? `${scrollport.value}px` : undefined));
 
 const hasDescription = computed(() => description !== undefined && description !== ``);
-// Pinned while the page scrolls under it, on the canvas it covers; with panes that scroll, nothing passes under it.
-const barPin = computed(() => (scroll === `page` ? `sticky top-0 z-10 bg-canvas` : ``));
 </script>
 
 <template>
@@ -159,14 +157,14 @@ const barPin = computed(() => (scroll === `page` ? `sticky top-0 z-10 bg-canvas`
 
         <!-- UNDOCKED (no index, or a pane too narrow for one beside the body): the screen's name and controls in the top bar
              over the page (ViewBar.vue), lined up with the page's column (Page's cap and gutters); on a phone, in
-             PageHeader. The head does not scroll: the bar stays put while you read, and with panes that scroll so does
-             anything pinned under it. With panes, the page is the height its container leaves under the bar, and nothing
-             past it: no column of its own to fill. -->
+             PageHeader. NOT PINNED (2026-11-26, the owner's call on Pipelines and Maintenance): in `page` mode the bar is
+             the page's own first row and scrolls away with it, so a long report gets the whole height; with panes the bar
+             never moves anyway, since only the panes under it scroll. With panes, the page is the height its container
+             leaves under the bar, and nothing past it: no column of its own to fill. -->
         <ViewBar
             v-if="!docked && !phone"
             :title="title"
             :align="width === `full` ? `px-(--ui-page-padding)` : `max-w-320 px-(--ui-page-padding)`"
-            :class="barPin"
         >
             <template v-if="$slots[`info`]" #info><slot name="info" /></template>
             <template v-if="$slots[`actions`]" #actions><slot name="actions" /></template>
