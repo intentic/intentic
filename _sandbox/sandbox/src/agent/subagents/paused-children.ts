@@ -3,6 +3,7 @@ import { sayToParent } from "../../conversations/land/child-lands.js";
 import { liveRunOf, turnRunOf } from "../../conversations/actor/conversation-holdings.js";
 import type { ConversationEvent } from "../../conversations/actor/conversation-decide.js";
 import { CHILDREN, keepChild, settleChild } from "./child-records.js";
+import { stoppedWords } from "@intentic/sandbox-contract/events/child-news";
 import { taskLine } from "./child-spec.js";
 import { noRerun } from "./child-words.js";
 import type { ChildRecord } from "./children.js";
@@ -64,7 +65,7 @@ const lapse = (services: Services, childId: string, parent: string, kid: ChildRe
     // A pause is a wall the sandbox re-runs past (a spent allowance, an outage): its lapse is still that wall's.
     settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error: lapsed, capacity: true });
     keepChild(services, childId);
-    void sayToParent(services, parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${lapsed}`);
+    void sayToParent(services, parent, stoppedWords({ child: childId, title: taskLine(kid.spec) }, lapsed));
 };
 
 // A turn that ended on a wall the sandbox re-runs it past by itself is paused, not finished: its row stays live so its

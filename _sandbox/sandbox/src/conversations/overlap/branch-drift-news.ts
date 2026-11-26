@@ -1,3 +1,4 @@
+import { driftWords } from "@intentic/sandbox-contract/events/child-news";
 import { COMMIT_FIRST } from "@intentic/sandbox-contract/events/land-conflict";
 import type { Services } from "../../composition.js";
 import { deliverWake } from "../../seams/wake-delivery.js";
@@ -35,9 +36,13 @@ export type DriftNewsDeps = Pick<
     "agents" | "conversations" | "agentWorktrees" | "transcripts" | "activity" | "turns" | "logger" | "sandboxSettings" | "auth" | "members" | "ownerEmail"
 >;
 
-const nameOf = (deps: Pick<DriftNewsDeps, "agents">, id: string): string => {
+const titleOf = (deps: Pick<DriftNewsDeps, "agents">, id: string): string | undefined => {
     const entry = deps.agents.entry(id);
-    const title = entry === undefined ? undefined : sharedTitleOf(entry);
+    return entry === undefined ? undefined : sharedTitleOf(entry);
+};
+
+const nameOf = (deps: Pick<DriftNewsDeps, "agents">, id: string): string => {
+    const title = titleOf(deps, id);
     return title === undefined ? `\`${id}\`` : `\`${id}\` ("${title}")`;
 };
 
@@ -122,12 +127,7 @@ export const tellDrift = async (deps: DriftNewsDeps, entry: IsolatedAgent, repos
     const line = driftLine(deps, repos);
     const parent = recordedTargetOf(deps.agents, entry);
     if (told === "parent" && parent.kind === "parent") {
-        const said = await sayToParent(
-            deps,
-            parent.parent,
-            `Your subagent ${nameOf(deps, entry.id)} has finished work held on its branch, and your checkout moved under it: ${line} ` +
-                `Bring it in now while the clash is small (the merge tool, or \`agents merge ${entry.id}\`, with conflict markers to resolve), or send it a message to rebase onto your checkout.`,
-        );
+        const said = await sayToParent(deps, parent.parent, driftWords({ child: entry.id, title: titleOf(deps, entry.id) }, line));
         await noted(deps, entry, `${line} Its parent was told.`, true);
         return said;
     }

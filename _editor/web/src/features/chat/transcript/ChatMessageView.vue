@@ -37,9 +37,10 @@ import { isFreshStart } from "./notices/noticeLook";
 import NoticeFreshStart from "./notices/NoticeFreshStart.vue";
 import NoticeMemory from "./notices/NoticeMemory.vue";
 import NoticeArrival from "./notices/NoticeArrival.vue";
+import NoticeNews from "./notices/NoticeNews.vue";
 import NoticeStrip from "./notices/NoticeStrip.vue";
 import NoticeRow from "./notices/NoticeRow.vue";
-import { isArrival, type NoticeTier } from "../../../models/conversations/transcript/noticeLayout";
+import { isArrival, isNews, type NoticeTier } from "../../../models/conversations/transcript/noticeLayout";
 import { isMemoryHold } from "./held/heldQueue";
 import type { ChatIncident } from "../../../models/conversations/transcript/chatIncidents";
 import ChatPromptAuthor from "./ChatPromptAuthor.vue";
@@ -71,19 +72,21 @@ const props = defineProps<{
     steps?: MergedSteps | undefined;
     // How a notice row is drawn (noticeLayout.ts); a row drawn outside a pane's layout is a plain line.
     noticeTier?: NoticeTier | undefined;
-    // The reports that arrived back to back with this one, drawn as one card here (noticeLayout.ts ArrivalGroup).
+    // The reports, or news about subagents, that arrived back to back with this one, drawn as one here (noticeLayout.ts ArrivalGroup).
     arrivals?: readonly ChatMessage[] | undefined;
 }>();
 
-// A one-line row of the meta lane; an arrival's card and a turn's failure strip are surfaces of their own, which a run
-// of lines does not close up around.
+// A one-line row of the meta lane; an arrival's card, news on the owner's edge and a turn's failure strip are drawn on
+// their own, which a run of lines does not close up around.
 const metaLine = computed(
     () =>
         props.message.role === `notice` &&
         props.message.need === undefined &&
         props.noticeTier !== `strip` &&
         props.noticeTier !== `arrival` &&
-        !(props.noticeTier === undefined && isArrival(props.message)),
+        !(props.noticeTier === undefined && isArrival(props.message)) &&
+        props.noticeTier !== `news` &&
+        !(props.noticeTier === undefined && isNews(props.message)),
 );
 
 // A snapshot that moved nothing is not a checklist event, so it draws no line at all — not an empty one.
@@ -477,6 +480,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
         <NeedCard v-else-if="message.role === 'notice' && message.need" :need-id="message.need.id" :snapshot="message.need" />
         <!-- Where a home's memory starts over: a divider across the column, not a line down its edge. -->
         <NoticeFreshStart v-else-if="isFreshStart(message)" :message="message" />
+        <!-- What the sandbox told the agent about its subagents: lines on the owner's edge, one block for news back to back. -->
+        <NoticeNews v-else-if="noticeTier === 'news' || (noticeTier === undefined && isNews(message))" :rows="arrivals ?? [message]" />
         <!-- What arrived for the agent, signed by its sender: one card, or one for a fleet that reported back to back. -->
         <NoticeArrival v-else-if="noticeTier === 'arrival' || (noticeTier === undefined && isArrival(message))" :rows="arrivals ?? [message]" />
         <!-- The failure the turn ended on, with its fix. -->

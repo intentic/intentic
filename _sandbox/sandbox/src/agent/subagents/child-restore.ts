@@ -7,6 +7,7 @@ import { bookedRerunWords, sayToParent } from "../../conversations/land/child-la
 import { opt } from "../../opt.js";
 import { defineInFlight } from "../../seams/restart/in-flight.js";
 import { bindChildFile, CHILDREN, keepChild, ledgerOf, SEATS, settleChild } from "./child-records.js";
+import { restartedWords, stoppedWords } from "@intentic/sandbox-contract/events/child-news";
 import { childRecordOf, childRouting, taskLine } from "./child-spec.js";
 import { type ChildRecord, followAdopted, resumeHeldChild, rosterHandle, startUnread } from "./children.js";
 import { labelOf } from "./child-gates.js";
@@ -166,20 +167,20 @@ const settleCutChild = (services: Services, childId: string): void => {
     endPause(kid);
     settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error });
     keepChild(services, childId);
-    void sayToParent(services, kid.parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${error}`);
+    void sayToParent(services, kid.parent, stoppedWords({ child: childId, title: taskLine(kid.spec) }, error));
 };
 
 // A child a restart cut before any model read its brief, started again on it; one that cannot start stays stopped.
 const startAgain = async (services: Services, childId: string, kid: ChildRecord): Promise<void> => {
     const started = await startUnread(services, childId, kid).catch((error: Error) => ({ ok: false as const, message: errorMessage(error) }));
     if (started.ok) {
-        void sayToParent(services, kid.parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") had not started when the sandbox restarted, so it starts again by itself, from its task: its report reaches you when it ends.`);
+        void sayToParent(services, kid.parent, restartedWords({ child: childId, title: taskLine(kid.spec) }));
         return;
     }
     const error = `${RESTART_CUT} ${started.message}`;
     settleChild(services.conversations, childId, { status: "failed", report: kid.report ?? "", error });
     keepChild(services, childId);
-    void sayToParent(services, kid.parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${error}`);
+    void sayToParent(services, kid.parent, stoppedWords({ child: childId, title: taskLine(kid.spec) }, error));
 };
 
 /**

@@ -9,6 +9,16 @@ import type { AskQuestion, ChildAgentAsk, ChildMove, ChildRun } from "@intentic/
 import type { LimitPolicy } from "@intentic/sandbox-contract/schemas/turn-break";
 import { capabilitiesOf } from "@intentic/sandbox-contract/models/agent-catalog";
 import { childRunOf } from "@intentic/sandbox-contract/events/child-run";
+import {
+    allowedWords,
+    answerLostWords,
+    fellBackWords,
+    messageLostWords,
+    movedHereWords,
+    notStartedWords,
+    stoppedWords,
+    workingWords,
+} from "@intentic/sandbox-contract/events/child-news";
 import { newConversationId, SUBAGENT_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import { type Holding, type LiveRun, liveRunOf } from "../../conversations/actor/conversation-holdings.js";
 import type { ConversationActors } from "../../conversations/actor/conversation-actors.js";
@@ -506,7 +516,7 @@ const moveOnward = async (services: Services, childId: string, parent: string, k
             void sayToParent(
                 services,
                 parent,
-                `Your subagent \`${childId}\` ("${taskLine(from)}") was refused on ${from.provider}/${from.model} and moved itself to ${kid.spec.provider}/${kid.spec.model}, the next of the fallbacks you gave it: it carries on in the same worktree, and its report comes when that turn ends. The refusal: ${failure}`,
+                fellBackWords({ child: childId, title: taskLine(from) }, `${from.provider}/${from.model}`, `${kid.spec.provider}/${kid.spec.model}`, failure),
             );
             return true;
         }
@@ -569,7 +579,7 @@ const settleChildTurn = async (
     // Its report was held back while it was to move (child-report.ts): the parent hears how it ended after all.
     if (moving !== undefined && error !== undefined && kid !== undefined) {
         const why = moving === "stayed" ? "none of its fallbacks could take it" : "it could not run here instead either";
-        void sayToParent(services, parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") stays stopped: ${why}. ${error}`);
+        void sayToParent(services, parent, stoppedWords({ child: childId, title: taskLine(kid.spec) }, `${why}. ${error}`));
     }
     adoptLateStart(services, childId, kid);
 };
@@ -612,7 +622,7 @@ const runHere = async (services: Services, childId: string, parent: string, kid:
     const words = `The runner "${runner}" could not prepare its copy of the workspace, so nothing of your last turn ran there: you now run here, in this sandbox, in the same worktree. Carry on with your task, and end with your report as before.`;
     const sent = await followUp(services, { conversationId: parent, cwd: kid.cwd }, kid, childId, words);
     if (sent.ok) {
-        void sayToParent(services, parent, `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") could not start on the runner "${runner}": ${failure} It runs here, in this sandbox, instead, and its report reaches you when it ends.`);
+        void sayToParent(services, parent, movedHereWords({ child: childId, title: taskLine(kid.spec) }, runner, failure));
     }
     return sent.ok;
 };
@@ -713,7 +723,7 @@ const adoptRun = (services: Services, childId: string, kid: ChildRecord, run: Li
     void sayToParent(
         services,
         kid.parent,
-        `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") is working: ${startedWhy(started)}. Its report reaches you when it ends, like any turn of its: do not send it the task again or give the task to another agent meanwhile.`,
+        workingWords({ child: childId, title: taskLine(kid.spec) }, startedWhy(started)),
     );
 };
 
@@ -1094,7 +1104,7 @@ const abandonChildStart = async (services: Services, parent: string, id: string,
     if (subagentEndingReported(services.conversations, id)) {
         return;
     }
-    if (await sayToParent(services, parent, `Your subagent \`${id}\` did not start: ${message}`)) {
+    if (await sayToParent(services, parent, notStartedWords(id, message))) {
         markSubagentEndingReported(services.conversations, id);
     }
 };
@@ -1115,7 +1125,7 @@ const startAllowed = async (services: Services, parent: ChildParent, start: Chil
             return;
         }
         if (started.note !== undefined) {
-            void sayToParent(services, parent.conversationId, `The owner allowed your subagent \`${start.id}\` to start. ${started.note}`);
+            void sayToParent(services, parent.conversationId, allowedWords(start.id, started.note));
         }
     } catch (error) {
         await abandonChildStart(services, parent.conversationId, start.id, errorMessage(error));
@@ -1371,7 +1381,7 @@ const sendAllowed = async (
         outcome = { ok: false, message: errorMessage(error) };
     }
     if (!outcome.ok) {
-        void sayToParent(services, parent.conversationId, `Your message to subagent \`${childId}\` did not go: ${outcome.message}`);
+        void sayToParent(services, parent.conversationId, messageLostWords(childId, outcome.message));
     }
 };
 
@@ -1458,7 +1468,7 @@ export const answerChild = async (
     void askOwner(services, parent.conversationId, run, askAbout(kid, "answer", childId, picks), verdict.reason).then((admission) => {
         const answered = admission.ok ? settleAnswer(services, kid, answers) : admission;
         if (!answered.ok) {
-            void sayToParent(services, parent.conversationId, `Your answer to subagent \`${childId}\` did not go: ${answered.message}`);
+            void sayToParent(services, parent.conversationId, answerLostWords(childId, answered.message));
         }
     });
     return { ok: true, note: heldAnswer(verdict.reason) };

@@ -1,3 +1,4 @@
+import { landConflictWords, landedWords, listed, type NewsSubject } from "@intentic/sandbox-contract/events/child-news";
 import { sharedTitleOf } from "../seal/seal-family.js";
 import type { LandConflict } from "@intentic/sandbox-contract/schemas/agents";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract/schemas/automations";
@@ -27,25 +28,14 @@ const SOURCE = "subagents";
 // Paths a conflict note names before counting the rest.
 const PATHS_NAMED = 5;
 
-const nameOf = (childId: string, title: string | undefined): string => (title === undefined ? `\`${childId}\`` : `\`${childId}\` ("${title}")`);
-
-const listed = (items: readonly string[], named: number): string =>
-    [
-        items
-            .slice(0, named)
-            .map((item) => `\`${item}\``)
-            .join(", "),
-        ...(items.length > named ? [`and ${items.length - named} more`] : []),
-    ].join(" ");
-
 // The parent that started this conversation, while that parent has a live turn to hear news in.
-const supervisorOf = (deps: ChildNewsDeps, childId: string): { readonly parent: string; readonly name: string } | undefined => {
+const supervisorOf = (deps: ChildNewsDeps, childId: string): { readonly parent: string; readonly who: NewsSubject } | undefined => {
     const entry = deps.agents.entry(childId);
     const parent = parentOfActor(entry?.identity.startedBy);
     if (parent === undefined || !deps.conversations.running(parent)) {
         return undefined;
     }
-    return { parent, name: nameOf(childId, (entry === undefined ? undefined : sharedTitleOf(entry))) };
+    return { parent, who: { child: childId, title: entry === undefined ? undefined : sharedTitleOf(entry) } };
 };
 
 // Says it into the parent's turn: whether the parent has it now (said into its turn, or a turn of its own), not merely
@@ -151,11 +141,7 @@ export const reportChildLanded = async (deps: ChildNewsDeps, event: WorkspaceEve
         return;
     }
     const repos = event.repos.map(({ repo }) => repo);
-    await tell(
-        deps,
-        supervisor.parent,
-        `Your subagent ${supervisor.name} landed in the main tree${repos.length === 0 ? "" : ` (${listed(repos, repos.length)})`}.`,
-    );
+    await tell(deps, supervisor.parent, landedWords(supervisor.who, repos));
 };
 
 /** A press of Land on a child hit a conflict: nothing reached the main tree, and its parent may be sequencing on it. */
@@ -164,12 +150,5 @@ export const reportChildConflict = async (deps: ChildNewsDeps, childId: string, 
     if (supervisor === undefined) {
         return;
     }
-    await tell(
-        deps,
-        supervisor.parent,
-        [
-            `The owner pressed Land on your subagent ${supervisor.name}, and it hit a merge conflict${paths.length === 0 ? "" : ` on ${listed(paths, PATHS_NAMED)}`}: nothing of it reached the main tree.`,
-            "It lands once its branch is rebased onto the main line and the conflicts are resolved. The owner can have it do that from its card, or you can tell it to; a message you send while another turn runs on it waits for that turn to end.",
-        ].join(" "),
-    );
+    await tell(deps, supervisor.parent, landConflictWords(supervisor.who, paths));
 };

@@ -8,7 +8,13 @@ import { HeldEndingSchema, MemoryKillMarkSchema, RetryLadderSchema } from "../sc
 import { HandoffOfferSchema } from "../schemas/providers/handoff.js";
 import { NoticeCodeSchema } from "./sandbox-notice.js";
 import { TranscriptAgentNoticeSchema } from "./agent-ui.js";
-import { TranscriptAgentWordsSchema, TranscriptEditorContextSchema, TranscriptNeedWakeSchema, TranscriptWatchWakeSchema } from "./prompt-origins.js";
+import {
+    TranscriptAgentWordsSchema,
+    TranscriptChildNewsSchema,
+    TranscriptEditorContextSchema,
+    TranscriptNeedWakeSchema,
+    TranscriptWatchWakeSchema,
+} from "./prompt-origins.js";
 import { ReviewFindingsSchema } from "./review.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind } from "./requests.js";
 import {
@@ -384,6 +390,9 @@ export const TranscriptRowSchema = z.object({
     needWake: TranscriptNeedWakeSchema.optional().describe("The answered need that reached this conversation, and the prompt it came as."),
     agentWords: TranscriptAgentWordsSchema.optional().describe(
         "Another agent's words that reached this conversation, whose they are, and the prompt they came as.",
+    ),
+    childNews: TranscriptChildNewsSchema.optional().describe(
+        "What the sandbox told this conversation about one of its subagents (a move, a stop, a message that did not go), and the prompt it came as.",
     ),
     backgroundJob: TranscriptBackgroundJobSchema.optional().describe("The background job this row marks the start of."),
     // Not a card: a page parks nothing, it is part of what the agent said. On the bubble whose tool call showed it.

@@ -43,6 +43,41 @@ export const TranscriptAgentWordsSchema = z.object({
 });
 export type TranscriptAgentWords = z.infer<typeof TranscriptAgentWordsSchema>;
 
+// What the sandbox told a conversation about one of its subagents between the start and the report (child-news.ts): a
+// move, a stop, a restart, a message that did not go. The parent reads it as a prompt; the row keeps that prompt and
+// names the subagent, so a reader never draws it as the owner's own words.
+export const ChildNewsKindSchema = z.enum([
+    "movedHere",
+    "stopped",
+    "restarted",
+    "otherModel",
+    "fellBack",
+    "working",
+    "notStarted",
+    "allowed",
+    "messageLost",
+    "answerLost",
+    "question",
+    "landed",
+    "landConflict",
+    "drift",
+]);
+export type ChildNewsKind = z.infer<typeof ChildNewsKindSchema>;
+
+export const TranscriptChildNewsSchema = z.object({
+    kind: ChildNewsKindSchema.describe("What became of the subagent."),
+    from: z.string().describe("The subagent's id."),
+    title: z.string().optional().describe("The subagent's title, when the news named one."),
+    runner: z.string().optional().describe("The runner it could not start on (movedHere)."),
+    model: z.string().optional().describe("The model it runs on now, where that is the news (otherModel, fellBack)."),
+    cause: z
+        .string()
+        .optional()
+        .describe("Why, in the sandbox's own words, where the news says: the same words for every subagent one cause hit, so a reader says it once."),
+    sent: z.string().describe("The whole prompt the model received, disclosed under the row."),
+});
+export type TranscriptChildNews = z.infer<typeof TranscriptChildNewsSchema>;
+
 // What a user row says the person was looking at when they sent it (the composer's "Viewing" chip): the file and the
 // selected lines, never the selected text, which rode that one prompt and is not worth keeping on every copy of the row.
 export const TranscriptEditorContextSchema = z.object({

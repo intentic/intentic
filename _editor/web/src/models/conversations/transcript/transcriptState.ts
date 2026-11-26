@@ -1,4 +1,5 @@
 import type { AttachFrame } from "@intentic/sandbox-contract/events/agent-events";
+import { asChildNews } from "@intentic/sandbox-contract/events/child-news";
 import { REQUEST_FIELDS, type TranscriptPatch, type TranscriptRow } from "@intentic/sandbox-contract/events/transcript";
 import { patchedRow } from "@intentic/sandbox-contract/transcript-fold";
 import type { ChatMessage } from "./transcript";
@@ -85,9 +86,13 @@ export const rebuildKeeping = (standing: readonly ChatMessage[], rows: readonly 
     return { ...emptyTranscriptState, messages, nextId };
 };
 
+// Rows as the sandbox sent them, news about a subagent that an older record holds as the owner's words read as the news
+// it is (child-news.ts asChildNews), so every way rows come in draws it the same.
+export const readRows = (rows: readonly TranscriptRow[]): TranscriptRow[] => rows.map(asChildNews);
+
 // The rows of a page of the daemon's record, each knowing where it sits there, counting from the page's own `from`.
 export const positioned = (rows: readonly TranscriptRow[], from: number): Omit<ChatMessage, "id">[] =>
-    rows.map((row, offset) => ({ ...row, at: from + offset }));
+    rows.map((row, offset) => ({ ...asChildNews(row), at: from + offset }));
 
 // WHERE THIS WINDOW'S COPY OF THE RECORD ENDS, as the next read of it asks: just past the last row it holds that the
 // record does, named by that row's id so the sandbox can tell a record that only grew from one rewound since. Undefined
@@ -238,7 +243,7 @@ export const attachRun = (state: TranscriptState, head: AttachHead, drawn?: numb
     const base = baseFor(state.messages, head.run, drawn);
     const kept = withoutCards(state.messages.slice(0, base), new Set(head.rows.flatMap(cardIds)));
     let nextId = state.nextId;
-    const rows = head.rows.map((row, index): ChatMessage => {
+    const rows = readRows(head.rows).map((row, index): ChatMessage => {
         const existing = state.messages[base + index];
         if (existing !== undefined && existing.local !== true) {
             return { ...row, id: existing.id };
@@ -254,7 +259,7 @@ export const attachRun = (state: TranscriptState, head: AttachHead, drawn?: numb
  * the daemon's own fold and record follow; this decides only which row it names, and paces prose for the typewriter. */
 export const applyPatch = (state: TranscriptState, patch: TranscriptPatch, typewriter: boolean): TranscriptState => {
     if (patch.op === `append`) {
-        return appendMessage(state, patch.row);
+        return appendMessage(state, asChildNews(patch.row));
     }
     // The row the patch names: by its id where the sandbox names rows (no counting, so a row this window holds above or
     // within the run cannot shift it), else by its index from where the run's rows start. Searched from the end, where

@@ -9,6 +9,7 @@ import { spentRung } from "../models/role-model-quota.js";
 import type { LandResult } from "@intentic/sandbox-contract/schemas/agents";
 import type { ChildActionResult, ChildRecord, ChildSpawnSpec, ChildTurnTally } from "./children.js";
 import { bookedRerunWords, sayToParent } from "../../conversations/land/child-lands.js";
+import { otherModelWords } from "@intentic/sandbox-contract/events/child-news";
 import { sameModel, taskLine } from "./child-spec.js";
 import { CANCELLED } from "./child-words.js";
 import { signInRerunOf } from "./paused-children.js";
@@ -204,6 +205,6 @@ export const takeServedModel = (services: Services, childId: string, kid: ChildR
     void sayToParent(
         services,
         kid.parent,
-        `Your subagent \`${childId}\` ("${taskLine(kid.spec)}") runs this turn on ${served}, not on ${asked} as it was spawned: ${asked} was not offered when the turn started. Cancel it if that model will not do.`,
+        otherModelWords({ child: childId, title: taskLine(kid.spec) }, served, asked),
     );
 };

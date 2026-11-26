@@ -1,4 +1,5 @@
 import type { AskQuestion, ChildMove } from "@intentic/sandbox-contract/events/requests";
+import { questionWords as childQuestionWords } from "@intentic/sandbox-contract/events/child-news";
 import type { ResumeReason } from "@intentic/sandbox-contract/events/resume";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import { taskLine } from "./child-spec.js";
@@ -21,17 +22,9 @@ export const NOT_STARTED = {
 // What a cancelled child's ending says, whatever its turn was doing when the cancel came.
 export const CANCELLED = "Stopped: its parent cancelled it.";
 
-// What a parent is told of the question its child parked on: the questions whole, options and all, and the door that
-// answers them, since the parent may have no wait open to read them from.
+// What a parent is told of the question its child parked on (child-news.ts composes it, so the parent's chat reads it back).
 export const questionWords = (childId: string, spec: ChildSpawnSpec, questions: readonly AskQuestion[]): string =>
-    [
-        `Your subagent \`${childId}\` ("${taskLine(spec)}") stopped on a question and is waiting for your answer; until you give one it does nothing and keeps its seat.`,
-        ...questions.map((asked) => {
-            const options = asked.options.map((option) => option.label);
-            return `- ${asked.question}${options.length === 0 ? "" : ` (options: ${options.join(", ")}${asked.multiSelect ? "; pick any number" : ""})`}`;
-        }),
-        `Answer with answer(child: "${childId}", answers: [{ question, picks }]), one entry per question in its own words. If it is not yours to decide, say so to the owner rather than guessing.`,
-    ].join("\n");
+    childQuestionWords({ child: childId, title: taskLine(spec) }, questions);
 
 // A paused child's re-run is no longer coming: the sandbox gave it up or dropped it, or a person ran the turn themselves.
 export const noRerun = (ranElsewhere: boolean): string =>

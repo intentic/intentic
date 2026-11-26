@@ -5448,6 +5448,27 @@
                 "noCode": "Kein Code geändert"
             }
         },
+        "noticeNews": {
+            "count": "{count} Subagent | {count} Subagents",
+            "told": "Was der Agent erfahren hat",
+            "openDevices": "Geräte öffnen",
+            "kind": {
+                "movedHere": "von {runner} hierher verlegt",
+                "stopped": "gestoppt, läuft nicht wieder",
+                "restarted": "startet nach einem Neustart neu",
+                "otherModel": "läuft auf {model}",
+                "fellBack": "zu {model} gewechselt",
+                "working": "arbeitet wieder",
+                "notStarted": "nie gestartet",
+                "allowed": "zum Start freigegeben",
+                "messageLost": "eine Nachricht kam nicht an",
+                "answerLost": "eine Antwort kam nicht an",
+                "question": "wartet auf eine Antwort",
+                "landed": "gelandet",
+                "landConflict": "Landen traf auf einen Merge-Konflikt",
+                "drift": "Checkout hat sich unter seiner Arbeit bewegt"
+            }
+        },
         "noticeReceipt": {
             "doneIn": "Fertig in {elapsed}",
             "done": "Fertig",

@@ -5448,6 +5448,27 @@
                 "noCode": "No code changed"
             }
         },
+        "noticeNews": {
+            "count": "{count} subagent | {count} subagents",
+            "told": "What the agent was told",
+            "openDevices": "Open Devices",
+            "kind": {
+                "movedHere": "moved here from {runner}",
+                "stopped": "stopped, won't run again",
+                "restarted": "starting again after a restart",
+                "otherModel": "running on {model}",
+                "fellBack": "moved to {model}",
+                "working": "working again",
+                "notStarted": "never started",
+                "allowed": "allowed to start",
+                "messageLost": "a message didn't reach it",
+                "answerLost": "an answer didn't reach it",
+                "question": "waiting on an answer",
+                "landed": "landed",
+                "landConflict": "Land hit a merge conflict",
+                "drift": "checkout moved under its work"
+            }
+        },
         "noticeReceipt": {
             "doneIn": "Done in {elapsed}",
             "done": "Done",

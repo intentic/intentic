@@ -1,6 +1,7 @@
 import { oneLine } from "@intentic/base/one-line";
 import type { SubagentVerification } from "../schemas/terminal.js";
 import type { TranscriptAgentWords, TranscriptRow } from "./transcript.js";
+import { childNewsRow } from "./child-news.js";
 import { needWakeRow } from "./need-wake.js";
 import { watchWakeRow } from "./watch-wake.js";
 
@@ -221,4 +222,5 @@ export const agentWordsRow = (prompt: string): TranscriptRow | undefined => {
 };
 
 /** The row for a prompt nobody at the composer typed; every transcript reader asks this one function. */
-export const unspokenPromptRow = (prompt: string): TranscriptRow | undefined => watchWakeRow(prompt) ?? needWakeRow(prompt) ?? agentWordsRow(prompt);
+export const unspokenPromptRow = (prompt: string): TranscriptRow | undefined =>
+    watchWakeRow(prompt) ?? needWakeRow(prompt) ?? agentWordsRow(prompt) ?? childNewsRow(prompt);

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
+import { linkedQuestionWords } from "@intentic/sandbox-contract/events/child-news";
 import { LINK_MAX_HOPS, type LinkHello, type LinkTask, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
 import { LINKED_PREFIX, newConversationId, ROUTE_CONVERSATION_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
@@ -209,18 +210,6 @@ const settle = async (engine: Engine, child: Live, status: "completed" | "failed
     }
 };
 
-const questionWords = (stored: StoredChild, question: NonNullable<LinkTaskStatus["question"]>): string =>
-    [
-        `Subagent \`${stored.id}\`, the task you handed to the linked sandbox "${stored.sandbox}", asks:`,
-        "",
-        ...question.questions.map((entry) => {
-            const options = entry.options.map((option) => option.label).join(" / ");
-            return options === "" ? `- ${entry.question}` : `- ${entry.question} (${options})`;
-        }),
-        "",
-        `Answer it with answer(child: "${stored.id}"), or send it words with send.`,
-    ].join("\n");
-
 // A task parked over there: blocked on the roster, and a question the parent may answer said into its turn once.
 const takeBlocked = async (engine: Engine, child: Live, status: LinkTaskStatus, before: LinkTaskStatus | undefined): Promise<void> => {
     const { stored } = child;
@@ -231,7 +220,7 @@ const takeBlocked = async (engine: Engine, child: Live, status: LinkTaskStatus, 
         return;
     }
     const asked = blockedMoveReporter(engine.deps.conversations, stored.id);
-    if (asked !== undefined && (await sayToParent(engine, stored, questionWords(stored, question), `linked-question-${randomUUID()}`)) !== "none") {
+    if (asked !== undefined && (await sayToParent(engine, stored, linkedQuestionWords(stored.id, stored.sandbox, question.questions), `linked-question-${randomUUID()}`)) !== "none") {
         asked();
     }
 };

@@ -17,7 +17,7 @@ import { modelLabelFor, providerDisplayLabel } from "../../providers/providerCat
  * this build's own for the failure's kind (failureView.ts), and the row opens those words as details (noticeFailure).
  */
 
-type NoticeRow = Pick<TranscriptRow, "noticeCode" | "watchWake" | "needWake" | "agentWords"> & { readonly text?: string };
+type NoticeRow = Pick<TranscriptRow, "noticeCode" | "watchWake" | "needWake" | "agentWords" | "childNews"> & { readonly text?: string };
 
 /** Where the row is read: a home conversation's lands are committed as well (the daemon's version-landed.ts). */
 export interface NoticePlace {
@@ -415,7 +415,7 @@ export const noticeFailure = (row: NoticeRow): FailureView | undefined => {
     if (notice !== undefined) {
         return isFailure(notice) ? failureView(notice.params) : undefined;
     }
-    const unworded = row.watchWake === undefined && row.needWake === undefined && row.agentWords === undefined;
+    const unworded = row.watchWake === undefined && row.needWake === undefined && row.agentWords === undefined && row.childNews === undefined;
     return unworded && row.text !== undefined ? legacyFailure(row.text) : undefined;
 };
 

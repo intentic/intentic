@@ -11,6 +11,7 @@ import {
     flushPending,
     mergeRecorded,
     positioned,
+    readRows,
     rebuildKeeping,
     revealPending,
     type TranscriptState,
@@ -231,7 +232,7 @@ export class TranscriptClock {
     // fresh ids. Nothing stays attached afterward. `from` is where the rows start in the daemon's record, for rows read
     // from it: each then knows its place there (ChatMessage.at).
     rebuild(rows: readonly TranscriptRow[], from?: number): void {
-        this.state.value = rebuildKeeping(this.state.value.messages, from === undefined ? rows : positioned(rows, from));
+        this.state.value = rebuildKeeping(this.state.value.messages, from === undefined ? readRows(rows) : positioned(rows, from));
     }
 
     // Adds what the daemon's record gained past `afterRow` (the row this window's cursor named), from position `from`:
@@ -252,7 +253,7 @@ export class TranscriptClock {
     // the page starts in the daemon's record.
     prepend(rows: readonly TranscriptRow[], from?: number): void {
         const state = this.state.value;
-        const placed = from === undefined ? rows : positioned(rows, from);
+        const placed = from === undefined ? readRows(rows) : positioned(rows, from);
         const older = placed.reduce((built, row) => appendMessage(built, row), { ...emptyTranscriptState, nextId: state.nextId });
         this.state.value = {
             ...state,

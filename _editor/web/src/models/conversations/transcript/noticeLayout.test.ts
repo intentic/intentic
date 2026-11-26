@@ -1,4 +1,5 @@
 import { agentWordsRow, childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
+import { childNewsRow, movedHereWords } from "@intentic/sandbox-contract/events/child-news";
 import { noticeLayoutOf, type NoticeLayoutContext } from "./noticeLayout";
 import { type ChatMessage, turnsOf } from "./transcript";
 
@@ -31,6 +32,10 @@ const landed = (id: number): ChatMessage => ({ id, role: `notice`, text: `Landed
 const report = (id: number, title: string, failed = false): ChatMessage => ({
     id,
     ...agentWordsRow(childReportPrompt({ child: `sub-${id}`, title, failed, report: `Done.`, verification: undefined }))!,
+});
+const news = (id: number, title: string): ChatMessage => ({
+    id,
+    ...childNewsRow(movedHereWords({ child: `sub-${id}`, title }, `omen`, `Preparing the runner's workspace failed.`))!,
 });
 const watching = (id: number): ChatMessage => ({
     id,
@@ -81,6 +86,19 @@ describe(`noticeLayoutOf`, () => {
         // The agent spoke between them: a card of its own.
         expect(fleet.groups.has(6)).toBe(false);
         expect(fleet.folded.has(6)).toBe(false);
+    });
+
+    // 2026-11-26: four of these, one cause, drew as four of the owner's own bubbles.
+    it(`draws news about subagents on its own, one block for news back to back, never in a report's card`, () => {
+        const told = layout([prompt(1), news(2, `#8 Lighter pnpm dev`), news(3, `#2 Targeted reclaim`), report(4, `Slice A`), answer(5), news(6, `#1 WSL card`)]);
+        expect(told.tiers.get(2)).toBe(`news`);
+        expect(told.groups.get(2)?.rows.map((row) => row.id)).toEqual([2, 3]);
+        expect(told.folded.has(3)).toBe(true);
+        // A report right after news is a card of its own, and the agent spoke before the last.
+        expect(told.tiers.get(4)).toBe(`arrival`);
+        expect(told.folded.has(4)).toBe(false);
+        expect(told.groups.has(6)).toBe(false);
+        expect(told.receipts.get(1)).toBeUndefined();
     });
 
     it(`leaves rows other components draw where they stand, and skips rows an incident folded`, () => {

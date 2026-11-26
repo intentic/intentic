@@ -5448,6 +5448,27 @@
                 "noCode": "Sin cambios de código"
             }
         },
+        "noticeNews": {
+            "count": "{count} subagente | {count} subagentes",
+            "told": "Lo que se le dijo al agente",
+            "openDevices": "Abrir Dispositivos",
+            "kind": {
+                "movedHere": "trasladado aquí desde {runner}",
+                "stopped": "detenido, no volverá a ejecutarse",
+                "restarted": "empieza de nuevo tras un reinicio",
+                "otherModel": "ejecutándose en {model}",
+                "fellBack": "pasó a {model}",
+                "working": "trabajando de nuevo",
+                "notStarted": "nunca empezó",
+                "allowed": "autorizado a empezar",
+                "messageLost": "un mensaje no le llegó",
+                "answerLost": "una respuesta no le llegó",
+                "question": "esperando una respuesta",
+                "landed": "integrado",
+                "landConflict": "la integración dio un conflicto de merge",
+                "drift": "el checkout cambió bajo su trabajo"
+            }
+        },
         "noticeReceipt": {
             "doneIn": "Hecho en {elapsed}",
             "done": "Hecho",

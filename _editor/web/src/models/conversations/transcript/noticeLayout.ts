@@ -6,6 +6,9 @@ import type { ChatMessage, ChatTurn } from "./transcript";
 
    - What ARRIVED for the agent (another agent's report or message, a watch that fired) is a card signed by its sender,
      drawn where it arrived; reports that arrive back to back share one card.
+   - What the sandbox told the agent about one of its subagents between start and report (it moved, stays stopped, a
+     message did not go) is a line on the owner's own edge, since it went to the agent the way a prompt does, but never
+     the owner's bubble (2026-11-26); news that arrives back to back is one block (NoticeNews.vue).
    - A failure the turn ended on, with nothing run after it, is a tinted strip with its fix.
    - A wait still running (a renewal, a route, an armed watch), and a row whose one press still matters in the latest
      turn, stays a line of its own.
@@ -15,7 +18,7 @@ import type { ChatMessage, ChatTurn } from "./transcript";
    Needs, background jobs, memory holds and a fresh start keep their own components, and this leaves them alone. */
 
 /** How a notice row that stays in the column is drawn. */
-export type NoticeTier = `arrival` | `strip` | `inline`;
+export type NoticeTier = `arrival` | `news` | `strip` | `inline`;
 
 /** What a turn's receipt holds: its notices, oldest first, and what its one line says about them. */
 export interface TurnReceipt {
@@ -32,7 +35,7 @@ export interface TurnReceipt {
     readonly stopped: boolean;
 }
 
-/** Reports that arrived back to back, drawn as one card at the first. */
+/** Reports, or news about subagents, that arrived back to back: drawn as one at the first. */
 export interface ArrivalGroup {
     readonly rows: readonly ChatMessage[];
 }
@@ -78,8 +81,14 @@ const drawnElsewhere = (row: ChatMessage): boolean =>
  *  need is not one: its own card, where it was asked, already says how it ended. */
 export const isArrival = (row: ChatMessage): boolean => row.role === `notice` && (row.agentWords !== undefined || row.watchWake !== undefined);
 
+/** What the sandbox told the agent about one of its subagents (child-news.ts). */
+export const isNews = (row: ChatMessage): boolean => row.role === `notice` && row.childNews !== undefined;
+
 /** A report from a subagent (or a review or test pass) this conversation started. */
 const isReport = (row: ChatMessage): boolean => row.role === `notice` && row.agentWords?.kind === `child`;
+
+// Which rows share a block when they arrive back to back: reports with reports, news with news.
+const familyOf = (row: ChatMessage): `report` | `news` | undefined => (isReport(row) ? `report` : isNews(row) ? `news` : undefined);
 
 /** A row this layout places: a notice no other component draws whole. */
 const placed = (row: ChatMessage, context: NoticeLayoutContext): boolean =>
@@ -91,12 +100,17 @@ const lastWord = (rows: readonly ChatMessage[], context: NoticeLayoutContext): C
         if (context.incidentFolded.has(row.id) || (row.role === `notice` && row.text === `` && row.need === undefined && row.backgroundJob === undefined)) {
             return false;
         }
-        return row.role !== `notice` || !placed(row, context) || isArrival(row) || noticeFailure(row) !== undefined || row.noticeAction !== undefined;
+        return (
+            row.role !== `notice` || !placed(row, context) || isArrival(row) || isNews(row) || noticeFailure(row) !== undefined || row.noticeAction !== undefined
+        );
     });
 
 const tierOf = (row: ChatMessage, context: NoticeLayoutContext, ending: ChatMessage | undefined, latest: boolean, live: boolean): NoticeTier | undefined => {
     if (isArrival(row)) {
         return `arrival`;
+    }
+    if (isNews(row)) {
+        return `news`;
     }
     if (context.pending(row)) {
         return `inline`;
@@ -120,17 +134,19 @@ const receiptOf = (turn: ChatTurn, rows: readonly ChatMessage[]): TurnReceipt =>
     };
 };
 
-// Reports that arrive with nothing drawn between them share a card: a fleet reporting while the agent was busy.
+// Reports that arrive with nothing drawn between them share a card: a fleet reporting while the agent was busy. News
+// about subagents does the same among itself: one cause stopping four subagents is one block, not four.
 const groupsOf = (rows: readonly ChatMessage[], drawn: (row: ChatMessage) => boolean): ArrivalGroup[] => {
     const groups: ChatMessage[][] = [];
-    let open: ChatMessage[] | undefined;
+    let open: { readonly family: `report` | `news`; readonly rows: ChatMessage[] } | undefined;
     for (const row of rows) {
-        if (isReport(row)) {
-            if (open === undefined) {
-                open = [row];
-                groups.push(open);
+        const family = familyOf(row);
+        if (family !== undefined) {
+            if (open?.family === family) {
+                open.rows.push(row);
             } else {
-                open.push(row);
+                open = { family, rows: [row] };
+                groups.push(open.rows);
             }
         } else if (drawn(row)) {
             open = undefined;

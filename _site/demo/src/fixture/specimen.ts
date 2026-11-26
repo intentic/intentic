@@ -1,6 +1,7 @@
 import type { AgentSummary } from "@intentic/sandbox-contract/schemas/agents";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract/events/transcript";
 import { childReportPrompt, peerMessagePrompt, unspokenPromptRow } from "@intentic/sandbox-contract/events/agent-words";
+import { movedHereWords, restartedWords } from "@intentic/sandbox-contract/events/child-news";
 import { watchWakePrompt, watchWakeRow } from "@intentic/sandbox-contract/events/watch-wake";
 import { RESUME_NOTES, resumeDisclosure, resumeNoticeRow } from "@intentic/sandbox-contract/events/resume";
 import { accountMovedRow, startingRow } from "@intentic/sandbox-contract/text/notice-rows";
@@ -18,6 +19,10 @@ import { PAYOUTS_PAGE } from "./pages";
 // the real components. Opened as a tab only in a dev build (openChats.ts); the published demo never shows it.
 
 export const SPECIMEN_CHAT_ID = `cnv_transcript_specimen`;
+
+// A runner's refusal word for word as runner-dispatch.ts says it, the one that sent four subagents home on 2026-11-26.
+const OMEN_TOO_OLD =
+    `Preparing the runner's workspace failed: the runner "omen" runs an older build (0.0.0), whose sync can lose a turn's uncommitted work, so nothing was sent there. Update it (Devices, its Update button), or move this conversation here to go on in this sandbox.`;
 export const SPECIMEN_SESSION = `ses_01j9specimen`;
 
 const HOUR = 3_600_000;
@@ -658,6 +663,20 @@ const messages: TranscriptRow[] = [
         )!,
         openedAt: Date.now() - 50 * 60_000,
     },
+    // What the sandbox tells the agent about its subagents between start and report: four one runner turned away, as one
+    // block on the owner's edge (NoticeNews.vue). The first is stored as an older record holds it, as the owner's words,
+    // which the chat reads back as the news it is (child-news.ts asChildNews).
+    {
+        role: `user`,
+        text: movedHereWords({ child: `sub-bunny-5g4a`, title: `#8 Lighter pnpm dev: measure and cut dev-server memory` }, `omen`, OMEN_TOO_OLD),
+        speaker: { kind: `sandbox` },
+        sentAt: Date.now() - 49 * 60_000,
+    },
+    ...[
+        [`sub-moon-4rfr`, `#2 Targeted memory reclaim instead of global drop_caches`],
+        [`sub-tuna-25dq`, `#1 Propose a WSL VM size that fits the PC (card)`],
+        [`sub-beaver-rhst`, `#6 Sleep idle local sandboxes when their PC is short of memory`],
+    ].map(([child, title]) => ({ ...unspokenPromptRow(movedHereWords({ child: child!, title }, `omen`, OMEN_TOO_OLD))!, openedAt: Date.now() - 49 * 60_000 })),
     {
         ...unspokenPromptRow(
             childReportPrompt({
@@ -679,6 +698,7 @@ const messages: TranscriptRow[] = [
         )!,
         openedAt: Date.now() - 48 * 60_000,
     },
+    { ...unspokenPromptRow(restartedWords({ child: `sub-fox-81aa`, title: `#3 Report stranded VM memory in the host reading` }))!, openedAt: Date.now() - 47 * 60_000 },
     {
         role: `assistant`,
         text: ANSWER_MARKDOWN,
