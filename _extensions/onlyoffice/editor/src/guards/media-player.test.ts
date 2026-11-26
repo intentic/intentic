@@ -97,14 +97,50 @@ describe(`installMediaPlayer`, () => {
         expect(bar()?.querySelector(`button`)?.getAttribute(`aria-label`)).toBe(`Play`);
     });
 
-    it(`plays on the slideshow's command and stops showing when the editor lets go`, () => {
+    it(`plays on the slideshow's command and stops showing when the editor lets go of a paused medium`, () => {
         const { api } = scripted();
         api.callMediaPlayerCommand?.(`play`, handle);
         expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
+        // The stubbed play leaves the medium paused.
         api.callMediaPlayerCommand?.(`hideMediaControl`, null);
         expect(bar()?.style.display).toBe(`none`);
         expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(1);
         expect(api.mediaData).toBeNull();
+    });
+
+    it(`plays on once the pointer leaves a playing medium in a slideshow, and stops when its slide is left`, async () => {
+        const { api } = scripted();
+        const demo = api.WordControl?.DemonstrationManager;
+        if (demo !== undefined) {
+            demo.Mode = true;
+        }
+        api.callMediaPlayerCommand?.(`showMediaControl`, handle);
+        // Playing a second in, as a browser would say once the stubbed play had started it (jsdom has no media error).
+        const media = video();
+        if (media !== null) {
+            Object.defineProperties(media, { paused: { get: () => false }, currentTime: { get: () => 1, set: () => {} }, error: { get: () => null } });
+        }
+        api.callMediaPlayerCommand?.(`play`, handle);
+        api.callMediaPlayerCommand?.(`hideMediaControl`, null);
+        expect(bar()?.style.display).toBe(`none`);
+        expect(stage()?.style.display).toBe(`block`);
+        expect(HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
+        expect(api.mediaData).toBeNull();
+        // Still followed where the editor places it, though the editor dropped its handle.
+        await new Promise((resolve) => window.setTimeout(resolve, 300));
+        expect(stage()?.style.display).toBe(`block`);
+        expect(HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
+        expect(api.mediaData).toBeNull();
+        // Hovered again: the controls come back over the same playback.
+        api.callMediaPlayerCommand?.(`showMediaControl`, handle);
+        expect(bar()?.style.display).toBe(`flex`);
+        expect(bar()?.querySelector(`button`)?.getAttribute(`aria-label`)).toBe(`Pause`);
+        api.callMediaPlayerCommand?.(`hideMediaControl`, null);
+        if (demo !== undefined) {
+            demo.SlideNum = 1;
+        }
+        await waitFor(() => expect(stage()?.style.display).toBe(`none`));
+        expect(HTMLMediaElement.prototype.pause).toHaveBeenCalledTimes(1);
     });
 
     it(`keeps a click on its controls from reaching the slide under them`, () => {

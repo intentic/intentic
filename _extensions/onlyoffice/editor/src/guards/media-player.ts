@@ -207,6 +207,9 @@ class MediaPlayer {
     private data: PlayerData | undefined;
     private controls = false;
     private follow: number | undefined;
+    // The editor's handle on the medium shown: the editor drops its own when it hides the controls (in a slideshow, as
+    // soon as the pointer leaves the medium), and a medium that goes on playing is still followed through this one.
+    private held: MediaData | undefined;
     // The slide the medium was shown on, and whether in a slideshow: the slideshow moving on, or ending, leaves the
     // editor reporting the medium where it was.
     private slide: object | undefined;
@@ -225,7 +228,11 @@ class MediaPlayer {
 
     command(command: string, data: PlayerData | null): void {
         const action = actionOf(command);
-        if (action.kind === `hide` || data?.FrameRect === undefined || data.ControlRect === undefined) {
+        if (action.kind === `hide`) {
+            this.hideControls();
+            return;
+        }
+        if (data?.FrameRect === undefined || data.ControlRect === undefined) {
             this.hide();
             return;
         }
@@ -240,6 +247,7 @@ class MediaPlayer {
             return;
         }
         this.data = data;
+        this.held = this.api.mediaData ?? undefined;
         this.slide = this.drawingSlide();
         this.shownInSlideshow = this.inSlideshow();
         switch (action.kind) {
@@ -332,10 +340,24 @@ class MediaPlayer {
         this.refresh(parts);
     }
 
+    // The editor hiding the controls (the pointer leaving the medium in a slideshow, the medium deselected, the editor
+    // losing focus) hides only the bar of a medium that plays, as the desktop app's player does: it plays on until it is
+    // paused, its slide is left, or the slideshow ends.
+    private hideControls(): void {
+        const parts = this.parts;
+        if (parts === undefined || this.data === undefined || parts.media.paused) {
+            this.hide();
+            return;
+        }
+        this.controls = false;
+        this.refresh(parts);
+    }
+
     hide(): void {
         const parts = this.parts;
         this.controls = false;
         this.data = undefined;
+        this.held = undefined;
         if (this.follow !== undefined) {
             this.frame.clearInterval(this.follow);
             this.follow = undefined;
@@ -361,7 +383,7 @@ class MediaPlayer {
         }
         this.follow = this.frame.setInterval(() => {
             const parts = this.parts;
-            const data = this.api.getPlayerData?.(`update`) ?? null;
+            const data = this.whereNow();
             const moved = !this.onItsSlide() || this.inSlideshow() !== this.shownInSlideshow;
             if (parts === undefined || data?.FrameRect === undefined || data.ControlRect === undefined || moved) {
                 this.letGo();
@@ -370,6 +392,22 @@ class MediaPlayer {
             this.data = data;
             this.layout(parts, data);
         }, FOLLOW_MS);
+    }
+
+    // Where the editor places the medium now. Its placement reads the medium it holds, so for one it dropped while it
+    // plays on, the held one stands in for that one read.
+    private whereNow(): PlayerData | null {
+        const api = this.api;
+        const current = api.mediaData;
+        if ((current !== null && current !== undefined) || this.held === undefined) {
+            return api.getPlayerData?.(`update`) ?? null;
+        }
+        api.mediaData = this.held;
+        try {
+            return api.getPlayerData?.(`update`) ?? null;
+        } finally {
+            api.mediaData = current;
+        }
     }
 
     private layout(parts: Parts, data: PlayerData): void {
