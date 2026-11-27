@@ -9,6 +9,7 @@ import { repoAppsBackend } from "./workspace/graph";
 import { maintenanceBackend } from "./extensions/maintenance.backend";
 import { issuesBackend } from "./extensions/issues.backend";
 import { pipelinesBackend } from "./board/ci.handler";
+import { productHealthBackend } from "./extensions/product-health.backend";
 import { visitorChatBackend } from "./extensions/visitor-chat.backend";
 import { linksRoutes } from "./machine/links.routes";
 import { machineRoutes } from "./machine/machine.routes";
@@ -134,7 +135,7 @@ const knowledge: Readonly<Record<string, (context: RawContext) => Response | Pro
 };
 
 // Every extension backend the demo stands in for, by method and path.
-const backends: typeof knowledge = { ...knowledge, ...repoAppsBackend, ...maintenanceBackend, ...issuesBackend, ...visitorChatBackend, ...pipelinesBackend };
+const backends: typeof knowledge = { ...knowledge, ...repoAppsBackend, ...maintenanceBackend, ...issuesBackend, ...visitorChatBackend, ...pipelinesBackend, ...productHealthBackend };
 
 // The API keys the visitor's laptop holds, for GET /arrivals/keys: the hint and digest only, as the daemon answers.
 const DEMO_KEYS = [

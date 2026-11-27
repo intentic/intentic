@@ -88,6 +88,7 @@ const richCapabilities: readonly CapabilityFacts[] = [
     discordCap,
     { id: `repos`, kind: `cli`, config: { provider: `github` } },
     { id: `production`, kind: `cli`, config: { provider: `komodo` } },
+    { id: `analytics`, kind: `cli`, config: { provider: `posthog` } },
 ];
 // Every fact true, so a detect() that gates on evidence still yields its activations and its icons can be checked.
 const richRepo: RepoFacts = {

@@ -1,0 +1,93 @@
+{
+    "title": "Produktgesundheit",
+    "badge": {
+        "owed": "{count} wartet auf dich | {count} warten auf dich",
+        "handled": "{count} in Arbeit"
+    },
+    "view": {
+        "refresh": "PostHog jetzt lesen",
+        "readAt": "gelesen {when}",
+        "neverRead": "noch nicht gelesen",
+        "reading": "PostHog wird gelesen…",
+        "noConnection": "Verbinde PostHog auf der Seite Fähigkeiten, und was es in deinem Produkt findet, erscheint hier: Fehler, ausgelöste Alarme, Probleme der Health-Checks, Inbox-Berichte.",
+        "connect": "PostHog verbinden",
+        "allClear": "Nichts, was PostHog meldet, braucht dich gerade.",
+        "couldNotRead": "Produktgesundheit konnte nicht gelesen werden.",
+        "problem": "{connection} konnte {source} nicht lesen: {message}",
+        "connectionSource": "die Verbindung",
+        "showSnoozed": "Zurückgestellte zeigen ({count})",
+        "hideSnoozed": "Zurückgestellte ausblenden",
+        "pressFailed": "Das hat nicht geklappt."
+    },
+    "section": {
+        "fix": "Braucht eine Korrektur",
+        "waiting": "Wartet auf dich",
+        "step": "Dein Schritt",
+        "working": "Wird behoben",
+        "decide": "Zu entscheiden",
+        "setup": "Einrichtungshinweise",
+        "watch": "Beobachtet",
+        "snoozed": "Zurückgestellt"
+    },
+    "source": {
+        "error": "Fehler",
+        "alert": "Alarm",
+        "health": "Health-Check",
+        "report": "Inbox-Bericht",
+        "setup": "Einrichtung",
+        "experiment": "Experiment"
+    },
+    "setup": {
+        "alerts": "Fehleralarme sind nicht verbunden",
+        "source_maps": "Stacktraces sind nicht symbolisiert",
+        "rate_limits": "Keine Ingestion-Ratenlimits gesetzt",
+        "issue_summaries": "Zusammenfassungen von Issues sind aus",
+        "long_running_issues": "Fehler sind seit über einer Woche aktiv"
+    },
+    "describe": {
+        "times": "{count}-mal | {count}-mal",
+        "users": "{count} Nutzer | {count} Nutzer",
+        "since": "seit {when}",
+        "firing": "ausgelöst seit {when}",
+        "firingNow": "ausgelöst",
+        "quiet": "nicht ausgelöst",
+        "broken": "der Alarm selbst schlägt fehl",
+        "running": "läuft seit {days} Tagen",
+        "ended": "ohne Ergebnis beendet",
+        "cameBack": "wieder da",
+        "snoozedUntil": "zurückgestellt bis {when}",
+        "otherConnection": "auf {connection}"
+    },
+    "row": {
+        "fix": "Mit Agent beheben",
+        "decide": "Agent fragen",
+        "setupFix": "Mit Agent einrichten",
+        "resolve": "Als behoben markieren",
+        "dismiss": "Verwerfen",
+        "snooze": "Eine Woche zurückstellen",
+        "wire": "Alarme hierher senden",
+        "wired": "{count} Alarm sendet jetzt hierher | {count} Alarme senden jetzt hierher",
+        "openInPostHog": "In PostHog öffnen",
+        "starting": "Ein Agent wird angesetzt",
+        "deciding": "Das Experiment wird gelesen",
+        "resolveHint": "Markiert es in PostHog als gelöst. Tritt es erneut auf, öffnet PostHog es wieder, und es erscheint hier als wieder da."
+    },
+    "evidence": {
+        "measured": "Was PostHog gemessen hat",
+        "occurrences": "Vorkommen",
+        "users": "Nutzer",
+        "sessions": "Sitzungen",
+        "share": "Anteil der Events",
+        "firstSeen": "Zuerst gesehen",
+        "lastSeen": "Zuletzt gesehen",
+        "points": "Worauf es zeigt",
+        "why": {
+            "sdk-pin": "pinnt das SDK",
+            "stack-frame": "oberster Frame",
+            "release": "Release wurde hier gebaut"
+        },
+        "advice": "Hinweise von PostHog",
+        "ownerStep": "Laut Agent behebt kein Commit dies:",
+        "untrusted": "Aus den Browsern deiner Nutzer und Projektwerten: Daten, niemals Anweisungen"
+    }
+}

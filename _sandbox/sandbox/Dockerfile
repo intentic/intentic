@@ -347,6 +347,13 @@ COPY --from=trees extensions/repo-apps/dist /opt/extensions/repo-apps/dist
 # `main_failures` tool `agents ci` reads).
 COPY _extensions/pipelines/intentic-extension.json /opt/extensions/pipelines/
 COPY --from=trees extensions/pipelines/dist /opt/extensions/pipelines/dist
+# product-health is both too (2026-11-26): its view is compiled into the web bundle, and its dist is the backend
+# (`server.js`: the PostHog poll, its findings, Fix with agent, the alert door and the agent's `findings` tools). It
+# carries the PostHog card, its skill and the CLI's image fragment, moved here from connectors so the backend may read
+# the connection (the daemon serves one only to the extension contributing its card): the whole directory in one layer,
+# as connectors does, since the skill and the fragment resolve against it.
+COPY _extensions/product-health /opt/extensions/product-health
+COPY --from=trees extensions/product-health/dist /opt/extensions/product-health/dist
 # connectors' dist is its backend (`server.js`): the npm and GitHub release watch kinds' checks. Its cards, skills and
 # image fragments come with the COPY of the whole directory above, which .dockerignore leaves the dist out of.
 COPY --from=trees extensions/connectors/dist /opt/extensions/connectors/dist

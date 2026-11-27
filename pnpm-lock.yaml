@@ -1465,6 +1465,9 @@ importers:
       '@intentic/ext-preview':
         specifier: workspace:*
         version: link:../../_extensions/preview
+      '@intentic/ext-product-health':
+        specifier: workspace:*
+        version: link:../../_extensions/product-health
       '@intentic/ext-repo-apps':
         specifier: workspace:*
         version: link:../../_extensions/repo-apps
@@ -2144,6 +2147,55 @@ importers:
       typescript:
         specifier: catalog:typescript6
         version: 6.0.3
+      vue:
+        specifier: 'catalog:'
+        version: 3.5.44(typescript@6.0.3)
+      vue-tsc:
+        specifier: 'catalog:'
+        version: 3.3.13(typescript@6.0.3)
+
+  _extensions/product-health:
+    dependencies:
+      '@intentic/base':
+        specifier: workspace:*
+        version: link:../../_tools/base
+      '@intentic/extension-api':
+        specifier: workspace:*
+        version: file:_shared/extension-api(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
+      '@intentic/extension-manifest':
+        specifier: workspace:*
+        version: link:../../_shared/extension-manifest
+      '@intentic/extension-ui':
+        specifier: workspace:*
+        version: link:../../_shared/extension-ui
+      '@intentic/sandbox-contract':
+        specifier: workspace:*
+        version: link:../../_shared/sandbox-contract
+      '@tanstack/vue-query':
+        specifier: 'catalog:'
+        version: 5.104.5(vue@3.5.44(typescript@6.0.3))
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@intentic/testing':
+        specifier: workspace:*
+        version: link:../../_tools/testing
+      '@intentic/tsconfig':
+        specifier: workspace:*
+        version: link:../../_tools/tsconfig
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.4
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.2
+      typescript:
+        specifier: catalog:typescript6
+        version: 6.0.3
+      vite:
+        specifier: 'catalog:'
+        version: 8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
       vue:
         specifier: 'catalog:'
         version: 3.5.44(typescript@6.0.3)
@@ -5469,6 +5521,11 @@ packages:
 
   '@intentic/ext-preview@file:_extensions/preview':
     resolution: {directory: _extensions/preview, type: directory}
+    peerDependencies:
+      vue: '3'
+
+  '@intentic/ext-product-health@file:_extensions/product-health':
+    resolution: {directory: _extensions/product-health, type: directory}
     peerDependencies:
       vue: '3'
 
@@ -14264,6 +14321,20 @@ snapshots:
       - '@opentelemetry/api'
       - '@vue/composition-api'
 
+  '@intentic/ext-product-health@file:_extensions/product-health(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))':
+    dependencies:
+      '@intentic/base': file:_tools/base
+      '@intentic/extension-api': file:_shared/extension-api(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
+      '@intentic/extension-manifest': file:_shared/extension-manifest
+      '@intentic/extension-ui': file:_shared/extension-ui(vue@3.5.44(typescript@6.0.3))
+      '@intentic/sandbox-contract': file:_shared/sandbox-contract(@opentelemetry/api@1.10.0)
+      '@tanstack/vue-query': 5.104.5(vue@3.5.44(typescript@6.0.3))
+      vue: 3.5.44(typescript@6.0.3)
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@vue/composition-api'
+
   '@intentic/ext-repo-apps@file:_extensions/repo-apps(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))':
     dependencies:
       '@intentic/base': file:_tools/base
@@ -14456,6 +14527,7 @@ snapshots:
       '@intentic/ext-onlyoffice': file:_extensions/onlyoffice(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
       '@intentic/ext-pipelines': file:_extensions/pipelines(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
       '@intentic/ext-preview': file:_extensions/preview(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
+      '@intentic/ext-product-health': file:_extensions/product-health(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
       '@intentic/ext-repo-apps': file:_extensions/repo-apps(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
       '@intentic/ext-viewers': file:_extensions/viewers(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))
       '@intentic/ext-visitor-chat': file:_extensions/visitor-chat(@opentelemetry/api@1.10.0)(vue@3.5.44(typescript@6.0.3))

@@ -1,0 +1,93 @@
+{
+    "title": "Kondycja produktu",
+    "badge": {
+        "owed": "{count} czeka na ciebie | {count} czekają na ciebie | {count} czeka na ciebie",
+        "handled": "{count} w naprawie"
+    },
+    "view": {
+        "refresh": "Odczytaj PostHog teraz",
+        "readAt": "odczytano {when}",
+        "neverRead": "jeszcze nie odczytano",
+        "reading": "Odczytywanie PostHog…",
+        "noConnection": "Połącz PostHog na stronie Możliwości, a to, co znajdzie w twoim produkcie, pojawi się tutaj: błędy, uruchomione alerty, problemy z kontroli kondycji, raporty z Inbox.",
+        "connect": "Połącz PostHog",
+        "allClear": "Nic z tego, co zgłasza PostHog, nie wymaga teraz twojej uwagi.",
+        "couldNotRead": "Nie udało się odczytać kondycji produktu.",
+        "problem": "{connection} nie odczytało {source}: {message}",
+        "connectionSource": "połączenia",
+        "showSnoozed": "Pokaż odłożone ({count})",
+        "hideSnoozed": "Ukryj odłożone",
+        "pressFailed": "Nie udało się."
+    },
+    "section": {
+        "fix": "Do naprawy",
+        "waiting": "Czeka na ciebie",
+        "step": "Twój krok",
+        "working": "W naprawie",
+        "decide": "Do decyzji",
+        "setup": "Porady konfiguracyjne",
+        "watch": "Obserwowane",
+        "snoozed": "Odłożone"
+    },
+    "source": {
+        "error": "Błąd",
+        "alert": "Alert",
+        "health": "Kontrola kondycji",
+        "report": "Raport z Inbox",
+        "setup": "Konfiguracja",
+        "experiment": "Eksperyment"
+    },
+    "setup": {
+        "alerts": "Alerty o błędach nie są podłączone",
+        "source_maps": "Ślady stosu nie są zsymbolizowane",
+        "rate_limits": "Brak limitów przyjmowania danych",
+        "issue_summaries": "Podsumowania problemów są wyłączone",
+        "long_running_issues": "Błędy są aktywne od ponad tygodnia"
+    },
+    "describe": {
+        "times": "{count} raz | {count} razy | {count} razy",
+        "users": "{count} użytkownik | {count} użytkowników | {count} użytkowników",
+        "since": "od {when}",
+        "firing": "uruchomiony od {when}",
+        "firingNow": "uruchomiony",
+        "quiet": "nieuruchomiony",
+        "broken": "sam alert zawodzi",
+        "running": "trwa od {days} dni",
+        "ended": "zakończony bez wniosku",
+        "cameBack": "wrócił",
+        "snoozedUntil": "odłożone do {when}",
+        "otherConnection": "w {connection}"
+    },
+    "row": {
+        "fix": "Napraw z agentem",
+        "decide": "Zapytaj agenta",
+        "setupFix": "Skonfiguruj z agentem",
+        "resolve": "Oznacz jako naprawione",
+        "dismiss": "Odrzuć",
+        "snooze": "Odłóż na tydzień",
+        "wire": "Wysyłaj alerty tutaj",
+        "wired": "{count} alert wysyła teraz tutaj | {count} alerty wysyłają teraz tutaj | {count} alertów wysyła teraz tutaj",
+        "openInPostHog": "Otwórz w PostHog",
+        "starting": "Uruchamianie agenta",
+        "deciding": "Odczytywanie eksperymentu",
+        "resolveHint": "Oznacza jako rozwiązane w PostHog. Jeśli wystąpi ponownie, PostHog otworzy to znowu, a tutaj pojawi się jako wrócił."
+    },
+    "evidence": {
+        "measured": "Co zmierzył PostHog",
+        "occurrences": "Wystąpienia",
+        "users": "Użytkownicy",
+        "sessions": "Sesje",
+        "share": "Udział w zdarzeniach",
+        "firstSeen": "Pierwsze wystąpienie",
+        "lastSeen": "Ostatnie wystąpienie",
+        "points": "Na co wskazuje",
+        "why": {
+            "sdk-pin": "przypina SDK",
+            "stack-frame": "górna ramka",
+            "release": "wydanie zbudowane tutaj"
+        },
+        "advice": "Wskazówki PostHog",
+        "ownerStep": "Agent twierdzi, że żaden commit tego nie naprawi:",
+        "untrusted": "Z przeglądarek twoich użytkowników i wartości projektu: dane, nigdy polecenia"
+    }
+}

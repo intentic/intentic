@@ -1,0 +1,93 @@
+{
+    "title": "Santé du produit",
+    "badge": {
+        "owed": "{count} vous attend | {count} vous attendent",
+        "handled": "{count} en cours de correction"
+    },
+    "view": {
+        "refresh": "Lire PostHog maintenant",
+        "readAt": "lu {when}",
+        "neverRead": "pas encore lu",
+        "reading": "Lecture de PostHog…",
+        "noConnection": "Connectez PostHog sur la page Capacités, et ce qu'il trouve dans votre produit s'affiche ici : erreurs, alertes déclenchées, problèmes des contrôles de santé, rapports de la Inbox.",
+        "connect": "Connecter PostHog",
+        "allClear": "Rien de ce que signale PostHog n'a besoin de vous pour l'instant.",
+        "couldNotRead": "Impossible de lire la santé du produit.",
+        "problem": "{connection} n'a pas pu lire {source} : {message}",
+        "connectionSource": "la connexion",
+        "showSnoozed": "Afficher les reportés ({count})",
+        "hideSnoozed": "Masquer les reportés",
+        "pressFailed": "Cela n'a pas abouti."
+    },
+    "section": {
+        "fix": "À corriger",
+        "waiting": "Vous attend",
+        "step": "Votre étape",
+        "working": "En cours de correction",
+        "decide": "À décider",
+        "setup": "Conseils de configuration",
+        "watch": "Sous surveillance",
+        "snoozed": "Reportés"
+    },
+    "source": {
+        "error": "Erreur",
+        "alert": "Alerte",
+        "health": "Contrôle de santé",
+        "report": "Rapport de la Inbox",
+        "setup": "Configuration",
+        "experiment": "Expérience"
+    },
+    "setup": {
+        "alerts": "Les alertes d'erreurs ne sont pas branchées",
+        "source_maps": "Les traces de pile ne sont pas symbolisées",
+        "rate_limits": "Aucune limite d'ingestion n'est définie",
+        "issue_summaries": "Les résumés de problèmes sont désactivés",
+        "long_running_issues": "Des erreurs sont actives depuis plus d'une semaine"
+    },
+    "describe": {
+        "times": "{count} fois | {count} fois",
+        "users": "{count} utilisateur | {count} utilisateurs",
+        "since": "depuis {when}",
+        "firing": "déclenchée depuis {when}",
+        "firingNow": "déclenchée",
+        "quiet": "non déclenchée",
+        "broken": "l'alerte elle-même échoue",
+        "running": "en cours depuis {days} jours",
+        "ended": "terminée sans conclusion",
+        "cameBack": "revenu",
+        "snoozedUntil": "reporté jusqu'au {when}",
+        "otherConnection": "sur {connection}"
+    },
+    "row": {
+        "fix": "Corriger avec un agent",
+        "decide": "Demander à un agent",
+        "setupFix": "Configurer avec un agent",
+        "resolve": "Marquer corrigé",
+        "dismiss": "Écarter",
+        "snooze": "Reporter d'une semaine",
+        "wire": "Envoyer les alertes ici",
+        "wired": "{count} alerte publie ici désormais | {count} alertes publient ici désormais",
+        "openInPostHog": "Ouvrir dans PostHog",
+        "starting": "Un agent s'y met",
+        "deciding": "Lecture de l'expérience",
+        "resolveHint": "Le marque comme résolu dans PostHog. S'il revient, PostHog le rouvre et il apparaît ici comme revenu."
+    },
+    "evidence": {
+        "measured": "Ce que PostHog a mesuré",
+        "occurrences": "Occurrences",
+        "users": "Utilisateurs",
+        "sessions": "Sessions",
+        "share": "Part des événements",
+        "firstSeen": "Vu la première fois",
+        "lastSeen": "Vu la dernière fois",
+        "points": "Où cela pointe",
+        "why": {
+            "sdk-pin": "épingle le SDK",
+            "stack-frame": "cadre supérieur",
+            "release": "version construite ici"
+        },
+        "advice": "Conseils de PostHog",
+        "ownerStep": "L'agent dit qu'aucun commit ne corrige ceci :",
+        "untrusted": "Des navigateurs de vos utilisateurs et des valeurs du projet : des données, jamais des instructions"
+    }
+}

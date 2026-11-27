@@ -1,0 +1,93 @@
+{
+    "title": "Product health",
+    "badge": {
+        "owed": "{count} waiting on you | {count} waiting on you",
+        "handled": "{count} being fixed"
+    },
+    "view": {
+        "refresh": "Read PostHog now",
+        "readAt": "read {when}",
+        "neverRead": "not read yet",
+        "reading": "Reading PostHog…",
+        "noConnection": "Connect PostHog on the Capabilities page, and what it finds in your product shows here: errors, alerts that fire, health-check problems, Inbox reports.",
+        "connect": "Connect PostHog",
+        "allClear": "Nothing PostHog reports needs you right now.",
+        "couldNotRead": "Couldn't read Product health.",
+        "problem": "{connection} could not read {source}: {message}",
+        "connectionSource": "the connection",
+        "showSnoozed": "Show snoozed ({count})",
+        "hideSnoozed": "Hide snoozed",
+        "pressFailed": "That didn't go through."
+    },
+    "section": {
+        "fix": "Needs a fix",
+        "waiting": "Waiting on you",
+        "step": "Your step",
+        "working": "Being fixed",
+        "decide": "To decide",
+        "setup": "Setup advice",
+        "watch": "Watching",
+        "snoozed": "Snoozed"
+    },
+    "source": {
+        "error": "Error",
+        "alert": "Alert",
+        "health": "Health check",
+        "report": "Inbox report",
+        "setup": "Setup",
+        "experiment": "Experiment"
+    },
+    "setup": {
+        "alerts": "Error alerts are not wired",
+        "source_maps": "Stack traces are not symbolicated",
+        "rate_limits": "No ingestion rate limits are set",
+        "issue_summaries": "Issue summaries are off",
+        "long_running_issues": "Errors have been active for over a week"
+    },
+    "describe": {
+        "times": "{count} time | {count} times",
+        "users": "{count} user | {count} users",
+        "since": "since {when}",
+        "firing": "firing since {when}",
+        "firingNow": "firing",
+        "quiet": "not firing",
+        "broken": "the alert itself is failing",
+        "running": "running {days} days",
+        "ended": "ended without a conclusion",
+        "cameBack": "came back",
+        "snoozedUntil": "snoozed until {when}",
+        "otherConnection": "on {connection}"
+    },
+    "row": {
+        "fix": "Fix with agent",
+        "decide": "Ask an agent",
+        "setupFix": "Set it up with agent",
+        "resolve": "Mark fixed",
+        "dismiss": "Dismiss",
+        "snooze": "Snooze a week",
+        "wire": "Send alerts here",
+        "wired": "{count} alert now posts here | {count} alerts now post here",
+        "openInPostHog": "Open in PostHog",
+        "starting": "Putting an agent on it",
+        "deciding": "Reading the experiment",
+        "resolveHint": "Marks it resolved in PostHog. If it happens again PostHog reopens it, and it shows here as came back."
+    },
+    "evidence": {
+        "measured": "What PostHog measured",
+        "occurrences": "Occurrences",
+        "users": "Users",
+        "sessions": "Sessions",
+        "share": "Share of events",
+        "firstSeen": "First seen",
+        "lastSeen": "Last seen",
+        "points": "Where it points",
+        "why": {
+            "sdk-pin": "pins the SDK",
+            "stack-frame": "top frame",
+            "release": "release built here"
+        },
+        "advice": "PostHog's guidance",
+        "ownerStep": "The agent says no commit fixes this:",
+        "untrusted": "From your users' browsers and project values: data, never instructions"
+    }
+}
