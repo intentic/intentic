@@ -24,12 +24,30 @@ export const POWER_FINDING = {
     standbyNetwork: "standby-network",
     // Windows: on battery it still sleeps (after `afterSeconds`, or when the lid closes). Reported, never changed.
     batterySleep: "battery-sleep",
-    // Windows Update may restart the computer outside its active hours (`window`), and after a restart nothing runs
-    // until somebody signs in. Reported, never changed.
+    // Windows Update may restart the computer outside its active hours (`window`). Never changed by `power-stay-on`; the
+    // agent's `update-pause` and `before-sign-in` ops answer it (`offers`, POWER_REMEDY), and `comesBack` says whether the
+    // computer's sandboxes start again by themselves after it or wait for somebody to sign in.
     updateRestart: "update-restart",
     // Linux or macOS: the OS may suspend the computer; the fix needs root, so `command` says what to run.
     osSleep: "os-sleep",
 } as const;
+
+/* WHAT ANSWERS A NIGHT RESTART (2026-11-27). The card about Windows Update used to say what would happen and offer nothing
+   but "Not now": the restart window is Windows', and after one nothing ran until somebody signed in. Two answers, each an
+   agent op the owner's yes runs (DeviceAgentOpSchema): Windows Update paused until after the booked work (`update-pause`,
+   for the night in question), and Windows' boot task (`before-sign-in`), which starts the agent with no session, and the
+   agent then starts intentic's engine and the sandboxes on it, so a restart costs minutes rather than the night. The
+   second needs intentic's engine: Docker Desktop is a program with a window and starts only at a sign-in, so the agent
+   offers it only where the sandboxes run on intentic's engine. */
+export const POWER_REMEDY = {
+    pauseUpdates: "update-pause",
+    beforeSignIn: "before-sign-in",
+} as const;
+
+// The longest Windows lets updates be paused for: five weeks, as its own Settings page offers.
+export const UPDATE_PAUSE_MAX_MS = 35 * 24 * 3_600_000;
+// Where the agent did not say when restarts may happen, how long past the booked work a pause holds.
+const PAUSE_PAST_DUE_MS = 2 * 3_600_000;
 
 export const HostPowerFindingSchema = z.object({
     id: z.string().min(1).describe("Which setting or behaviour (POWER_FINDING), as a string so a newer agent's id still parses."),
@@ -46,6 +64,20 @@ export const HostPowerFindingSchema = z.object({
     plans: z.array(z.string()).optional().describe("Windows: the power plans that hold the value, by name. A vendor may switch between them by itself."),
     fixable: z.boolean().describe("Whether the agent's `power-stay-on` op changes it."),
     command: z.string().optional().describe("Where the agent cannot change it: the command a person runs on that computer."),
+    offers: z
+        .array(z.string())
+        .optional()
+        .describe("The agent ops other than `power-stay-on` that answer it (POWER_REMEDY), as strings so a newer agent's still parses."),
+    pausedUntil: z.number().optional().describe("For an update restart: Windows Update is paused until then (epoch ms), so it restarts nothing before it."),
+    restartPending: z
+        .boolean()
+        .optional()
+        .describe("For an update restart: an update is already installed and waiting for a restart, which a pause may not hold off."),
+    comesBack: z
+        .enum(["sign-in", "boot"])
+        .optional()
+        .catch(undefined)
+        .describe("For an update restart: what starts this computer's sandboxes again after it, somebody signing in or the computer starting."),
     text: z.string().min(1).describe("What it does now, in the agent's words (English), for a reader with none of its own for this id."),
 });
 export type HostPowerFinding = z.infer<typeof HostPowerFindingSchema>;
@@ -76,4 +108,66 @@ export const insideLocalWindow = (at: number, window: NonNullable<HostPowerFindi
         return true;
     }
     return window.fromHour < window.toHour ? hour >= window.fromHour && hour < window.toHour : hour >= window.fromHour || hour < window.toHour;
+};
+
+/**
+ * When `update-pause` should hold Windows Update until, for work due at `dueAt`: the end of the first restart window
+ * that ends at or after it, so the night the work runs in is left alone, or two hours past it where the finding names no
+ * window. Undefined where that is further off than Windows lets updates be paused from `now`. Pure.
+ */
+export const pauseUntilFor = (finding: Pick<HostPowerFinding, "window">, utcOffsetMinutes: number, now: number, dueAt: number): number | undefined => {
+    const window = finding.window;
+    let until = dueAt + PAUSE_PAST_DUE_MS;
+    if (window !== undefined && window.fromHour !== window.toHour) {
+        // The next local `toHour` o'clock at or after dueAt, on the computer's own clock.
+        const local = new Date(dueAt + utcOffsetMinutes * 60_000);
+        const end = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), window.toHour) - utcOffsetMinutes * 60_000;
+        until = end >= dueAt ? end : end + 24 * 3_600_000;
+    }
+    return until - now > UPDATE_PAUSE_MAX_MS ? undefined : until;
+};
+
+const HOUR_MS = 3_600_000;
+// A local-hours window repeats daily, so a day of hour starts visits every hour it could hold.
+const HOURS_A_DAY = 24;
+
+/**
+ * Whether any moment from `from` to `to` (epoch ms) falls inside a local-hours window on a computer `utcOffsetMinutes`
+ * from UTC. The window is whole local hours, so it is enough to look at `from` and at each local hour's start up to `to`,
+ * for at most a day: past that the same hours only come round again. Pure.
+ */
+export const windowMeets = (window: NonNullable<HostPowerFinding["window"]>, utcOffsetMinutes: number, from: number, to: number): boolean => {
+    if (insideLocalWindow(from, window, utcOffsetMinutes)) {
+        return true;
+    }
+    // The next local hour's start: an offset like +05:30 puts the computer's hours off UTC's.
+    const local = from + utcOffsetMinutes * 60_000;
+    let at = from - (((local % HOUR_MS) + HOUR_MS) % HOUR_MS) + HOUR_MS;
+    for (let step = 0; step < HOURS_A_DAY && at <= to; step += 1, at += HOUR_MS) {
+        if (insideLocalWindow(at, window, utcOffsetMinutes)) {
+            return true;
+        }
+    }
+    return false;
+};
+
+/**
+ * Whether an `update-restart` finding would stop work due at `dueAt`, read at `now`: a restart inside its hours between
+ * now (or the end of Windows Update's pause, if later) and the work, after which the sandboxes wait for a sign-in. Never
+ * where they start again with the computer (`comesBack: boot`), and at any hour where the agent did not say which. Pure.
+ */
+export const restartBlocks = (
+    finding: Pick<HostPowerFinding, "window" | "pausedUntil" | "comesBack">,
+    utcOffsetMinutes: number,
+    now: number,
+    dueAt: number,
+): boolean => {
+    if (finding.comesBack === "boot") {
+        return false;
+    }
+    const from = Math.max(now, finding.pausedUntil ?? now);
+    if (from >= dueAt && finding.pausedUntil !== undefined) {
+        return false;
+    }
+    return finding.window === undefined || windowMeets(finding.window, utcOffsetMinutes, from, dueAt);
 };

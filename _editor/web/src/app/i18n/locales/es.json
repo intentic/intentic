@@ -6743,7 +6743,12 @@
             "lead": "{device} detendría el trabajo programado para {when}.",
             "leadUndated": "{device} detendría el trabajo programado en él.",
             "approve": "Cambiar estos ajustes en {device}",
-            "working": "Cambiando los ajustes en {device}…"
+            "working": "Cambiando los ajustes en {device}…",
+            "approveBoot": "Iniciar los sandboxes con {device}",
+            "approveWithBoot": "Cambiar estos ajustes e iniciar los sandboxes con {device}",
+            "approvePause": "Pausar Windows Update hasta {until}",
+            "approveWithPause": "Cambiar estos ajustes y pausar Windows Update hasta {until}",
+            "bootHint": "Para iniciar los sandboxes con {device}, Windows pide permiso en la pantalla de {device}, así que púlsalo cuando estés en {device}. Después, un reinicio cuesta minutos, no la noche."
         },
         "wslMemory": {
             "lead": "En {device}, Windows tuvo menos de su línea baja de {low} disponible en el {share}% de las lecturas de las últimas {hours} horas, mientras la VM de WSL retenía una mediana de {vm} de {total}; el uso propio de Windows fuera de la VM llegó a {outside}.",
@@ -8087,7 +8092,10 @@
             "keepsNetwork": "la mantiene",
             "batterySleep": "Con batería sigue suspendiéndose tras {after}: déjalo enchufado por la noche.",
             "batterySleepAny": "Con batería sigue suspendiéndose: déjalo enchufado por la noche.",
-            "updateRestart": "Windows Update puede reiniciarlo entre las {from} y las {to} (hora de {device}); tras un reinicio no se ejecuta nada hasta que inicies sesión.",
+            "updateRestart": "Windows Update puede reiniciarlo entre las {from} y las {to} (hora de {device}); tras un reinicio no se ejecuta nada hasta que alguien inicie sesión en {device}.",
+            "updateRestartPaused": "Windows Update está en pausa hasta {until}; después puede reiniciarlo entre las {from} y las {to} (hora de {device}) y no se ejecuta nada hasta que alguien inicie sesión en {device}.",
+            "updateRestartBoot": "Windows Update puede reiniciarlo entre las {from} y las {to} (hora de {device}); {device} vuelve a iniciar sus sandboxes por sí solo, antes de que nadie inicie sesión.",
+            "restartPending": "Ya hay una actualización instalada esperando un reinicio: una pausa puede no detenerla. Reinicia {device} tú mismo antes de dejarlo.",
             "osSleep": "Puede suspenderse solo. Para evitarlo, ejecuta esto en {device}:",
             "rowSleep": "Suspensión tras",
             "rowHibernate": "Hibernación tras",

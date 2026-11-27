@@ -29,6 +29,12 @@ export const AGENT_VERB: Record<DeviceAgentOp, readonly string[]> = {
     // (2026-11-26) The owner's yes on the sandbox's wsl-memory card: memory= in this PC's .wslconfig set to the size they
     // approved (environments/wslconfig-memory.ts), which agentArgv adds. Nothing restarts: WSL takes it at its next start.
     "wsl-memory": ["wsl-memory", "apply"],
+    // (2026-11-27) The owner's answers on the host-power card to Windows Update's night restarts: Windows Update paused
+    // until the moment they approved (power/update-pause.ts), which agentArgv adds; and Windows' boot task, so the agent,
+    // intentic's engine and the sandboxes on it start with the PC before anyone signs in (autostart/before-sign-in.ts),
+    // which Windows asks permission for on this PC's screen. Neither restarts anything.
+    "update-pause": ["power", "pause-updates"],
+    "before-sign-in": ["before-sign-in", "on"],
 };
 
 // Why the line .wslconfig gets says what it does: what this agent measured, where it still holds the finding the card
@@ -38,9 +44,15 @@ const wslMemoryWhy = (): string => {
     return fit === undefined ? "Windows sat under its low line for hours while the WSL VM held its memory" : fitReason(fit);
 };
 
-/** The argv of a flow: the op's verb, and for `wsl-memory` the size approved and why. */
+/** The argv of a flow: the op's verb, for `wsl-memory` the size approved and why, for `update-pause` when it ends. */
 export const agentArgv = (flow: DeviceAgentFlow, why: () => string = wslMemoryWhy): readonly string[] => {
     const verb = AGENT_VERB[flow.op];
+    if (flow.op === "update-pause") {
+        if (flow.until === undefined) {
+            throw new Error("The update-pause op needs the moment the pause ends (until), and none came with it: nothing was changed.");
+        }
+        return [...verb, "--until", String(flow.until)];
+    }
     if (flow.op !== "wsl-memory") {
         return verb;
     }
@@ -179,6 +191,12 @@ const started = (op: DeviceAgentOp, installed: string | undefined): string => {
     if (op === "wsl-memory") {
         return `Setting memory= in this PC's .wslconfig, with the file as it was kept beside it. Nothing restarts: this connection stays up.`;
     }
+    if (op === "update-pause") {
+        return `Pausing Windows Update on this computer until after the booked work, as its own Settings page does. Nothing restarts: this connection stays up.`;
+    }
+    if (op === "before-sign-in") {
+        return `Asking Windows to start this agent when this PC starts, before anyone signs in, so intentic's engine and its sandboxes come back after a restart by themselves. Windows asks for permission on this PC's screen: answer it there. This connection stays up.`;
+    }
     return `Dropping this device's links to sandboxes that have stopped answering. The agent closes them on its next pass; this connection stays up.`;
 };
 
@@ -189,6 +207,8 @@ const settled: Record<DeviceAgentOp, string> = {
     restart: `The agent was restarted on this device.`,
     "forget-unreachable": `The drop ran on this device. What it removed is in the lines above; this device's link count catches up within a few seconds.`,
     "power-stay-on": `This computer's power settings were changed: on mains power it no longer sleeps or hibernates by itself, and what each finding became is in the lines above. \`intentic-machine power restore\` on it puts the old values back.`,
+    "update-pause": `Windows Update is paused on this computer until the moment in the lines above, and resumes by itself after it.`,
+    "before-sign-in": `This agent now starts when this PC starts, before anyone signs in, and brings intentic's engine and its sandboxes back after a restart. \`intentic-machine before-sign-in off\` on it undoes that.`,
     "wsl-memory": `memory= in this PC's .wslconfig was set, the file as it was kept beside it (the lines above name it). The WSL VM takes the new size only when WSL restarts (wsl --shutdown), which restarts every sandbox on this PC, this one included: that is the owner's to do.`,
 };
 
@@ -219,7 +239,10 @@ export const runStop = (lines: readonly string[]): string | undefined => {
     return [(lines[at] ?? "").slice("error: ".length), ...(end === -1 ? rest : rest.slice(0, end))].join("\n");
 };
 
-export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => void, flow: Pick<DeviceAgentFlow, "memoryGb"> = {}): Promise<string> => {
+// The ops after which this agent's facts read the power settings again, rather than answer the reading from before.
+const REREADS_POWER: ReadonlySet<DeviceAgentOp> = new Set<DeviceAgentOp>(["power-stay-on", "update-pause", "before-sign-in"]);
+
+export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => void, flow: Pick<DeviceAgentFlow, "memoryGb" | "until"> = {}): Promise<string> => {
     if (RESTARTS.has(op)) {
         await waitOutOwnSwaps(onLine);
     }
@@ -242,7 +265,7 @@ export const runAgentOp = async (op: DeviceAgentOp, onLine: (line: string) => vo
         });
     } finally {
         // The facts this agent answers read the settings again, rather than keep the reading from before the change.
-        if (op === "power-stay-on") {
+        if (REREADS_POWER.has(op)) {
             forgetPowerReading();
         }
         if (op === "wsl-memory") {

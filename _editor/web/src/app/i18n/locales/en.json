@@ -6743,7 +6743,12 @@
             "lead": "{device} would stop the work booked for {when}.",
             "leadUndated": "{device} would stop the work booked on it.",
             "approve": "Change these settings on {device}",
-            "working": "Changing the settings on {device}…"
+            "working": "Changing the settings on {device}…",
+            "approveBoot": "Start sandboxes when {device} starts",
+            "approveWithBoot": "Change these, and start sandboxes when {device} starts",
+            "approvePause": "Pause Windows Update until {until}",
+            "approveWithPause": "Change these, and pause Windows Update until {until}",
+            "bootHint": "Starting sandboxes with {device} means Windows asks for permission on {device}'s screen, so press it while you're at {device}. After that a restart costs minutes, not the night."
         },
         "wslMemory": {
             "lead": "On {device}, Windows had less than its {low} low line available in {share}% of the readings over the last {hours} hours, while the WSL VM held a median {vm} of {total}; Windows' own use outside the VM reached {outside}.",
@@ -8087,7 +8092,10 @@
             "keepsNetwork": "keeps it",
             "batterySleep": "On battery it still sleeps after {after}: keep it plugged in for the night.",
             "batterySleepAny": "On battery it still sleeps: keep it plugged in for the night.",
-            "updateRestart": "Windows Update may restart it between {from} and {to} ({device}'s clock); after a restart nothing runs until you sign in.",
+            "updateRestart": "Windows Update may restart it between {from} and {to} ({device}'s clock); after a restart nothing runs until someone signs in on {device}.",
+            "updateRestartPaused": "Windows Update is paused until {until}; after that it may restart it between {from} and {to} ({device}'s clock), and nothing runs until someone signs in on {device}.",
+            "updateRestartBoot": "Windows Update may restart it between {from} and {to} ({device}'s clock); {device} starts its sandboxes again by itself, before anyone signs in.",
+            "restartPending": "An update is already installed and waiting for a restart: a pause may not hold that one off. Restarting {device} yourself before you leave it does.",
             "osSleep": "It may suspend itself. To stop that, run this on {device}:",
             "rowSleep": "Sleeps after",
             "rowHibernate": "Hibernates after",

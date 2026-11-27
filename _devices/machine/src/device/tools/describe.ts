@@ -18,6 +18,7 @@ import {
     DEVICE_FEATURE_HOST_STATS,
     DEVICE_FEATURE_CI_RUNNERS,
     DEVICE_FEATURE_WSL_MEMORY,
+    DEVICE_FEATURE_POWER_RESTART,
     type DeviceFacts,
 } from "@intentic/sandbox-contract/schemas/hosts";
 import type { DeviceScopes } from "@intentic/sandbox-contract/schemas/capabilities";
@@ -158,7 +159,8 @@ export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => 
         // while one is installed here and answers (keyring/feature.ts); people's remote access only where an
         // intentic-remoted can be had (remote/remoted-binary.ts), and its lock-screen service on Windows alone
         // (remote/remoted-service.ts). The `power-stay-on` op on Windows' own side alone, the one environment whose power
-        // plans the agent changes (power/apply.ts): a Linux or macOS fix needs root, and a WSL distro's are Windows'. The CI
+        // plans the agent changes (power/apply.ts): a Linux or macOS fix needs root, and a WSL distro's are Windows'; so are the
+        // `update-pause` and `before-sign-in` ops (power-restart), which answer Windows Update's restarts. The CI
         // runner tools on Linux alone (a WSL distro included), where runners are systemd units (tools/ci-runners/).
         features: [
             ...features,
@@ -173,7 +175,7 @@ export const hostFacts = async (scopes: DeviceScopes, log: (message: string) => 
             ...(keyring ? [DEVICE_FEATURE_KEYRING] : []),
             ...(remotedAdvertised() ? [DEVICE_FEATURE_REMOTE, DEVICE_FEATURE_REMOTE_ICE] : []),
             ...(remotedAdvertised() && platform() === "win32" ? [DEVICE_FEATURE_REMOTE_SERVICE, DEVICE_FEATURE_ADMIN_RUN] : []),
-            ...(WINDOWS_SIDE ? [DEVICE_FEATURE_POWER, DEVICE_FEATURE_WSL_MEMORY] : []),
+            ...(WINDOWS_SIDE ? [DEVICE_FEATURE_POWER, DEVICE_FEATURE_WSL_MEMORY, DEVICE_FEATURE_POWER_RESTART] : []),
             ...(platform() === "linux" ? [DEVICE_FEATURE_CI_RUNNERS] : []),
         ],
     };

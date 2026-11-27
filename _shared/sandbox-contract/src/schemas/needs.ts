@@ -204,16 +204,15 @@ export const InstructionNeedSchema = z.object({
 });
 export type InstructionNeed = z.infer<typeof InstructionNeedSchema>;
 
-// The computer this sandbox runs on would sleep through work just booked on it (2026-11-22, host-power.ts): its power plan
-// sleeps it after hours without input, its lid does, Windows Update may restart it in the night. Raised by the daemon
-// itself, never by an agent's ask, in the conversation whose booking it would stop; a person's approval runs the
-// computer's `power-stay-on` op, which changes what `fixable` findings say on mains power. Its outcome is the person's
-// alone: the conversation is never woken to hear it, since a woken turn would run the booked work early.
+// The computer this sandbox runs on would sleep through work just booked on it (2026-11-22, host-power.ts). Raised by the
+// daemon itself in the booking conversation; a yes runs `power-stay-on` and the chosen answer to a Windows Update restart
+// (`remedy`). Told to nobody: a woken turn would run the booked work early.
 export const HostPowerNeedSchema = z.object({
     kind: z.literal("host-power"),
     device: z.string().min(1).describe("The connected computer this sandbox runs on, by its device id."),
     findings: z.array(HostPowerFindingSchema).describe("What its OS would do to the work, as read when the card was raised."),
     dueAt: z.number().optional().describe("When the booked work that raised it is due, in milliseconds."),
+    utcOffsetMinutes: z.number().int().optional().describe("The computer's local time minus UTC when read: what places its findings' local hours on another clock."),
 });
 export type HostPowerNeed = z.infer<typeof HostPowerNeedSchema>;
 
@@ -398,7 +397,8 @@ export const NeedAnswerSchema = z.discriminatedUnion("kind", [
     // 2026-11-18: was `{ scope }`, a yes that lifted what the role withheld; now the role the conversation switches to.
     z.object({ kind: z.literal("grant"), role: entryId.describe("Which of the need's roles the conversation switches to.") }),
     z.object({ kind: z.literal("release") }),
-    z.object({ kind: z.literal("approve") }),
+    // (2026-11-27) `remedy`: a host-power card's answer to a Windows Update restart (POWER_REMEDY); absent is the pause.
+    z.object({ kind: z.literal("approve"), remedy: z.enum(["update-pause", "before-sign-in"]).optional() }),
 ]);
 export type NeedAnswer = z.infer<typeof NeedAnswerSchema>;
 

@@ -85,7 +85,11 @@ export const agentRunTitle = (run: AgentRun): string => {
                   : run.state === `waiting`
                     ? t(`sandbox.agentRun.comingBack`)
                     : t(`sandbox.agentRun.restarting`);
+        // The two answers to Windows Update's restarts run from the host-power card alone, never from this view: if one is
+        // ever shown here, it is a change of the computer's power settings, as stay-on is.
         case `power-stay-on`:
+        case `update-pause`:
+        case `before-sign-in`:
             return powerTitle(run.state);
         case `wsl-memory`:
             return wslMemoryTitle(run.state);
@@ -119,6 +123,8 @@ export const agentRefusal = (op: DeviceAgentOp): string =>
         restart: t(`sandbox.agentRun.restartRefused`),
         "forget-unreachable": t(`sandbox.agentRun.forgetRefused`),
         "power-stay-on": t(`sandbox.agentRun.powerRefused`),
+        "update-pause": t(`sandbox.agentRun.powerRefused`),
+        "before-sign-in": t(`sandbox.agentRun.powerRefused`),
         "wsl-memory": t(`sandbox.agentRun.wslMemoryRefused`),
     } satisfies Record<DeviceAgentOp, string>)[op];
 
@@ -129,6 +135,8 @@ export const agentRunWorking = (op: DeviceAgentOp): string =>
         restart: t(`sandbox.agentRun.workingRestart`),
         "forget-unreachable": t(`sandbox.agentRun.workingForget`),
         "power-stay-on": t(`sandbox.agentRun.workingPower`),
+        "update-pause": t(`sandbox.agentRun.workingPower`),
+        "before-sign-in": t(`sandbox.agentRun.workingPower`),
         "wsl-memory": t(`sandbox.agentRun.workingWslMemory`),
     } satisfies Record<DeviceAgentOp, string>)[op];
 
@@ -139,6 +147,8 @@ export const agentRunDoing = (op: DeviceAgentOp): string =>
         restart: t(`sandbox.deviceOps.workingAgentRestart`),
         "forget-unreachable": t(`sandbox.deviceOps.workingAgentForget`),
         "power-stay-on": t(`sandbox.deviceOps.workingAgentPower`),
+        "update-pause": t(`sandbox.deviceOps.workingAgentPower`),
+        "before-sign-in": t(`sandbox.deviceOps.workingAgentPower`),
         "wsl-memory": t(`sandbox.deviceOps.workingAgentWslMemory`),
     } satisfies Record<DeviceAgentOp, string>)[op];
 
@@ -155,6 +165,8 @@ export const agentRunAsked = (op: DeviceAgentOp): string =>
         "forget-unreachable": t(`sandbox.deviceOps.askedForget`),
         // Nothing restarts: the machine's own answer ends the wait, and failing that its next reading does.
         "power-stay-on": t(`sandbox.deviceOps.askedPower`),
+        "update-pause": t(`sandbox.deviceOps.askedPower`),
+        "before-sign-in": t(`sandbox.deviceOps.askedPower`),
         // Nor does writing .wslconfig (the WSL memory card's yes): the VM takes it at WSL's next start, not now.
         "wsl-memory": t(`sandbox.deviceOps.askedWslMemory`),
     } satisfies Record<DeviceAgentOp, string>)[op];

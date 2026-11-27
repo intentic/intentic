@@ -93,6 +93,9 @@ const AGENT_COMMAND: Record<DeviceAgentOp, string> = {
     "power-stay-on": `power stay-on`,
     // The size goes with it (`--gb <N>`); the WSL memory card's yes names it.
     "wsl-memory": `wsl-memory apply`,
+    // The moment goes with it (`--until <when>`); the host-power card's yes names it.
+    "update-pause": `power pause-updates`,
+    "before-sign-in": `before-sign-in on`,
 };
 
 export const agentFallback = (op: DeviceAgentOp): string => `intentic-machine ${AGENT_COMMAND[op]}`;

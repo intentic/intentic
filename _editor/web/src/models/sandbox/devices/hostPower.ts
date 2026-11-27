@@ -1,6 +1,7 @@
-import { type HostPowerFinding, POWER_FINDING } from "@intentic/sandbox-contract/schemas/host-power";
+import { type HostPowerFinding, pauseUntilFor, POWER_FINDING, POWER_REMEDY } from "@intentic/sandbox-contract/schemas/host-power";
+import type { HostPowerNeed } from "@intentic/sandbox-contract/schemas/needs";
 import type { TipRow } from "@intentic/ui";
-import { formatElapsed } from "@intentic/ui/format";
+import { formatElapsed, formatWhen } from "@intentic/ui/format";
 import { t } from "@intentic/ui/i18n";
 
 // A COMPUTER'S POWER SETTINGS IN THE READER'S WORDS (host-power.ts). The machine agent reports each setting that would stop
@@ -86,13 +87,8 @@ export const powerNote = (finding: HostPowerFinding, device: string, index = 0):
                         ? t(`sandbox.hostPower.batterySleepAny`)
                         : t(`sandbox.hostPower.batterySleep`, { after: formatElapsed(finding.afterSeconds) }),
             };
-        case POWER_FINDING.updateRestart: {
-            const window = finding.window;
-            // Equal hours are the whole day (insideLocalWindow), which "between 03:00 and 03:00" would not say.
-            return window === undefined || window.fromHour === window.toHour
-                ? { key, text: finding.text }
-                : { key, text: t(`sandbox.hostPower.updateRestart`, { from: hour(window.fromHour), to: hour(window.toHour), device }) };
-        }
+        case POWER_FINDING.updateRestart:
+            return { key, text: restartWords(finding, device) };
         case POWER_FINDING.osSleep:
             return finding.command === undefined
                 ? { key, text: finding.text }
@@ -101,6 +97,55 @@ export const powerNote = (finding: HostPowerFinding, device: string, index = 0):
             return { key, text: finding.text, command: finding.command };
     }
 };
+
+// A Windows Update restart in the reader's words: its hours on the computer's clock, then what follows it, which since
+// 2026-11-27 the finding says (`comesBack`, `pausedUntil`). A finding that names no hours, or the whole day, is the
+// agent's own sentence. Pure.
+const restartWords = (finding: HostPowerFinding, device: string): string => {
+    const window = finding.window;
+    // Equal hours are the whole day (insideLocalWindow), which "between 03:00 and 03:00" would not say.
+    if (window === undefined || window.fromHour === window.toHour) {
+        return finding.text;
+    }
+    const hours = { from: hour(window.fromHour), to: hour(window.toHour), device };
+    if (finding.comesBack === `boot`) {
+        return t(`sandbox.hostPower.updateRestartBoot`, hours);
+    }
+    return finding.pausedUntil === undefined
+        ? t(`sandbox.hostPower.updateRestart`, hours)
+        : t(`sandbox.hostPower.updateRestartPaused`, { ...hours, until: formatWhen(finding.pausedUntil) });
+};
+
+/** One answer the host-power card offers to a Windows Update restart: which, and the moment a pause holds until. */
+export interface RestartRemedy {
+    readonly remedy: (typeof POWER_REMEDY)[keyof typeof POWER_REMEDY];
+    readonly until?: number | undefined;
+}
+
+/**
+ * The answers a host-power card offers to its restart, the lasting one first: none where the finding offers none (an
+ * older agent), where the computer already brings its sandboxes back, or where Windows Update is paused past the work.
+ * A pause is offered only where its end can be placed on the computer's clock and Windows would hold it that long. Pure.
+ */
+export const restartRemedies = (subject: Pick<HostPowerNeed, `findings` | `dueAt` | `utcOffsetMinutes`>, now: number): RestartRemedy[] => {
+    const restart = subject.findings.find((finding) => finding.id === POWER_FINDING.updateRestart);
+    const offers = restart?.offers ?? [];
+    const due = subject.dueAt ?? now;
+    if (restart === undefined || restart.comesBack === `boot` || (restart.pausedUntil ?? 0) >= due) {
+        return [];
+    }
+    const until = subject.utcOffsetMinutes === undefined ? undefined : pauseUntilFor(restart, subject.utcOffsetMinutes, now, due);
+    return [
+        ...(offers.includes(POWER_REMEDY.beforeSignIn) ? [{ remedy: POWER_REMEDY.beforeSignIn }] : []),
+        ...(offers.includes(POWER_REMEDY.pauseUpdates) && until !== undefined ? [{ remedy: POWER_REMEDY.pauseUpdates, until }] : []),
+    ];
+};
+
+/** A note that an update already waits for a restart, which a pause may not hold off; undefined where none waits. */
+export const restartPendingNote = (subject: Pick<HostPowerNeed, `findings`>, device: string): string | undefined =>
+    subject.findings.some((finding) => finding.id === POWER_FINDING.updateRestart && finding.restartPending === true)
+        ? t(`sandbox.hostPower.restartPending`, { device })
+        : undefined;
 
 // What stops booked work soonest goes first: the shorter of the two idle timeouts, then the lid, which only counts once
 // it is closed, then the network in standby, which only counts once it is asleep.

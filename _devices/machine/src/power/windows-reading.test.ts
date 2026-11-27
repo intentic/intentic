@@ -38,6 +38,17 @@ test("rog's reading has its four plans, Turbo active, every setting read, Modern
     expect([reading.modernStandby, reading.battery, reading.lid]).toEqual([true, true, true]);
     expect(reading.activeHours).toEqual({ start: 8, end: 2 });
     expect(reading.utcOffsetMinutes).toBe(60);
+    // Read before the script asked about Windows Update's pause: not paused, nothing waiting, as far as it can say.
+    expect([reading.pausedUntil, reading.restartPending]).toEqual([undefined, undefined]);
+});
+
+test("Windows Update's pause reads as the moment it ends, and an update waiting for a restart as such", () => {
+    const reading = windowsReadingFrom(WindowsAnswerSchema.parse({ ...ROG, pauseUntil: "2026-11-28T07:00:00Z", restartPending: true }), NOW);
+    expect(reading.pausedUntil).toBe(Date.UTC(2026, 10, 28, 7, 0));
+    expect(reading.restartPending).toBe(true);
+    // What Windows leaves behind when nothing was ever paused, or a string that is not a date: not paused.
+    expect(windowsReadingFrom(WindowsAnswerSchema.parse({ ...ROG, pauseUntil: "" }), NOW).pausedUntil).toBeUndefined();
+    expect(windowsReadingFrom(WindowsAnswerSchema.parse({ ...ROG, pauseUntil: 5 }), NOW).pausedUntil).toBeUndefined();
 });
 
 // What the owner set on rog after the night of 2026-11-22: nothing on mains power would stop work, only the restarts.

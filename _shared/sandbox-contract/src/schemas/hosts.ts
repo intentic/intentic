@@ -282,6 +282,11 @@ export const DeviceFeatureSchema = z.enum([
     // (2026-11-26) The `wsl-memory` agent op: `memory=` in this PC's `.wslconfig` rewritten to the size the owner approved
     // on a card (`DeviceFacts.wslMemory`), by `intentic-machine wsl-memory apply`. Advertised by Windows' own side.
     "wsl-memory",
+    // (2026-11-27) The `update-pause` and `before-sign-in` agent ops, the two answers to Windows Update restarting the PC at
+    // night (host-power.ts, `update-restart`): Windows Update paused until after work booked here, and Windows' boot task
+    // that starts the agent, and with it intentic's engine and its sandboxes, before anyone signs in. Advertised by
+    // Windows' own side.
+    "power-restart",
 ]);
 export type DeviceFeature = z.infer<typeof DeviceFeatureSchema>;
 export const DEVICE_FEATURE_RESHAPE_LATER: DeviceFeature = "reshape-later";
@@ -308,6 +313,7 @@ export const DEVICE_FEATURE_ADMIN_RUN: DeviceFeature = "admin-run";
 export const DEVICE_FEATURE_STACKS_MANAGED: DeviceFeature = "stacks-managed";
 export const DEVICE_FEATURE_HOST_STATS: DeviceFeature = "host-stats";
 export const DEVICE_FEATURE_WSL_MEMORY: DeviceFeature = "wsl-memory";
+export const DEVICE_FEATURE_POWER_RESTART: DeviceFeature = "power-restart";
 // What `ic features --json` answers (_hosts/ic/src/features.rs, golden/ic-features.json): the optional ops that ic
 // implements, as strings, since a newer ic's word means nothing to an older agent.
 export const IcFeaturesAnswerSchema = z.object({ features: z.array(z.string()) });

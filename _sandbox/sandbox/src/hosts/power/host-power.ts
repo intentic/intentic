@@ -1,6 +1,6 @@
 import { serialLock } from "@intentic/base/async";
 import { type Device, hostRunningSandbox, isWslDevice, machinesOf } from "@intentic/sandbox-contract/schemas/devices";
-import { type HostPower, type HostPowerFinding, insideLocalWindow, POWER_FINDING } from "@intentic/sandbox-contract/schemas/host-power";
+import { type HostPower, type HostPowerFinding, POWER_FINDING, restartBlocks } from "@intentic/sandbox-contract/schemas/host-power";
 import { parseHostConnection } from "@intentic/sandbox-contract/schemas/hosts";
 import { type HostPowerNeed, isOpenNeed, type Need } from "@intentic/sandbox-contract/schemas/needs";
 import type { Logger } from "pino";
@@ -29,34 +29,14 @@ export const POWER_LEAD_MS = 15 * 60_000;
 export const POWER_DECLINE_QUIET_MS = 7 * 24 * 3_600_000;
 // How long the computer is given to describe itself again before the check reads what it said last.
 const REFRESH_MS = 8_000;
-const HOUR_MS = 3_600_000;
-// A local-hours window repeats daily, so a day of hour starts visits every hour it could hold.
-const HOURS_A_DAY = 24;
-
-/**
- * Whether any moment from `from` to `to` (epoch ms) falls inside a local-hours window on a computer `utcOffsetMinutes`
- * from UTC. The window is whole local hours, so it is enough to look at `from` and at each local hour's start up to `to`,
- * for at most a day: past that the same hours only come round again. Pure.
- */
-export const windowMeets = (window: NonNullable<HostPowerFinding["window"]>, utcOffsetMinutes: number, from: number, to: number): boolean => {
-    if (insideLocalWindow(from, window, utcOffsetMinutes)) {
-        return true;
-    }
-    // The next local hour's start: an offset like +05:30 puts the computer's hours off UTC's.
-    const local = from + utcOffsetMinutes * 60_000;
-    let at = from - (((local % HOUR_MS) + HOUR_MS) % HOUR_MS) + HOUR_MS;
-    for (let step = 0; step < HOURS_A_DAY && at <= to; step += 1, at += HOUR_MS) {
-        if (insideLocalWindow(at, window, utcOffsetMinutes)) {
-            return true;
-        }
-    }
-    return false;
-};
+// Moved to the contract (2026-11-27), where the host-power card's answer weighs a restart too; said here as before.
+export { windowMeets } from "@intentic/sandbox-contract/schemas/host-power";
 
 // Whether one finding would act before work due at `dueAt`. An idle timer on mains power acts once it runs out, counted
 // from now, when the owner may have just stopped typing; the lid, a standby that cuts the network and a Linux or macOS
 // suspend can act at any moment; an update restart only inside its hours, and at any hour when the agent did not say
-// which. Battery sleep never raises a card by itself: the card shows it as a note, since nothing here changes it and a
+// which, and never while Windows Update is paused past the work or the sandboxes start again with the computer
+// (restartBlocks). Battery sleep never raises a card by itself: the card shows it as a note, since nothing here changes it and a
 // laptop in a bag must still sleep. An id this build does not know counts only when the agent's op can change it.
 const blocks = (finding: HostPowerFinding, power: HostPower, now: number, dueAt: number): boolean => {
     switch (finding.id) {
@@ -68,7 +48,7 @@ const blocks = (finding: HostPowerFinding, power: HostPower, now: number, dueAt:
         case POWER_FINDING.osSleep:
             return true;
         case POWER_FINDING.updateRestart:
-            return finding.window === undefined || windowMeets(finding.window, power.utcOffsetMinutes, now, dueAt);
+            return restartBlocks(finding, power.utcOffsetMinutes, now, dueAt);
         case POWER_FINDING.batterySleep:
             return false;
         default:
@@ -162,7 +142,7 @@ export const raiseHostPowerCard = async (deps: HostPowerCheckDeps, conversationI
     // No clock time in the title: the daemon's zone is not the reader's, and the card draws `dueAt` in theirs.
     const need = await deps.needs.observe(
         conversationId,
-        { kind: "host-power", device: host.device, findings: power.findings, dueAt },
+        { kind: "host-power", device: host.device, findings: power.findings, dueAt, utcOffsetMinutes: power.utcOffsetMinutes },
         `${host.name} would sleep through work booked here`,
     );
     deps.logger.info({ conversationId, device: host.device, blockers: ids, need: need.id, dueAt }, "host power: booked work would be slept through; card raised");

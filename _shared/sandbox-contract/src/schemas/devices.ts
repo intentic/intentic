@@ -220,13 +220,19 @@ export type DeviceFlowLine = z.infer<typeof DeviceFlowLineSchema>;
 // eight minutes), and one sandbox's button disconnected the machine from another.
 // `power-stay-on` (2026-11-22) changes the power settings that would sleep the computer through scheduled work, on mains
 // power only (`intentic-machine power stay-on`, `DeviceFacts.power`); only an agent advertising DEVICE_FEATURE_POWER has it.
-export const DeviceAgentOpSchema = z.enum(["upgrade", "restart", "forget-unreachable", "power-stay-on", "wsl-memory"]);
+// `update-pause` and `before-sign-in` (2026-11-27) answer Windows Update's night restarts (`update-restart` in
+// host-power.ts): Windows Update paused until `until`, and Windows' boot task that starts the agent, and with it intentic's
+// engine, before anyone signs in (Windows asks for permission on that PC's screen); only an agent advertising
+// DEVICE_FEATURE_POWER_RESTART has them.
+export const DeviceAgentOpSchema = z.enum(["upgrade", "restart", "forget-unreachable", "power-stay-on", "wsl-memory", "update-pause", "before-sign-in"]);
 export type DeviceAgentOp = z.infer<typeof DeviceAgentOpSchema>;
 // (2026-11-26) `memoryGb` goes with `wsl-memory` alone, the size the owner approved; sent only to an agent that advertises
-// `wsl-memory`, since the input is strict and an older agent refuses a field it does not know.
+// `wsl-memory`, since the input is strict and an older agent refuses a field it does not know. (2026-11-27) `until` goes
+// with `update-pause` alone, the moment (epoch ms) Windows Update stays paused until.
 export const DeviceAgentFlowSchema = z.strictObject({
     op: DeviceAgentOpSchema,
     memoryGb: z.number().int().min(1).max(1024).optional(),
+    until: z.number().int().positive().optional(),
 });
 export type DeviceAgentFlow = z.infer<typeof DeviceAgentFlowSchema>;
 // Adds the device id to the flow input.

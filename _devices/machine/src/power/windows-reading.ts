@@ -9,7 +9,8 @@ import { z } from "zod";
    keypress and both sandboxes on it froze through the night's booked sends (windows-findings.ts says what each value means).
    This reads the four settings that decide it, from EVERY power plan, since a vendor's own tool switches plans by
    itself (rog's ASUS software moves between Performance, Balanced, Silent and Turbo), and the facts around them: Modern
-   Standby, a battery, a lid, Windows Update's active hours.
+   Standby, a battery, a lid, Windows Update's active hours, and (2026-11-27) whether Windows Update is paused and until
+   when, and whether an update already waits for a restart.
 
    One PowerShell, one JSON answer, nothing in it read from translated text. `powercfg` prints its labels in the
    machine's language (owners run Polish and German Windows), so of its output only GUIDs and the `0x…` numbers are
@@ -62,6 +63,11 @@ export interface WindowsPowerReading {
     readonly lid: boolean | undefined;
     // Windows Update's active hours, local hours 0-23; undefined where they are not set.
     readonly activeHours: { readonly start: number; readonly end: number } | undefined;
+    // (2026-11-27) When Windows Update's pause ends (PauseUpdatesExpiryTime), epoch ms; undefined where it is not paused
+    // or that could not be read. A pause that has already ended reads as the moment it ended.
+    readonly pausedUntil?: number | undefined;
+    // Whether an update is installed and waiting for a restart (Windows Update's RebootRequired key).
+    readonly restartPending?: boolean | undefined;
     readonly utcOffsetMinutes: number;
 }
 
@@ -118,9 +124,11 @@ export const windowsPowerScript = (assembly: string): string =>
         "} catch { $nativeError = $_.Exception.Message }",
         "$battery = $null; if (-not $capabilities) { try { $battery = @(Get-CimInstance -ClassName Win32_Battery).Count -gt 0 } catch { $battery = $null } }",
         "$hoursStart = $null; $hoursEnd = $null",
-        "try { $ux = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings'; $hoursStart = $ux.ActiveHoursStart; $hoursEnd = $ux.ActiveHoursEnd } catch { $hoursStart = $null; $hoursEnd = $null }",
+        "$pauseUntil = $null",
+        "try { $ux = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\WindowsUpdate\\UX\\Settings'; $hoursStart = $ux.ActiveHoursStart; $hoursEnd = $ux.ActiveHoursEnd; $pauseUntil = $ux.PauseUpdatesExpiryTime } catch { $hoursStart = $null; $hoursEnd = $null }",
+        "$restartPending = Test-Path -LiteralPath 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate\\Auto Update\\RebootRequired'",
         "$offset = [int][TimeZoneInfo]::Local.GetUtcOffset([DateTime]::Now).TotalMinutes",
-        "$json = [pscustomobject]@{ list = $list; queries = $queries; names = $names; capabilities = $capabilities; nativeError = $nativeError; battery = $battery; activeHoursStart = $hoursStart; activeHoursEnd = $hoursEnd; utcOffsetMinutes = $offset } | ConvertTo-Json -Compress -Depth 4",
+        "$json = [pscustomobject]@{ list = $list; queries = $queries; names = $names; capabilities = $capabilities; nativeError = $nativeError; battery = $battery; activeHoursStart = $hoursStart; activeHoursEnd = $hoursEnd; pauseUntil = $pauseUntil; restartPending = $restartPending; utcOffsetMinutes = $offset } | ConvertTo-Json -Compress -Depth 4",
         "[regex]::Replace($json, '[^\\x00-\\x7e]', { param($m) '\\u{0:x4}' -f [int][char]$m.Value })",
     ].join("\n");
 
@@ -144,6 +152,9 @@ export const WindowsAnswerSchema = z.object({
     battery: z.boolean().nullable().catch(null),
     activeHoursStart: z.number().int().min(0).max(23).nullable().catch(null),
     activeHoursEnd: z.number().int().min(0).max(23).nullable().catch(null),
+    // (2026-11-27) Windows' own string for when the pause ends, `2026-11-28T07:00:00Z`; absent from an older script's answer.
+    pauseUntil: z.string().nullable().catch(null),
+    restartPending: z.boolean().nullable().catch(null),
     utcOffsetMinutes: z.number().int(),
 });
 export type WindowsAnswer = z.infer<typeof WindowsAnswerSchema>;
@@ -219,6 +230,7 @@ export const windowsReadingFrom = (answer: WindowsAnswer, at: number): WindowsPo
         };
     });
     const hours = answer.activeHoursStart !== null && answer.activeHoursEnd !== null ? { start: answer.activeHoursStart, end: answer.activeHoursEnd } : undefined;
+    const pausedUntil = answer.pauseUntil === null ? Number.NaN : Date.parse(answer.pauseUntil);
     return {
         at,
         plans,
@@ -226,6 +238,8 @@ export const windowsReadingFrom = (answer: WindowsAnswer, at: number): WindowsPo
         battery: capabilities.battery ?? answer.battery ?? undefined,
         lid: capabilities.lid,
         activeHours: hours,
+        pausedUntil: Number.isFinite(pausedUntil) ? pausedUntil : undefined,
+        restartPending: answer.restartPending ?? undefined,
         utcOffsetMinutes: answer.utcOffsetMinutes,
     };
 };

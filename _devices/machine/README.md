@@ -26,8 +26,13 @@ flowchart LR
   prompt on that PC) for a boot task that starts the agent when the PC starts, with no session
   ([`autostart/before-sign-in.ts`](src/autostart/before-sign-in.ts)). That agent serves what needs no desktop, its
   sandbox links and the WSL distros, and refuses the screen, window, clipboard and browser tools in one sentence
-  ([`device/session.ts`](src/device/session.ts)). It leaves the keeper (which starts Docker Desktop), the sandbox
-  rounds, file sync and its own updates to the signed-in session's agent, which takes over at the next sign-in:
+  ([`device/session.ts`](src/device/session.ts)). (2026-11-27) Where the sandboxes run on intentic's engine it also
+  runs the keeper and the sandbox rounds, so the keeper's first sweep has ic start the engine and the sandboxes on it
+  with nobody signed in; a task of this kind reached WSL and the engine on rog (session 0), and the engine's start from
+  one is unproven until the first night it runs. On Docker Desktop, a program with a window, it leaves the keeper and
+  the sandbox rounds to the signed-in session's agent, as it leaves file sync and its own updates on any engine. The
+  sandbox's host-power card turns the task on through the `before-sign-in` op. The signed-in session's agent takes over
+  at the next sign-in:
   it writes a request the boot agent reads every tick and leaves on, and stops it only if it does not
   ([`resident/handover.ts`](src/resident/handover.ts)). While someone is signed in, the boot task's repetitions find
   an agent running and exit without a word. `uninstall` removes the task too, asking Windows again. Measured on a
@@ -1201,7 +1206,8 @@ what each does, and changes them only at the owner's word ([`power/`](src/power)
   tool switches plans by itself (rog's ASUS software moves between Performance, Balanced, Silent and Turbo): sleep after
   (STANDBYIDLE), hibernate after (HIBERNATEIDLE), the lid (LIDACTION) and the network in Modern Standby
   (CONNECTIVITYINSTANDBY), each on mains power and on battery. It also reads whether the PC has Modern Standby, a
-  battery and a lid (CallNtPowerInformation, through Add-Type), Windows Update's active hours and the offset from UTC.
+  battery and a lid (CallNtPowerInformation, through Add-Type), Windows Update's active hours, whether it is paused and
+  until when, whether an update already waits for a restart, and the offset from UTC.
   `powercfg` prints its labels in the PC's language (owners run Polish and German Windows), so only its GUIDs and
   `0x` numbers are read: `powercfg /qh <plan> <subgroup> <setting>` ends, in every language, with the AC index and then
   the DC index. A setting a plan lacks reads as absent, never as an error. Measured on rog: about a second, most of it
@@ -1219,8 +1225,11 @@ what each does, and changes them only at the owner's word ([`power/`](src/power)
   - `battery-sleep`: on battery it sleeps after a time or when the lid closes. Told, never changed: a laptop in a bag
     must still sleep;
   - `update-restart`: Windows Update may restart the PC outside its active hours (rog's 08:00 to 02:00 make 02:00 to
-    08:00), and after a restart nothing runs again until somebody signs in, since the agent and Docker Desktop start at
-    sign-in. Told, never changed: the active hours are the owner's to pick;
+    08:00). Stay-on never changes it: the active hours are the owner's to pick. (2026-11-27) It says what follows a
+    restart (`comesBack`: a sign-in, or the PC starting its sandboxes itself, where the start before sign-in is on and
+    they run on intentic's engine), a pause in force (`pausedUntil`), an update waiting for a restart
+    (`restartPending`), and the ops that answer it (`offers`): `update-pause` always, and `before-sign-in` on
+    intentic's engine while that task is off;
   - `os-sleep`: Linux or macOS may suspend the computer. The fix needs root, so the finding carries the command
     (`sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target`, `sudo pmset -c sleep 0`)
     and the agent never runs it. A MacBook's lid sleeps it whatever the setting, unless an external display is attached.
@@ -1230,7 +1239,14 @@ what each does, and changes them only at the owner's word ([`power/`](src/power)
   read; the C# it loads for the native read is compiled once into a DLL under `~/.intentic/machine/cache` rather than on
   every reading; a read that fails is said once in `machine.log` and leaves the field absent until
   one works. `describe` says the findings in one line and that they are the owner's to change. The Windows side
-  advertises `power`, the feature that says it takes the `power-stay-on` op.
+  advertises `power`, the feature that says it takes the `power-stay-on` op, and `power-restart`, the `update-pause`
+  and `before-sign-in` ops.
+- **Pausing Windows Update** (Windows only, [`update-pause.ts`](src/power/update-pause.ts)). `intentic-machine power
+  pause-updates --until <when>`, which the card's `update-pause` op runs, writes the six values Windows' own Settings
+  page writes under `HKLM\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings` (that key lets a signed-in user set values,
+  so there is no prompt), then has the orchestrator read them (`UsoClient RefreshSettings`). It never shortens a pause
+  already in force and never pauses for more than Windows' five weeks. Checked on rog unelevated: the orchestrator's own
+  state read both feature and quality updates paused within half a minute.
 - **Stay-on** (Windows only, [`writes.ts`](src/power/writes.ts) decides, [`apply.ts`](src/power/apply.ts) does). The
   owner's yes on that card runs the `power-stay-on` op, which is `intentic-machine power stay-on` detached, as `upgrade`
   is. For every plan, on mains power only: sleep after and hibernate after to never, the lid to do nothing (where there

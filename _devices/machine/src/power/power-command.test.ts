@@ -31,7 +31,7 @@ test("after a stay-on each finding says it changed, is still there, or was left 
     ]);
 });
 
-test("the status says what its reading rests on: the plans with the active one marked, the battery, Modern Standby, the active hours", () => {
+test("the status says what its reading rests on: the plans with the active one marked, the battery, Modern Standby, the active hours, a pause", () => {
     const reading: WindowsPowerReading = {
         at: 1,
         plans: [
@@ -49,5 +49,10 @@ test("the status says what its reading rests on: the plans with the active one m
         ["battery", "yes"],
         ["Modern Standby", "could not be read"],
         ["active hours", "08:00 to 02:00"],
+        ["updates paused", "no"],
+    ]);
+    expect(aboutFields({ kind: "windows", reading: { ...reading, pausedUntil: Date.UTC(2026, 10, 28, 7) }, power: power([]) })).toContainEqual([
+        "updates paused",
+        "until 2026-11-28T07:00:00.000Z",
     ]);
 });

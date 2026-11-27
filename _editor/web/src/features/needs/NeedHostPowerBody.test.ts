@@ -8,7 +8,7 @@ import { formatWhen } from "@intentic/ui/format";
 import { IconStub } from "@intentic/ui/testing";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 
-const answer = { mutateAsync: jest.fn(async (_input: { id: string; answer: { kind: string } }): Promise<void> => undefined) };
+const answer = { mutateAsync: jest.fn(async (_input: { id: string; answer: { kind: string; remedy?: string } }): Promise<void> => undefined) };
 jest.mock(`../../models/needs/useNeeds`, () => ({ useNeeds: () => ({ answer }) }));
 // The need's answer runs its task, as the operations ledger would.
 jest.mock(`./needAnswer`, () => ({
@@ -88,7 +88,7 @@ it(`keeps what the op leaves alone as notes, in the reader's words`, () => {
     const { notes, done } = mount();
     expect(notes()).toEqual([
         `On battery it still sleeps after 15m: keep it plugged in for the night.`,
-        `Windows Update may restart it between 02:00 and 08:00 (rog's clock); after a restart nothing runs until you sign in.`,
+        `Windows Update may restart it between 02:00 and 08:00 (rog's clock); after a restart nothing runs until someone signs in on rog.`,
     ]);
     done();
 });
@@ -128,5 +128,70 @@ it(`says a finding it has no words for in the agent's own sentence`, () => {
 it(`draws no answers once the yes is being carried out`, () => {
     const { buttons, done } = mount(SUBJECT, `working`);
     expect(buttons()).toEqual([]);
+    done();
+});
+
+/* WHAT ANSWERS THE RESTART (2026-11-27): the card used to offer nothing for it but "Not now". Now each answer the agent
+   offers is a yes of its own, the lasting one first, and each also makes the changes listed above. */
+const RESTART: HostPowerFinding = { ...UPDATE, offers: [`update-pause`, `before-sign-in`], comesBack: `sign-in` };
+// Friday 05:00 on rog, an hour east of UTC: the pause holds until 08:00 there, the end of that night's window.
+const FRIDAY_FIVE = Date.now() + 2 * 24 * 3_600_000;
+const restartCard = (findings: HostPowerFinding[], extra: Partial<HostPowerNeed> = {}): HostPowerNeed => ({
+    kind: `host-power`,
+    device: `rog`,
+    findings,
+    dueAt: FRIDAY_FIVE,
+    utcOffsetMinutes: 60,
+    ...extra,
+});
+
+it(`offers starting the sandboxes with the PC first and a pause past the work second, saying Windows will ask on the PC`, async () => {
+    const { el, buttons, done } = mount(restartCard([RESTART]));
+    const [boot, pause, decline] = buttons();
+    expect(boot).toBe(`Start sandboxes when rog starts`);
+    expect(pause).toMatch(/^Pause Windows Update until /);
+    expect(decline).toBe(`Not now`);
+    expect(el.textContent).toContain(`Windows asks for permission on rog's screen`);
+    el.querySelector<HTMLButtonElement>(`[data-power-remedy="update-pause"]`)?.click();
+    await nextTick();
+    await Promise.resolve();
+    expect(answer.mutateAsync).toHaveBeenCalledWith({ id: `need-4`, answer: { kind: `approve`, remedy: `update-pause` } });
+    done();
+});
+
+it(`says each answer also makes the changes above, where the card has any, and offers no separate yes for them`, () => {
+    const { buttons, done } = mount(restartCard([SLEEPS, RESTART]));
+    expect(buttons()[0]).toBe(`Change these, and start sandboxes when rog starts`);
+    expect(buttons()[1]).toMatch(/^Change these, and pause Windows Update until /);
+    expect(buttons()).not.toContain(`Change these settings on rog`);
+    done();
+});
+
+it(`offers nothing for a restart the PC already comes back from, or one paused past the work, and says which it is`, () => {
+    const back = mount(restartCard([{ ...RESTART, comesBack: `boot`, offers: [`update-pause`] }]));
+    expect(back.buttons()).toEqual([`Not now`]);
+    expect(back.notes()).toEqual([`Windows Update may restart it between 02:00 and 08:00 (rog's clock); rog starts its sandboxes again by itself, before anyone signs in.`]);
+    back.done();
+    const paused = mount(restartCard([{ ...RESTART, pausedUntil: FRIDAY_FIVE + 3_600_000 }]));
+    expect(paused.buttons()).toEqual([`Not now`]);
+    expect(paused.notes()[0]).toMatch(/^Windows Update is paused until /);
+    paused.done();
+});
+
+// An older card carries no offset to place the pause's end on the reader's clock, and an older agent offers nothing.
+it(`offers no pause where the card cannot say until when, and nothing where the agent offers nothing`, () => {
+    const undated = mount(restartCard([RESTART], { utcOffsetMinutes: undefined }));
+    expect(undated.buttons()).toEqual([`Start sandboxes when rog starts`, `Not now`]);
+    undated.done();
+    const older = mount(restartCard([UPDATE]));
+    expect(older.buttons()).toEqual([`Not now`]);
+    older.done();
+});
+
+it(`warns that an update already waiting for a restart may not be held off by a pause`, () => {
+    const { el, done } = mount(restartCard([{ ...RESTART, restartPending: true }]));
+    expect(el.querySelector(`[data-power-pending]`)?.textContent).toBe(
+        `An update is already installed and waiting for a restart: a pause may not hold that one off. Restarting rog yourself before you leave it does.`,
+    );
     done();
 });

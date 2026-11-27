@@ -570,8 +570,9 @@ export async function* runDeviceAgentFlow(services: Services, id: string, input:
             refreshFactsOnceSettled(services, id);
         }
         // (2026-11-22) The agent drops its own cached reading of the power settings as the op ends, so asking now finds
-        // them changed: the Devices view's warning and an open host-power card clear without waiting for the next read.
-        if (input.op === "power-stay-on") {
+        // them changed: the Devices view's warning and an open host-power card clear without waiting for the next read. So
+        // do the two answers to Windows Update's restarts (2026-11-27), which the same reading carries.
+        if (input.op === "power-stay-on" || input.op === "update-pause" || input.op === "before-sign-in") {
             refreshFactsNow(services, id);
         }
     }

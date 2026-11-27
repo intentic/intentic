@@ -6743,7 +6743,12 @@
             "lead": "{device} arrêterait le travail prévu pour {when}.",
             "leadUndated": "{device} arrêterait le travail prévu dessus.",
             "approve": "Modifier ces paramètres sur {device}",
-            "working": "Modification des paramètres sur {device}…"
+            "working": "Modification des paramètres sur {device}…",
+            "approveBoot": "Démarrer les sandboxes avec {device}",
+            "approveWithBoot": "Modifier ces paramètres et démarrer les sandboxes avec {device}",
+            "approvePause": "Suspendre Windows Update jusqu'à {until}",
+            "approveWithPause": "Modifier ces paramètres et suspendre Windows Update jusqu'à {until}",
+            "bootHint": "Pour démarrer les sandboxes avec {device}, Windows demande l'autorisation sur l'écran de {device} : appuyez donc quand vous êtes devant {device}. Ensuite, un redémarrage coûte quelques minutes, pas la nuit."
         },
         "wslMemory": {
             "lead": "Sur {device}, Windows avait moins que son seuil bas de {low} disponible dans {share} % des relevés des {hours} dernières heures, pendant que la VM WSL occupait une médiane de {vm} sur {total} ; l'usage propre de Windows hors de la VM atteignait {outside}.",
@@ -8087,7 +8092,10 @@
             "keepsNetwork": "le garde",
             "batterySleep": "Sur batterie, il se met toujours en veille après {after} : laissez-le branché pour la nuit.",
             "batterySleepAny": "Sur batterie, il se met toujours en veille : laissez-le branché pour la nuit.",
-            "updateRestart": "Windows Update peut le redémarrer entre {from} et {to} (heure de {device}) ; après un redémarrage, rien ne tourne tant que vous ne vous êtes pas connecté.",
+            "updateRestart": "Windows Update peut le redémarrer entre {from} et {to} (heure de {device}) ; après un redémarrage, rien ne tourne tant que personne ne s'est connecté sur {device}.",
+            "updateRestartPaused": "Windows Update est suspendu jusqu'à {until} ; ensuite il peut le redémarrer entre {from} et {to} (heure de {device}), et rien ne tourne tant que personne ne s'est connecté sur {device}.",
+            "updateRestartBoot": "Windows Update peut le redémarrer entre {from} et {to} (heure de {device}) ; {device} redémarre ensuite ses sandboxes tout seul, avant que quiconque se connecte.",
+            "restartPending": "Une mise à jour est déjà installée et attend un redémarrage : une suspension ne la retiendra peut-être pas. Redémarrez {device} vous-même avant de le laisser.",
             "osSleep": "Il peut se mettre en veille de lui-même. Pour l'en empêcher, exécutez ceci sur {device} :",
             "rowSleep": "Veille après",
             "rowHibernate": "Hibernation après",

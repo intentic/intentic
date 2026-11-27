@@ -7,13 +7,17 @@ import { handToWindows, windowsRoot } from "../environments/machine.js";
 import { thisSide } from "../environments/wsl.js";
 import { powerBeforePath, readPowerSnapshot, realPowerIo, restore, stayOn } from "./apply.js";
 import { type PowerHere, readPowerHere } from "./host-power.js";
+import { pauseUpdates, realPauseIo } from "./update-pause.js";
 import { windowsFindings } from "./windows-findings.js";
+import { readWindowsPower } from "./windows-reading.js";
 import { hourWords } from "./words.js";
 import { SETTING_WORDS, writeLine } from "./writes.js";
 
-/* `intentic-machine power status | stay-on | restore` (2026-11-22): what this computer's own power settings would do
-   to work left running on it, and on Windows, at the owner's word, the mains-power ones changed so it stays on
-   (apply.ts), and put back. The sandbox's `power-stay-on` op runs `power stay-on` detached (device/tools/agent.ts).
+/* `intentic-machine power status | stay-on | restore | pause-updates` (2026-11-22): what this computer's own power
+   settings would do to work left running on it, and on Windows, at the owner's word, the mains-power ones changed so it
+   stays on (apply.ts), and put back, and (2026-11-27) Windows Update paused past work booked on it (update-pause.ts).
+   The sandbox's `power-stay-on` and `update-pause` ops run `power stay-on` and `power pause-updates` detached
+   (device/tools/agent.ts).
    In a WSL distro each verb is the Windows side's: its agent answers on this terminal, as `updates` does. */
 
 const STAY_ON = "intentic-machine power stay-on";
@@ -68,6 +72,7 @@ export const aboutFields = (here: ReadHere): Footnote[] => {
                 ["battery", yesNo(reading.battery)],
                 ["Modern Standby", yesNo(reading.modernStandby)],
                 ["active hours", reading.activeHours === undefined ? "not set" : `${hourWords(reading.activeHours.start)} to ${hourWords(reading.activeHours.end)}`],
+                ["updates paused", reading.pausedUntil === undefined || reading.pausedUntil <= reading.at ? "no" : `until ${new Date(reading.pausedUntil).toISOString()}`],
             ];
         }
         case "linux":
@@ -230,7 +235,54 @@ const restoreCommand = buildCommand({
     },
 });
 
+// `--until` as epoch ms (what the sandbox's op sends) or anything Date.parse reads (what a person types). Pure.
+const parseUntil = (value: string): number => {
+    const at = /^\d+$/.test(value) ? Number(value) : Date.parse(value);
+    if (!Number.isFinite(at)) {
+        throw new Error(`${value} is not a moment: give epoch milliseconds or a date such as 2026-11-28T08:00:00Z.`);
+    }
+    return at;
+};
+
+interface PauseFlags {
+    readonly until: number;
+}
+
+const pauseCommand = buildCommand<PauseFlags>({
+    docs: { brief: "Pause Windows Update until a moment (at most five weeks off), so it restarts nothing before then (Windows)" },
+    parameters: {
+        flags: { until: { kind: "parsed", parse: parseUntil, brief: "When the pause ends: epoch milliseconds, or a date such as 2026-11-28T08:00:00Z" } },
+    },
+    async func(this: CommandContext, flags: PauseFlags) {
+        if (await handedToWindows(["pause-updates", "--until", String(flags.until)])) {
+            return;
+        }
+        const ui = machineUi(this.process);
+        if ((await thisSide()) !== "windows") {
+            ui.quiet("Nothing to pause: this pauses Windows Update, and this is not Windows.");
+            return;
+        }
+        ui.act(`Pausing Windows Update until ${new Date(flags.until).toISOString()}`);
+        const outcome = await pauseUpdates(
+            realPauseIo(async () => (await readWindowsPower()).pausedUntil),
+            flags.until,
+        );
+        ui.done(
+            outcome.kind === "already"
+                ? `Windows Update was already paused until ${new Date(outcome.until).toISOString()}, which reaches past that: nothing was changed.`
+                : `Windows Update is paused until ${new Date(outcome.until).toISOString()}: it restarts nothing before then. It resumes by itself after.`,
+        );
+        const after = await readWindowsPower();
+        if (after.pausedUntil === undefined || after.pausedUntil < flags.until) {
+            throw new Error(explain("Windows Update's pause does not read back.", "the values were written, but Windows reports no pause reaching that far.", "intentic-machine power status"));
+        }
+        if (after.restartPending === true) {
+            ui.warn("An update is already installed and waiting for a restart: a pause may not hold that restart off. Restarting this PC yourself before you leave it does.");
+        }
+    },
+});
+
 export const powerRoutes = buildRouteMap({
-    routes: { status, "stay-on": stayOnCommand, restore: restoreCommand },
+    routes: { status, "stay-on": stayOnCommand, restore: restoreCommand, "pause-updates": pauseCommand },
     docs: { brief: "This computer's own power settings: whether it would sleep through work left running, and on Windows keeping it on while plugged in" },
 });

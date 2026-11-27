@@ -22,7 +22,7 @@ import { readChannelSlugs } from "../device/sandbox-rounds/swap-records.js";
 import { fleet } from "../device/tools/sandboxes.js";
 import { takeOverCommandLedger } from "../device/tools/command-ledger.js";
 import { stopRunningCommands } from "../device/tools/shell.js";
-import { syncEngineEnv } from "../engine-env.js";
+import { readActiveEngine, syncEngineEnv } from "../engine-env.js";
 import { type Children, superviseChildren } from "../environments/children.js";
 import { type AutoUpgrade, startAutoUpgrade } from "../environments/auto-upgrade.js";
 import { heldDistros, SUPERVISOR_ENV, supervisedByWindows, updateMachineConfig, withoutChild } from "../environments/machine.js";
@@ -145,8 +145,14 @@ export const stillKeeping = async (
    before-sign-in on`, local-agent's beforeSignIn) starts this agent with `--before-sign-in` when the PC starts, with no
    session and no desktop, so a PC that Windows Update restarted at night answers before anyone comes to it. It serves
    what needs no desktop: its sandbox links and, on the Windows side, the WSL distros. It leaves alone everything that
-   needs a signed-in person: the keeper (which starts Docker Desktop, a program with a window), the sandbox rounds,
-   the agent's own updates and file sync. The logon task's agent is the PC's real one: when it starts, at the sign-in,
+   needs a signed-in person: the agent's own updates and file sync, and, where the sandboxes run on Docker Desktop (a
+   program with a window, which starts only in a session), the keeper and the sandbox rounds.
+   (2026-11-27) Where they run on intentic's engine, a WSL distro, it runs the keeper and the sandbox rounds too
+   (`keepsSandboxes`): the keeper's first sweep has ic start the engine and the sandboxes on it, so a PC Windows Update
+   restarted at 03:00 runs its booked work at 05:00 with nobody signed in. Checked on rog that a task of this kind (S4U,
+   session 0, nobody's desktop) reaches WSL and the engine: `wsl.exe -d intentic-engine` and `ic engine status` answered
+   from one; the engine's start from such a task waits for the first night it runs. The logon task's agent is the PC's
+   real one: when it starts, at the sign-in,
    it asks this one to leave (a request file this one reads every tick), waits for it to go, and takes the environment
    over, which brings the screen tools back. The boot task's watchdog keeps firing while someone is signed in; each of
    those starts finds an agent running and leaves without a word, so it costs one short-lived process every five
@@ -299,6 +305,9 @@ const startSyncIfDue = (sync: SyncHalf, pairings: number, log: Log): void => {
 interface Runtime {
     // Started by the boot task with nobody signed in (BEFORE ANYONE SIGNS IN, above).
     readonly beforeSignIn: boolean;
+    // Whether it keeps this side's sandboxes: always once somebody is signed in, and before that only where they run on
+    // intentic's engine, which needs no session (BEFORE ANYONE SIGNS IN, above).
+    readonly keepsSandboxes: boolean;
     readonly connections: Map<string, Connection>;
     readonly sync: SyncHalf;
     readonly kept: KeptCheck;
@@ -350,17 +359,22 @@ const sessionRounds = (supervised: boolean, connections: ReadonlyMap<string, Con
     ];
 };
 
+// Whether it keeps this side's sandboxes: a boot agent only on intentic's engine (BEFORE ANYONE SIGNS IN, above).
+const keepsSandboxesFor = (beforeSignIn: boolean, ownEngine: () => boolean = () => readActiveEngine() !== undefined): boolean => !beforeSignIn || ownEngine();
+
 const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: PidRecord, log: Log): Runtime => {
     const beforeSignIn = lease.supervisor === BEFORE_SIGN_IN;
+    const keepsSandboxes = keepsSandboxesFor(beforeSignIn);
     const connections = new Map<string, Connection>();
     const children = WINDOWS_SIDE
         ? superviseChildren(log, async (distro) => void (await updateMachineConfig((config) => withoutChild(config, distro))))
         : undefined;
-    // With nobody signed in, the links and the distros are all this agent serves: every round below either starts a
-    // program with a window (the keeper starts Docker Desktop), needs the engine that program runs, or changes this
-    // agent itself, and the agent of the signed-in session runs them all from the sign-in on.
+    // With nobody signed in and the sandboxes on Docker Desktop, the links and the distros are all this agent serves:
+    // every sandbox round either starts a program with a window (the keeper starts Docker Desktop) or needs the engine
+    // that program runs, and the agent of the signed-in session runs them all from the sign-in on. On intentic's engine
+    // the sandbox rounds run from the boot on. The agent's own updates wait for a sign-in either way.
     // The memory reading runs before sign-in too: an agent's memory is its own whoever is signed in (memory-log.ts).
-    const rounds = [...(beforeSignIn ? [startLogRoll(runLogPath, log)] : sessionRounds(supervised, connections, lease, log)), startMemoryLog(memoryLogPath, log)];
+    const rounds = [...(keepsSandboxes ? sessionRounds(supervised, connections, lease, log) : [startLogRoll(runLogPath, log)]), startMemoryLog(memoryLogPath, log)];
     const autoUpgrade = supervised || beforeSignIn ? undefined : startAutoUpgrade(log);
     const unproven = trial.prove(log);
     // Before sign-in too: a PC short of memory is short whoever is signed in, and the drop needs no desktop.
@@ -392,7 +406,7 @@ const runtimeOf = (supervised: boolean, trial: Trial, kept: KeptCheck, lease: Pi
     for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
         process.on(signal, () => void finish(signalExitCode(signal)));
     }
-    return { beforeSignIn, connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, cacheDrop, wslMemory, finish };
+    return { beforeSignIn, keepsSandboxes, connections, sync: { running: undefined, failures: 0, retryAt: 0 }, kept, children, autoUpgrade, cacheDrop, wslMemory, finish };
 };
 
 // The lease, and for an agent started before sign-in a sign-in's request to hand over: either ends this agent here.
@@ -414,12 +428,12 @@ const keepLease = async (runtime: Runtime, lease: PidRecord, log: Log): Promise<
 };
 
 // Whether this agent has nothing left to do here: nothing linked, paired or kept, and no sync half still winding down.
-// An agent started before sign-in keeps no sandboxes (begin says why), so nothing linked is enough for it.
+// An agent that keeps no sandboxes (a boot agent on Docker Desktop, begin says why) is done once nothing is linked.
 const doneServing = async (runtime: Runtime, now: Served, log: Log): Promise<boolean> => {
     if (!nothingToServe(now)) {
         return false;
     }
-    return runtime.beforeSignIn || (runtime.sync.running === undefined && !(await stillKeeping(runtime.kept, log)));
+    return !runtime.keepsSandboxes || (runtime.sync.running === undefined && !(await stillKeeping(runtime.kept, log)));
 };
 
 // One pass: the lease first, since everything after it acts on this environment as its one agent.
@@ -479,15 +493,21 @@ const begin = async (
         await release();
         throw error;
     });
-    // With nobody signed in there is no engine to ask (Docker Desktop starts with a session), and the sandboxes it would
-    // name are the signed-in agent's to keep: a boot agent with nothing linked has nothing to do, and leaves quietly.
-    if (beforeSignIn && nothingToServe(served)) {
+    // With nobody signed in and the sandboxes on Docker Desktop there is no engine to ask (it starts with a session), and
+    // the sandboxes it would name are the signed-in agent's to keep: a boot agent with nothing linked has nothing to do,
+    // and leaves quietly. On intentic's engine it asks, as any agent does, whether this side keeps a sandbox.
+    if (!keepsSandboxesFor(beforeSignIn) && nothingToServe(served)) {
         await release();
         return undefined;
     }
     // Asked only of an agent with nothing else to serve, which is the one it decides for; any other has not asked yet.
     const kept: KeptCheck = nothingToServe(served) ? { at: Date.now(), kept: await keptSandboxes() } : { at: Number.NEGATIVE_INFINITY, kept: [] };
     if (nothingToServe(served) && kept.kept.length === 0) {
+        if (beforeSignIn) {
+            // The login entry is the signed-in session's to put right, as below: a boot agent with nothing to keep leaves quietly.
+            await release();
+            return undefined;
+        }
         // Said once: this runs at every login, and a loop over it would say it every few seconds.
         log("nothing to serve: no sandbox is linked to this device and none is paired for sync. Connect one from a card in your sandbox.");
         await autostart(MACHINE_AUTOSTART, machineLauncher(), log).unregister();
@@ -567,7 +587,8 @@ export const runForeground = async (log: Log, { beforeSignIn = false }: { readon
     }
     await beginRecord(watchdog, log);
     const runtime = runtimeOf(supervised, trial, started.kept, started.lease, log);
-    log(`serving ${serving(started.served)}${beforeSignIn ? ", started by this PC before anyone signed in: the screen tools wait for a sign-in" : ""}`);
+    const keeps = runtime.keepsSandboxes ? " it keeps the sandboxes on intentic's engine, and" : "";
+    log(`serving ${serving(started.served)}${beforeSignIn ? `, started by this PC before anyone signed in:${keeps} the screen tools wait for a sign-in` : ""}`);
     for (;;) {
         // the tick loop itself, serial by definition
         await tick(runtime, started.lease, log);

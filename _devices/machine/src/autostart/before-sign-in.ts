@@ -6,7 +6,8 @@ import { MACHINE_AUTOSTART } from "./autostart.js";
 
 /* THE SWITCH FOR STARTING BEFORE ANYONE SIGNS IN (2026-10-15): Windows' boot task (local-agent's beforeSignIn), which
    starts this agent with no session when the PC starts, so a PC Windows Update restarted at night answers before anyone
-   comes to it (resident.ts, BEFORE ANYONE SIGNS IN). Off unless somebody turns it on here: Windows asks for permission
+   comes to it, and brings back the sandboxes it runs on intentic's engine (resident.ts, BEFORE ANYONE SIGNS IN). The
+   sandbox's host-power card turns it on too, through the `before-sign-in` agent op (2026-11-27). Off unless somebody turns it on here: Windows asks for permission
    both ways, on this PC's screen, so it cannot be switched from anywhere nobody is sitting. Elsewhere there is nothing
    to switch: a Linux agent's systemd unit already starts at boot (lingering keeps it without a session). */
 
@@ -29,7 +30,7 @@ export const beforeSignInStatus = (state: BeforeSignInState): SwitchReading => {
     if (state === "on") {
         return {
             item: { tone: "ok", name: "before sign-in", meta: "on" },
-            said: "When this PC starts, Windows starts this agent before anyone signs in: sandboxes can run commands and read and write files here from then on. The screen tools wait for a sign-in, when the agent of the signed-in session takes over.",
+            said: "When this PC starts, Windows starts this agent before anyone signs in: sandboxes can run commands and read and write files here from then on, and sandboxes on intentic's engine start again here by themselves. The screen tools wait for a sign-in, when the agent of the signed-in session takes over.",
             later: [["turn it off", "intentic-machine before-sign-in off"]],
         };
     }
@@ -49,7 +50,7 @@ export const beforeSignInStatus = (state: BeforeSignInState): SwitchReading => {
     }
     return {
         item: { tone: "skip", name: "before sign-in", meta: "off" },
-        said: "This agent starts when somebody signs in on this PC. After a restart nobody came to (Windows Update restarts a PC at night by itself), sandboxes cannot reach it until somebody signs in.",
+        said: "This agent starts when somebody signs in on this PC. After a restart nobody came to (Windows Update restarts a PC at night by itself), sandboxes cannot reach it, and the sandboxes it runs stay down, until somebody signs in.",
         later: [["turn it on (Windows asks for permission)", "intentic-machine before-sign-in on"]],
     };
 };

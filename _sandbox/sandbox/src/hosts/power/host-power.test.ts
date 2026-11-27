@@ -80,6 +80,22 @@ describe("powerBlockers", () => {
         expect(powerBlockers(powerOf([UPDATE], -300), NOW, NOW + HOUR)).toEqual([]);
     });
 
+    it("counts no update restart while Windows Update is paused past the work, and only the hours after a pause that ends before it", () => {
+        // Paused until 06:00 local, the work due at 05:00: nothing restarts first.
+        expect(powerBlockers(powerOf([{ ...UPDATE, pausedUntil: NOW + 6 * HOUR }]), NOW, NOW + 5 * HOUR)).toEqual([]);
+        // Paused until 00:30 local, the work due at 05:00: the window from 01:00 still comes first.
+        const short = { ...UPDATE, pausedUntil: NOW + 30 * MINUTE };
+        expect(powerBlockers(powerOf([short]), NOW, NOW + 5 * HOUR)).toEqual([short]);
+        // Paused until 07:00 the same morning, the work due at 23:30: the window is behind the pause.
+        expect(powerBlockers(powerOf([{ ...UPDATE, pausedUntil: NOW + 7 * HOUR }]), NOW, NOW + 23 * HOUR + 30 * MINUTE)).toEqual([]);
+    });
+
+    it("counts no update restart where the computer starts its sandboxes again by itself", () => {
+        expect(powerBlockers(powerOf([{ ...UPDATE, comesBack: "boot" }]), NOW, NOW + 5 * HOUR)).toEqual([]);
+        const waits = { ...UPDATE, comesBack: "sign-in" as const };
+        expect(powerBlockers(powerOf([waits]), NOW, NOW + 5 * HOUR)).toEqual([waits]);
+    });
+
     it("counts an update restart at any hour when the agent did not say which", () => {
         const anyHour: HostPowerFinding = { id: "update-restart", fixable: false, text: "Windows Update may restart it." };
         expect(powerBlockers(powerOf([anyHour]), NOW, NOW + 20 * MINUTE)).toEqual([anyHour]);
@@ -208,7 +224,7 @@ describe("raiseHostPowerCard", () => {
         expect(observed).toEqual([
             {
                 conversationId: "conv-a",
-                subject: { kind: "host-power", device: "rog", findings: ROG.findings, dueAt: NOW + 8 * HOUR },
+                subject: { kind: "host-power", device: "rog", findings: ROG.findings, dueAt: NOW + 8 * HOUR, utcOffsetMinutes: ROG.utcOffsetMinutes },
                 title: "rog would sleep through work booked here",
             },
         ]);

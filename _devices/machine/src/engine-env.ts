@@ -92,19 +92,25 @@ export const engineEnvChanges = (
 
 let pointedAt: string | undefined;
 
+/** The engine record when this account's sandboxes run on intentic's engine, read from ic's `engine.json`; else undefined. */
+export const readActiveEngine = (home: string = homeDir()): EngineRecord | undefined => {
+    let text: string | undefined;
+    try {
+        text = readFileSync(join(home, STATE_DIR, "engine", "engine.json"), "utf8");
+    } catch {
+        // allow(silent-catch): no record is no engine of ours, the same answer activeEngine gives an empty one
+        text = undefined;
+    }
+    return activeEngine(text);
+};
+
 // Read the record and bring this process's environment in step with it. Windows only: elsewhere `docker` is the
 // system's own, and inside WSL the sandboxes stay on Docker Desktop through its integration.
 export const syncEngineEnv = (env: NodeJS.ProcessEnv = process.env, home: string = homeDir()): void => {
     if (process.platform !== "win32") {
         return;
     }
-    let text: string | undefined;
-    try {
-        text = readFileSync(join(home, STATE_DIR, "engine", "engine.json"), "utf8");
-    } catch {
-        text = undefined;
-    }
-    const record = activeEngine(text);
+    const record = readActiveEngine(home);
     const changes = engineEnvChanges(env, record, pointedAt, existsSync);
     for (const [name, value] of Object.entries(changes)) {
         if (value === undefined) {

@@ -7462,7 +7462,10 @@
             "keepsNetwork": "zachowuje ją",
             "batterySleep": "Na baterii nadal usypia się po {after}: zostaw go na noc podłączonego do prądu.",
             "batterySleepAny": "Na baterii nadal się usypia: zostaw go na noc podłączonego do prądu.",
-            "updateRestart": "Windows Update może go zrestartować między {from} a {to} (czas na {device}); po restarcie nic nie działa, dopóki się nie zalogujesz.",
+            "updateRestart": "Windows Update może go zrestartować między {from} a {to} (czas na {device}); po restarcie nic nie działa, dopóki ktoś nie zaloguje się na {device}.",
+            "updateRestartPaused": "Windows Update jest wstrzymany do {until}; potem może go zrestartować między {from} a {to} (czas na {device}) i nic nie działa, dopóki ktoś nie zaloguje się na {device}.",
+            "updateRestartBoot": "Windows Update może go zrestartować między {from} a {to} (czas na {device}); {device} sam uruchomi sandboxy ponownie, zanim ktokolwiek się zaloguje.",
+            "restartPending": "Aktualizacja jest już zainstalowana i czeka na restart: wstrzymanie może jej nie powstrzymać. Zrestartuj {device} sam, zanim od niego odejdziesz.",
             "osSleep": "Może sam przejść w uśpienie. Żeby temu zapobiec, uruchom to na {device}:",
             "rowSleep": "Uśpienie po",
             "rowHibernate": "Hibernacja po",
@@ -14487,7 +14490,12 @@
             "lead": "{device} przerwie pracę zaplanowaną na {when}.",
             "leadUndated": "{device} przerwie zaplanowaną na nim pracę.",
             "approve": "Zmień te ustawienia na {device}",
-            "working": "Zmieniam ustawienia na {device}…"
+            "working": "Zmieniam ustawienia na {device}…",
+            "approveBoot": "Uruchamiaj sandboxy razem z {device}",
+            "approveWithBoot": "Zmień te ustawienia i uruchamiaj sandboxy razem z {device}",
+            "approvePause": "Wstrzymaj Windows Update do {until}",
+            "approveWithPause": "Zmień te ustawienia i wstrzymaj Windows Update do {until}",
+            "bootHint": "Przy uruchamianiu sandboxów razem z {device} Windows poprosi o zgodę na ekranie {device}, więc naciśnij to, gdy jesteś przy {device}. Potem restart kosztuje minuty, a nie całą noc."
         },
         "wslMemory": {
             "lead": "Na {device} Windows miał mniej niż swoją dolną granicę {low} dostępnej pamięci w {share}% odczytów z ostatnich {hours} godzin, podczas gdy maszyna wirtualna WSL trzymała medianę {vm} z {total}; własne zużycie Windows poza maszyną wirtualną sięgało {outside}.",

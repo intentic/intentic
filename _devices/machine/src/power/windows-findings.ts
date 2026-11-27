@@ -1,4 +1,5 @@
-import { type HostPower, type HostPowerFinding, POWER_FINDING } from "@intentic/sandbox-contract/schemas/host-power";
+import type { BeforeSignInState } from "@intentic/local-agent";
+import { type HostPower, type HostPowerFinding, POWER_FINDING, POWER_REMEDY } from "@intentic/sandbox-contract/schemas/host-power";
 import { idleSeconds, type IndexPair, type PlanReading, type PowerSettingKey, type WindowsPowerReading } from "./windows-reading.js";
 import { durationWords, hourWords, plansPhrase } from "./words.js";
 
@@ -8,8 +9,19 @@ import { durationWords, hourWords, plansPhrase } from "./words.js";
    ASUS one) switches plans by itself, so the plan active at noon is not always the one active at 05:37.
 
    Only what is on mains power is fixable: the owner's yes to `power-stay-on` changes those (apply.ts), and battery is
-   reported and left alone, since a laptop in a bag must still sleep. Windows Update's restarts are reported too and
-   never changed: the active hours are the owner's to pick, and a restart is still Windows'. */
+   reported and left alone, since a laptop in a bag must still sleep. Windows Update's restarts are never changed by
+   stay-on (the active hours are the owner's to pick, and a restart is still Windows'); since 2026-11-27 their finding
+   says what answers them (host-power.ts POWER_REMEDY): a pause until after the booked work, and, where the sandboxes run
+   on intentic's engine, the boot task that brings them back before anyone signs in. */
+
+/** What decides whether a restart stops this PC's sandboxes for the night: the boot task, and the engine they run on. */
+export interface RestartReading {
+    // Windows' start before sign-in (local-agent's beforeSignIn); undefined where this install has none to offer.
+    readonly beforeSignIn: BeforeSignInState | undefined;
+    // Whether the sandboxes here run on intentic's engine, which the agent starts with no session; Docker Desktop is a
+    // program with a window and waits for a sign-in.
+    readonly ownEngine: boolean;
+}
 
 // What one LIDACTION value does, as the contract's `action` and in a sentence.
 interface LidAction {
@@ -131,23 +143,51 @@ const batteryFinding = (reading: WindowsPowerReading): HostPowerFinding[] => {
     return [finding];
 };
 
-// Windows Update restarts outside the active hours: from where they end to where they start.
-const updateRestartFinding = (reading: WindowsPowerReading): HostPowerFinding[] => {
+// What brings the sandboxes back after a restart, said as the end of the finding's sentence. Pure.
+const afterRestartWords = (comesBack: "sign-in" | "boot", restart: RestartReading | undefined): string => {
+    if (comesBack === "boot") {
+        return "after a restart the agent starts with the PC, before anyone signs in, and starts intentic's engine and the sandboxes on it again.";
+    }
+    if (restart?.ownEngine === true) {
+        return restart.beforeSignIn === "stale"
+            ? "after a restart nothing runs again until somebody signs in: the start before sign-in that Windows holds is an older install's, which may start an agent that is no longer here."
+            : "after a restart nothing runs again until somebody signs in, since the agent starts at sign-in; starting it before sign-in brings intentic's engine and the sandboxes back by themselves.";
+    }
+    return "after a restart nothing runs again until somebody signs in, since the agent and Docker Desktop start at sign-in.";
+};
+
+// Windows Update restarts outside the active hours: from where they end to where they start. Paused, it restarts nothing
+// until the pause ends, which the finding carries for the daemon to weigh against the booked work.
+const updateRestartFinding = (reading: WindowsPowerReading, restart: RestartReading | undefined): HostPowerFinding[] => {
     const hours = reading.activeHours;
-    return hours === undefined
-        ? []
-        : [
-              {
-                  id: POWER_FINDING.updateRestart,
-                  window: { fromHour: hours.end, toHour: hours.start },
-                  fixable: false,
-                  text: `Windows Update may restart it between ${hourWords(hours.end)} and ${hourWords(hours.start)} local time, outside its active hours; after a restart nothing runs again until somebody signs in, since the agent and Docker Desktop start at sign-in.`,
-              },
-          ];
+    if (hours === undefined) {
+        return [];
+    }
+    const comesBack = restart?.ownEngine === true && restart.beforeSignIn === "on" ? "boot" : "sign-in";
+    const offers = [
+        POWER_REMEDY.pauseUpdates,
+        ...(restart?.ownEngine === true && restart.beforeSignIn !== undefined && restart.beforeSignIn !== "on" ? [POWER_REMEDY.beforeSignIn] : []),
+    ];
+    const paused = reading.pausedUntil !== undefined && reading.pausedUntil > reading.at ? reading.pausedUntil : undefined;
+    const finding: HostPowerFinding = {
+        id: POWER_FINDING.updateRestart,
+        window: { fromHour: hours.end, toHour: hours.start },
+        fixable: false,
+        offers,
+        comesBack,
+        text: `Windows Update may restart it between ${hourWords(hours.end)} and ${hourWords(hours.start)} local time, outside its active hours${paused === undefined ? "" : `, once its pause ends at ${new Date(paused).toISOString()}`}; ${afterRestartWords(comesBack, restart)}`,
+    };
+    if (paused !== undefined) {
+        finding.pausedUntil = paused;
+    }
+    if (reading.restartPending === true) {
+        finding.restartPending = true;
+    }
+    return [finding];
 };
 
 /** What a Windows reading says, as the device's facts carry it. Pure. */
-export const windowsFindings = (reading: WindowsPowerReading): HostPower => {
+export const windowsFindings = (reading: WindowsPowerReading, restart?: RestartReading): HostPower => {
     const power: HostPower = {
         at: reading.at,
         utcOffsetMinutes: reading.utcOffsetMinutes,
@@ -157,7 +197,7 @@ export const windowsFindings = (reading: WindowsPowerReading): HostPower => {
             ...lidFinding(reading),
             ...standbyNetworkFinding(reading),
             ...batteryFinding(reading),
-            ...updateRestartFinding(reading),
+            ...updateRestartFinding(reading, restart),
         ],
     };
     if (reading.battery !== undefined) {

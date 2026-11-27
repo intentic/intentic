@@ -5,7 +5,11 @@ import { thisSide } from "../environments/wsl.js";
 import { powerChangedPath } from "./apply.js";
 import { type LinuxPowerReading, linuxFindings, readLinuxPower } from "./linux.js";
 import { type MacPowerReading, macFindings, readMacPower } from "./macos.js";
-import { windowsFindings } from "./windows-findings.js";
+import { beforeSignIn } from "@intentic/local-agent";
+import { MACHINE_AUTOSTART } from "../autostart/autostart.js";
+import { readActiveEngine } from "../engine-env.js";
+import { machineLauncher } from "../resident/supervision.js";
+import { type RestartReading, windowsFindings } from "./windows-findings.js";
 import { readWindowsPower, type WindowsPowerReading } from "./windows-reading.js";
 
 /* WHICH ENVIRONMENT SAYS WHAT THE COMPUTER'S OWN POWER SETTINGS DO (2026-11-22), and the reading the device's facts
@@ -21,11 +25,24 @@ export type PowerHere =
     | { readonly kind: "wsl" }
     | { readonly kind: "other"; readonly platform: string };
 
+// What decides whether a restart stops this PC's sandboxes until a sign-in (windows-findings.ts RestartReading): the boot
+// task's state, two schtasks calls, read with the rest of the power settings and as rarely.
+const readRestart = (): RestartReading => {
+    let state: RestartReading["beforeSignIn"];
+    try {
+        state = beforeSignIn(MACHINE_AUTOSTART, machineLauncher())?.state();
+    } catch {
+        // allow(silent-catch): a task that cannot be read is one the card cannot offer to change either
+        state = "unknown";
+    }
+    return { beforeSignIn: state, ownEngine: readActiveEngine() !== undefined };
+};
+
 export const readPowerHere = async (): Promise<PowerHere> => {
     const side = await thisSide();
     if (side === "windows") {
         const reading = await readWindowsPower();
-        return { kind: "windows", reading, power: windowsFindings(reading) };
+        return { kind: "windows", reading, power: windowsFindings(reading, readRestart()) };
     }
     if (side === "wsl") {
         return { kind: "wsl" };

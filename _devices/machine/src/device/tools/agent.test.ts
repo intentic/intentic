@@ -13,7 +13,17 @@ test("every op maps to the CLI verb that actually performs it", () => {
         "power-stay-on": ["power", "stay-on"],
         // The owner's yes to a smaller WSL VM (environments/wslconfig-memory.ts), which restarts nothing either.
         "wsl-memory": ["wsl-memory", "apply"],
+        // The owner's answers to Windows Update's night restarts (power/update-pause.ts, autostart/before-sign-in.ts).
+        "update-pause": ["power", "pause-updates"],
+        "before-sign-in": ["before-sign-in", "on"],
     });
+});
+
+// The moment is the one the card computed from the booked work; without one, nothing is paused.
+test("update-pause carries the moment the pause ends, and refuses without one", () => {
+    expect(agentArgv({ op: "update-pause", until: 1_764_313_200_000 })).toEqual(["power", "pause-updates", "--until", "1764313200000"]);
+    expect(() => agentArgv({ op: "update-pause" })).toThrow("The update-pause op needs the moment the pause ends (until), and none came with it: nothing was changed.");
+    expect(agentArgv({ op: "before-sign-in" })).toEqual(["before-sign-in", "on"]);
 });
 
 // The size is the one the owner approved on the card, never one this agent works out again; without one, nothing runs.

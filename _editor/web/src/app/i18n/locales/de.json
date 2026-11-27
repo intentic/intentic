@@ -6743,7 +6743,12 @@
             "lead": "{device} würde die für {when} geplante Arbeit anhalten.",
             "leadUndated": "{device} würde die dort geplante Arbeit anhalten.",
             "approve": "Diese Einstellungen auf {device} ändern",
-            "working": "Die Einstellungen auf {device} werden geändert…"
+            "working": "Die Einstellungen auf {device} werden geändert…",
+            "approveBoot": "Sandboxes mit {device} starten",
+            "approveWithBoot": "Diese ändern und Sandboxes mit {device} starten",
+            "approvePause": "Windows Update bis {until} pausieren",
+            "approveWithPause": "Diese ändern und Windows Update bis {until} pausieren",
+            "bootHint": "Damit die Sandboxes mit {device} starten, fragt Windows auf dem Bildschirm von {device} nach Erlaubnis: Drücken Sie es also, wenn Sie an {device} sind. Danach kostet ein Neustart Minuten statt der ganzen Nacht."
         },
         "wslMemory": {
             "lead": "Auf {device} hatte Windows in {share} % der Messungen der letzten {hours} Stunden weniger als seine Untergrenze von {low} verfügbar, während die WSL-VM im Median {vm} von {total} belegte; Windows' eigener Bedarf außerhalb der VM erreichte {outside}.",
@@ -8087,7 +8092,10 @@
             "keepsNetwork": "bleibt verbunden",
             "batterySleep": "Im Akkubetrieb schläft er weiterhin nach {after} ein: Lassen Sie ihn über Nacht am Netzteil.",
             "batterySleepAny": "Im Akkubetrieb schläft er weiterhin ein: Lassen Sie ihn über Nacht am Netzteil.",
-            "updateRestart": "Windows Update kann ihn zwischen {from} und {to} neu starten (Uhrzeit auf {device}); nach einem Neustart läuft nichts, bis Sie sich anmelden.",
+            "updateRestart": "Windows Update kann ihn zwischen {from} und {to} neu starten (Uhrzeit auf {device}); nach einem Neustart läuft nichts, bis sich jemand an {device} anmeldet.",
+            "updateRestartPaused": "Windows Update ist bis {until} pausiert; danach kann es ihn zwischen {from} und {to} neu starten (Uhrzeit auf {device}), und nichts läuft, bis sich jemand an {device} anmeldet.",
+            "updateRestartBoot": "Windows Update kann ihn zwischen {from} und {to} neu starten (Uhrzeit auf {device}); {device} startet seine Sandboxes danach von selbst, bevor sich jemand anmeldet.",
+            "restartPending": "Ein Update ist bereits installiert und wartet auf einen Neustart: Eine Pause hält diesen vielleicht nicht auf. Starten Sie {device} selbst neu, bevor Sie gehen.",
             "osSleep": "Er kann sich selbst schlafen legen. Um das zu verhindern, führen Sie dies auf {device} aus:",
             "rowSleep": "Energiesparen nach",
             "rowHibernate": "Ruhezustand nach",

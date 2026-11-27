@@ -1,9 +1,9 @@
 import type { DeviceAgentFlow, DeviceFlowLine } from "@intentic/sandbox-contract/schemas/devices";
 import type { HostPowerFinding } from "@intentic/sandbox-contract/schemas/host-power";
 import { type DeviceFacts, hostConnectionKey } from "@intentic/sandbox-contract/schemas/hosts";
-import type { Need, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
+import type { HostPowerNeed, Need, NeedSubject } from "@intentic/sandbox-contract/schemas/needs";
 import { opt } from "../../opt.js";
-import { changedOn, hostPowerNeed } from "./host-power-need.js";
+import { changedOn, flowsFor, hostPowerNeed } from "./host-power-need.js";
 
 // A host-power card (2026-11-22): raised by the sandbox when work booked here would be slept through, answered by a
 // maintainer, whose yes runs the computer's own `power-stay-on` op the way the Devices view's buttons do.
@@ -191,6 +191,91 @@ describe("host-power need", () => {
     it("takes nothing but an approval as a yes", async () => {
         const { kind } = harness();
         expect(await kind.answer(needOf([LID]), { kind: "release" }, maintainer)).toEqual({ refused: "A power card is answered by approving the change, or declined." });
+    });
+});
+
+describe("host-power need: Windows Update's night restart (2026-11-27)", () => {
+    // rog: active 08:00 to 02:00, an hour east of UTC, its sandboxes on intentic's engine, the start before sign-in off.
+    const NOW = Date.UTC(2026, 10, 26, 23, 35);
+    const FRIDAY_FIVE = Date.UTC(2026, 10, 28, 4, 0);
+    const FRIDAY_EIGHT = Date.UTC(2026, 10, 28, 7, 0);
+    const RESTART: HostPowerFinding = {
+        id: "update-restart",
+        window: { fromHour: 2, toHour: 8 },
+        fixable: false,
+        offers: ["update-pause", "before-sign-in"],
+        comesBack: "sign-in",
+        text: "Windows Update may restart it between 02:00 and 08:00.",
+    };
+    const card = (findings: HostPowerFinding[]): Need => ({ ...needOf(findings), subject: { kind: "host-power", device: "rog", findings, dueAt: FRIDAY_FIVE } });
+    const both = ["power", "power-restart"];
+
+    const restartHarness = (findings: HostPowerFinding[], after: HostPowerFinding[]) => {
+        const ran: DeviceAgentFlow[] = [];
+        const state = { facts: factsWith(findings, both) };
+        const kind = hostPowerNeed({
+            facts: () => state.facts,
+            online: () => true,
+            async *runAgentFlow (_device, flow) {
+                ran.push(flow);
+                yield { kind: "line", text: `ran ${flow.op}` };
+                yield { kind: "result", message: "done" };
+            },
+            refresh: async () => {
+                state.facts = factsWith(after, both);
+            },
+            now: () => NOW,
+        });
+        return { kind, ran, state };
+    };
+
+    it("pauses Windows Update until the end of the window the work falls in, by default, and is met once the pause reaches past it", async () => {
+        const { kind, ran } = restartHarness([RESTART], [{ ...RESTART, pausedUntil: FRIDAY_EIGHT }]);
+        expect(await kind.answer(card([RESTART]), approve, maintainer)).toMatchObject({ status: "met", result: "Changed on rog: ran update-pause" });
+        expect(ran).toEqual([{ op: "update-pause", until: FRIDAY_EIGHT }]);
+        expect(await kind.check(card([RESTART]))).toMatchObject({ result: "rog's settings no longer stop work left running on it." });
+    });
+
+    it("turns on the start before sign-in when that is the answer chosen, after stay-on where the card holds what it changes", async () => {
+        const { kind, ran } = restartHarness([SLEEP, RESTART], [{ ...RESTART, comesBack: "boot", offers: ["update-pause"] }]);
+        expect(await kind.answer(card([SLEEP, RESTART]), { kind: "approve", remedy: "before-sign-in" }, maintainer)).toMatchObject({ status: "met" });
+        expect(ran).toEqual([{ op: "power-stay-on" }, { op: "before-sign-in" }]);
+    });
+
+    it("stays open while the restart would still stop the work, and is met when the PC brings its sandboxes back by itself", async () => {
+        const { kind, state } = restartHarness([RESTART], []);
+        expect(await kind.check(card([RESTART]))).toBeUndefined();
+        // A pause that ends before the window the work falls in does not answer it.
+        state.facts = factsWith([{ ...RESTART, pausedUntil: Date.UTC(2026, 10, 27, 5, 0) }], both);
+        expect(await kind.check(card([RESTART]))).toBeUndefined();
+        state.facts = factsWith([{ ...RESTART, comesBack: "boot" }], both);
+        expect(await kind.check(card([RESTART]))).toMatchObject({ result: "rog's settings no longer stop work left running on it." });
+    });
+
+    it("refuses an answer the card does not offer, and one an agent too old to carry it would drop, running nothing", async () => {
+        const { kind, ran, state } = restartHarness([RESTART], []);
+        const pauseOnly = { ...RESTART, offers: ["update-pause"] };
+        expect(await kind.answer(card([pauseOnly]), { kind: "approve", remedy: "before-sign-in" }, maintainer)).toEqual({
+            refused: "This card does not offer starting its sandboxes before anyone signs in on rog.",
+        });
+        state.facts = factsWith([RESTART], ["power"]);
+        expect(await kind.answer(card([RESTART]), approve, maintainer)).toEqual({
+            refused: "rog's agent is older than this: update it from the Devices view, then press again.",
+        });
+        expect(ran).toEqual([]);
+    });
+});
+
+describe("flowsFor", () => {
+    const RESTART: HostPowerFinding = { id: "update-restart", fixable: false, offers: ["update-pause"], text: "Windows Update may restart it." };
+    const subject = (dueAt: number): HostPowerNeed => ({ kind: "host-power", device: "rog", findings: [RESTART], dueAt });
+
+    it("pauses two hours past the work where no window was said, and refuses work further off than Windows pauses for", () => {
+        const facts = factsWith([RESTART], ["power", "power-restart"]);
+        expect(flowsFor(subject(10 * 3_600_000), undefined, facts, 0)).toEqual([{ op: "update-pause", until: 12 * 3_600_000 }]);
+        expect(flowsFor(subject(40 * 24 * 3_600_000), undefined, facts, 0)).toEqual({
+            refused: "The booked work is further off than Windows lets updates be paused (five weeks): nothing was changed on rog.",
+        });
     });
 });
 

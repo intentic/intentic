@@ -88,6 +88,8 @@ test("a laptop at Windows' defaults sleeps, hibernates and sleeps on the lid plu
             id: POWER_FINDING.updateRestart,
             window: { fromHour: 17, toHour: 8 },
             fixable: false,
+            offers: ["update-pause"],
+            comesBack: "sign-in",
             text: "Windows Update may restart it between 17:00 and 08:00 local time, outside its active hours; after a restart nothing runs again until somebody signs in, since the agent and Docker Desktop start at sign-in.",
         },
     ]);
@@ -173,4 +175,38 @@ test("hibernate at 0x7FFFFFFF or more is never, the lid's other actions are name
 test("only mains-power findings are fixable: battery and update restarts never are", () => {
     expect(fixablePowerFindings(windowsFindings(LAPTOP)).map((finding) => finding.id)).toEqual([POWER_FINDING.sleepIdle, POWER_FINDING.hibernateIdle, POWER_FINDING.lidClose]);
     expect(windowsFindings(LAPTOP).findings.filter((finding) => finding.power === "dc").every((finding) => !finding.fixable)).toBe(true);
+});
+
+/* WHAT ANSWERS A NIGHT RESTART (2026-11-27): the pause wherever Windows Update restarts, the start before sign-in only
+   where the sandboxes run on intentic's engine (Docker Desktop waits for a sign-in whatever starts the agent). */
+const NIGHTS = reading([], { battery: false, activeHours: { start: 8, end: 2 } });
+const restartOf = (power: ReturnType<typeof windowsFindings>) => power.findings.find((finding) => finding.id === POWER_FINDING.updateRestart);
+
+test("on intentic's engine with the start before sign-in off, both answers are offered and a sign-in is still what brings it back", () => {
+    const restart = restartOf(windowsFindings(NIGHTS, { beforeSignIn: "off", ownEngine: true }));
+    expect(restart).toMatchObject({ offers: ["update-pause", "before-sign-in"], comesBack: "sign-in", window: { fromHour: 2, toHour: 8 } });
+    expect(restart?.text).toContain("starting it before sign-in brings intentic's engine and the sandboxes back by themselves");
+    // A task an older install wrote is offered again too, since writing it again is the fix.
+    expect(restartOf(windowsFindings(NIGHTS, { beforeSignIn: "stale", ownEngine: true }))?.offers).toEqual(["update-pause", "before-sign-in"]);
+});
+
+test("with the start before sign-in on and intentic's engine, the PC brings its sandboxes back and only the pause is left to offer", () => {
+    const restart = restartOf(windowsFindings(NIGHTS, { beforeSignIn: "on", ownEngine: true }));
+    expect(restart).toMatchObject({ offers: ["update-pause"], comesBack: "boot" });
+    expect(restart?.text).toContain("the agent starts with the PC, before anyone signs in");
+});
+
+test("on Docker Desktop the start before sign-in is never offered, on or off, since Docker Desktop waits for a sign-in", () => {
+    for (const beforeSignIn of ["on", "off"] as const) {
+        expect(restartOf(windowsFindings(NIGHTS, { beforeSignIn, ownEngine: false }))).toMatchObject({ offers: ["update-pause"], comesBack: "sign-in" });
+    }
+    // An install with no boot task to offer (no launcher stub) offers the pause alone.
+    expect(restartOf(windowsFindings(NIGHTS, { beforeSignIn: undefined, ownEngine: true }))?.offers).toEqual(["update-pause"]);
+});
+
+test("a pause still running is carried with its end, one that has ended is not, and an update waiting for a restart is said", () => {
+    const paused = restartOf(windowsFindings({ ...NIGHTS, pausedUntil: AT + 3_600_000, restartPending: true }));
+    expect(paused).toMatchObject({ pausedUntil: AT + 3_600_000, restartPending: true });
+    expect(paused?.text).toContain(`once its pause ends at ${new Date(AT + 3_600_000).toISOString()}`);
+    expect(restartOf(windowsFindings({ ...NIGHTS, pausedUntil: AT - 1 }))?.pausedUntil).toBeUndefined();
 });
