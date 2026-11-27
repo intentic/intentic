@@ -17,6 +17,7 @@ import {
     PUBLIC_DOOR_POW_CALLER_HEADER,
     PUBLIC_DOOR_POW_HEADER,
     type PublicDoorVerification,
+    WAKE_DOOR_PARAM,
 } from "@intentic/sandbox-contract/extension-protocol";
 import type { Context } from "hono";
 import type { AppEnv } from "../../app-env.js";
@@ -223,10 +224,12 @@ const challenge = (c: Context<AppEnv>, routes: readonly PublicRouteContribution[
     return c.json(mintChallenge(caller, Date.now()));
 };
 
-// The door's URL as the backend sees it: its path, and the query without the key.
+// The door's URL as the backend sees it: its path, and the query without the key or (2026-11-27) the wake secret a
+// `wakes` route's URL carries for the platform (own-sleep.ts).
 const forwardedUrl = (c: Context<AppEnv>): URL => {
     const url = new URL(c.req.url);
     url.searchParams.delete(PUBLIC_DOOR_KEY_PARAM);
+    url.searchParams.delete(WAKE_DOOR_PARAM);
     return url;
 };
 

@@ -225,6 +225,13 @@ flowchart LR
   with the ticket the owner's browser got and the grant the daemon holds. A browser opening the sandbox's own address
   is sent to the app's `/open` on it (`GET /`, `system/boot/open-in-app.ts`). (2026-10-02) It used to give up after
   ten minutes and wait for a restart, which nobody knew to do while the platform said the sandbox did not exist.
+- (2026-11-26) The first turn a person started here that finished without failing is recorded once, in
+  `/history/first-turn.json` (`system/activation/first-turn.ts`), and every announce carries it as `firstTurnAt`: the
+  platform's funnel counts it as the sandbox's activation, since a daemon announcing says only that a container came
+  up. It counts a `run.settled` spoken by a signed-in person, in their own words (no errand), with no failure and not
+  stopped, so not a program's token, an automation, a carry-on, a child's or a peer's turn; a re-run of their request
+  after a failure keeps them as its speaker and counts. Recording it announces at once while registered
+  (`announcer.nudge`) rather than at the next heartbeat. It does not travel in a bundle: the target records its own.
 - (2026-11-09) The sandbox keeps a copy of the name and logo the platform holds for it, so a client that reaches it
   while the platform is down still shows them (`system/presentation/presentation-mirror.ts`). It lives in
   `/history/presentation.json` as `{ name, image?, digest?, at }` (`system/presentation/presentation-store.ts`, a plain file `ic` reads like
@@ -1131,6 +1138,26 @@ flowchart LR
     the whole window, once its turns, subagents, workflows and watches have ended. A person connecting, or a command a
     turn left running for them, gives it the whole window.
   - Webhook and listener automations do not hold it awake: an always-on receiver would spend its month's hours in days.
+    Instead every sleep saves its wake doors with the alarm, the one with nothing due included (2026-11-27,
+    `system/sleep/wake-doors.ts`): each enabled webhook automation's fire URL whose token was handed out, and each
+    extension public route declaring `wakes: true` while an automation listens on that extension's provider. Only the
+    SHA-256 of each door's secret leaves the machine (the fire token, or the route's wake secret, kept in
+    `.intentic/secrets/doors.json` under `wake`). The boot's retraction clears them. A request at a door while the
+    machine sleeps is answered 503 with `Retry-After` by the edge while the platform starts it, so a sender that
+    retries (Slack, Telegram) is heard; one that never retries (GitHub, unless somebody presses Redeliver) still loses
+    what it sent while the machine slept.
+  - A boot a request at a door made (the platform says so in its answer to the boot's retraction) is graced like the
+    alarm's: five quiet minutes, so a stray wake costs a boot and those minutes.
+  - Its last word before the stop notes the sleep on the history volume and tells every extension watching
+    (`api.sleep.beforeSleep`, `extensions/runtime/extension-sleep.ts`) at once, waiting up to ten seconds for them to
+    answer ready; once asked, the stop is never called off. `api.sleep.boot()` answers whether the last stop was such a
+    sleep and whether a request at a door started this boot.
+  - Beside those hooks it hands the platform the one credential that may leave the sandbox (2026-11-27,
+    `system/sleep/sleep-watches.ts`): the bot token of each connection whose card declares `sleepWatch` (Discord's)
+    and whose owner turned its consent switch on, while an automation listens on that card's provider, on a hosted
+    machine only. The platform holds the bot's gateway connection while the machine sleeps, notes where each message
+    for it is, wakes it, and deletes the token at the daemon's first word. The card's extension asks once what was heard
+    (`api.sleep.heard()`, `POST /extension/sleep/heard`, `extensions/runtime/sleep-watch-cards.ts`), only for its own cards.
 
   Fleet initialization restores queued conversations before clocks are read, so a persisted booking is visible before
   any browser opens its chat. Locally, `ic` asks `/run/intentic/sleep.sock` for a fresh reading immediately before

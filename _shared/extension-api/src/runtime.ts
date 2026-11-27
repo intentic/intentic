@@ -28,6 +28,7 @@ import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/headers";
 import type * as OrpcClient from "@orpc/client";
 import type * as OpenApiFetch from "@orpc/openapi-client/fetch";
 import { createBackendReach } from "./backend-reach.js";
+import { createSleepReach } from "./sleep-reach.js";
 import { createTurnReach } from "./turn-reach.js";
 import type { Disposable } from "./disposable.js";
 import type {
@@ -84,6 +85,10 @@ export type {
     ServerActivation,
     ServerDocument,
     ServerDocumentOptions,
+    SleepBoot,
+    SleepHandler,
+    SleepHeardMessage,
+    SleepNotice,
     StartedJob,
     StoredJson,
     ToolArguments,
@@ -298,6 +303,7 @@ export const createExtensionRuntime = (options: ExtensionRuntimeOptions): Extens
     const log = options.log ?? ((message: string) => void process.stdout.write(`[${options.id}] ${message}\n`));
     const daemon = createDaemonApi({ url: options.daemonUrl, token: options.token, id: options.id, permissions: options.permissions, fetch: options.fetch });
     const reach = createBackendReach(options.id, daemon.request, options.declared ?? NO_DECLARED_REACH, log);
+    const { close: closeSleep, ...sleep } = createSleepReach(daemon.request, log);
     return {
         api: {
             apiVersion: extensionApiVersion,
@@ -317,8 +323,12 @@ export const createExtensionRuntime = (options: ExtensionRuntimeOptions): Extens
             work: reach.work,
             exec: reach.exec,
             activity: reach.activity,
+            sleep,
         },
-        close: reach.close,
+        close: () => {
+            reach.close();
+            closeSleep();
+        },
     };
 };
 

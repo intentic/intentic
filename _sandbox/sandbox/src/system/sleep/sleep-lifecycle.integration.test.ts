@@ -88,9 +88,9 @@ test("sleep and two wakes deliver the earliest booked message and then the remai
     let sandbox: Awaited<ReturnType<typeof boot>> | undefined;
     // Each boot's alarm, taken charge of once its schedulers run, on the same history volume as the conversations.
     const sleep = async () => {
-        const alarm = createHostedSleep({ ...testConfig, historyRoot: root }, logger, async (deadline) => {
+        const alarm = createHostedSleep({ ...testConfig, historyRoot: root }, logger, async ({ at: deadline }) => {
             saved.push(deadline);
-            return true;
+            return { saved: true };
         });
         await alarm.retractAtBoot();
         return alarm;
@@ -161,9 +161,9 @@ test("a cron's alarm survives sleep and new schedulers deliver its occurrence on
         await sandbox.services.automations.upsert(automationConfig("recurring", { trigger: { kind: "schedule", cron: "0 0 1 1 *" } }));
         const at = await nextPromisedWake(sandbox.services, "sleep");
         if (at === undefined) { throw new Error("a cron must promise its next occurrence"); }
-        const sleep = createHostedSleep({ ...testConfig, historyRoot: root }, logger, async (deadline) => {
+        const sleep = createHostedSleep({ ...testConfig, historyRoot: root }, logger, async ({ at: deadline }) => {
             saved.push(deadline);
-            return true;
+            return { saved: true };
         });
         await sleep.retractAtBoot();
         expect(await sleep.prepare(at, 0)).toBe(true);

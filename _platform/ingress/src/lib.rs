@@ -19,6 +19,7 @@ pub mod revocation;
 pub mod serve;
 pub mod session;
 pub mod tls;
+pub mod wakes;
 pub mod webtransport;
 
 pub use relay::body;

@@ -115,7 +115,7 @@ const readStream = async (open: (signal: AbortSignal) => Promise<Response>, oute
     }
 };
 
-interface Streaming {
+export interface Streaming {
     readonly open: (signal: AbortSignal) => Promise<Response>;
     readonly line: (text: string) => void;
     // Before every connection after the first, since frames may have been missed in between.
@@ -124,7 +124,7 @@ interface Streaming {
 }
 
 // Keeps one stream open while `signal` stands, connected again with backoff whenever it ends.
-const keepStreaming = async ({ open, line, gap, dropped }: Streaming, signal: AbortSignal): Promise<void> => {
+export const keepStreaming = async ({ open, line, gap, dropped }: Streaming, signal: AbortSignal): Promise<void> => {
     let connections = 0;
     const backoff = createBackoff({ floorMs: 1_000, capMs: 30_000, stableMs: SILENCE_MS });
     while (!signal.aborted) {

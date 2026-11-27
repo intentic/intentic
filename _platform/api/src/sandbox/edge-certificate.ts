@@ -81,8 +81,9 @@ export const startEdgeCertificate = (prisma: PrismaClient, config: Config, logge
     setInterval(tick, CHECK_EVERY_MS);
 };
 
-// Compared as digests, so neither the token's length nor its bytes leak through timing.
-const sameToken = (presented: string, expected: string): boolean =>
+// Compared as digests, so neither the token's length nor its bytes leak through timing. The edge's request wake
+// (hosted-request-wake.ts) checks its token the same way.
+export const sameToken = (presented: string, expected: string): boolean =>
     timingSafeEqual(createHash(`sha256`).update(presented).digest(), createHash(`sha256`).update(expected).digest());
 
 export type EdgeCertificateAnswer =

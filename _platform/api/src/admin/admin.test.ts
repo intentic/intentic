@@ -170,6 +170,7 @@ describe(`adminFunnel`, () => {
         setupCodeClaimedAt?: Date | null;
         lastSeenAt?: Date | null;
         firstAnnouncedAt?: Date | null;
+        firstTurnAt?: Date | null;
         hosted?: { id: string } | null;
     }
     let made = 0;
@@ -185,6 +186,7 @@ describe(`adminFunnel`, () => {
                 setupCodeClaimedAt: sandbox.setupCodeClaimedAt ?? null,
                 lastSeenAt: sandbox.lastSeenAt ?? null,
                 firstAnnouncedAt: sandbox.firstAnnouncedAt ?? null,
+                firstTurnAt: sandbox.firstTurnAt ?? null,
                 hosted: sandbox.hosted ?? null,
             };
         }),
@@ -213,46 +215,70 @@ describe(`adminFunnel`, () => {
             account(`made@x.test`, OLD, [{}, {}]),
             account(`claimed@x.test`, OLD, [{ setupCodeClaimedAt: OLD }]),
             account(`hostedonly@x.test`, OLD, [{ hosted: { id: `m1` } }]),
-            account(`gone@x.test`, LONG_AGO, [{ lastSeenAt: OLD, firstAnnouncedAt: LONG_AGO }]),
-            account(`active@x.test`, LONG_AGO, [{ lastSeenAt: RECENT, firstAnnouncedAt: LONG_AGO }, { lastSeenAt: OLD }]),
+            account(`gone@x.test`, LONG_AGO, [{ lastSeenAt: OLD, firstAnnouncedAt: LONG_AGO, firstTurnAt: LONG_AGO }]),
+            account(`active@x.test`, LONG_AGO, [{ lastSeenAt: RECENT, firstAnnouncedAt: LONG_AGO, firstTurnAt: LONG_AGO }, { lastSeenAt: OLD }]),
+            // Up all week and never a person's finished turn: connected, but neither activated nor active.
+            account(`idle@x.test`, LONG_AGO, [{ lastSeenAt: RECENT, firstAnnouncedAt: LONG_AGO }]),
+            // Activated on one sandbox that has since gone quiet, and another up all week that nobody has used: active
+            // asks both of the same sandbox, so this account is activated but not active.
+            account(`split@x.test`, LONG_AGO, [
+                { lastSeenAt: OLD, firstAnnouncedAt: LONG_AGO, firstTurnAt: LONG_AGO },
+                { lastSeenAt: RECENT, firstAnnouncedAt: LONG_AGO },
+            ]),
         ];
         const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
-        expect(funnel.funnel).toEqual({ accounts: 6, withSandbox: 5, setupEngaged: 4, connected: 2, activeLast7: 1 });
+        expect(funnel.funnel).toEqual({ accounts: 8, withSandbox: 7, setupEngaged: 6, connected: 4, firstTurn: 3, activeLast7: 1 });
         // Nobody activated in the window: the honest answer is null, never zero hours.
         expect(funnel.activation).toBeNull();
+        // Nobody who signed up in the window has had a first turn either.
+        expect(funnel.toFirstTurn).toBeNull();
+    });
+
+    it(`reads a first turn only on a sandbox that announced, so the stage never outgrows connected`, async () => {
+        const accounts = [account(`odd@x.test`, OLD, [{ firstTurnAt: OLD }])];
+        const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
+        expect(funnel.funnel).toEqual({ accounts: 1, withSandbox: 1, setupEngaged: 0, connected: 0, firstTurn: 0, activeLast7: 0 });
     });
 
     it(`leaves the team's own accounts out of every figure, and keeps them in the unfiltered stages`, async () => {
         const accounts = [
-            account(`person@x.test`, RECENT, [{ lastSeenAt: RECENT, firstAnnouncedAt: RECENT }]),
-            account(`Owner@Intentic.test`, RECENT, [{ lastSeenAt: RECENT, firstAnnouncedAt: RECENT }]),
+            account(`person@x.test`, RECENT, [{ lastSeenAt: RECENT, firstAnnouncedAt: RECENT, firstTurnAt: RECENT }]),
+            account(`Owner@Intentic.test`, RECENT, [{ lastSeenAt: RECENT, firstAnnouncedAt: RECENT, firstTurnAt: RECENT }]),
             account(`canary@intentic.test`, RECENT, [{ hosted: { id: `m1` }, lastSeenAt: RECENT }]),
             account(`bot@qa.test`, RECENT, [{ lastSeenAt: OLD }]),
         ];
         const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
-        expect(funnel.funnel).toEqual({ accounts: 1, withSandbox: 1, setupEngaged: 1, connected: 1, activeLast7: 1 });
+        expect(funnel.funnel).toEqual({ accounts: 1, withSandbox: 1, setupEngaged: 1, connected: 1, firstTurn: 1, activeLast7: 1 });
         expect(funnel.signups.total).toBe(1);
         expect(funnel.signups.last7).toBe(1);
         expect(funnel.internalAccounts).toBe(3);
-        expect(funnel.unfiltered).toEqual({ accounts: 4, withSandbox: 4, setupEngaged: 4, connected: 4, activeLast7: 3 });
-        expect(funnel.lanes).toEqual({ hosted: { connected: 0, activeLast7: 0 }, ownMachine: { connected: 1, activeLast7: 1 } });
+        expect(funnel.unfiltered).toEqual({ accounts: 4, withSandbox: 4, setupEngaged: 4, connected: 4, firstTurn: 2, activeLast7: 2 });
+        expect(funnel.lanes).toEqual({
+            hosted: { connected: 0, firstTurn: 0, activeLast7: 0 },
+            ownMachine: { connected: 1, firstTurn: 1, activeLast7: 1 },
+        });
         expect(funnel.activation).toEqual({ medianHours: 0, count: 1 });
+        expect(funnel.toFirstTurn).toEqual({ medianHours: 0, count: 1 });
     });
 
     it(`splits connected and active by lane, a collected hosted sandbox still hosted, and one of each counted in both`, async () => {
         const accounts = [
-            // A hosted machine that is still there.
-            account(`h@x.test`, OLD, [{ hosted: { id: `m1` }, lastSeenAt: RECENT }]),
+            // A hosted machine that is still there, used.
+            account(`h@x.test`, OLD, [{ hosted: { id: `m1` }, lastSeenAt: RECENT, firstTurnAt: OLD }]),
             // Hosted once: the machine row is gone, its provision names the app by the sandbox's tunnel id.
-            account(`collected@x.test`, OLD, [{ tunnelId: `tn-c`, lastSeenAt: OLD }], [`sbx-tn-c`]),
-            // A sandbox on the owner's own machine.
+            account(`collected@x.test`, OLD, [{ tunnelId: `tn-c`, lastSeenAt: OLD, firstTurnAt: OLD }], [`sbx-tn-c`]),
+            // A sandbox on the owner's own machine, up and never used.
             account(`own@x.test`, OLD, [{ lastSeenAt: RECENT }]),
-            // One of each: counted in both lanes, once in `connected`.
-            account(`both@x.test`, OLD, [{ hosted: { id: `m2` }, lastSeenAt: OLD }, { lastSeenAt: RECENT }], [`sbx-other`]),
+            // One of each: counted in both lanes, once in `connected`; only the own machine has had a first turn.
+            account(`both@x.test`, OLD, [{ hosted: { id: `m2` }, lastSeenAt: OLD }, { lastSeenAt: RECENT, firstTurnAt: RECENT }], [`sbx-other`]),
         ];
         const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
         expect(funnel.funnel.connected).toBe(4);
-        expect(funnel.lanes).toEqual({ hosted: { connected: 3, activeLast7: 1 }, ownMachine: { connected: 2, activeLast7: 2 } });
+        expect(funnel.funnel.firstTurn).toBe(3);
+        expect(funnel.lanes).toEqual({
+            hosted: { connected: 3, firstTurn: 2, activeLast7: 1 },
+            ownMachine: { connected: 2, firstTurn: 1, activeLast7: 1 },
+        });
     });
 
     it(`medians sign-up → first announce per account, leaving out accounts that had activated before the window`, async () => {
@@ -270,6 +296,28 @@ describe(`adminFunnel`, () => {
         const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
         // Alice 2h, Bob 10h: median 6h over 2 accounts.
         expect(funnel.activation).toEqual({ medianHours: 6, count: 2 });
+    });
+
+    it(`medians sign-up → first finished turn per account, over accounts that signed up in the window`, async () => {
+        const accounts = [
+            // Alice: signed up at 00:00, her first turn finished 3h later; a later one on a second sandbox must not count.
+            account(`alice@x.test`, day(`2026-08-20T00:00:00Z`), [
+                { lastSeenAt: RECENT, firstTurnAt: day(`2026-08-20T03:00:00Z`) },
+                { lastSeenAt: RECENT, firstTurnAt: day(`2026-08-22T00:00:00Z`) },
+            ]),
+            // Bob: 9h to his first turn.
+            account(`bob@x.test`, day(`2026-08-21T00:00:00Z`), [{ lastSeenAt: RECENT, firstTurnAt: day(`2026-08-21T09:00:00Z`) }]),
+            // Carol signed up long before the window, and her sandbox reported its first turn inside it: what a sandbox
+            // used before its daemon recorded the moment reports, so not a first turn that took her months.
+            account(`carol@x.test`, day(`2026-01-01T00:00:00Z`), [{ lastSeenAt: RECENT, firstTurnAt: day(`2026-08-22T01:00:00Z`) }]),
+            // Dan signed up in the window and is connected, with no finished turn yet.
+            account(`dan@x.test`, day(`2026-08-23T00:00:00Z`), [{ lastSeenAt: RECENT, firstAnnouncedAt: day(`2026-08-23T01:00:00Z`) }]),
+        ];
+        const funnel = await adminFunnel(prismaWith(accounts), config, () => NOW);
+        // Alice 3h, Bob 9h: median 6h over 2 accounts.
+        expect(funnel.toFirstTurn).toEqual({ medianHours: 6, count: 2 });
+        // The time to connect is its own figure, over Dan alone here.
+        expect(funnel.activation).toEqual({ medianHours: 1, count: 1 });
     });
 });
 

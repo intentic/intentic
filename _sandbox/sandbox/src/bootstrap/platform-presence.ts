@@ -5,13 +5,19 @@ import type { QuietProbes } from "../system/quiet-watch.js";
 import { anyConnected } from "../ports/established.js";
 import { fileRestartResume } from "../system/restart-resume.js";
 import type { BootPhase } from "./boot-phase.js";
-import type { ActiveHost } from "@intentic/api-contract/ingress";
+import type { ActiveHost,WakeDoor } from "@intentic/api-contract/ingress";
 import { clearStandby, standbyNotice, standbyTurn, writeStandby } from "../system/standby/standby.js";
 import { LINK_LOST_EXIT } from "../system/boot/restarts/daemon-stop.js";
 import { opt } from "../opt.js";
 import { nextPromisedWake } from "./promised-wakes.js";
 import { workingNow } from "./working-now.js";
 import { createHostedSleep } from "../system/sleep/hosted-sleep.js";
+import { wakeDoorsOf } from "../system/sleep/wake-doors.js";
+import { cachedEnabledExtensions } from "../capabilities/contributions.js";
+import { listenerOwnership } from "../extensions/listener/listener-state.js";
+import { beforeHostedSleep, setSleepBootFacts } from "../extensions/runtime/extension-sleep.js";
+import { handOverSleepWatches } from "../system/sleep/sleep-watches.js";
+import { consentedSleepWatches } from "../extensions/runtime/sleep-watch-cards.js";
 import { join } from "node:path";
 import { fileMembersStore, membersDocument } from "../auth/auth.js";
 import { revokeHeld } from "../auth/members/revoke-held.js";
@@ -19,10 +25,12 @@ import { reconcileOrgRoster } from "../org/org-roster.js";
 import { settingsDocument } from "../settings/settings-store.js";
 import { subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { runningJobsOf } from "../agent/tools/jobs/background-jobs.js";
+import { firstTurnRecorder } from "../system/activation/first-turn.js";
 
 // Webhooks have no durable ingress outside this daemon; gateway listeners need their live connection. A sandbox on
 // somebody's own computer keeps receiving until the owner disables them (or they expire): staying up costs it only
-// memory. A hosted machine does not (sleep/idle-stop.ts): it would spend its month's hours in days.
+// memory. A hosted machine does not (sleep/idle-stop.ts): it would spend its month's hours in days, and sleeps with its
+// wake doors saved instead (sleep/wake-doors.ts), so a sender that retries is heard once a request has woken it.
 export const continuousReception = async (services: Pick<BootPhase["services"], "automations">): Promise<boolean> =>
     (await services.automations.list()).some(
         (automation) =>
@@ -30,6 +38,26 @@ export const continuousReception = async (services: Pick<BootPhase["services"], 
             (automation.expiresAt === undefined || automation.expiresAt > Date.now()) &&
             (automation.trigger.kind === "event" || automation.trigger.kind === "listener"),
     );
+
+// The wake doors a hosted machine sleeps with now (system/sleep/wake-doors.ts), from its automations, its enabled
+// extensions (each `wakes` route counted only for the provider its listener owns) and its door file.
+const wakeDoorsFor = async (services: BootPhase["services"]): Promise<WakeDoor[]> => {
+    const [automations, extensions, ownership] = await Promise.all([services.automations.list(), cachedEnabledExtensions(services), listenerOwnership(services)]);
+    return wakeDoorsOf({
+        automations,
+        extensions: extensions.map((extension) => {
+            const provider = extension.manifest.contributes?.listener?.provider;
+            return {
+                id: extension.id,
+                provider: provider !== undefined && ownership.owners.get(provider) === extension.id ? provider : undefined,
+                routes: extension.manifest.contributes?.publicRoutes ?? [],
+            };
+        }),
+        fireToken: (id) => services.doorTokens.peek("automation", id),
+        wakeSecret: (path) => services.doorTokens.ensure("wake", path),
+        now: Date.now(),
+    });
+};
 
 // The soonest moment this sandbox promised somebody that a stop for idleness must not sleep through, 0 for none: one list
 // (promised-wakes.ts), shared with the automatic update's.
@@ -114,6 +142,13 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
             services.reach.start(reach);
         }
     }
+    // The first turn a person gets done here, recorded once on the history volume and announced at once rather than at
+    // the next heartbeat: the platform's activation moment (system/activation/first-turn.ts). Recorded with no platform
+    // configured too, so a sandbox connected later still says it.
+    if (role.container) {
+        const recorded = () => services.announcer.nudge();
+        shutdown.push(services.events.subscribe("run.settled", firstTurnRecorder({ historyRoot: config.historyRoot, logger, recorded })));
+    }
     // The organisation policy, from the same platform over the same token; a personal sandbox is answered null each time.
     // Its reactions start whether or not the platform is configured: a held policy is enforced either way.
     startOrgReactions({ config, logger, services, shutdown });
@@ -130,7 +165,9 @@ export const startPlatformPresence = ({ config, logger, role, services, shutdown
 // The hosted machine's sleep: idle-stop and the platform alarm it saves before stopping (sleep/hosted-sleep.ts).
 // Started with the platform presence, before the boot chain, so a boot that stalls still stops for idleness
 // (2026-10-18: started past the gate, a stalled chain billed until the month's hours ran out). The alarm the last sleep
-// left stands until `takeCharge`, once the schedulers and resumers that keep its promises have started.
+// left stands until `takeCharge`, once the schedulers and resumers that keep its promises have started. Every sleep saves
+// its wake doors with the alarm (2026-11-27), and its last word before the stop notes the sleep and runs every
+// extension's before-sleep hook (extensions/runtime/extension-sleep.ts).
 export interface PlatformSleep {
     readonly takeCharge: () => void;
 }
@@ -140,7 +177,8 @@ export const startPlatformSleep = ({ config, logger, role, services, shutdown }:
     if (!role.container || (config.idleStopMinutes === 0 && !config.sandbox.vm)) {
         return undefined;
     }
-    const alarm = createHostedSleep(config, logger);
+    const alarm = createHostedSleep(config, logger, undefined, () => wakeDoorsFor(services));
+    setSleepBootFacts({ afterSleep: alarm.afterSleep, requestWake: false }, alarm.bootFacts);
     if (config.idleStopMinutes > 0) {
         shutdown.push(
             startIdleStop(
@@ -150,9 +188,20 @@ export const startPlatformSleep = ({ config, logger, role, services, shutdown }:
                     working: () => workingNow(services, "idle-stop").length,
                     nextPromisedWakeAt: () => nextPromisedWakeAt(services),
                     leftRunning: () => services.agents.list().filter((agent) => runningJobsOf(services.conversations, agent.id).length > 0).length,
-                    alarmBoot: alarm.alarmBoot,
+                    alarmBoot: () => alarm.alarmBoot() || alarm.requestBoot(),
                     prepareSleep: alarm.prepare,
                     cancelSleep: alarm.cancel,
+                    beforeStop: async () => {
+                        await alarm.sleeping();
+                        // (2026-11-27) The connections their owners let the platform hold while it sleeps, beside the hooks.
+                        const handedOver = consentedSleepWatches(services, config.sandbox.vm)
+                            .then((watches) => handOverSleepWatches(config, logger, watches))
+                            .catch((error: Error) => logger.warn({ err: error }, "idle-stop: the connections to hold while asleep could not be read"));
+                        const [{ told, answered }] = await Promise.all([beforeHostedSleep(), handedOver]);
+                        if (answered < told) {
+                            logger.warn({ told, answered }, "idle-stop: not every extension finished its before-sleep hook in time; stopping anyway");
+                        }
+                    },
                 },
                 // Named as the initiator before the SIGTERM main.ts answers, so the stop and the next boot say why.
                 () => {

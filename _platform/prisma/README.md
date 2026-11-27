@@ -20,6 +20,12 @@ flowchart LR
   the ready daemon cancels it. (2026-10-18: an in-process timer would disappear on an api restart.)
 - `personSeenAt` is the last moment a person was there, which the free lane's idle collection measures from
   (`20261018180000_person_seen`, backfilled from `lastSeenAt`, since before the alarm every boot was somebody's).
+- A sandbox's `wakeDoors` holds the wake doors its hosted daemon slept with, a path prefix and the SHA-256 of a secret
+  each, never the secret; `requestWakeAt`, `requestWakeDay` and `requestWakeCount` hold the request wake under way and
+  how many the day started (`20261127120000_wake_doors`, the api's `hosted-request-wake.ts`).
+- `sleep_watch` holds a hosted sandbox's Discord bot token while it sleeps, encrypted with `SECRETS_KEY`, for a
+  connection whose owner turned that on, and `sleep_heard` where the messages for the bot were while it slept, ids only
+  (`20261127140000_sleep_watches`, the api's `sandbox/hosted/sleep-watch/`). Both go with their sandbox.
 - `trial_usage` holds each account's free-trial spend per UTC day. Its `graceOpen`, `graceOpenedAt` and `graceSteps`
   columns let a turn that started with allowance left finish past it, up to `TRIAL_GRACE_STEPS` (default 25) more
   calls a day (`20261019120000_trial_turn_grace`). A turn the daemon opened and never closed stops counting an hour
@@ -27,6 +33,9 @@ flowchart LR
 - A sandbox's `color` (`20261124120000_sandbox_color`) is its owner's pick of the colour every member's editor tints its
   rail, wallpaper and composer with; null until one is picked. `sandbox_trash.color` keeps it through the recovery
   window, so a restore brings it back beside the logo.
+- A sandbox's `firstTurnAt` (`20261126180000_sandbox_first_turn`) is when the first turn a person started on it finished
+  without failing, as its daemon recorded it and announced: the operator funnel's activation. Null until such a turn,
+  and on every row from before it until its daemon, on a release that records it, finishes one.
 - A sandbox's `activeHost` and `activeEpoch` name the one copy that runs it and how many takeovers moved it
   (`20261111120000_active_host`, backfilled from the newest copy in `seenInstances`); the rules are in the api's
   `src/sandbox/active/active-host.ts`.

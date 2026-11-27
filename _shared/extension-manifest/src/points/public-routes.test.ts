@@ -112,3 +112,21 @@ test("a request lands on the first declared route its method and every segment m
     expect(report === undefined ? undefined : publicRouteAutomationOf(report, ["bugs-1", "report"])).toBe("bugs-1");
     expect(publicRouteAutomationOf({ path: "*/config" }, ["bugs-1", "config"])).toBeUndefined();
 });
+
+test("a route that wakes the sandbox names one path, its only `*` an automation's, and waking is a power of its own", () => {
+    expect(issues({ path: "hook", methods: ["POST"], wakes: true })).toEqual([]);
+    expect(issues({ path: "*/events", methods: ["POST"], automation: true, wakes: true })).toEqual([]);
+    expect(issues({ path: "*/events", methods: ["POST"], wakes: true })).toEqual([
+        "a route that wakes the sandbox names one path: its only `*` is an automation's, with `automation: true`",
+    ]);
+    expect(issues({ path: "*/events/*", methods: ["POST"], automation: true, wakes: true })).toEqual([
+        "a route that wakes the sandbox names one path: its only `*` is an automation's, with `automation: true`",
+    ]);
+    expect(issues({ path: "hook", methods: ["POST"], wakes: false })).toHaveLength(1);
+    const manifest = ExtensionManifestSchema.parse(
+        manifestWith({ server: "dist/server.js", contributes: { publicRoutes: [{ path: "*/events", methods: ["POST"], automation: true, wakes: true }], listener: LISTENER } }),
+    );
+    const powers = powersOf(manifest);
+    expect(powers.get("wakes:*/events")).toBe("a call to /*/events wakes the sandbox while it sleeps, which spends its awake hours");
+    expect([...powers.keys()]).toContain("public:*/events");
+});

@@ -129,6 +129,13 @@ export const PublicRouteContributionSchema = z
             .max(PUBLIC_ROUTE_BODY_MAX)
             .optional()
             .describe(`The largest body it takes, in bytes; ${PUBLIC_ROUTE_BODY_DEFAULT} when absent, at most ${PUBLIC_ROUTE_BODY_MAX}.`),
+        wakes: z
+            .literal(true)
+            .meta({ power: { key: "wakes:${path}", sentence: "a call to /${path} wakes the sandbox while it sleeps, which spends its awake hours" } })
+            .optional()
+            .describe(
+                "(2026-11-27) A call here may wake a sandbox the platform hosts while it sleeps, when it reaches the route at the URL `api.sleep.wakeUrl(path, { automationId })` hands out (a wake secret rides in its query) and an automation on this extension's listener provider is switched on (the one the path names, for an automation's route). The sender is answered 503 with `Retry-After` while the machine boots, so it must retry; one that never retries loses what it sent. Its only `*` is the automation's.",
+            ),
     })
     .superRefine((route, ctx) => {
         if (route.origins === "listed" && route.automation !== true) {
@@ -145,6 +152,10 @@ export const PublicRouteContributionSchema = z
         }
         if (route.automation === true && !route.path.split("/").includes("*")) {
             ctx.addIssue({ code: "custom", path: ["automation"], message: "`automation` reads the automation's id from the path's first `*`, which this path has none of" });
+        }
+        // A wake URL names one path, so nothing in it may be left to the caller but the automation the route is for.
+        if (route.wakes === true && route.path.split("/").filter((segment) => segment === "*").length > (route.automation === true ? 1 : 0)) {
+            ctx.addIssue({ code: "custom", path: ["wakes"], message: "a route that wakes the sandbox names one path: its only `*` is an automation's, with `automation: true`" });
         }
     })
     .meta({

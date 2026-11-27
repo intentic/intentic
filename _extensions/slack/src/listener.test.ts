@@ -4,6 +4,7 @@ import { waitFor } from "@intentic/testing/bun";
 import type { SlackConnection } from "./client.js";
 import { type GatewayCtx, type ListenerDispatchFrame, type ListenerStop, type ListenerStopAnswer, stopButtonId } from "@intentic/connector-runtime";
 import { STATUS_BLOCK_ID } from "./card.js";
+import { createSlackHttpIntake, SLACK_SIGNATURE_HEADER, SLACK_TIMESTAMP_HEADER, slackSignature } from "./http.js";
 import { ACK_DEADLINE_MS, createSlackListener, type SlackEnvelope, type SlackMessage, toHistory, tsToIso, welcomeText } from "./listener.js";
 
 const SELF = "U0BOT";
@@ -12,9 +13,8 @@ const SELF = "U0BOT";
 // the point: a test that starts needing more says so instead of silently passing.
 const fakeConnection = (over: Record<string, unknown> = {}): SlackConnection =>
     ({
-        appToken: "xapp-1",
+        id: "slack",
         selfUserId: SELF,
-        socket: {} as SlackConnection["socket"],
         web: {
             users: { info: async () => ({ user: { profile: { display_name: "Ada" } } }) },
             reactions: { add: async () => ({ ok: true }), remove: async () => ({ ok: true }) },
@@ -406,4 +406,26 @@ test("an event whose keeping outlasts Slack's patience is acked by the deadline 
     } finally {
         jest.useRealTimers();
     }
+});
+
+test("a mention POSTed to the app's Request URL is answered as a Socket Mode one is, and acked", async () => {
+    const secret = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6";
+    const { ctx, streamed } = fakeCtx();
+    const { connection, posted, reactions } = recordingConnection();
+    const listener = createSlackListener(ctx, () => new Map([["app", connection]]));
+    const intake = createSlackHttpIntake({
+        apps: () => [{ id: connection.id, signingSecret: secret }],
+        connection: (id) => (id === connection.id ? connection : undefined),
+        listening: async () => true,
+        deliver: (to, received) => listener.onEvent(to, received),
+        log: ctx.log,
+    });
+    const body = JSON.stringify({ type: "event_callback", event_id: "Ev1", team_id: "T1", event: messageEvent({ text: `<@${SELF}> help` }) });
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const headers = { "content-type": "application/json", [SLACK_TIMESTAMP_HEADER]: timestamp, [SLACK_SIGNATURE_HEADER]: slackSignature(secret, timestamp, body) };
+    expect(await intake.receive({ headers, body })).toEqual({ status: 200, body: "" });
+    await waitFor(() => expect(streamed).toHaveLength(1));
+    expect(streamed[0]).toMatchObject({ mentioned: true, thread: "1755102030.001900", extra: { teamId: "T1" } });
+    await waitFor(() => expect(reactions).toEqual(["+eyes", "+white_check_mark", "-eyes"]));
+    expect(posted[0]).toMatchObject({ channel: "C1", thread_ts: "1755102030.001900", text: "hi" });
 });

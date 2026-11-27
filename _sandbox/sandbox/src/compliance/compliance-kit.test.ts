@@ -99,6 +99,20 @@ describe("defaults", () => {
 });
 
 describe("flows", () => {
+    // (2026-11-27) Discord's second path, to Intentic, exists only for a connection whose owner turned wake-on-mention on.
+    it("names Intentic as a path of a Discord bot only while its wake-on-mention switch is on", () => {
+        const withSwitch = (wakeOnMention: string) => ({
+            ...factsWith(defaults()),
+            connectors: [connectorOf("discord", "discord", { provider: "discord", botToken: "t", wakeOnMention }, ["discord.com"])],
+        });
+        const chats = (wakeOnMention: string) => flowsOf(withSwitch(wakeOnMention)).filter((flow) => flow.kind === "team-chat");
+        expect(chats("off").map((flow) => flow.id)).toEqual(["team-chat:discord"]);
+        expect(chats("on").map((flow) => [flow.id, flow.operator, flow.hosts])).toEqual([
+            ["team-chat:discord", "Discord Inc.", ["discord.com", "gateway.discord.gg", "cdn.discordapp.com"]],
+            ["team-chat:discord:2", "Intentic", ["app.intentic.dev", "discord.com"]],
+        ]);
+    });
+
     it("lists a default sandbox's paths with the shield off", () => {
         const flows = flowsOf(factsWith(defaults()));
         const claude = flows.find((flow) => flow.id === "model-provider:claude");

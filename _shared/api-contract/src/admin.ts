@@ -40,21 +40,27 @@ export type AdminOverview = z.infer<typeof AdminOverviewSchema>;
 //   withSandbox created at least one sandbox
 //   setupEngaged a setup started somewhere (code claimed, hosted machine, or a daemon announced)
 //   connected a daemon has ever announced
-//   activeLast7 announced within the last seven days
+//   firstTurn a connected sandbox has finished a turn a person started, without failing (the activation)
+//   activeLast7 a sandbox past its first turn announced within the last seven days
 // `signupSeries` is per-UTC-day counts, oldest first, zero-filled.
 // Every figure leaves out the team's own accounts (operators, the hosted canary, TELEMETRY_INTERNAL_ACCOUNTS: api
 // internal-accounts.ts); `unfiltered` is the same stages with them in, and `internalAccounts` how many were left out.
 // `lanes` splits connected and active by where the sandbox runs; an account with one of each counts in both lanes.
 // The three are absent from a platform from before 2026-11-23, whose figures include everyone.
+// (2026-11-26) `firstTurn` and `toFirstTurn` are absent from a platform from before them, and `activeLast7` there
+// counts any sandbox that announced in the week, first turn or not.
 export const AdminFunnelStagesSchema = z.object({
     accounts: z.number(),
     withSandbox: z.number(),
     setupEngaged: z.number(),
     connected: z.number(),
+    firstTurn: z.number().optional(),
     activeLast7: z.number(),
 });
 export type AdminFunnelStages = z.infer<typeof AdminFunnelStagesSchema>;
-const AdminFunnelLaneSchema = z.object({ connected: z.number(), activeLast7: z.number() });
+const AdminFunnelLaneSchema = z.object({ connected: z.number(), firstTurn: z.number().optional(), activeLast7: z.number() });
+// A median in hours over `count` accounts.
+const AdminFunnelMedianSchema = z.object({ medianHours: z.number(), count: z.number() });
 export const AdminFunnelSchema = z.object({
     signups: z.object({ today: z.number(), last7: z.number(), last30: z.number(), total: z.number() }),
     signupSeries: z.array(z.object({ day: z.string(), count: z.number() })),
@@ -62,8 +68,12 @@ export const AdminFunnelSchema = z.object({
     lanes: z.object({ hosted: AdminFunnelLaneSchema, ownMachine: AdminFunnelLaneSchema }).optional(),
     internalAccounts: z.number().optional(),
     unfiltered: AdminFunnelStagesSchema.optional(),
-    // Sign-up to first announce, over accounts that activated in the last 30 days; null if none did.
-    activation: z.object({ medianHours: z.number(), count: z.number() }).nullable(),
+    // Time to connect: sign-up to the first announce, over accounts whose first one landed in the last 30 days; null if
+    // none did.
+    activation: AdminFunnelMedianSchema.nullable(),
+    // Time to first turn: sign-up to the first turn a person started that finished without failing, over accounts that
+    // signed up in the last 30 days and have had one; null if none has.
+    toFirstTurn: AdminFunnelMedianSchema.nullable().optional(),
 });
 export type AdminFunnel = z.infer<typeof AdminFunnelSchema>;
 

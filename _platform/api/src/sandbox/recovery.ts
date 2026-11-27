@@ -256,6 +256,8 @@ export const adoptSandbox = async (prisma: PrismaClient, config: Config, request
         daemonUrl: request.daemonUrl,
         daemonVersion: request.version,
         lastSeenAt: now,
+        // The platform's own first sight of this row. Its first turn is the daemon's to say, and stays null here: the
+        // announce the daemon sends as soon as it is adopted carries it, and writes it onto the new row as on any other.
         firstAnnouncedAt: now,
     };
     // The logo the owner's browser remembered, when it is one; a malformed one is left behind rather than refusing.

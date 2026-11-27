@@ -74,6 +74,19 @@ flowchart LR
 - The manifest offers a **Team assistant on Discord** automation template (a mention-only listener with a prompt
   written for threads), so the setup after pasting a token is: invite the bot, pick the template, pick a model. When
   the bot joins a new server while an automation is on, it says hello in the server's system channel.
+- Discord delivers a message to a bot only down a live gateway connection, and a hosted sandbox's connection sleeps
+  with it. A connection can opt in to being heard anyway (2026-11-27): the card's switch, shown only on a hosted
+  sandbox and off by default, says it in full: "While this sandbox sleeps, Intentic's servers hold this bot's token to
+  notice a mention and wake the sandbox. The token is deleted when the sandbox wakes." This is the one exception to
+  credentials staying in the sandbox, declared as the card's `sleepWatch`. With it on and a Discord automation on, the
+  daemon hands the token to the platform as the machine goes to sleep; the platform holds the bot's gateway connection
+  with no privileged intent, and a mention, a reply to the bot, a direct message or a message in a thread the bot opened
+  wakes the sandbox. It keeps only where that message is (channel, message and server ids), and at this gateway's start
+  after the sleep [src/replay.ts](src/replay.ts) asks for those once (`api.sleep.heard()`), fetches each message with the
+  bot's own token and hands it to the live handler, so it is answered in the same thread and conversation as if it had
+  just arrived; one deleted since is skipped with a log line. A message in a thread the bot only answered in, rather
+  than opened, does not wake it, and a mention in the seconds while the machine stops is not heard. The card's
+  `processors` names Intentic as a second path for a connection with the switch on.
 - Only the manifest is in every image. The built gateway ships in the `messaging` image pack; on a core image the card
   says the runtime is not included.
 - Reconcile, status and shutdown come from [connector-runtime](../../_shared/connector-runtime), as do the reply's
@@ -88,6 +101,7 @@ flowchart LR
 - [src/card.ts](src/card.ts) — the status card drawn as an embed.
 - [src/listener.ts](src/listener.ts) — messages to listener events, history, the Stop button, delivery.
 - [src/voice.ts](src/voice.ts) — the voice session: capture, transcribe, dispatch, speak, write the transcript.
+- [src/replay.ts](src/replay.ts) — what was said to the bot while a hosted sandbox slept, fetched and answered at start.
 
 ## Commands
 

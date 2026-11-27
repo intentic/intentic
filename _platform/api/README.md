@@ -108,10 +108,15 @@ flowchart LR
   (`@example.com`, matched exactly, never a subdomain) for test accounts. `me.get` answers the caller's own
   `internal: true|false`, never the list, and the editor tags that account's analytics `internal: true`.
   `admin.funnel` leaves these accounts out of every figure, says how many it left out (`internalAccounts`), keeps the
-  stages with them in (`unfiltered`), and splits connected and active by lane (`lanes.hosted`, `lanes.ownMachine`: a
-  sandbox is hosted while its machine row stands, or after collection by its provision's app name). (2026-11-23) It
-  answers no "came back on a later day": the platform keeps no visit history (a session's `updatedAt` moves while a tab
-  is merely open, and an expired session is deleted), so returns are read from product analytics instead.
+  stages with them in (`unfiltered`), and splits connected, first turn and active by lane (`lanes.hosted`,
+  `lanes.ownMachine`: a sandbox is hosted while its machine row stands, or after collection by its provision's app
+  name). (2026-11-26) Activation is a person's first finished turn (`firstTurn`): `Sandbox.firstTurnAt`, written once
+  from the first announce whose daemon names one and never dated after it (`src/sandbox/announce/announce-row.ts`), read only on
+  a sandbox that announced, and `activeLast7` is a sandbox past its first turn that announced in the week, so every
+  stage still holds the next. `toFirstTurn` is the median from sign-up to it, over accounts that signed up in the last
+  30 days, beside `activation`, the time to connect. (2026-11-23) The funnel answers no "came back on a later day":
+  the platform keeps no visit history (a session's `updatedAt` moves while a tab is merely open, and an expired session
+  is deleted), so returns are read from product analytics instead.
 - Reachability is a signed grant. The api holds the Ed25519 private key (`INGRESS_SIGNING_KEY`), the edge holds only
   the public half, and a deletion record revokes it (`src/sandbox/reachability.ts`). A trigger on `sandbox` records
   the tunnel id of every deleted row and every rotated token (`SandboxTombstone`), and `GET /api/reachability/:id`
@@ -154,6 +159,28 @@ flowchart LR
   acknowledgement it cannot honour. (2026-10-18: relying on the next browser visit for distant bookings and crons was
   rejected. The database owns the alarm; the sleeping machine owns the scheduled work and delivers it through its
   existing schedulers after wake. Retrying every refusal every minute was rejected too: spent hours never answer it.)
+- A request may wake a hosted machine too (2026-11-27, `src/sandbox/hosted/wake/hosted-request-wake.ts`). The daemon's
+  alarm carries its wake doors, each a public path prefix and the SHA-256 of a secret the request carries
+  (`Sandbox.wakeDoors`, replaced at every sleep, cleared by the boot's retraction). The edge, missing a tunnel for a
+  plain request, asks `POST /api/ingress/wake` under the platform token with the sandbox's id, the request's path and
+  the digests of what it carries, and is answered at once: `waking` (with `retryAfter`, 60 seconds) when a door
+  matched and a start is under way, else nothing changed. A matched request starts the machine through
+  `wakeHostedSandbox` with cause `request`, unawaited: the owner's standing, hours, the state gate and metering, and
+  never a person, so `personSeenAt` does not move and no idle notice is withdrawn. One start while one boots
+  (`requestWakeAt`, cleared by the daemon's first word or after ten minutes) and 48 a UTC day
+  (`requestWakeCount` on `requestWakeDay`) bound a leaked door; a start that failed frees the boot slot but keeps its
+  count. The daemon's first word after such a start is answered `requestWake: true`, which graces that boot like an
+  alarm's.
+- A Discord mention may wake one, for a connection whose owner opted in on the card (2026-11-27,
+  `src/sandbox/hosted/sleep-watch/`). As the machine goes to sleep the daemon hands over each such bot's token
+  (`POST /sandbox/sleep-watch`), kept encrypted with `SECRETS_KEY` in `SleepWatch`, four an account. One replica runs
+  the watcher under `holdExclusive` (`JOB_SLEEP_WATCH`, the advisory lock held for the watcher's life): twenty seconds
+  after the hand-over it holds each bot's gateway connection (`discord-watch.ts`, plain WebSocket, no privileged
+  intent), notes where each message for the bot is in `SleepHeard` (ids only) and starts the machine through
+  `claimRequestStart`, the request wake's claim. Every word from the waking daemon (announce, alarm, `POST
+  /sandbox/sleep-watch/heard`) deletes the tokens; the last also hands the notes over once. A token Discord refuses, a
+  start refused for standing or hours, a removed sandbox, and a start no daemon answered within a boot's time end it
+  too. `main.ts` stops the watcher, closing every connection, before it disconnects Prisma.
 - The free lane's idle collection (`src/sandbox/hosted/hosted-idle.ts`) measures from `Sandbox.personSeenAt`, the last
   moment a person was there: a browser's wake, or the `personAt` the daemon sends with its alarm as it sleeps. A
   notice stands only if it was sent after that moment, so a person coming back withdraws it without a write, and an
@@ -258,7 +285,7 @@ flowchart LR
   start, `host`, `os`); one that does not leaves the record alone. The row keeps the last two distinct copies
   (`seenInstances`), and when their running stretches overlap by ten minutes or more, `duplicateSince` says since when;
   the owner's `sandbox.list` row carries `duplicateCopies: { hosts, since }` until one copy has been silent an hour
-  (`src/sandbox/announce-copies.ts`). A label that is too long is dropped, never a reason to refuse the announce.
+  (`src/sandbox/announce/announce-copies.ts`). A label that is too long is dropped, never a reason to refuse the announce.
 - (2026-11-11) One active host per sandbox (`src/sandbox/active/active-host.ts`, the rules; `active/active-host-announce.ts`, the
   write). The row names the copy that runs it (`activeHost`: `host`, `os`, `env` the engine, `manager` ic, compose or
   other, `machineId`, `since`) and counts the takeovers that moved it (`activeEpoch`). The first announce of a copy

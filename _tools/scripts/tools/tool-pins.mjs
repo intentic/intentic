@@ -3,8 +3,8 @@
 // Leave Debian packages floating within trixie for security revisions; node-gyp moves with Node headers.
 // Keep @posthog/cli manual because skill command names depend on it and tests do not cover that interface.
 
-import { createHash } from "node:crypto";
 import { readPin, rewrite, writePin } from "../engines/engine-pins.mjs";
+import { sha256Of } from "../engines/upstream.mjs";
 
 export { rewrite };
 
@@ -22,23 +22,6 @@ const site = (file, pattern, count, carries = "version") => ({ file, pattern, co
 export const DEFAULT_SOAK_HOURS = 72;
 
 const TIMEOUT_MS = 120_000;
-
-// The sha256 of what a URL serves, or undefined when it could not be fetched. Hashing the bytes rather than reading a
-// checksums file keeps every tool on one path whatever its release publishes, and is what the image build verifies.
-export const sha256Of = async (url) => {
-    try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-        if (!response.ok) {
-            return undefined;
-        }
-        return createHash("sha256")
-            .update(Buffer.from(await response.arrayBuffer()))
-            .digest("hex");
-    } catch (error) {
-        console.warn(`tool-pins: could not hash ${url}:`, error);
-        return undefined;
-    }
-};
 
 // The multi-arch index digest Docker Hub serves for a tag, which is what a `name:tag@sha256:…` reference pins.
 export const dockerHubDigest = async (repository, tag) => {

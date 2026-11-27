@@ -4,7 +4,11 @@
 // Nothing here throws on a bad answer from the network. A registry that is down must read as "could not ask", which
 // leaves the pin where it is; a version invented from a failed fetch would be blessed fleet-wide within the hour.
 
+import { createHash } from "node:crypto";
+
 const TIMEOUT_MS = 30_000;
+// A release archive runs to tens of megabytes; long enough for one on a slow runner.
+const HASH_TIMEOUT_MS = 120_000;
 
 const getJson = async (url, headers = {}) => {
     try {
@@ -81,6 +85,33 @@ export const hasAssets = (release, version, assets) => {
     return assets(version).every((name) => uploaded.has(name));
 };
 
+// The files a release pin downloads from one version, one per architecture it names, or undefined for a pin that names
+// none (the tools' release pins read only the tag). `asset` names each file in the release's own word for the
+// architecture, which is also the key its recorded sha256 is filed under.
+export const releaseAssetNames = (upstream) =>
+    upstream.arches === undefined ? undefined : (version) => upstream.arches.map((arch) => upstream.asset(version, arch));
+
+// Where one architecture's file of a release is downloaded from: the address the pack's curl and the daemon fetch.
+export const releaseAssetUrl = (upstream, version, arch) =>
+    `https://github.com/${upstream.repo}/releases/download/${upstream.tagPrefix ?? "v"}${version}/${upstream.asset(version, arch)}`;
+
+// The sha256 of what a URL serves, or undefined when it could not be fetched. Hashing the bytes rather than reading a
+// checksums file keeps every pin on one path whatever its release publishes, and is what the image build verifies.
+export const sha256Of = async (url) => {
+    try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(HASH_TIMEOUT_MS) });
+        if (!response.ok) {
+            return undefined;
+        }
+        return createHash("sha256")
+            .update(Buffer.from(await response.arrayBuffer()))
+            .digest("hex");
+    } catch (error) {
+        console.warn(`could not hash ${url}:`, error);
+        return undefined;
+    }
+};
+
 const githubVersions = async (repo, tagPrefix, assets) => {
     const body = await getJson(`https://api.github.com/repos/${repo}/releases?per_page=100`, githubHeaders());
     if (!Array.isArray(body)) {
@@ -120,7 +151,7 @@ const primaryVersions = (upstream) => {
             return pointerVersions(upstream.url, upstream.artifact);
         }
         default: {
-            return githubVersions(upstream.repo, upstream.tagPrefix, upstream.assets);
+            return githubVersions(upstream.repo, upstream.tagPrefix, releaseAssetNames(upstream));
         }
     }
 };

@@ -22,6 +22,15 @@ paste both onto the card, whose Test checks the bot token before saving. Finally
 channel it should see: `/invite @intentic`. For the team to hand the app work by mentioning it, the owner switches on
 the **Team assistant on Slack** automation (Automations, under the suggestions).
 
+**On a cloud sandbox** (one Intentic hosts, which sleeps when nobody uses it) a Socket Mode app is only heard while the
+sandbox is awake. There `/work/.intentic/local/runtime/extensions/intentic.slack/app-setup.json` exists: hand the person
+its `createApp` link in place of the card's (`jq -r .createApp` on that file). It creates the same app with Socket Mode
+off and its events and button presses sent to `requestUrl`, which wakes the sandbox. The steps are then: create the app,
+**Install App → Install to Workspace** (the `xoxb-` token), **Basic Information → Signing Secret**, and paste both onto
+the card; no app-level token is needed. An app already on Socket Mode there keeps answering while the sandbox is awake;
+to switch it, in its settings turn **Socket Mode** off, set the **Request URL** under **Event Subscriptions** and under
+**Interactivity & Shortcuts** to `requestUrl`, and paste its Signing Secret onto the card.
+
 An app made from an older manifest lacks two things the card's has: **Interactivity & Shortcuts** switched on
 (without it, the Stop button on a status card shows an error) and the `member_joined_channel` event (the hello
 when it is invited to a channel). Both are toggles on the app's dashboard; Socket Mode needs no request URL.

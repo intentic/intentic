@@ -7,6 +7,7 @@ import { BrokerSchema, CommandActionSchema } from "./capability-broker.js";
 import { ConnectionRefSchema, ConnectProbeSchema, KeyRequestSchema } from "./capability-field-shapes.js";
 import { ChannelFactsSchema, ListenerCardStatusSchema, ProcessorsSchema } from "./channel-facts.js";
 import { type EffectMeaning, fieldMeanings, unwrapMeaning } from "../meaning.js";
+import { SleepWatchSchema, sleepWatchProblems } from "./sleep-watch.js";
 
 // A field the install dialog's config form renders (key, label, secret/optional flags, a select, a `when` gate);
 // mirrors the platform catalog's own field shape.
@@ -39,6 +40,14 @@ export const CapabilityFieldSchema = z.object({
         .optional()
         .describe(
             "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
+        ),
+    // (2026-11-27) Drawn only on a sandbox the platform hosts: for a setting that means something only there, such as a
+    // card's consent to `sleepWatch`.
+    hosted: z
+        .boolean()
+        .optional()
+        .describe(
+            "Show this field only on a sandbox Intentic hosts, never on one on the owner's own computer: for a setting that only means something there, such as the consent a card's `sleepWatch` names. Elsewhere it is not drawn and its answer is ignored.",
         ),
     // Value only takes effect after a sandbox rebuild (rides the image overlay); shown as a chip since two
     // otherwise-identical switches can cost very differently.
@@ -330,6 +339,9 @@ export const CapabilityContributionSchema = z
             ),
             // Only says where the card's status is read from, so it carries no effect.
             status: ListenerCardStatusSchema.optional(),
+            // (2026-11-27) The one exception to credentials staying in the sandbox, per connection and only on its owner's
+            // yes: grants the extension nothing (the daemon decides, from the consent field), so it carries no power.
+            sleepWatch: SleepWatchSchema.optional(),
             // Only names what a command does, so it carries no effect: the sandbox holds the command to the owner's rules.
             commandActions: z
                 .array(CommandActionSchema)
@@ -448,6 +460,14 @@ export const CapabilityContributionSchema = z
                     code: "custom",
                     message: `env must not reference the totp field "${field.key}", the daemon mints codes from it instead`,
                 });
+            }
+        }
+    })
+    // A card's `sleepWatch` must stand against its own fields (sleep-watch.ts).
+    .superRefine((spec, ctx) => {
+        if (spec.kind === "cli" && spec.sleepWatch !== undefined) {
+            for (const message of sleepWatchProblems(spec.sleepWatch, spec.fields)) {
+                ctx.addIssue({ code: "custom", message });
             }
         }
     })

@@ -4,4 +4,6 @@ export * from "./headers.js";
 export * from "./routes.js";
 export * from "./ingress-schemas.js";
 export * from "./pool-signal-schemas.js";
+export * from "./wake-schemas.js";
+export * from "./sleep-watch-schemas.js";
 export * from "../model-catalog.js";

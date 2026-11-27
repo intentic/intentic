@@ -22,6 +22,9 @@ export interface DomainEventMap {
         readonly actor: string | undefined;
         // The same, typed: what tells a person at the keyboard from a program holding a token they minted.
         readonly speaker: TurnSpeaker | undefined;
+        // What composed words the run answered are for, when the sandbox or the app composed them rather than the speaker
+        // writing them (schemas/speaker.ts); absent for the speaker's own words.
+        readonly errand?: TurnErrand;
         // Undefined for a run that ended well or was stopped.
         readonly failure: string | undefined;
         // Set when the run was stopped (a person's stop, a parent's cancel) rather than ending by itself, so a report of

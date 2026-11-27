@@ -2,7 +2,7 @@ import type { ActiveHost, HostManager, Takeover } from "@intentic/api-contract";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
 import { type ActiveDecision, activeHostOf, decideActive } from "./active-host.js";
-import type { AnnouncedCopy } from "../announce-copies.js";
+import type { AnnouncedCopy } from "../announce/announce-copies.js";
 
 /* THE ANNOUNCE ROUTE'S SIDE OF ONE ACTIVE HOST PER SANDBOX: applies active-host.ts's decision to the row and answers the
  * daemon with where it stands. A move is written only over the row as it was read (the same epoch, and still no active

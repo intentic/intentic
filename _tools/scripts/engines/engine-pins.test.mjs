@@ -3,8 +3,19 @@
 // one line too many is not caught by the engines check afterwards — it would be caught by whatever breaks next.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ENGINE_PINS, readPins, rewrite, withBlessed } from "./engine-pins.mjs";
-import { hasAssets } from "./upstream.mjs";
+import {
+    ENGINE_PINS,
+    checksumProblems,
+    checksumValues,
+    enginePin,
+    readBlessedList,
+    readPins,
+    releaseChecksums,
+    rewrite,
+    withBlessed,
+    withChecksums,
+} from "./engine-pins.mjs";
+import { hasAssets, releaseAssetNames } from "./upstream.mjs";
 
 const CATALOG = ENGINE_PINS.find((engine) => engine.id === "claude").sites[0].pattern;
 const EXCLUDES = ENGINE_PINS.find((engine) => engine.id === "claude").sites[1].pattern;
@@ -87,14 +98,140 @@ test("every engine this repo pins reads back one version per site group", () => 
 
 // A release GitHub published before (or without) its build's uploads is not one the pack can install.
 test("a translator release counts only once both archives the pack downloads are uploaded", () => {
-    const { upstream } = ENGINE_PINS.find((engine) => engine.id === "translator");
+    const assets = releaseAssetNames(enginePin("translator").upstream);
     const named = (...names) => ({ assets: names.map((name) => ({ name })) });
-    assert.equal(hasAssets({ assets: [] }, "8.0.39", upstream.assets), false);
-    assert.equal(hasAssets(named("CLIProxyAPI_8.0.39_linux_amd64.tar.gz"), "8.0.39", upstream.assets), false);
-    assert.equal(
-        hasAssets(named("CLIProxyAPI_8.0.38_linux_amd64.tar.gz", "CLIProxyAPI_8.0.38_linux_aarch64.tar.gz"), "8.0.38", upstream.assets),
-        true,
-    );
+    assert.equal(hasAssets({ assets: [] }, "8.0.39", assets), false);
+    assert.equal(hasAssets(named("CLIProxyAPI_8.0.39_linux_amd64.tar.gz"), "8.0.39", assets), false);
+    assert.equal(hasAssets(named("CLIProxyAPI_8.0.38_linux_amd64.tar.gz", "CLIProxyAPI_8.0.38_linux_aarch64.tar.gz"), "8.0.38", assets), true);
     // Engines that declare no assets are not held to any.
     assert.equal(hasAssets({ assets: [] }, "1.0.0", undefined), true);
+});
+
+// A release engine's builds are hashed as the version is blessed, and the hashes are written beside it in engines.json and
+// in the pack, both by text. These pin where each lands and what a missing one reads as.
+const A = "a".repeat(64);
+const B = "b".repeat(64);
+const C = "c".repeat(64);
+const D = "d".repeat(64);
+const translator = enginePin("translator");
+
+const TRANSLATOR_LIST = `{
+    "engines": {
+        "opencode-v2": {
+            "blessed": "2.4.1",
+            "notes": "npm @opencode/cli"
+        },
+        "translator": {
+            "blessed": "8.1.3",
+            "notes": "CLIProxyAPI GitHub release"
+        }
+    }
+}
+`;
+
+test("a release engine's first hashes are written on the line after its blessed version, in its own indentation", () => {
+    const recorded = withChecksums(TRANSLATOR_LIST, "translator", { amd64: A, aarch64: B });
+    assert.equal(
+        recorded,
+        TRANSLATOR_LIST.replace(
+            `"blessed": "8.1.3",\n`,
+            `"blessed": "8.1.3",\n            "sha256": {\n                "amd64": "${A}",\n                "aarch64": "${B}"\n            },\n`,
+        ),
+    );
+    assert.deepEqual(JSON.parse(recorded).engines["opencode-v2"], { blessed: "2.4.1", notes: "npm @opencode/cli" });
+});
+
+test("a later blessing replaces the hashes it finds rather than adding a second set", () => {
+    const first = withChecksums(withBlessed(TRANSLATOR_LIST, "translator", "8.1.3"), "translator", { amd64: A, aarch64: B });
+    const next = withChecksums(withBlessed(first, "translator", "8.1.7"), "translator", { amd64: C, aarch64: D });
+    assert.equal(next.split("\n").length, first.split("\n").length);
+    assert.deepEqual(JSON.parse(next).engines.translator, {
+        blessed: "8.1.7",
+        sha256: { amd64: C, aarch64: D },
+        notes: "CLIProxyAPI GitHub release",
+    });
+});
+
+// An entry whose last key is `blessed` has no comma after it to write the hashes behind.
+test("hashes recorded beside a blessed version with nothing after it leave valid JSON", () => {
+    const bare = `{\n    "engines": {\n        "translator": {\n            "blessed": "8.1.3"\n        }\n    }\n}\n`;
+    assert.deepEqual(JSON.parse(withChecksums(bare, "translator", { amd64: A, aarch64: B })).engines.translator, {
+        blessed: "8.1.3",
+        sha256: { amd64: A, aarch64: B },
+    });
+});
+
+test("an engine the list does not carry gets no hashes written somewhere else", () => {
+    assert.throws(() => withChecksums(TRANSLATOR_LIST, "kimi", { amd64: A }), /no "blessed" for kimi/);
+});
+
+// The addresses the pack's curl and the daemon fetch; a hash of any other file vouches for nothing.
+test("a release's builds are hashed from the files the pack downloads, one per architecture", async () => {
+    const asked = [];
+    const hashOf = async (url) => {
+        asked.push(url);
+        return url.endsWith("_amd64.tar.gz") ? A : B;
+    };
+    assert.deepEqual(await releaseChecksums(translator, "8.1.7", hashOf), { amd64: A, aarch64: B });
+    assert.deepEqual(asked, [
+        "https://github.com/router-for-me/CLIProxyAPI/releases/download/v8.1.7/CLIProxyAPI_8.1.7_linux_amd64.tar.gz",
+        "https://github.com/router-for-me/CLIProxyAPI/releases/download/v8.1.7/CLIProxyAPI_8.1.7_linux_aarch64.tar.gz",
+    ]);
+});
+
+test("a version one of whose builds cannot be hashed is not blessed with the other's hash alone", async () => {
+    const hashOf = async (url) => (url.endsWith("_amd64.tar.gz") ? A : undefined);
+    await assert.rejects(
+        releaseChecksums(translator, "8.1.7", hashOf),
+        new Error(
+            "https://github.com/router-for-me/CLIProxyAPI/releases/download/v8.1.7/CLIProxyAPI_8.1.7_linux_aarch64.tar.gz could not be hashed, " +
+                "so 8.1.7 cannot be blessed with its checksums",
+        ),
+    );
+});
+
+test("an engine that is no release asset records no hashes and fetches nothing", async () => {
+    const hashOf = async (url) => assert.fail(`hashed ${url}`);
+    assert.equal(await releaseChecksums(enginePin("claude"), "0.3.400", hashOf), undefined);
+    assert.deepEqual(checksumValues(undefined), {});
+});
+
+const PACK_ARMS = `RUN version=8.1.3 \\
+    && case "$(dpkg --print-architecture)" in \\
+        amd64) arch=amd64; sha=${A} ;; \\
+        arm64) arch=aarch64; sha=${B} ;; \\
+    esac \\
+`;
+
+test("each build's hash moves on its own arm of the pack's case, found by the release's word for it", () => {
+    let text = PACK_ARMS;
+    for (const spot of translator.sites) {
+        const values = { blessed: "8.1.7", ...checksumValues({ amd64: C, aarch64: D }) };
+        const moved = rewrite(text, spot.pattern, values[spot.carries]);
+        assert.equal(moved.count, 1, `${spot.carries} matched once`);
+        text = moved.text;
+    }
+    assert.equal(text, PACK_ARMS.replace("8.1.3", "8.1.7").replace(A, C).replace(B, D));
+});
+
+test("a blessed release entry is refused without a sha256 for every build, or with one the pack does not verify", () => {
+    const pin = { "sha256:amd64": A, "sha256:aarch64": B };
+    assert.deepEqual(checksumProblems(translator, { blessed: "8.1.3", sha256: { amd64: A, aarch64: B } }, pin), []);
+    const missing = checksumProblems(translator, { blessed: "8.1.3", sha256: { amd64: A } }, pin);
+    assert.equal(missing.length, 1);
+    assert.match(missing[0], /^engines\.json records no sha256 for translator@8\.1\.3's aarch64 build\. /);
+    assert.equal(checksumProblems(translator, { blessed: "8.1.3" }, pin).length, 2);
+    const malformed = checksumProblems(translator, { blessed: "8.1.3", sha256: { amd64: A.toUpperCase(), aarch64: B } }, pin);
+    assert.match(malformed[0], new RegExp(`^engines\\.json records "${A.toUpperCase()}", which is not a sha256, for translator@8\\.1\\.3's amd64 build\\. `));
+    assert.deepEqual(checksumProblems(translator, { blessed: "8.1.3", sha256: { amd64: A, aarch64: C } }, pin), [
+        `engines.json records ${C} for translator@8.1.3's aarch64 build, but the pack verifies ${B}; they are one hash and move together`,
+    ]);
+    assert.deepEqual(checksumProblems(enginePin("claude"), { blessed: "0.3.400" }, {}), []);
+});
+
+// What the check reads on this checkout: the hashes engines.json records are the ones the pack verifies.
+test("this repository's blessed translator carries both builds' hashes, the same the pack verifies", () => {
+    const entry = readBlessedList().engines.translator;
+    assert.deepEqual(Object.keys(entry.sha256), translator.upstream.arches);
+    assert.deepEqual(checksumProblems(translator, entry, readPins().translator), []);
 });

@@ -36,8 +36,8 @@ pub struct Config {
     /// Where the platform's certificate is kept between restarts (`INGRESS_TLS_CACHE_FILE`, default
     /// [`crate::certificate::DEFAULT_CACHE_FILE`]); `off` keeps it in memory only. Unused with a PEM pair on disk.
     pub tls_cache_file: String,
-    /// What this edge presents to the platform: to fetch the certificate it issued, and to wake a hosted sandbox
-    /// (`INGRESS_PLATFORM_TOKEN`).
+    /// What this edge presents to the platform: to fetch the certificate it issued, and to ask whether a request may
+    /// wake a hosted sandbox that sleeps (wakes.rs) (`INGRESS_PLATFORM_TOKEN`).
     pub platform_token: String,
     /// The TLS port sits behind a TCP passthrough that opens each connection with a PROXY header
     /// (`INGRESS_PROXY_PROTOCOL`).

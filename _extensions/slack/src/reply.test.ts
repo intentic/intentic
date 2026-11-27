@@ -76,11 +76,11 @@ const fakeSlack = (options: FakeOptions = {}) => {
             }),
         }),
     });
-    const connection = unstubbed<SlackConnection>("connection", { appToken: "xapp-1", selfUserId: "U0BOT", web });
+    const connection = unstubbed<SlackConnection>("connection", { id: "slack", selfUserId: "U0BOT", web });
     return { connection, calls, posted, streamed };
 };
 
-const refusable = (refused: Set<string>) => ({ refused: () => refused.has("xapp-1"), refuse: () => void refused.add("xapp-1") });
+const refusable = (refused: Set<string>) => ({ refused: () => refused.has("slack"), refuse: () => void refused.add("slack") });
 
 interface ReplyOptions {
     readonly refused?: Set<string>;
@@ -128,7 +128,7 @@ test("an app Slack refuses the working status is not asked again", async () => {
     const slack = fakeSlack({ statusError: "not_allowed" });
     const refused = new Set<string>();
     await replyTo(slack, { refused }).settle();
-    expect(refused.has("xapp-1")).toBe(true);
+    expect(refused.has("slack")).toBe(true);
     await replyTo(slack, { refused }).settle();
     expect(slack.calls.filter((call) => call.startsWith("status"))).toEqual([`status: ${WORKING_STATUS}`]);
 });
@@ -207,7 +207,7 @@ test("native: a workspace that refuses streams gets the card, and is not asked a
     reply.frame(frame({ step: { ...READING, status: "running" } }));
     await waitFor(() => expect(slack.posted).toHaveLength(1));
     expect(slack.posted[0]).toMatchObject({ text: "⚙️ Working · 0s" });
-    expect(streamRefused.has("xapp-1")).toBe(true);
+    expect(streamRefused.has("slack")).toBe(true);
     reply.frame(frame({ end: true }));
     await reply.settle();
     expect(slack.streamed.map((call) => call.method)).toEqual(["start"]);

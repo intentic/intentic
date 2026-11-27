@@ -21,6 +21,7 @@ const SANDBOX_FIELDS = {
     daemonVersion: true,
     lastSeenAt: true,
     firstAnnouncedAt: true,
+    firstTurnAt: true,
     personSeenAt: true,
     setupCodeClaimedAt: true,
     setupClaimedBy: true,

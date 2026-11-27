@@ -111,7 +111,13 @@ export const CHECKS = [
     { id: "publish-set", file: "publish-set.mjs", needs: "checkout", gate: "code", about: "PUB is dependency-closed and topologically ordered" },
     { id: "publish-retry", file: "publish-retry.mjs", needs: "checkout", gate: "code", about: "the publish, upload and pull failures a release rides out, and the ones it must not" },
     { id: "release-api", file: "release-api.mjs", needs: "checkout", gate: "code", about: "github.sh answers a question with text or nothing, and fails loudly on a write" },
-    { id: "engines", file: "engines-blessed.mjs", needs: "checkout", gate: "code", about: "engines.json blesses only versions this repo pins" },
+    {
+        id: "engines",
+        file: "engines-blessed.mjs",
+        needs: "checkout",
+        gate: "code",
+        about: "engines.json blesses only versions this repo pins, a release engine's with every build's hash",
+    },
     { id: "tool-pins", file: "tool-pins.mjs", needs: "checkout", gate: "code", about: "each tool the sandbox image pins reads back one version at every site" },
     {
         id: "layer-tables",

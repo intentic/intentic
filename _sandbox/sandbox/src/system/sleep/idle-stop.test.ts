@@ -200,6 +200,48 @@ describe("startIdleStop", () => {
         dispose();
     });
 
+    // (2026-11-27) The last word before the stop: the note that it is a sleep and every extension's before-sleep hook.
+    describe("the last word before the stop", () => {
+        it("is asked once every check passed, after the sleep's doors were saved, and the stop follows it", async () => {
+            const order: string[] = [];
+            const stop = jest.fn(() => void order.push("stop"));
+            const cancelSleep = jest.fn(async () => {
+                order.push("doors");
+                return true;
+            });
+            const beforeStop = jest.fn(async () => void order.push("last word"));
+            const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ cancelSleep, beforeStop }), stop);
+            await minutes(4);
+            expect(beforeStop).not.toHaveBeenCalled();
+            await minutes(1);
+            expect(order).toEqual(["doors", "last word", "stop"]);
+            dispose();
+        });
+
+        it("cannot call the stop off, by failing or by a person arriving while it runs", async () => {
+            const stop = jest.fn();
+            let connected = 0;
+            const at = Date.now() + 6 * 3_600_000;
+            const cancelSleep = jest.fn(async () => true);
+            const beforeStop = jest.fn(async () => {
+                connected = 1;
+                throw new Error("an extension's hook failed");
+            });
+            const dispose = startIdleStop(
+                { minutes: 5, logger },
+                probesOf({ connected: () => connected, nextPromisedWakeAt: async () => at, prepareSleep: async () => true, cancelSleep, beforeStop }),
+                stop,
+            );
+            await minutes(5);
+            expect(stop).toHaveBeenCalledTimes(1);
+            // The alarm it armed stands: the stop went ahead, so nothing retracts it.
+            expect(cancelSleep).not.toHaveBeenCalled();
+            await minutes(5);
+            expect(beforeStop).toHaveBeenCalledTimes(1);
+            dispose();
+        });
+    });
+
     describe("an alarm's boot", () => {
         const alarmBoot = () => true;
 

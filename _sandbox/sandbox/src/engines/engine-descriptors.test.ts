@@ -43,8 +43,14 @@ test("the translator asks for the architecture word upstream publishes, not the 
 // version and the architecture word (above) vary.
 test("the translator's asset is the file its release carries", () => {
     const { source } = engineDescriptor("translator");
-    const asset = source.kind === "github-release" ? source.asset("7.2.140") : undefined;
+    const asset = source.kind === "github-release" ? source.asset("7.2.140", source.arch()) : undefined;
     expect(asset).toBe(`CLIProxyAPI_7.2.140_linux_${releaseArch()}.tar.gz`);
+});
+
+// The same word names the build to download and the key engines.json records its hash under, so the two cannot drift.
+test("the translator files this machine's build, and its hash, under the release's own architecture word", () => {
+    const { source } = engineDescriptor("translator");
+    expect(source.kind === "github-release" ? source.arch() : undefined).toBe(releaseArch());
 });
 
 // Only the in-process engine has two vocabularies to reconcile, so it alone is excluded here.

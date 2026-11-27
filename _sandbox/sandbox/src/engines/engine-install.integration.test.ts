@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -29,8 +30,10 @@ jest.mock("node:child_process", async () => {
     };
 });
 
-const { downloadInstall, releaseInstall } = await import("./engine-install.js");
-const { engineDescriptor, grokArch } = await import("./engine-descriptors.js");
+const { downloadInstall, installEngine, releaseInstall } = await import("./engine-install.js");
+const { engineDescriptor, grokArch, releaseArch } = await import("./engine-descriptors.js");
+const { forgetUpstream } = await import("./engine-channel.js");
+const { engineDir, installedVersions, readEngineState } = await import("./engine-store.js");
 
 let prefix = "";
 
@@ -71,4 +74,80 @@ test("a download engine's build is fetched for this machine and unpacked as an e
 test("a download engine whose build is missing fails the install rather than leaving an empty binary", async () => {
     stubGlobal("fetch", async () => new Response("not found", { status: 404 }));
     await expect(downloadInstall(engineDescriptor("grok-build"), "0.0.1", prefix)).rejects.toThrow(/answered 404/);
+});
+
+// A translator release recorded in engines.json is installed only as the bytes whose sha256 was recorded beside it.
+// Nothing here is really an archive, so a download that passes the check ends at tar (mocked) finding no binary; one
+// that fails it must never reach tar at all.
+const ASSET = new Uint8Array([0x1f, 0x8b, 0x08, 0x00]);
+const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+const OTHER = sha256(new Uint8Array([0x00]));
+const untarred = (): { file: string; args: readonly string[] }[] => [
+    { file: "tar", args: ["-xzf", join(prefix, "asset.tar.gz"), "--no-same-owner", "-C", join(prefix, ".unpack")] },
+];
+const assetOf = (version: string): string => `CLIProxyAPI_${version}_linux_${releaseArch()}.tar.gz`;
+const refusal = (version: string, expected: string): string =>
+    `${assetOf(version)} does not match the sha256 recorded for translator ${version} in engines.json ` +
+    `(expected ${expected}, downloaded ${sha256(ASSET)}); refused, and the current copy keeps serving`;
+// Where an install that passed the check stops here: tar is mocked, so nothing is unpacked for it to find.
+const unpackedNothing = (version: string) => ({ ok: false as const, version, reason: `${assetOf(version)} contains no cli-proxy-api`, quarantined: false });
+
+test("a release asset whose bytes are the ones recorded for it is unpacked", async () => {
+    stubGlobal("fetch", async () => new Response(ASSET));
+    await expect(releaseInstall(engineDescriptor("translator"), "8.1.3", prefix, sha256(ASSET))).rejects.toThrow(/contains no cli-proxy-api/);
+    expect(calls).toEqual(untarred());
+});
+
+test("a release asset unlike the hash recorded for it is refused before tar reads a byte of it", async () => {
+    stubGlobal("fetch", async () => new Response(ASSET));
+    await expect(releaseInstall(engineDescriptor("translator"), "8.1.3", prefix, OTHER)).rejects.toThrow(refusal("8.1.3", OTHER));
+    expect(calls).toEqual([]);
+});
+
+// The install as the store runs it: the hash comes from the blessed list, and only for the version that list blesses.
+describe("installing a release engine against the blessed list", () => {
+    const LIST = "https://example.test/engines.json";
+    const serve = (recorded: Record<string, string>): string[] => {
+        const asked: string[] = [];
+        stubGlobal("fetch", async (url: string) => {
+            asked.push(url);
+            return url === LIST ? Response.json({ engines: { translator: { blessed: "8.1.3", sha256: recorded } } }) : new Response(ASSET);
+        });
+        return asked;
+    };
+
+    beforeEach(() => {
+        process.env["INTENTIC_ENGINES_DIR"] = prefix;
+        process.env["INTENTIC_ENGINES_LIST_URL"] = LIST;
+        forgetUpstream();
+    });
+
+    afterEach(() => {
+        delete process.env["INTENTIC_ENGINES_DIR"];
+        delete process.env["INTENTIC_ENGINES_LIST_URL"];
+        forgetUpstream();
+    });
+
+    test("a blessed version whose download is not the recorded build fails like a failed download, leaving nothing behind", async () => {
+        serve({ [releaseArch()]: OTHER });
+        expect(await installEngine("translator", "8.1.3")).toEqual({ ok: false, version: "8.1.3", reason: refusal("8.1.3", OTHER), quarantined: false });
+        expect(calls).toEqual([]);
+        expect(await installedVersions("translator")).toEqual([]);
+        expect(await readdir(join(engineDir("translator"), ".staging"))).toEqual([]);
+        expect(await readEngineState("translator")).toEqual({ quarantined: [] });
+    });
+
+    test("a blessed version is checked against this machine's build's hash, not another architecture's", async () => {
+        const asked = serve({ [releaseArch()]: sha256(ASSET), elsewhere: OTHER });
+        expect(await installEngine("translator", "8.1.3")).toEqual(unpackedNothing("8.1.3"));
+        expect(calls.map((call) => call.file)).toEqual(["tar"]);
+        expect(asked).toEqual([LIST, `https://github.com/router-for-me/CLIProxyAPI/releases/download/v8.1.3/${assetOf("8.1.3")}`]);
+    });
+
+    // A `latest` or `pinned` channel can name a version the list does not bless; the hash beside 8.1.3 is not its hash.
+    test("a version the list does not bless is installed unchecked rather than against another version's hash", async () => {
+        serve({ [releaseArch()]: OTHER });
+        expect(await installEngine("translator", "8.1.2")).toEqual(unpackedNothing("8.1.2"));
+        expect(calls.map((call) => call.file)).toEqual(["tar"]);
+    });
 });

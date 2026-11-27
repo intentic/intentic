@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@intentic/prisma";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
+import type { IngressBody } from "@intentic/api-contract";
 import { ORPCError } from "@orpc/server";
 import { Hono } from "hono";
 import type { Logger } from "pino";
@@ -20,10 +21,24 @@ export const HOSTED_WAKE_BOOT_MS = 10 * 60_000;
 // Overdue this long, a promise is left to the scheduler's catch-up at the next start rather than retried any more.
 export const HOSTED_WAKE_GIVE_UP_MS = 24 * 3_600_000;
 // Refusals no retry answers: a suspended owner, spent hours (they come back on the 1st), a machine that is gone.
-const FINAL_REFUSALS: ReadonlySet<string> = new Set(["FORBIDDEN", "PAYMENT_REQUIRED", "NOT_FOUND"]);
+export const FINAL_REFUSALS: ReadonlySet<string> = new Set(["FORBIDDEN", "PAYMENT_REQUIRED", "NOT_FOUND"]);
 
 const retryDelay = (deadline: Date, now: Date): number =>
     Math.min(HOSTED_WAKE_RETRY_CEILING_MS, Math.max(HOSTED_WAKE_RETRY_MS, now.getTime() - deadline.getTime()));
+
+// What one alarm writes. Any word from the daemon ends a request wake's boot, so the next request at a door may start it
+// again; a person's last moment there is never later than now whatever the daemon's clock says; and (2026-11-27) the
+// doors it sleeps with replace the stored ones, while a daemon that names none leaves them standing.
+const alarmUpdate = (body: IngressBody<"wakeAlarm">, now: number): Prisma.SandboxUpdateManyMutationInput => {
+    const data: Prisma.SandboxUpdateManyMutationInput = { scheduledWakeAt: body.at === null ? null : new Date(body.at), scheduledWakeRetryAt: null, requestWakeAt: null };
+    if (body.personAt !== undefined && body.personAt > 0) {
+        data.personSeenAt = new Date(Math.min(body.personAt, now));
+    }
+    if (body.doors !== undefined) {
+        data.wakeDoors = body.doors;
+    }
+    return data;
+};
 
 export const hostedWakeAlarmRoutes = ({ prisma, config }: { readonly prisma: PrismaClient; readonly config: Config }) => {
     const app = new Hono<{ Variables: { logger: Logger } }>();
@@ -38,16 +53,18 @@ export const hostedWakeAlarmRoutes = ({ prisma, config }: { readonly prisma: Pri
         if (body.at !== null && !hostedEnabled(config)) {
             return kit.refuse(503, "hosted wakes are unavailable");
         }
-        const data: Prisma.SandboxUpdateManyMutationInput = { scheduledWakeAt: body.at === null ? null : new Date(body.at), scheduledWakeRetryAt: null };
-        // A person's last moment there, never later than now whatever the daemon's clock says.
-        if (body.personAt !== undefined && body.personAt > 0) {
-            data.personSeenAt = new Date(Math.min(body.personAt, Date.now()));
+        const where = { tokenDigest: sha256Hex(kit.connectToken), removedAt: null, hosted: { isNot: null } } as const;
+        const before = await prisma.sandbox.findFirst({ where, select: { id: true, requestWakeAt: true } });
+        const stored = before === null ? { count: 0 } : await prisma.sandbox.updateMany({ where, data: alarmUpdate(body, Date.now()) });
+        if (before === null || stored.count === 0) {
+            return kit.refuse(404, "unknown hosted sandbox");
         }
-        const stored = await prisma.sandbox.updateMany({
-            where: { tokenDigest: sha256Hex(kit.connectToken), removedAt: null, hosted: { isNot: null } },
-            data,
-        });
-        return stored.count === 0 ? kit.refuse(404, "unknown hosted sandbox") : kit.answer({ ok: true });
+        // (2026-11-27) Any word from the daemon ends what it let the platform hold while it slept: an alarm is written
+        // awake, before the stop that hands holds over (sleep-watch.ts).
+        await prisma.sleepWatch.deleteMany({ where: { sandboxId: before.id } });
+        // The first word of a boot a request at a door started: what lets that boot sleep again after a short grace.
+        const requestWake = before.requestWakeAt !== null && Date.now() - before.requestWakeAt.getTime() < HOSTED_WAKE_BOOT_MS;
+        return kit.answer(requestWake ? { ok: true, requestWake } : { ok: true });
     });
     return app;
 };

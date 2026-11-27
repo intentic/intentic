@@ -432,6 +432,69 @@ export const extensionJobsUrl = (): string => rawRouteUrl("POST /extension/jobs"
 export const extensionJobUrl = (id: string): string => rawRouteUrl("POST /extension/jobs/{id}", { id });
 export const extensionActivityUrl = (): string => rawRouteUrl("POST /extension/activity");
 
+/* (2026-11-27) HOSTED SLEEP, as an extension's own code meets it (`api.sleep` in @intentic/extension-api). A sandbox the
+ * platform hosts stops when nobody uses it, and is woken again by a request at one of its wake doors (api-contract's
+ * wake-schemas.ts): an enabled webhook automation's fire URL, or an extension's public route declaring `wakes: true`,
+ * reached at the URL POST /extension/sleep/wake-url hands out. Every extension token reaches these four undeclared, and
+ * each answers only about the extension asking. */
+
+// The query parameter a wake URL carries its wake secret in. The door hands the extension the request without it.
+export const WAKE_DOOR_PARAM = "wake";
+
+// POST /extension/sleep/wake-url: the full public URL of one of the caller's own `wakes` routes, its `*` filled with the
+// automation an automation's route is for, its wake secret in WAKE_DOOR_PARAM. The same URL on every ask and after every
+// restart, so a provider's webhook setting it was pasted into stays good.
+export const ExtensionWakeUrlAskSchema = z.object({
+    route: z.string().min(1).max(512).describe("The route's path as the manifest declares it, e.g. `*/events`."),
+    automationId: z.string().min(1).max(200).optional().describe("The automation an automation's route is for."),
+});
+export const ExtensionWakeUrlSchema = z.object({ url: z.string() });
+
+// GET /extension/sleep/boot: what this boot follows. `afterSleep`: the daemon stopped last time because the hosted machine
+// went to sleep (its extensions' before-sleep hooks ran). `requestWake`: the platform started it for a request at a wake
+// door, which the platform says once the boot has taken charge; the daemon waits up to EXTENSION_SLEEP_BOOT_WAIT_MS for
+// that before answering false.
+export const ExtensionSleepBootSchema = z.object({ afterSleep: z.boolean(), requestWake: z.boolean() });
+export type ExtensionSleepBoot = z.infer<typeof ExtensionSleepBootSchema>;
+export const EXTENSION_SLEEP_BOOT_WAIT_MS = 15_000;
+
+// POST /extension/sleep/watch: held open for as long as the extension wants to hear that the machine is about to sleep,
+// an ndjson stream of heartbeats (EXTENSION_EVENTS_HEARTBEAT_MS) and, right before a hosted sleep, one `sleep` frame per
+// sleep. The extension answers it with POST /extension/sleep/ready naming its id once its own work is done; the daemon
+// stops once every watcher answered or EXTENSION_SLEEP_HOOK_MS passed, whichever is first, and stops either way. A sleep
+// asked of the watchers is never called off.
+export const ExtensionSleepFrameSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("heartbeat") }),
+    z.object({ kind: z.literal("sleep"), id: z.string(), deadline: z.number() }),
+]);
+export type ExtensionSleepFrame = z.infer<typeof ExtensionSleepFrameSchema>;
+export const ExtensionSleepReadySchema = z.object({ id: z.string().min(1).max(64) });
+export const EXTENSION_SLEEP_HOOK_MS = 10_000;
+
+// POST /extension/sleep/heard (2026-11-27): where the messages are that the platform's sleep watch heard for the caller's
+// own connections while the hosted sandbox slept (a Discord bot whose owner let the platform hold it, the card's
+// `sleepWatch`): ids only, never what they say, oldest first. Answered once: asking forgets them, and ends whatever the
+// platform still held. Empty on a sandbox the platform does not host.
+export const ExtensionSleepHeardSchema = z.object({
+    heard: z.array(
+        z.object({
+            service: z.string(),
+            connection: z.string().describe("The card's id in this sandbox."),
+            channelId: z.string(),
+            messageId: z.string(),
+            guildId: z.string().optional(),
+            at: z.number().describe("When the platform heard it, ms."),
+        }),
+    ),
+});
+export type ExtensionSleepHeard = z.infer<typeof ExtensionSleepHeardSchema>;
+
+export const extensionWakeUrlUrl = (): string => rawRouteUrl("POST /extension/sleep/wake-url");
+export const extensionSleepHeardUrl = (): string => rawRouteUrl("POST /extension/sleep/heard");
+export const extensionSleepBootUrl = (): string => rawRouteUrl("GET /extension/sleep/boot");
+export const extensionSleepWatchUrl = (): string => rawRouteUrl("POST /extension/sleep/watch");
+export const extensionSleepReadyUrl = (): string => rawRouteUrl("POST /extension/sleep/ready");
+
 // What the daemon starts an extension's process with, and what `connectExtensionProcess` reads. The token is the same
 // minted per-extension token its backend carries; the directories are the ones the backend api names.
 export const EXTENSION_PROCESS_ENV = {

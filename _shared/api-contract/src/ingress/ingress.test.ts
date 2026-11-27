@@ -48,6 +48,18 @@ describe("bodies an older machine sends still parse", () => {
         ).toEqual({ daemonUrl: "https://abc123def456.intentic.dev" });
     });
 
+    it("an announce keeps the moment of the first finished turn, and drops one that is not a moment rather than the announce", () => {
+        expect(AnnounceBodySchema.parse({ daemonUrl: "https://abc123def456.intentic.dev", firstTurnAt: 1_764_150_000_000 })).toEqual({
+            daemonUrl: "https://abc123def456.intentic.dev",
+            firstTurnAt: 1_764_150_000_000,
+        });
+        for (const firstTurnAt of ["2026-11-26T10:00:00Z", 0, -5, 1.5, 8_640_000_000_000_001]) {
+            expect(AnnounceBodySchema.parse({ daemonUrl: "https://abc123def456.intentic.dev", firstTurnAt })).toEqual({
+                daemonUrl: "https://abc123def456.intentic.dev",
+            });
+        }
+    });
+
     it("an announce at an address that is not https is refused", () => {
         expect(AnnounceBodySchema.safeParse({ daemonUrl: "http://abc123def456.intentic.dev" }).success).toBe(false);
     });
@@ -204,5 +216,6 @@ describe("callers in other languages spell the contract's values", () => {
         expect(source("_platform/ingress/src/revocation.rs")).toContain(
             `const REACHABILITY_PATH: &str = "${PLATFORM_INGRESS.reachability.path.replace("{sandboxId}", "")}";`,
         );
+        expect(source("_platform/ingress/src/wakes.rs")).toContain(`pub const WAKE_PATH: &str = "${PLATFORM_INGRESS.requestWake.path}";`);
     });
 });

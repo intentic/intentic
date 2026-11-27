@@ -10,6 +10,7 @@ import { version } from "../../version.js";
 import { callIngress, type IngressAnswer } from "../platform-client.js";
 import { readTakeoverNow, removeTakeover } from "../standby/standby.js";
 import { opt } from "../../opt.js";
+import { readFirstTurnNow } from "../activation/first-turn.js";
 
 // Registration with the platform: tells it this sandbox's public URL at boot, then again every hour while it runs, as its
 // heartbeat (the browser's own SSE probe is still what says it is reachable). Authenticated by the connect token, the
@@ -91,6 +92,10 @@ export interface Announcer {
     // Who hears whether this copy is the one that runs the sandbox, at every accepted announce that says (standby.ts);
     // the boot sets it once it can stop the daemon. The last one set is the one told.
     readonly onStanding: (listener: NonNullable<AnnounceListeners["standing"]>) => void;
+    // Announces now rather than at the next heartbeat, for news the announce carries (the first finished turn,
+    // first-turn.ts). Only while registered: a registration still being retried carries it at its next attempt anyway,
+    // and a stopped or deleted one sends nothing.
+    readonly nudge: () => void;
 }
 
 // The platform's answer, in the owner's terms; the identity rides a 200 from a platform new enough to send it, and a
@@ -151,8 +156,8 @@ const handOn = (answer: IngressAnswer<IngressOutput<"announce">>, listeners: Ann
     }
 };
 
-// The same body on every announce, the heartbeat's included, fixed for this process's life; only a takeover ic left for
-// this copy rides beside it (announceOnce).
+// The same body on every announce, the heartbeat's included, fixed for this process's life; only what the history volume
+// holds rides beside it, read at each announce (announceOnce).
 const announceBodyOf = (config: Config): AnnounceBody => ({
     daemonUrl: config.sandbox.publicUrl,
     version,
@@ -170,18 +175,20 @@ const withStanding = (listeners: AnnounceListeners, current: () => AnnounceListe
     },
 });
 
-// One announce: the fixed body, with the takeover ic left for this copy when there is one (deleted once an announce
-// carrying it is accepted), and the platform's answer handed on and read as a verdict.
+// One announce: the fixed body, with the moment the first turn a person started here finished once one has
+// (first-turn.ts) and the takeover ic left for this copy when there is one (deleted once an announce carrying it is
+// accepted), and the platform's answer handed on and read as a verdict.
 const announceOnce = async (
     { config, logger, listeners, body }: { config: Config; logger: Logger; listeners: AnnounceListeners; body: AnnounceBody },
     signal: AbortSignal,
 ): Promise<AnnounceState> => {
-    // A daemon with no history volume (a headless run's) has no takeover to send.
+    // A daemon with no history volume (a headless run's) has neither to send.
     const historyRoot = config.historyRoot;
     const takeover = readTakeoverNow(historyRoot);
+    const input: AnnounceBody = { ...body, ...opt("firstTurnAt", readFirstTurnNow(historyRoot)), ...opt("takeover", takeover) };
     let answer: IngressAnswer<IngressOutput<"announce">>;
     try {
-        answer = await callIngress(config, { route: "announce", input: takeover === undefined ? body : { ...body, takeover }, signal });
+        answer = await callIngress(config, { route: "announce", input, signal });
     } catch (error) {
         return {
             state: "unreachable",
@@ -212,8 +219,8 @@ export const createAnnouncer = (config: Config, logger: Logger, listeners: Annou
     const turn = new Latest();
     // One registration at a time: a Reconnect pressed mid-attempt shares the attempt rather than racing it.
     const flight = new SingleFlight<"announce", AnnounceState>();
-    // The same body on every announce, the heartbeat's included, fixed for this process's life; only a takeover ic left
-    // for this copy rides beside it, read fresh each time and deleted once an announce carrying it is accepted.
+    // The same body on every announce, the heartbeat's included, fixed for this process's life; only the first finished
+    // turn and a takeover ic left for this copy ride beside it, read fresh each time (announceOnce).
     let standingListener: AnnounceListeners["standing"];
     const heard = withStanding(listeners, () => standingListener);
     const announceBody = announceBodyOf(config);
@@ -308,6 +315,12 @@ export const createAnnouncer = (config: Config, logger: Logger, listeners: Annou
         status: () => status,
         onStanding: (listener) => {
             standingListener = listener;
+        },
+        nudge: () => {
+            const run = running.current;
+            if (run !== undefined && status.state === "registered") {
+                void cycle(run, turn.next(run));
+            }
         },
         relink: async (adoption) => {
             // Never started (a headless run, nothing to register with) or stopped: a Reconnect starts nothing again.

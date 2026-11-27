@@ -30,6 +30,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "extension-approvals.json", portability: "identity", note: "Approve the extensions written in this workspace again from Extensions." },
     { path: "extension-conversations.json", portability: "carry" },
     { path: "extension-fires-owed.json", portability: "carry" },
+    { path: "first-turn.json", portability: "identity" },
     { path: "hook-approvals.json", portability: "identity", note: "Approve the workspace's Claude Code hooks again from Approvals." },
     { path: "hook-requests.json", portability: "derived" },
     { path: "host-enrollments.json", portability: "identity" },

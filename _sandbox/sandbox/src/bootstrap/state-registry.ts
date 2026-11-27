@@ -130,6 +130,7 @@ import { stateRegroupStep } from "../store/evolution/steps/state-regroup.js";
 import { newestRunDocument } from "../store/newest-run.js";
 import { skillUsesDocument } from "../store/skills/skill-uses.js";
 import { turnStartsDocument } from "../store/start-window.js";
+import { firstTurnDocument } from "../system/activation/first-turn.js";
 import { bootFailureDocument } from "../system/boot/boot-failure.js";
 import { bootHistoryDocument } from "../system/boot/restarts/boot-history.js";
 import { choreClockDocument } from "../system/chore-clock.js";
@@ -207,10 +208,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     extensionEnablementDocument,
     dismissalsDocument,
     ciDocument,
+    composerDraftsDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
-    composerDraftsDocument,
     projectDeliveriesDocument,
     conversationRecordDocument,
     definitionDocument,
@@ -261,11 +262,11 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     rolesDocument,
     ruleFiringsDocument,
     runnerIdentityDocument,
+    safetyLogDocument,
+    autostartDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
-    safetyLogDocument,
-    autostartDocument,
     credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
@@ -289,6 +290,7 @@ const documentsPart3 = (): readonly DocumentSpec[] => [
     newestRunDocument,
     skillUsesDocument,
     turnStartsDocument,
+    firstTurnDocument,
     bootFailureDocument,
     bootHistoryDocument,
     choreClockDocument,

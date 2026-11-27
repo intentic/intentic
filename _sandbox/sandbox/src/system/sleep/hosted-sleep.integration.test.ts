@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
 import { testConfig } from "../../env.config.testing.js";
-import { createHostedSleep } from "./hosted-sleep.js";
+import type { WakeDoor } from "@intentic/api-contract/ingress";
+import { type AlarmWrite, createHostedSleep } from "./hosted-sleep.js";
 
 const logger = pino({ level: "silent" });
 
@@ -15,7 +16,8 @@ afterEach(async () => {
     await rm(root, { recursive: true, force: true });
 });
 
-const sleepOf = (save: (at: number | null, personAt: number) => Promise<boolean>) => createHostedSleep({ ...testConfig, historyRoot: root }, logger, save);
+const sleepOf = (save: (at: number | null, personAt: number) => Promise<boolean>) =>
+    createHostedSleep({ ...testConfig, historyRoot: root }, logger, async ({ at, personAt }) => ({ saved: await save(at, personAt) }));
 
 test("until the boot takes charge, the last sleep's alarm stands whatever idle-stop asks", async () => {
     const save = jest.fn(async () => true);
@@ -116,4 +118,62 @@ test("an alarm that was not acknowledged, or was retracted, leaves no mark for t
     const afterCancel = sleepOf(async () => true);
     await afterCancel.retractAtBoot();
     expect(afterCancel.alarmBoot()).toBe(false);
+});
+
+// (2026-11-27) Wake doors ride the alarm: every sleep saves them, the one with nothing due (idle-stop's cancelSleep)
+// included, and the retraction at boot clears them.
+describe("wake doors", () => {
+    const DOOR: WakeDoor = { path: "/automations/auto-1/fire", digest: "a".repeat(64) };
+    const recording = (answer: { requestWake?: boolean } = {}) => {
+        const writes: AlarmWrite[] = [];
+        const save = async (alarm: AlarmWrite) => {
+            writes.push(alarm);
+            return { saved: true, ...answer };
+        };
+        return { writes, save };
+    };
+
+    test("each sleep sends the doors it sleeps with, whether or not anything is due, and the boot's retraction clears them", async () => {
+        const { writes, save } = recording();
+        const sleep = createHostedSleep({ ...testConfig, historyRoot: root }, logger, save, async () => [DOOR]);
+        await sleep.retractAtBoot();
+        expect(await sleep.prepare(9_000_000, 1_000)).toBe(true);
+        expect(await sleep.cancel(2_000)).toBe(true);
+        expect(writes).toEqual([
+            { at: null, personAt: 0, doors: [] },
+            { at: 9_000_000, personAt: 1_000, doors: [DOOR] },
+            { at: null, personAt: 2_000, doors: [DOOR] },
+        ]);
+    });
+
+    test("doors that cannot be read cost the sleep its doors, never its alarm", async () => {
+        const { writes, save } = recording();
+        const sleep = createHostedSleep({ ...testConfig, historyRoot: root }, logger, save, async () => {
+            throw new Error("the door file is unreadable");
+        });
+        await sleep.retractAtBoot();
+        expect(await sleep.prepare(9_000_000, 0)).toBe(true);
+        expect(writes.at(-1)).toEqual({ at: 9_000_000, personAt: 0, doors: undefined });
+    });
+
+    test("the platform's word that a request at a door started this boot is read off the retraction", async () => {
+        const sleep = createHostedSleep({ ...testConfig, historyRoot: root }, logger, recording({ requestWake: true }).save);
+        expect(sleep.requestBoot()).toBe(false);
+        const facts = sleep.bootFacts();
+        await sleep.retractAtBoot();
+        expect(sleep.requestBoot()).toBe(true);
+        expect(await facts).toEqual({ afterSleep: false, requestWake: true });
+        expect(sleep.alarmBoot()).toBe(false);
+    });
+
+    test("a stop noted as a sleep is what the next boot follows, once", async () => {
+        const first = createHostedSleep({ ...testConfig, historyRoot: root }, logger, recording().save);
+        expect(first.afterSleep).toBe(false);
+        await first.sleeping();
+        const next = createHostedSleep({ ...testConfig, historyRoot: root }, logger, recording().save);
+        expect(next.afterSleep).toBe(true);
+        await next.retractAtBoot();
+        expect(await next.bootFacts()).toEqual({ afterSleep: true, requestWake: false });
+        expect(createHostedSleep({ ...testConfig, historyRoot: root }, logger, recording().save).afterSleep).toBe(false);
+    });
 });

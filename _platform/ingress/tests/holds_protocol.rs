@@ -456,6 +456,7 @@ async fn machine(name: &str, keys: &Keys) -> Machine {
         instance: name.into(),
         build: String::new(),
         transports: Vec::new(),
+        wakes: intentic_ingress::wakes::Wakes::new("", ""),
     });
     let serving = edge.clone();
     let public = serve::serve_on(public, move |request, remote| {

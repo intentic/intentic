@@ -57,10 +57,12 @@ jest.mock("node:https", () => ({ request: (...args: unknown[]) => requestMock(..
 
 const { createAnnouncer, HEARTBEAT_MS } = await import("./announce.js");
 
+// No history volume, as a headless run has none: no takeover and no first turn to send, unless a case gives it one.
 const config = {
     platform: { url: "https://host.docker.internal:6480" },
     sandbox: { publicUrl: "https://sandbox-x.intentic.dev", grant: "ig1.grant" },
     connectToken: "tok",
+    historyRoot: "",
 } as unknown as Parameters<typeof createAnnouncer>[0];
 const logger = { info: jest.fn(), warn: jest.fn() } as unknown as Parameters<typeof createAnnouncer>[1];
 
@@ -139,6 +141,64 @@ describe("createAnnouncer", () => {
             expect(existsSync(join(historyRoot, ".ic/takeover.json"))).toBe(true);
             expect(heard).toEqual([]);
             announcer.stop();
+        });
+    });
+
+    /* THE FIRST FINISHED TURN (2026-11-26): once the daemon recorded the first turn a person started that finished
+     * (first-turn.ts), every announce carries it, and recording it asks for one at once rather than at the heartbeat. */
+    describe("the first finished turn", () => {
+        const historyWith = (at?: number): string => {
+            const historyRoot = mkdtempSync(join(tmpdir(), "announce-first-turn-"));
+            if (at !== undefined) {
+                writeFileSync(join(historyRoot, "first-turn.json"), JSON.stringify({ at }));
+            }
+            return historyRoot;
+        };
+
+        it("rides every announce once recorded, and none before", () => {
+            const at = 1_764_150_000_000;
+            createAnnouncer({ ...config, historyRoot: historyWith(at) }, logger).start();
+            createAnnouncer({ ...config, historyRoot: historyWith() }, logger).start();
+            expect(calls).toHaveLength(2);
+            expect(calls[0]?.body).toMatchObject({ firstTurnAt: at });
+            expect(calls[1]?.body).not.toHaveProperty("firstTurnAt");
+        });
+
+        it("announces at once when nudged while registered, carrying the moment just recorded", async () => {
+            const historyRoot = historyWith();
+            const announcer = createAnnouncer({ ...config, historyRoot }, logger);
+            announcer.start();
+            await settle();
+            expect(announcer.status().state).toBe("registered");
+            writeFileSync(join(historyRoot, "first-turn.json"), JSON.stringify({ at: 1_764_150_000_000 }));
+            announcer.nudge();
+            expect(calls).toHaveLength(2);
+            expect(calls[1]?.body).toMatchObject({ firstTurnAt: 1_764_150_000_000 });
+            // The nudge took the heartbeat's place rather than adding a loop: one more announce an hour later, not two.
+            await advanceTimersByTimeAsync(HEARTBEAT_MS * 1.15);
+            expect(calls).toHaveLength(3);
+            announcer.stop();
+        });
+
+        it("sends nothing on a nudge before it is registered, stopped, or after a deletion record", async () => {
+            const unstarted = createAnnouncer(config, logger);
+            unstarted.nudge();
+            expect(calls).toEqual([]);
+
+            outcomes.push({ status: 410 });
+            const deleted = createAnnouncer(config, logger);
+            deleted.start();
+            await settle();
+            expect(deleted.status()).toMatchObject({ state: "rejected", reason: "deleted" });
+            deleted.nudge();
+            expect(calls).toHaveLength(1);
+
+            const stopped = createAnnouncer(config, logger);
+            stopped.start();
+            await settle();
+            stopped.stop();
+            stopped.nudge();
+            expect(calls).toHaveLength(2);
         });
     });
 

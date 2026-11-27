@@ -69,12 +69,19 @@ flowchart LR
   origins and `key` lets a caller with no Origin present its door key instead, `signature` names a scheme and a sandbox
   secret, `turnstile` names the sandbox secret a Cloudflare Turnstile token is verified with, `keyFromBrowsers` lets an
   automation that opts in admit an unlisted browser with its key, `proofOfWork`, `rate`, `dailyMax` (a number, or
-  `"none"` on a GET-only route), `bodyMax`). `publicRouteFor` is the one reading of which declared route a
+  `"none"` on a GET-only route), `bodyMax`, and (2026-11-27) `wakes`, a power of its own: a call at the route's wake
+  URL may wake a sleeping hosted sandbox, its only `*` an automation's). `publicRouteFor` is the one reading of which declared route a
   request lands on, which the daemon's door and the SDK's fake share; a `superRefine` holds the routes to a `server`
   bundle and an automation's route to the extension's own `contributes.listener`.
 - `listener.strangers` (`visitor` or `report`, 2026-11-26) says anyone on the internet reaches the source, which holds
   its wakes to the owner's admission floor for a website visitor or a bug report instead of a team chat's; the daemon
   reads it in place of a table of provider names. It is a power of its own.
+- A cli card may declare `sleepWatch` (`points/sleep-watch.ts`, 2026-11-27): the one credential Intentic's servers may
+  hold while a hosted sandbox sleeps, for a service that delivers only over a live connection (`discord`, the only one
+  the platform speaks). It names the secret field and a consent field, which the parse holds to a switch (`boolean`)
+  declared `hosted: true` and off by default; a field declaring `hosted` is drawn only on a sandbox Intentic hosts.
+  `sleepWatchConsented` is the one reading of the switch. A `processors` path may sit under a `when` over the card's
+  answers, as Discord's path to Intentic sits under that switch.
 - A card states facts about its platform (`points/channel-facts.ts`, 2026-11-26), which the core reads in place of its
   own tables keyed by provider name: `channel.messageLimit`, `channel.publish.target` (a pattern of the targets its
   backend publishes an approved post to, which must compile), `channel.posting`, `processors` (one entry per path its

@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-telegram",
     "version": "1.0.0",
-    "description": "Telegram, the connected bot as an agent tool, plus the long-polling gateway as a baked extension process",
+    "description": "Telegram, the connected bot as an agent tool, plus the long-polling gateway as a baked extension process and the wake door Telegram is pointed at while a hosted sandbox sleeps",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -13,6 +13,7 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/connector-runtime": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
         "zod": "catalog:"
     },
     "devDependencies": {

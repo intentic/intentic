@@ -29,8 +29,15 @@ export interface EnginePaths {
 
 export type EngineSource =
     | { readonly kind: "npm"; readonly package: string }
-    // Translator only: a GitHub release asset instead of npm; same store and channels, different fetch.
-    | { readonly kind: "github-release"; readonly repo: string; readonly asset: (version: string) => string; readonly binary: string }
+    // Translator only: a GitHub release asset instead of npm; same store and channels, different fetch. `arch` is the word
+    // the release files this machine's build under, which is also the key engines.json records that build's sha256 by.
+    | {
+          readonly kind: "github-release";
+          readonly repo: string;
+          readonly arch: () => string;
+          readonly asset: (version: string, arch: string) => string;
+          readonly binary: string;
+      }
     // A vendor that publishes neither (xAI's Grok Build): its newest version is the text a channel URL answers, and each
     // version is one gzipped binary at a URL of its own.
     | { readonly kind: "download"; readonly channel: string; readonly artifact: (version: string) => string; readonly binary: string }
@@ -350,7 +357,8 @@ const translatorDescriptor: EngineDescriptor = {
     source: {
         kind: "github-release",
         repo: "router-for-me/CLIProxyAPI",
-        asset: (version) => `CLIProxyAPI_${version}_linux_${releaseArch()}.tar.gz`,
+        arch: () => releaseArch(),
+        asset: (version, build) => `CLIProxyAPI_${version}_linux_${build}.tar.gz`,
         binary: "cli-proxy-api",
     },
     command: "cli-proxy-api",

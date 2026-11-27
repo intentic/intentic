@@ -1,10 +1,13 @@
 # slack
 
-The Slack connection: a two-token card and skill for the agent, plus a gateway process that turns a mention into a thread the agent works in.
+The Slack connection: a card and skill for the agent, plus a gateway process that turns a mention into a thread the agent works in, heard over Socket Mode or, on a hosted sandbox, at a Request URL that wakes it.
 
 ```mermaid
 flowchart LR
-    slack["Slack<br/>Socket Mode"] -->|"events · button presses"| gw(["slack gateway<br/>sandbox process"])
+    slack["Slack"] -->|"Socket Mode: events · button presses"| gw(["slack gateway<br/>sandbox process"])
+    slack -->|"Request URL (hosted): POST, wakes it"| door["/door/intentic.slack/events"]
+    door --> be(["slack backend"])
+    be -->|"loopback, unread"| gw
     gw -->|"POST /listeners/slack/dispatch"| daemon["Daemon<br/>automations"]
     daemon -->|"ndjson: text, steps, plan"| gw
     gw -->|"POST /listeners/slack/stop"| daemon
@@ -12,18 +15,40 @@ flowchart LR
     agent["Agent"] -->|"curl Web API via skill"| slack
 ```
 
-- Three pieces. The capability card takes a bot token (`xoxb-`) and an app-level token (`xapp-`); its guide link opens
-  Slack's app creation with [app-manifest.json](app-manifest.json) filled in (Slack's `manifest_json` link, held equal
-  to the file by `src/app-manifest.test.ts`), and its Test asks `auth.test`, whose answer is 200 either way, so the
-  probe reads `ok`. The skill (`skills/slack/SKILL.md`) teaches the agent Slack's Web API with `curl`. The gateway is a
-  `processes` entry the daemon runs while a Slack card or Slack automation exists.
+- Four pieces. The capability card takes a bot token (`xoxb-`) and how Slack reaches the sandbox: an app-level token
+  (`xapp-`, Socket Mode) or the app's signing secret (Request URLs). Its guide link opens Slack's app creation with
+  the Socket Mode app filled in ([app-manifest.json](app-manifest.json), Slack's `manifest_json` link; both are held
+  equal to [src/app-manifest.ts](src/app-manifest.ts), which writes the app in both shapes, by
+  `src/app-manifest.test.ts`), and its Test asks `auth.test`, whose answer is 200 either way, so the probe reads `ok`.
+  The skill (`skills/slack/SKILL.md`) teaches the agent Slack's Web API with `curl`. The gateway is a `processes` entry
+  the daemon runs while a Slack card or Slack automation exists, and the backend (`server`) hears the Request URL.
 - The card declares what its Web API methods do (`broker.actions`: posting, editing and deleting a message, adding and
   removing a reaction, and the history reads), so the sandbox's credential gateway records each call in Activity with
   its channel and text, and holds it to the owner's action rules (`slack.message.send` and the rest) before the token
   is attached.
-- The gateway holds one Socket Mode socket per Slack app, and only while an enabled Slack automation exists; the
-  daemon holds no Slack connection. Socket Mode is an outbound WebSocket, so no public URL is needed, for events and
-  for button presses alike. A revoked token is fatal and pauses reconnecting for a backoff period.
+- The gateway holds one connection per Slack card, and only while an enabled Slack automation exists; the daemon holds
+  no Slack connection. Socket Mode is an outbound WebSocket, so no public URL is needed, for events and for button
+  presses alike. A revoked token is fatal and pauses reconnecting for a backoff period.
+- (2026-11-27) A sandbox Intentic hosts sleeps when nobody uses it, and a socket sleeps with it, so a mention sent then
+  was never heard. There the app sends events and button presses to a Request URL instead
+  ([src/http.ts](src/http.ts)): the `events` public route's wake URL (`api.sleep.wakeUrl`, `wakes: true`), which
+  wakes the sandbox when called while it sleeps; the edge answers 503 and Slack's retry, a minute or five later, is
+  heard. Which way an app goes is [src/mode.ts](src/mode.ts): a hosted sandbox (`SANDBOX_VM=1`) takes Request URLs
+  once the card holds the signing secret and keeps Socket Mode until then, so an app set up before keeps answering
+  while the sandbox is awake; any other sandbox keeps Socket Mode while it has an app-level token.
+- Only a backend hears a public route, so the backend ([src/server.ts](src/server.ts)) hands each call, unread, to
+  the gateway's loopback (published like a CLI's), and answers 503 with `Retry-After` while there is none. The
+  gateway checks `X-Slack-Signature` against every card's signing secret (an HMAC over the timestamp and the body,
+  refused when the timestamp is five minutes off), answers within two seconds, and hands the call to the listener as
+  the envelope Socket Mode would have delivered, so everything below is the same. Slack's `url_verification` is
+  answered with its challenge before any check, since it comes while the app is created, before the card holds its
+  secret; a retry of an event already taken (its `event_id`) is acked and not dispatched twice; a call a card
+  signed while nothing listens is acked, so Slack never reads the silence as a broken URL; and one that arrives while
+  the card's connection is still opening, as right after a wake, is answered 503, so Slack sends it again.
+- On a hosted sandbox the backend writes the Request URL and a link that creates an app already pointed at it into its
+  state directory (`app-setup.json`), and the skill hands that link out in place of the card's. An app still on
+  Socket Mode there is told once, as a failure on the Slack automations ([src/socket-notice.ts](src/socket-notice.ts)),
+  that it only answers while the sandbox is awake, with the one switch in Slack's app settings and that link.
 - An event envelope is acked once what it carries is kept (connector-runtime's dispatch spool, or the daemon's inbox),
   or after 2.5 s whatever happens, since Slack redelivers what is not acked within three; a gateway that dies before
   then is sent it again. Every other envelope is acked at once.
@@ -60,17 +85,16 @@ flowchart LR
 
 ## Key files
 
-- [intentic-extension.json](intentic-extension.json) — the card, its setup guide, the listener events, the template and the gateway process.
+- [intentic-extension.json](intentic-extension.json) — the card, its setup guide, the listener events, the template, the gateway process and the Request URL's route.
 - [src/listener.ts](src/listener.ts) — Slack envelopes to dispatched events, whether a message is for us, Stop, the hello.
-- [src/reply.ts](src/reply.ts) — what the shared reply looks like in Slack: reactions, thread status, Markdown answers.
-- [src/card.ts](src/card.ts) — the status card drawn as Block Kit.
-- [src/stream.ts](src/stream.ts) — the opt-in alternative: the work as Slack's own streamed task list.
-- [src/client.ts](src/client.ts) — the socket and Web API pool, and which Slack errors are fatal.
-- [skills/slack/SKILL.md](skills/slack/SKILL.md) — what the agent learns about using Slack.
+- [src/http.ts](src/http.ts) — calls to the Request URL checked and made into envelopes: signatures, the URL check, retries.
+- [src/reply.ts](src/reply.ts) — what the shared reply looks like in Slack: reactions, thread status, Markdown answers; the card ([src/card.ts](src/card.ts)) and the streamed alternative ([src/stream.ts](src/stream.ts)) draw it.
+- [src/client.ts](src/client.ts) — the connection pool, Socket Mode or Request URLs, and which Slack errors are fatal.
+- [skills/slack/SKILL.md](skills/slack/SKILL.md) — what the agent learns about using and setting up Slack.
 
 ## Commands
 
 ```sh
-pnpm --filter @intentic/ext-slack build   # dist/gateway.js
+pnpm --filter @intentic/ext-slack build   # dist/gateway.js, dist/server.js
 pnpm --filter @intentic/ext-slack test
 ```

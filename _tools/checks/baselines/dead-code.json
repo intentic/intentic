@@ -377,7 +377,7 @@
     "_platform/api/src/repair/repair-tools.ts": "standing when the check arrived (2026-10-16)",
     "_platform/api/src/repair/repair-turn-schema.ts": "standing when the check arrived (2026-10-16)",
     "_platform/api/src/repair/repair.routes.ts": "standing when the check arrived (2026-10-16)",
-    "_platform/api/src/sandbox/announce-copies.ts": {
+    "_platform/api/src/sandbox/announce/announce-copies.ts": {
         "count": 2,
         "why": "standing when the check arrived (2026-10-16)"
     },

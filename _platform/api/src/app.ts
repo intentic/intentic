@@ -16,12 +16,14 @@ import { acmeChallengeHolds, CloudflareTokenError, ensureLocalDnsRecord, setAcme
 import { edgeCertificateFor } from "./sandbox/edge-certificate.js";
 import { hostReportHttpRoutes } from "./sandbox/host-report.js";
 import { localWakeSignals, type WakeSignals } from "./sandbox/local-wake/wake-signals.js";
-import { hostedWakeAlarmRoutes } from "./sandbox/hosted/wake/hosted-wake-alarm.js";
+import { hostedWakeRoutes } from "./sandbox/hosted/wake/hosted-request-wake.js";
+import { releaseSleepWatches, sleepWatchRoutes } from "./sandbox/hosted/sleep-watch/sleep-watch.js";
 import { ingressEnabled, sandboxHostname } from "./sandbox/reachability.js";
 import { DaemonVersionSchema } from "./sandbox/daemon-version.js";
 import { identityField, isTombstoned } from "./sandbox/recovery.js";
 import { identityKeyOf } from "./sign-in.js";
-import { announcedCopyOf, noteAnnounce, seenCopiesOf } from "./sandbox/announce-copies.js";
+import { announcedCopyOf, noteAnnounce, seenCopiesOf } from "./sandbox/announce/announce-copies.js";
+import { announcedRow } from "./sandbox/announce/announce-row.js";
 import { announceActive } from "./sandbox/active/active-host-announce.js";
 import { claimerOf, heldClaimerOf, namesMachine, secondMachine } from "./sandbox/setup-code.js";
 import { recoveryHttpRoutes } from "./sandbox/recovery.routes.js";
@@ -248,7 +250,9 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
     // What `ic sandbox fix` found on the machine a sandbox runs on: `/host-report/claim` redeems the recovery panel's fix
     // code for the report key, `/host-report` takes a report under that key (sandbox/host-report.ts).
     app.route(`/host-report`, hostReportHttpRoutes({ config, prisma, wakeSignals }));
-    app.route(`/`, hostedWakeAlarmRoutes({ prisma, config }));
+    app.route(`/`, hostedWakeRoutes({ prisma, config, logger }));
+    // (2026-11-27) What a hosted sandbox's owner let the platform hold while it sleeps (sleep-watch.ts).
+    app.route(`/`, sleepWatchRoutes({ prisma, config }));
 
     // The daemon's phone-home, authenticated by the connect token. A token with no row answers 410 when its id has a
     // deletion record, else 404: the second is what a registry that forgot the sandbox says, and the daemon keeps
@@ -306,25 +310,17 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
                 `announce: two copies of this sandbox are running side by side on one token`,
             );
         }
-        // Cleared here since a stored refusal must describe a live disagreement; firstAnnouncedAt is written once.
-        // The removal tombstone goes with it, and for the same reason: this sandbox is plainly here, whatever was
-        // deleted on some machine before. A box set up again on the same token heals its own record.
+        // What it writes, the moments written once among it (announce-row.ts).
+        const heard = { daemonUrl, version: version.success ? version.data : null, firstTurnAt: body.firstTurnAt, copies };
         const announced = await prisma.sandbox.updateMany({
             where: { id: sandbox.id, tokenDigest: sha256Hex(token) },
-            data: {
-                daemonUrl,
-                daemonVersion: version.success ? version.data : null,
-                lastSeenAt: now,
-                announceRefusal: Prisma.DbNull,
-                removedAt: null,
-                removedBy: null,
-                ...(sandbox.firstAnnouncedAt === null ? { firstAnnouncedAt: now } : {}),
-                ...(copies === undefined ? {} : { seenInstances: [...copies.seen], duplicateSince: copies.duplicateSince }),
-            },
+            data: announcedRow(sandbox, heard, now),
         });
         if (announced.count === 0) {
             return kit.refuse(404, `unknown sandbox`);
         }
+        // A daemon that announces is awake: nothing it let the platform hold while it slept is held any longer (2026-11-27).
+        await releaseSleepWatches(prisma, sandbox.id);
         // With the identity key for the platform's assertions (sign-in.ts), the row's id for opening it offline, the digest
         // of its name and logo (ingress-schemas.ts), and whether this copy is the one that runs it (active-host-announce.ts).
         return kit.answer({
@@ -352,6 +348,8 @@ export const createApp = (config: Config, prisma: PrismaClient, logger: Logger, 
             where: { tokenDigest: sha256Hex(token) },
             data: { removedAt: new Date(), removedBy: claimed === `` ? null : claimed, daemonUrl: null },
         });
+        // Nothing is held for a sandbox that is gone (2026-11-27, sleep-watch.ts).
+        await prisma.sleepWatch.deleteMany({ where: { sandbox: { tokenDigest: sha256Hex(token) } } });
         return removed.count === 0 ? kit.refuse(404, `unknown sandbox`) : kit.answer({ ok: true });
     });
 

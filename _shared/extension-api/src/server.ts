@@ -5,7 +5,17 @@ import type { WebhookSignatureScheme } from "@intentic/sandbox-contract/schemas/
 import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Disposable } from "./disposable.js";
-import type { ActivityRow, CiFeedEvent, ExecOptions, ExecResult, RunSettled, SandboxActivity } from "./server-reach.js";
+import type {
+    ActivityRow,
+    CiFeedEvent,
+    ExecOptions,
+    ExecResult,
+    RunSettled,
+    SandboxActivity,
+    SleepBoot,
+    SleepHandler,
+    SleepHeardMessage,
+} from "./server-reach.js";
 
 // The effect vocabulary the daemon's own tools and every device's tools declare, re-exported so a tool here says what it
 // does in the same words.
@@ -210,6 +220,9 @@ export interface PublicRouteVerification {
     // When the daemon took it (ms).
     readonly at: number;
 }
+
+// (2026-11-27) What `api.sleep` hands its callers (server-reach.ts).
+export type { SleepBoot, SleepHandler, SleepHeardMessage, SleepNotice } from "./server-reach.js";
 
 // One call through a public route, path relative to /door/<id>, its door key (if any) already taken off. Return
 // `undefined` for "not mine": the host answers 404.
@@ -440,6 +453,36 @@ export interface ExtensionServerApi {
     // from its token. Reached without declaring anything; rejects with the daemon's words when refused.
     readonly activity: {
         append(row: ActivityRow): Promise<void>;
+    };
+    // (2026-11-27) Hosted sleep, for code that must hear what arrives while the sandbox sleeps (a chat gateway, a webhook
+    // receiver). A sandbox the platform hosts stops when nobody uses it; a request at one of its wake doors starts it
+    // again, its sender answered 503 with `Retry-After` while it boots, so only a sender that retries is heard (Slack and
+    // Telegram do; GitHub does not redeliver unasked). The backend and every declared process get it, undeclared.
+    readonly sleep: {
+        // The full public URL of one of this extension's own public routes declaring `wakes: true`, path as the manifest
+        // spells it (`*/events`), its `*` filled with `automationId` for an automation's route, and the wake secret in
+        // its query (`?wake=`, which the door takes off before the backend hears the call). The same URL on every call
+        // and after every restart, so it is the one to paste into a provider's webhook setting (Slack's Request URL,
+        // Telegram's setWebhook). A call there wakes the sandbox only while an automation on the extension's listener
+        // provider is switched on (the one it names, for an automation's route). Rejects for a route not declared so, and
+        // on a sandbox with no public address.
+        wakeUrl(route: string, options?: { readonly automationId?: string | undefined }): Promise<string>;
+        // Runs `handler` right before the hosted machine sleeps, after the platform has saved its wake doors: the moment
+        // to point a provider at a wake URL (Telegram's setWebhook in place of long polling). Every handler of every
+        // extension runs at once and all of them share one deadline, `notice.deadline` (ms; about ten seconds), after
+        // which the machine stops whether or not they finished. Once asked, the sleep is never called off. Disposing
+        // stops hearing; nothing is told on a sandbox that never sleeps (one on somebody's own computer).
+        beforeSleep(handler: SleepHandler): Disposable;
+        // What this boot follows (`SleepBoot`): whether the last stop was a hosted sleep (the moment to undo what
+        // `beforeSleep` did), and whether a request at a wake door started it. Resolves within about fifteen seconds of
+        // the daemon's boot; a daemon from before it answers false for both.
+        boot(): Promise<SleepBoot>;
+        // (2026-11-27, 2.58.0) What the platform heard for this extension's own connections while the sandbox slept,
+        // oldest first: a card declaring `sleepWatch` whose owner let the platform hold its credential (Discord's bot)
+        // has the platform note where each message for it is. Fetch each one and answer it as if it had just arrived.
+        // Handed over once: asking forgets them. Empty on a sandbox the platform does not host; rejects when the
+        // platform could not say, leaving them there to ask again.
+        heard(): Promise<readonly SleepHeardMessage[]>;
     };
     readonly routes: {
         // Serves this extension's route namespace; the daemon proxies /x/<id>/* here through its ordinary auth. A

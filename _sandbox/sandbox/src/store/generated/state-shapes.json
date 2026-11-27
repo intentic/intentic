@@ -517,6 +517,12 @@
       "since": "unreleased"
     }
   ],
+  "history:first-turn.json": [
+    {
+      "type": "{ at?: number }",
+      "since": "unreleased"
+    }
+  ],
   "history:hook-approvals.json": [
     {
       "type": "{ approved: Record<string, { approvedAt: number; hooks: ({ declaredIn?: string; event: string; matcher?: string; run: string; source: \"user\" | \"project\"; type: string })[] }> }",
@@ -2031,6 +2037,10 @@
     {
       "type": "{ automation?: Record<string, string>; gate?: Record<string, string>; intake?: Record<string, string> }",
       "since": "v1.312.0"
+    },
+    {
+      "type": "{ automation?: Record<string, string>; gate?: Record<string, string>; intake?: Record<string, string>; wake?: Record<string, string> }",
+      "since": "unreleased"
     }
   ],
   "workspace:intentic-bundle.json": [

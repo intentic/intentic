@@ -80,7 +80,7 @@ flowchart LR
 | [db/](db) | the check `db:up` and `db:reset` run before migrating (`verify-target.mjs`): that `DATABASE_URL` reaches the compose service's own Postgres |
 | [desktop/](desktop) | desktop installer builds and install/update checks, `try-onboarding.mjs` |
 | [ci/](ci) | git hooks, runner setup, provider CLI installs, CI failure audit, SDLC scoreboard |
-| [engines/](engines) | agent engine version pins and the bumper behind `engines.yml` |
+| [engines/](engines) | agent engine version pins, the release builds' recorded hashes, and the bumper behind `engines.yml` |
 | [tools/](tools) | the sandbox image's pinned tools, every place each is written, and the bumper behind `tools.yml` |
 | [lib/](lib) | shared shell and JS helpers: repo root, git, GitHub, registry retries, the publish set, gate steps, a docker config without the credential helpers docker cannot run (`docker-config.sh`) |
 | [fonts.mjs](fonts.mjs) | downloads the served webfonts and writes their `@font-face` rules |

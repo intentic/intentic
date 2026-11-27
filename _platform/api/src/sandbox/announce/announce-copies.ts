@@ -1,7 +1,7 @@
 import { type ActiveHost, AnnounceBodySchema, type DuplicateCopies } from "@intentic/api-contract";
 import { z } from "zod";
-import { HOUR_MS } from "../durations.js";
-import { isActiveCopy } from "./active/active-host.js";
+import { HOUR_MS } from "../../durations.js";
+import { isActiveCopy } from "../active/active-host.js";
 
 /* Track the last two announced container instances; a connect token can be copied, causing competing tunnels.
  * Duplicates require both copies heard within an hour and overlapping lifetimes of at least SIDE_BY_SIDE_MS, excluding restarts/cutovers.

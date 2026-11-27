@@ -109,6 +109,13 @@ export const EXTENSION_OWN_ROUTES: readonly string[] = [
     "POST /extension/jobs/*",
     // (2026-11-26) A row in the sandbox's activity feed, written as the extension's own.
     "POST /extension/activity",
+    // (2026-11-27) Hosted sleep: its own `wakes` routes' URLs, what this boot follows, and the before-sleep watch.
+    "POST /extension/sleep/wake-url",
+    "GET /extension/sleep/boot",
+    "POST /extension/sleep/watch",
+    "POST /extension/sleep/ready",
+    // (2026-11-27) What the platform's sleep watch heard for its own connections while the sandbox slept.
+    "POST /extension/sleep/heard",
 ];
 
 // (2026-11-26) What an extension's own code may hear, hold and run beyond its routes, each a power its manifest declares

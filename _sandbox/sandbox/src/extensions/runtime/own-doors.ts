@@ -27,7 +27,7 @@ import { holdExtensionWork } from "./extension-holds.js";
 type OwnCaller = (c: Context<AppEnv>) => Promise<InstalledExtension | Response>;
 
 // A request's JSON body read by `schema`; a body that is not JSON reads as nothing, which the schema then refuses.
-const bodyOf = async <S extends z.ZodType>(c: Context<AppEnv>, schema: S): Promise<z.ZodSafeParseResult<z.output<S>>> => {
+export const bodyOf = async <S extends z.ZodType>(c: Context<AppEnv>, schema: S): Promise<z.ZodSafeParseResult<z.output<S>>> => {
     let raw: unknown;
     try {
         raw = await c.req.json();

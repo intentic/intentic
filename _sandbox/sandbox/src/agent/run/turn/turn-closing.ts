@@ -41,9 +41,9 @@ export const closingOf = (rows: readonly TranscriptRow[]): string => {
     return [report, ...answers].join("\n\n");
 };
 
-// What the bus hears of a run that settled: who asked, how it ended, and what it ended on.
+// What the bus hears of a run that settled: who asked, whether in their own words, how it ended, and what it ended on.
 export const settledOf = (
-    input: Pick<TurnInput, "actor" | "speaker"> & { readonly conversationId: string },
+    input: Pick<TurnInput, "actor" | "speaker" | "errand"> & { readonly conversationId: string },
     rows: readonly TranscriptRow[],
     ended: { readonly run: string; readonly failure: string | undefined; readonly stopped: boolean; readonly rerun: { readonly at?: number } | undefined },
 ): DomainEventMap["run.settled"] => ({
@@ -51,6 +51,7 @@ export const settledOf = (
     run: ended.run,
     actor: input.actor,
     speaker: input.speaker,
+    ...opt("errand", input.errand),
     failure: ended.failure,
     closing: closingOf(rows),
     ...opt("stopped", ended.stopped ? true : undefined),

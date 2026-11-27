@@ -33,6 +33,9 @@ export const JOB_MODEL_CATALOG = 14;
 // Applies the sandbox plan changes that are due (a downgrade at renewal, an upgrade to retry); two replicas would
 // resize one machine twice.
 export const JOB_HOSTED_PLAN = 15;
+// (2026-11-27) Holds the Discord connections sleeping hosted sandboxes' owners let the platform hold, for as long as the
+// replica runs; two replicas would each hold every bot, so one mention would be heard twice.
+export const JOB_SLEEP_WATCH = 16;
 
 export const runExclusive = async (config: Config, key: number, fn: () => Promise<void>): Promise<void> => {
     const client = new Client({ connectionString: config.database.url });
@@ -45,5 +48,27 @@ export const runExclusive = async (config: Config, key: number, fn: () => Promis
         await fn();
     } finally {
         await client.end();
+    }
+};
+
+// The same lock held for as long as `fn` runs rather than for one pass (2026-11-27): for a worker that holds connections
+// of its own. `fn` is told through its signal when the lock's connection is lost, which frees the lock for another
+// replica, and must stop then. Answers whether this replica held it.
+export const holdExclusive = async (config: Config, key: number, fn: (lost: AbortSignal) => Promise<void>): Promise<boolean> => {
+    const client = new Client({ connectionString: config.database.url, keepAlive: true });
+    const lost = new AbortController();
+    client.on(`error`, () => lost.abort());
+    client.on(`end`, () => lost.abort());
+    await client.connect();
+    try {
+        const { rows } = await client.query<{ locked: boolean }>(`SELECT pg_try_advisory_lock($1) AS locked`, [key]);
+        if (!rows[0]?.locked) {
+            return false;
+        }
+        await fn(lost.signal);
+        return true;
+    } finally {
+        // allow(silent-catch): a connection already lost has nothing left to end
+        await client.end().catch(() => undefined);
     }
 };

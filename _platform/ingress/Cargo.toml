@@ -31,6 +31,8 @@ httparse = "1"
 hyper = { version = "1", features = ["client", "server", "http1", "http2"] }
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2", "ring", "tls12", "logging", "webpki-roots"] }
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "server", "server-auto", "http1", "http2", "tokio"] }
+# Decodes a query value before the request wake hashes it (wakes.rs); already in the tree through hyper-rustls.
+percent-encoding = "2"
 relay = { path = "../../_shared/relay" }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring", "log"] }
 ring = "0.17"

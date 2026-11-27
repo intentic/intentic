@@ -31,7 +31,10 @@ const config = configSchema.parse({
 
 const logger = { child: () => logger, info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } as unknown as Logger;
 
-const fakePrisma = (sandbox: Record<string, Record<string, ReturnType<typeof jest.fn>>>) => sandbox as unknown as PrismaClient;
+// Every route that ends what a sleeping sandbox let the platform hold reaches `sleepWatch` too (2026-11-27); a test that
+// asserts on it passes its own.
+const fakePrisma = (tables: Record<string, Record<string, ReturnType<typeof jest.fn>>>) =>
+    ({ sleepWatch: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) }, ...tables }) as unknown as PrismaClient;
 
 const claim = (prisma: PrismaClient) =>
     createApp(config, prisma, logger).app.request(`/setup/claim`, {
@@ -780,8 +783,11 @@ const farewell = (prisma: PrismaClient, token: string | undefined, removedBy?: u
 describe(`POST /sandbox/farewell`, () => {
     it(`stamps the removal on the row the token digests to, and drops the address`, async () => {
         const updateMany = jest.fn().mockResolvedValue({ count: 1 });
-        const res = await farewell(fakePrisma({ sandbox: { updateMany } }), `tok`, `radarsu-rog`);
+        const deleteMany = jest.fn().mockResolvedValue({ count: 1 });
+        const res = await farewell(fakePrisma({ sandbox: { updateMany }, sleepWatch: { deleteMany } }), `tok`, `radarsu-rog`);
         expect(res.status).toBe(200);
+        // Nothing a removed sandbox let the platform hold while it slept is held any longer.
+        expect(deleteMany).toHaveBeenCalledWith({ where: { sandbox: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } } });
         expect(updateMany).toHaveBeenCalledTimes(1);
         expect(updateMany).toHaveBeenCalledWith({
             where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
@@ -819,10 +825,13 @@ describe(`POST /sandbox/announce`, () => {
     it(`stamps daemonUrl + lastSeenAt on the row matched by the token's digest`, async () => {
         const updateMany = jest.fn().mockResolvedValue({ count: 1 });
         const findUnique = jest.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
-        const prisma = fakePrisma({ sandbox: { findUnique, updateMany } });
+        const deleteMany = jest.fn().mockResolvedValue({ count: 1 });
+        const prisma = fakePrisma({ sandbox: { findUnique, updateMany }, sleepWatch: { deleteMany } });
 
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
         expect(res.status).toBe(200);
+        // A daemon that announces is awake: what it let the platform hold while it slept is let go (sleep-watch.ts).
+        expect(deleteMany).toHaveBeenCalledWith({ where: { sandboxId: `s1` } });
         // `hosted` rides along because it is half of whether this platform handed this row a grant.
         expect(findUnique).toHaveBeenCalledWith({
             where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
@@ -856,6 +865,36 @@ describe(`POST /sandbox/announce`, () => {
         );
         expect(res.status).toBe(200);
         expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ daemonVersion: `1.62.0-rc.1+build.7` }) }));
+    });
+
+    // (2026-11-26) The first turn a person started that finished without failing, as the daemon recorded it: the
+    // funnel's activation (admin-funnel.ts). Written once, from the first announce that names one, never dated later
+    // than that announce, and never moved after.
+    it(`writes the daemon's first finished turn once, and never later than the announce that brought it`, async () => {
+        const row = { id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null, firstAnnouncedAt: new Date(`2026-11-20T09:00:00Z`) };
+        const post = async (stored: Date | null, firstTurnAt: unknown) => {
+            const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+            const findUnique = jest.fn().mockResolvedValue({ ...row, firstTurnAt: stored });
+            const res = await createApp(config, fakePrisma({ sandbox: { findUnique, updateMany } }), logger).app.request(`/sandbox/announce`, {
+                method: `POST`,
+                headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },
+                body: JSON.stringify({ daemonUrl: `https://sandbox-abc.intentic.dev`, firstTurnAt }),
+            });
+            expect(res.status).toBe(200);
+            // SAFETY: an accepted announce makes exactly one updateMany, whose argument carries the row's new data.
+            const [[written]] = updateMany.mock.calls as [[{ data: { firstTurnAt?: Date; lastSeenAt: Date } }]];
+            return written.data;
+        };
+        const finished = Date.parse(`2026-11-21T14:30:00Z`);
+        expect((await post(null, finished)).firstTurnAt).toEqual(new Date(finished));
+        // A daemon whose clock runs ahead dates it no later than this announce.
+        const ahead = await post(null, Date.now() + 3 * 60 * 60_000);
+        expect(ahead.firstTurnAt).toEqual(ahead.lastSeenAt);
+        // Already written: kept as it is, whatever this announce says.
+        expect(Object.keys(await post(new Date(finished), finished - 60_000))).not.toContain(`firstTurnAt`);
+        // Not yet had one, or a daemon too old to say, or a value that is not a moment: nothing written.
+        expect(Object.keys(await post(null, undefined))).not.toContain(`firstTurnAt`);
+        expect(Object.keys(await post(null, `yesterday`))).not.toContain(`firstTurnAt`);
     });
 
     // Which copy announced, kept beside the last other one (announce-copies.ts). Two copies whose running stretches

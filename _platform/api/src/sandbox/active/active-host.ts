@@ -1,6 +1,6 @@
 import { type ActiveHost, ActiveHostSchema, type HostManager, type Takeover } from "@intentic/api-contract";
 import type { Prisma } from "@intentic/prisma";
-import type { AnnouncedCopy } from "../announce-copies.js";
+import type { AnnouncedCopy } from "../announce/announce-copies.js";
 
 /* WHICH COPY OF A SANDBOX RUNS IT (2026-11-11). One connect token can sit in two containers (a stale copy on the machine
  * a sandbox moved away from, the setup command pasted twice), and the edge keeps whichever dialled first, so the stale

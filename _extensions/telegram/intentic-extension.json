@@ -6,8 +6,9 @@
     "category": "connections",
     "logo": "telegram",
     "engines": {
-        "intentic": "^2.0.0"
+        "intentic": "^2.57.0"
     },
+    "server": "dist/server.js",
     "contributes": {
         "listener": {
             "provider": "telegram",
@@ -32,6 +33,13 @@
                 "starterPrompt": "A Telegram message just arrived, each line of the event payload is one JSON event of type `message`: `author` is who wrote it, `channelId` is the chat, `content` is the text (a `[voice note]`-style marker when they sent a file instead, with the file ids in `extra.attachments`), `thread` names the request's reply chain in a group, and `mentioned: true` means it was addressed to the bot (a private message, an @mention, a reply to the bot, or a reply in a chain it is answering). `history` holds the recent messages the gateway watched go by, a bot cannot read a chat's past, so that is all the context there is. Your answer is posted into the chat for you as you write it: write Markdown (bold, code, links, lists), which is shown formatted."
             }
         },
+        "publicRoutes": [
+            {
+                "path": "wake",
+                "methods": ["POST"],
+                "wakes": true
+            }
+        ],
         "processes": [
             {
                 "name": "gateway",

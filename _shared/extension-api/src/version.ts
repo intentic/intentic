@@ -131,4 +131,23 @@
 // surface grows `serverApi`, the manifest schema and the wire's CI schemas (the feed's `failed` detail, the forge reads
 // a backend asks of the core, main's repair state as it is handed over), and drops the contract routes main's fix agent
 // answered from the daemon (`GET /ci/main`, `POST /ci/failures/forget`, `POST /ci/fix`), which its backend answers now.
-export const extensionApiVersion = "2.56.0";
+// 2.57.0 (2026-11-27) lets an extension hear what arrives while a sandbox the platform hosts sleeps. A public route may
+// declare `wakes: true` (its only `*` an automation's), a power the owner approves of its own: a call to it at the URL
+// `api.sleep.wakeUrl(route, { automationId })` hands out (its wake secret in `?wake=`, the same URL across restarts, to
+// paste into a provider's webhook setting) wakes the sleeping machine while an automation on the extension's listener
+// provider is on, its sender answered 503 with `Retry-After` until it boots. `api.sleep.beforeSleep(handler)` runs right
+// before a hosted sleep under one shared deadline of about ten seconds, and `api.sleep.boot()` says whether the last stop
+// was such a sleep and whether a request at a wake door started this boot. The backend and every declared process get
+// `api.sleep`, through four doors every extension token reaches undeclared (`/extension/sleep/...`). Additive: a manifest
+// or a backend that uses none of it is unchanged, and `fakeExtensionApi` models it (`sleep`). The recorded surface grows
+// `serverApi`, the manifest schema and the wire's extension protocol.
+// 2.58.0 (2026-11-27) lets a card name the one credential Intentic's servers may hold while a hosted sandbox sleeps, for a
+// service that delivers only over a live connection (Discord's gateway). A cli card declares `sleepWatch` (the service,
+// its secret field, and a consent switch), and a field may declare `hosted: true`, drawn only on a sandbox Intentic hosts;
+// a consent must be such a switch, off by default. Right before a hosted sleep the daemon hands the platform the
+// credential of each connection whose owner turned the switch on while an automation listens on the card's provider;
+// the platform notes where each message for the bot is and wakes the sandbox, and deletes the credential when it wakes.
+// `api.sleep.heard()` answers those notes for the extension's own connections, once. A processor path may sit under a
+// `when` over the card's answers. Additive: a manifest that declares none of it is unchanged, and `fakeExtensionApi`
+// models `heard` (`sleep.heard`). The recorded surface grows the manifest schema.
+export const extensionApiVersion = "2.58.0";

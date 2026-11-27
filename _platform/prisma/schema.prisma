@@ -236,6 +236,11 @@ model Sandbox {
     // cannot answer "when did this sandbox come alive" (it moves on every check-in), and time-to-activate
     // and retention cohorts both need the moment that does not move. Null = never announced.
     firstAnnouncedAt   DateTime?
+    // When the first turn a PERSON started on this sandbox finished without failing, as its daemon recorded it and
+    // sent on an announce: the activation moment the operator's funnel counts, since connected only says a container
+    // came up. Written once from the first announce that names it, never overwritten, and never later than the
+    // announce that brought it. Null = no such turn yet, or a daemon from before 2026-11-26, which records none.
+    firstTurnAt        DateTime?
     // Short-lived setup code the connect script redeems at POST /setup/claim for the values the one-liner used
     // to carry inline (so no raw token lands in shell history). Re-claimable until expiry — a failed run stays
     // re-runnable from the same copied command — and overwritten whenever setup mints a fresh one.
@@ -295,6 +300,17 @@ model Sandbox {
     // hosted-wake-alarm.ts). What the free lane's idle collection measures from (hosted-idle.ts), since a boot the alarm
     // made stamps lastSeenAt as any boot does. Backfilled from lastSeenAt when it arrived (2026-10-18).
     personSeenAt       DateTime?
+    // The hosted daemon's wake doors (2026-11-27): [{path, digest}], the public path prefixes a request may wake it at
+    // while it sleeps and the SHA-256 of the secret each request must carry (a webhook's fire token, an extension route's
+    // wake secret), never the secret. Replaced at every sleep, cleared once its boot takes charge; null from a daemon
+    // that names none (api hosted-request-wake.ts).
+    wakeDoors          Json?
+    // When the edge's ask last started this machine for a request at a door, and null once its daemon has checked in
+    // since: no second start while one is booting. `requestWakeCount` counts the starts of the UTC day `requestWakeDay`,
+    // held to a daily cap.
+    requestWakeAt      DateTime?
+    requestWakeDay     DateTime?
+    requestWakeCount   Int             @default(0)
     // The last two distinct copies of this sandbox that announced, as [{instance, host, os, firstAt, at}] (api
     // announce-copies.ts): an `instance` is minted once per container start, so two that keep announcing side by side
     // are two containers holding one connect token, which is what pasting the setup command into PowerShell and into
@@ -332,6 +348,10 @@ model Sandbox {
     projectClaims      ProjectClaim[]
     // The run-outs this sandbox reported for a provider account it shares with its owner's other sandboxes.
     poolSignals        ProviderPoolSignal[]
+    // (2026-11-27) The connections its owner let the platform hold while it sleeps, and where the messages they heard are
+    // (SleepWatch, SleepHeard below).
+    sleepWatches       SleepWatch[]
+    sleepHeard         SleepHeard[]
     // The organisation whose policy this sandbox is held to (Organisation below); null is a personal sandbox, which
     // is every sandbox until an admin of an organisation who owns it binds it. Set null if the organisation goes, so
     // its sandboxes fall back to personal rather than vanishing with it.
@@ -1143,4 +1163,54 @@ model ProviderPoolKey {
     createdAt DateTime @default(now())
 
     @@map("provider_pool_key")
+}
+
+// (2026-11-27) A connection a hosted sandbox's owner let the platform hold while it sleeps, the one exception to
+// credentials staying in the sandbox (api sandbox/hosted/sleep-watch/): a Discord bot's token, per connection, on the
+// owner's yes on the card. Handed over by the daemon right before the machine stops, encrypted under SECRETS_KEY (api
+// crypto.ts), and deleted at the waking daemon's first word (its announce, its alarm, its ask for what was heard), with
+// the sandbox, or on a refusal no retry answers (a token Discord refuses, a start refused for standing or hours).
+model SleepWatch {
+    id         String    @id @default(cuid())
+    sandboxId  String
+    sandbox    Sandbox   @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+    // The service the watcher speaks ("discord") and the card it belongs to in the sandbox.
+    service    String
+    connection String
+    // The credential, `enc1:` ciphertext (crypto.ts encryptSecret); plaintext only where SECRETS_KEY is unset (dev).
+    credential String
+    heldAt     DateTime  @default(now())
+    // The watcher connects from here on, once the machine has had time to stop, so it never hears what the sandbox's own
+    // gateway is still hearing.
+    listenFrom DateTime
+    // When a message it heard started the machine. It listens on, recording and waking nothing, until the daemon's word
+    // deletes it, or a boot's time passes. Null while nothing woke it.
+    wokeAt     DateTime?
+    // A start that did not happen: when the watcher may try again, and how many have failed in a row.
+    retryAt    DateTime?
+    failures   Int       @default(0)
+
+    @@unique([sandboxId, connection])
+    @@index([listenFrom])
+    @@map("sleep_watch")
+}
+
+// (2026-11-27) Where a message a sleep watch heard is, never what it says: the channel, message and server ids of one
+// message addressed to the bot. Kept until the sandbox's gateway asks for them (POST /sandbox/sleep-watch/heard), which
+// hands them over once and forgets them, and at most a week.
+model SleepHeard {
+    id         String   @id @default(cuid())
+    sandboxId  String
+    sandbox    Sandbox  @relation(fields: [sandboxId], references: [id], onDelete: Cascade)
+    service    String
+    connection String
+    channelId  String
+    messageId  String
+    // Null for a direct message.
+    guildId    String?
+    heardAt    DateTime @default(now())
+
+    @@unique([sandboxId, connection, messageId])
+    @@index([heardAt])
+    @@map("sleep_heard")
 }

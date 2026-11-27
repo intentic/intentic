@@ -15,6 +15,7 @@ import { startHostedHealth } from "./sandbox/hosted/hosted-health.js";
 import { startHostedMeter } from "./sandbox/hosted/hosted-meter.js";
 import { startHostedPlanChanges } from "./sandbox/hosted/plan/hosted-plan-changes.js";
 import { startHostedWakeAlarms } from "./sandbox/hosted/wake/hosted-wake-alarm.js";
+import { startSleepWatches } from "./sandbox/hosted/sleep-watch/sleep-watch-worker.js";
 import { startHostedProbation } from "./sandbox/hosted/hosted-probation.js";
 import { checkHostedPlanPrices, hostedPlanEnabled } from "./sandbox/hosted/plan/hosted-plan.js";
 import { startHostedPool } from "./sandbox/hosted/hosted-pool.js";
@@ -101,6 +102,9 @@ startHostedBuilds(prisma, config, logger);
 startHostedMeter(prisma, config, logger);
 startHostedPlanChanges(prisma, config, logger);
 startHostedWakeAlarms(prisma, config, logger);
+// Holds the Discord bots sleeping hosted sandboxes' owners let it hold, and wakes a sandbox for a message to its bot
+// (sleep-watch-worker.ts); one replica at a time.
+const stopSleepWatches = startSleepWatches(prisma, config, logger);
 // Stops a free machine at full load for a whole window, on the provider's own meter (hosted-abuse.ts).
 startHostedAbuse(prisma, config, logger);
 // Watches the hosted lane against Fly and says so when they disagree; read-only (hosted-health.ts).
@@ -140,6 +144,7 @@ logger.info({ url: `${tls ? `https` : `http`}://localhost:${server.port}` }, `ap
 const shutdown = async () => {
     logger.info(`shutting down`);
     stopBrowsingCatalog();
+    await stopSleepWatches();
     await wakeSignals.stop();
     await prisma.$disconnect();
     await server.stop();

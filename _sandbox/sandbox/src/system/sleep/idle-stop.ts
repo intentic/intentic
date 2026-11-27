@@ -14,9 +14,16 @@ import { connectedCount } from "../presence.js";
 // - a boot that alarm made sleeps again after ALARM_GRACE_MS of quiet rather than the whole window, as ic's alarm grace
 //   does for a local sandbox, so an hourly chore does not cost twenty minutes an hour. Quiet still waits for every turn,
 //   subagent, workflow and watch to end; the grace is lost once a person connects, and waits while a command a turn
-//   left running for the person is still up (2026-10-18).
+//   left running for the person is still up (2026-10-18). A boot a request at a wake door made is graced the same way
+//   (2026-11-27), so a stray wake costs a boot and five minutes.
+// - the last word before the stop (`beforeStop`): the note that this stop is a sleep and every extension's before-sleep
+//   hook, under one deadline; once asked, the stop goes ahead.
 // Webhook and listener automations do not hold a hosted machine up: an always-on receiver would spend a month's hours
-// in days. A webhook that arrives while it sleeps is the sender's to retry.
+// in days. Instead (2026-11-27) every sleep saves its wake doors with the alarm (hosted-sleep.ts, wake-doors.ts): an
+// enabled webhook automation's fire URL and an extension's `wakes` routes. A request at one while the machine sleeps is
+// answered 503 with Retry-After by the edge and the platform starts the machine, so the sender's retry is heard. A sender
+// that never retries (GitHub, unless someone presses Redeliver) still loses what it sent while the machine slept; Slack
+// and Telegram retry.
 
 // The freshest activity stamp in a `#{session_name} #{session_activity}` listing, in ms; 0 for none. A dev server's
 // panel session is left out: its output is a server talking to itself, not a person, and a chatty one would otherwise
@@ -54,13 +61,17 @@ export interface IdleStopProbes {
     readonly nextPromisedWakeAt: () => Promise<number>;
     // Background commands still running, a dev server a turn kept for the person among them (background-jobs.ts).
     readonly leftRunning?: () => number;
-    // Whether this boot is one the platform's alarm made (sleep/hosted-sleep.ts); asked each pass.
+    // Whether this boot is one the platform made on the sandbox's own earlier word, its alarm or (2026-11-27) a request at
+    // one of its wake doors (sleep/hosted-sleep.ts), which sleeps again after ALARM_GRACE_MS; asked each pass.
     readonly alarmBoot?: () => boolean;
     // Save the earliest deadline outside this machine before stopping, with the last moment a person was here (0 for
     // none since this boot); false means no alarm was acknowledged.
     readonly prepareSleep?: (at: number, personAt: number) => Promise<boolean>;
     // Retract a saved alarm: a final reading that refuses sleep, or a sleep with nothing due.
     readonly cancelSleep?: (personAt: number) => Promise<boolean>;
+    // (2026-11-27) The last word before the stop, once every check passed: bounded by its own deadline, and the stop goes
+    // ahead whatever it answers.
+    readonly beforeStop?: () => Promise<void>;
 }
 
 // Everything the daemon can answer about itself. What its conversations are doing is not among it: turns, children and
@@ -148,8 +159,9 @@ export const startIdleStop = (
                 "idle-stop: nobody connected and nothing running for the whole window, stopping",
             );
             disposed = true;
-            stop();
             stopping = true;
+            await probes.beforeStop?.().catch((error: Error) => args.logger.warn({ err: error }, "idle-stop: the last word before the stop failed; stopping anyway"));
+            stop();
         } finally {
             if (!stopping && wakeAt > 0) {
                 await probes.cancelSleep?.(personAt);

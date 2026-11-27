@@ -756,6 +756,10 @@
                                                     "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
+                                                "hosted": {
+                                                    "description": "Show this field only on a sandbox Intentic hosts, never on one on the owner's own computer: for a setting that only means something there, such as the consent a card's `sleepWatch` names. Elsewhere it is not drawn and its answer is ignored.",
+                                                    "type": "boolean"
+                                                },
                                                 "rebuild": {
                                                     "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label: two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
                                                     "type": "boolean"
@@ -945,6 +949,10 @@
                                                     "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
                                                     "type": "string",
                                                     "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "when": {
+                                                    "description": "The path exists only while this condition over the card's answers holds, in the field `when`'s grammar (`wakeOnMention == 'on'`): for a path a connection opens only on its owner's yes.",
+                                                    "type": "string"
                                                 }
                                             },
                                             "required": [
@@ -1427,6 +1435,33 @@
                                         "description": "Take this card's status from your listener's report (`POST /listeners/<provider>/status`, its `connections` and `pairing`), for a card whose settings anyone could type but only the gateway knows whether they work.",
                                         "additionalProperties": false
                                     },
+                                    "sleepWatch": {
+                                        "type": "object",
+                                        "properties": {
+                                            "service": {
+                                                "type": "string",
+                                                "enum": [
+                                                    "discord"
+                                                ],
+                                                "description": "The connection Intentic's servers hold for it while the sandbox sleeps: `discord`, the bot's gateway connection, the only one they speak."
+                                            },
+                                            "credential": {
+                                                "type": "string",
+                                                "description": "The secret field holding the credential they hold (a bot token)."
+                                            },
+                                            "consent": {
+                                                "type": "string",
+                                                "description": "The switch (`boolean: true`, `hosted: true`, off by default) that is the owner's yes for one connection. Off, or on a sandbox on the owner's own computer, nothing leaves the sandbox. Its label or hint must say exactly what happens."
+                                            }
+                                        },
+                                        "required": [
+                                            "service",
+                                            "credential",
+                                            "consent"
+                                        ],
+                                        "description": "Lets Intentic's servers hold this card's credential while a hosted sandbox sleeps, to notice what the service delivers only over a live connection and wake the sandbox for it: only for a connection whose owner turned the `consent` switch on, only while an automation listens on this card's provider, and only until the sandbox wakes, when it is deleted. The one exception to credentials staying in the sandbox.",
+                                        "additionalProperties": false
+                                    },
                                     "commandActions": {
                                         "description": "The outward actions this card's command-line tools perform (`whatsapp send` sends a message), for a tool that reaches its service some other way than the gateway. Each is offered on Guardrails as `<card id>.<action>`. The sandbox refuses a command the owner's rule denies or holds before it runs and records it in Activity once it ends, unless the card's backend carries it out (`gatedBy: \"backend\"`), which then asks the outward-action door instead.",
                                         "type": "array",
@@ -1675,6 +1710,10 @@
                                                     "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
+                                                "hosted": {
+                                                    "description": "Show this field only on a sandbox Intentic hosts, never on one on the owner's own computer: for a setting that only means something there, such as the consent a card's `sleepWatch` names. Elsewhere it is not drawn and its answer is ignored.",
+                                                    "type": "boolean"
+                                                },
                                                 "rebuild": {
                                                     "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label: two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
                                                     "type": "boolean"
@@ -1864,6 +1903,10 @@
                                                     "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
                                                     "type": "string",
                                                     "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "when": {
+                                                    "description": "The path exists only while this condition over the card's answers holds, in the field `when`'s grammar (`wakeOnMention == 'on'`): for a path a connection opens only on its owner's yes.",
+                                                    "type": "string"
                                                 }
                                             },
                                             "required": [
@@ -2040,6 +2083,10 @@
                                                     "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
+                                                "hosted": {
+                                                    "description": "Show this field only on a sandbox Intentic hosts, never on one on the owner's own computer: for a setting that only means something there, such as the consent a card's `sleepWatch` names. Elsewhere it is not drawn and its answer is ignored.",
+                                                    "type": "boolean"
+                                                },
                                                 "rebuild": {
                                                     "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label: two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
                                                     "type": "boolean"
@@ -2229,6 +2276,10 @@
                                                     "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
                                                     "type": "string",
                                                     "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "when": {
+                                                    "description": "The path exists only while this condition over the card's answers holds, in the field `when`'s grammar (`wakeOnMention == 'on'`): for a path a connection opens only on its owner's yes.",
+                                                    "type": "string"
                                                 }
                                             },
                                             "required": [
@@ -2396,6 +2447,10 @@
                                                     "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
+                                                "hosted": {
+                                                    "description": "Show this field only on a sandbox Intentic hosts, never on one on the owner's own computer: for a setting that only means something there, such as the consent a card's `sleepWatch` names. Elsewhere it is not drawn and its answer is ignored.",
+                                                    "type": "boolean"
+                                                },
                                                 "rebuild": {
                                                     "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label: two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
                                                     "type": "boolean"
@@ -2585,6 +2640,10 @@
                                                     "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
                                                     "type": "string",
                                                     "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "when": {
+                                                    "description": "The path exists only while this condition over the card's answers holds, in the field `when`'s grammar (`wakeOnMention == 'on'`): for a path a connection opens only on its owner's yes.",
+                                                    "type": "string"
                                                 }
                                             },
                                             "required": [
@@ -2757,6 +2816,10 @@
                                                     "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
+                                                "hosted": {
+                                                    "description": "Show this field only on a sandbox Intentic hosts, never on one on the owner's own computer: for a setting that only means something there, such as the consent a card's `sleepWatch` names. Elsewhere it is not drawn and its answer is ignored.",
+                                                    "type": "boolean"
+                                                },
                                                 "rebuild": {
                                                     "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label: two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
                                                     "type": "boolean"
@@ -2946,6 +3009,10 @@
                                                     "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
                                                     "type": "string",
                                                     "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "when": {
+                                                    "description": "The path exists only while this condition over the card's answers holds, in the field `when`'s grammar (`wakeOnMention == 'on'`): for a path a connection opens only on its owner's yes.",
+                                                    "type": "string"
                                                 }
                                             },
                                             "required": [
@@ -3118,6 +3185,10 @@
                                                     "description": "Shown on hover behind an (i) beside the label, never as text under the control: for what the label alone cannot say, a host requirement, when a value takes effect. The card's own `hint` speaks for the whole card; this one is bound to the field it qualifies.",
                                                     "type": "string"
                                                 },
+                                                "hosted": {
+                                                    "description": "Show this field only on a sandbox Intentic hosts, never on one on the owner's own computer: for a setting that only means something there, such as the consent a card's `sleepWatch` names. Elsewhere it is not drawn and its answer is ignored.",
+                                                    "type": "boolean"
+                                                },
                                                 "rebuild": {
                                                     "description": "This value only takes effect after the sandbox is rebuilt, because it rides the image overlay. Shown as a chip beside the label: two switches side by side, identical in every visible way, can otherwise cost five seconds or five minutes with no way to tell which.",
                                                     "type": "boolean"
@@ -3307,6 +3378,10 @@
                                                     "description": "The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in.",
                                                     "type": "string",
                                                     "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
+                                                },
+                                                "when": {
+                                                    "description": "The path exists only while this condition over the card's answers holds, in the field `when`'s grammar (`wakeOnMention == 'on'`): for a path a connection opens only on its owner's yes.",
+                                                    "type": "string"
                                                 }
                                             },
                                             "required": [
@@ -4095,6 +4170,15 @@
                                 "type": "integer",
                                 "minimum": 0,
                                 "maximum": 1048576
+                            },
+                            "wakes": {
+                                "description": "(2026-11-27) A call here may wake a sandbox the platform hosts while it sleeps, when it reaches the route at the URL `api.sleep.wakeUrl(path, { automationId })` hands out (a wake secret rides in its query) and an automation on this extension's listener provider is switched on (the one the path names, for an automation's route). The sender is answered 503 with `Retry-After` while the machine boots, so it must retry; one that never retries loses what it sent. Its only `*` is the automation's.",
+                                "type": "boolean",
+                                "const": true,
+                                "power": {
+                                    "key": "wakes:${path}",
+                                    "sentence": "a call to /${path} wakes the sandbox while it sleeps, which spends its awake hours"
+                                }
                             }
                         },
                         "required": [

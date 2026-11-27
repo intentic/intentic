@@ -24,6 +24,7 @@ import { subscribeCiFeed } from "../../seams/ci-feed-bus.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import { extensionThatStarted } from "./extension-conversations.js";
 import { createExtensionDoors } from "./own-doors.js";
+import { createExtensionSleepDoors } from "./own-sleep.js";
 
 // What an extension's own code asks the daemon about itself (the contract's extension-protocol): its settings with
 // their secret values, and one stream of what moved, its settings and the workspace, and (2026-11-26) the kinds its
@@ -219,11 +220,18 @@ export const createExtensionOwnRoutes = (services: Services) => ({
 export const extensionOwnRawRoutes = defineRawRoutes((services: Services) => {
     const extensionOwnRoutes = createExtensionOwnRoutes(services);
     const doors = createExtensionDoors(services, (c: Context<AppEnv>) => ownCaller(services, c));
+    const sleep = createExtensionSleepDoors(services, (c: Context<AppEnv>) => ownCaller(services, c));
     return {
         "GET /extension/settings": extensionOwnRoutes.settings,
         "GET /extension/events": extensionOwnRoutes.events,
         "POST /extension/work/hold": doors.hold,
         "POST /extension/exec": doors.exec,
         "POST /extension/activity": doors.activity,
+        // (2026-11-27) Hosted sleep (own-sleep.ts).
+        "POST /extension/sleep/wake-url": sleep.wakeUrl,
+        "GET /extension/sleep/boot": sleep.boot,
+        "POST /extension/sleep/watch": sleep.watch,
+        "POST /extension/sleep/ready": sleep.ready,
+        "POST /extension/sleep/heard": sleep.heard,
     };
 });

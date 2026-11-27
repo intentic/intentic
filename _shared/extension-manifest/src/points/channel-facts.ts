@@ -1,3 +1,4 @@
+import { isWhenExpression } from "@intentic/base/when";
 import { z } from "zod";
 
 // (2026-11-26) WHAT A CARD'S OWN EXTENSION KNOWS ABOUT THE PLATFORM BEHIND IT, declared on the card so the core reads it
@@ -82,6 +83,14 @@ export const ProcessorFactsSchema = z.object({
         .regex(/^[a-zA-Z][a-zA-Z0-9]*$/)
         .optional()
         .describe("The card's field naming the server this path reaches (an IMAP card's `host`). The path exists only once that field is filled in."),
+    // (2026-11-27) A path the owner opens per connection (Discord's consent to Intentic holding the bot while it sleeps).
+    when: z
+        .string()
+        .refine(isWhenExpression, { message: "not a valid `when` condition" })
+        .optional()
+        .describe(
+            "The path exists only while this condition over the card's answers holds, in the field `when`'s grammar (`wakeOnMention == 'on'`): for a path a connection opens only on its owner's yes.",
+        ),
 });
 export type ProcessorFacts = z.infer<typeof ProcessorFactsSchema>;
 

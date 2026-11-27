@@ -17,6 +17,7 @@ use intentic_ingress::registry::Registry;
 use intentic_ingress::revocation::Revocation;
 use intentic_ingress::serve;
 use intentic_ingress::tls::{self, CertificateSlot};
+use intentic_ingress::wakes::Wakes;
 use ring::rand::{SecureRandom, SystemRandom};
 use tokio::signal::unix::{SignalKind, signal};
 use tracing_subscriber::EnvFilter;
@@ -152,6 +153,8 @@ async fn run(config: Config, key: GrantKey) -> anyhow::Result<()> {
         instance: instance.clone(),
         build: config.build.clone(),
         transports: config.transports(),
+        // A plain request to a sandbox holding no tunnel may wake it, when the platform says it is at a wake door.
+        wakes: Wakes::new(&config.platform_url, &config.platform_token),
     });
     // Every held sandbox's existence asked again as its cached answer expires: a deleted one's tunnels close.
     edge.recheck_held(intentic_ingress::revocation::KEEP_FOR);

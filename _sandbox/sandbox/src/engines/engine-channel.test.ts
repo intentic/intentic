@@ -1,5 +1,6 @@
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { blessedList, blessedListReadAt, forgetUpstream, lowestSatisfying, targetVersion } from "./engine-channel.js";
+import { blessedList, blessedListReadAt, forgetUpstream, lowestSatisfying, recordedSha256, targetVersion } from "./engine-channel.js";
+import { releaseArch } from "./engine-descriptors.js";
 import type { EngineState } from "./engine-store.js";
 
 // Pins channel-selection policy against stubbed network responses, not real npm; an unreachable list or registry must
@@ -160,4 +161,43 @@ test("a re-read is conditional on the etag it already holds", async () => {
 test("a list that does not parse is ignored", async () => {
     stubGlobal("fetch", jest.fn().mockResolvedValue(jsonResponse({ engines: { claude: { blessed: 257 } } })));
     expect(await blessedList()).toBeUndefined();
+});
+
+// A release engine's download is held to the hash recorded beside its blessed version, for the build this machine runs.
+const HERE = "a".repeat(64);
+const THERE = "b".repeat(64);
+const translatorList = (entry: Record<string, unknown>): Response => jsonResponse({ engines: { claude: { blessed: "0.3.257" }, translator: entry } });
+
+test("the hash recorded for a blessed release is this machine's build's", async () => {
+    stubGlobal("fetch", jest.fn().mockResolvedValue(translatorList({ blessed: "8.1.3", sha256: { [releaseArch()]: HERE, elsewhere: THERE } })));
+    expect(await recordedSha256("translator", "8.1.3")).toBe(HERE);
+});
+
+// A `latest` or `pinned` channel may name another version; the hash beside 8.1.3 is no statement about its bytes.
+test("a hash applies only to the version it was recorded beside", async () => {
+    stubGlobal("fetch", jest.fn().mockResolvedValue(translatorList({ blessed: "8.1.3", sha256: { [releaseArch()]: HERE } })));
+    expect(await recordedSha256("translator", "8.1.2")).toBeUndefined();
+    expect(await recordedSha256("translator", "8.1.4")).toBeUndefined();
+});
+
+test("a blessed release with no hash recorded for this machine has none to check against", async () => {
+    stubGlobal("fetch", jest.fn().mockResolvedValue(translatorList({ blessed: "8.1.3" })));
+    expect(await recordedSha256("translator", "8.1.3")).toBeUndefined();
+    stubGlobal("fetch", jest.fn().mockResolvedValue(translatorList({ blessed: "8.1.3", sha256: { elsewhere: THERE } })));
+    forgetUpstream();
+    expect(await recordedSha256("translator", "8.1.3")).toBeUndefined();
+});
+
+test("an engine that publishes no release asks the list for no hash", async () => {
+    stubGlobal("fetch", jest.fn());
+    expect(await recordedSha256("claude", "0.3.257")).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+});
+
+// Every engine is read from the one list, so a hash field that does not parse costs that hash, never the list.
+test("a malformed hash record leaves the list, and the version it blesses, readable", async () => {
+    stubGlobal("fetch", jest.fn().mockResolvedValue(translatorList({ blessed: "8.1.3", sha256: "not a record" })));
+    expect(await targetVersion("translator", { kind: "blessed" }, CLEAN)).toBe("8.1.3");
+    expect(await targetVersion("claude", { kind: "blessed" }, CLEAN)).toBe("0.3.257");
+    expect(await recordedSha256("translator", "8.1.3")).toBeUndefined();
 });

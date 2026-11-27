@@ -46,8 +46,9 @@ import {
     WalletEnsureBodySchema,
     WalletSignatureSchema,
     WalletSignBodySchema,
-    WakeAlarmBodySchema,
 } from "./ingress-schemas.js";
+import { RequestWakeAnswerSchema, RequestWakeBodySchema, WakeAlarmAnswerSchema, WakeAlarmBodySchema } from "./wake-schemas.js";
+import { SleepHeardBodySchema, SleepHeardSchema, SleepWatchAnswerSchema, SleepWatchBodySchema } from "./sleep-watch-schemas.js";
 import { PoolSignalBodySchema, PoolSignalKeySchema, PoolSignalsBodySchema, PoolSignalsSchema } from "./pool-signal-schemas.js";
 
 /* Shared root-level machine routes, registered by ingress.ts and called through platform-client.ts; preserve legacy paths and error/status formats.
@@ -120,9 +121,37 @@ export const PLATFORM_INGRESS = {
         input: AnnounceBodySchema,
         output: AnnounceAcceptedSchema,
     },
+    // The hosted machine's alarm, saved before it sleeps, and (2026-11-27) the wake doors it sleeps with
+    // (wake-schemas.ts); retracted, doors cleared, once its boot has taken charge.
     wakeAlarm: {
-        method: "POST", path: "/sandbox/wake-alarm", auth: "connect", body: "json", answer: "json",
-        input: WakeAlarmBodySchema, output: IngressOkSchema,
+        method: "POST",
+        path: "/sandbox/wake-alarm",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        input: WakeAlarmBodySchema,
+        output: WakeAlarmAnswerSchema,
+    },
+    // (2026-11-27) The connections a hosted machine's owner let the platform hold while it sleeps (a Discord bot's token,
+    // per connection, on the owner's yes; sleep-watch-schemas.ts), handed over right before it stops; `[]` drops them.
+    sleepWatch: {
+        method: "POST",
+        path: "/sandbox/sleep-watch",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        input: SleepWatchBodySchema,
+        output: SleepWatchAnswerSchema,
+    },
+    // What those connections heard while it slept, handed over once and forgotten; asking ends every hold.
+    sleepHeard: {
+        method: "POST",
+        path: "/sandbox/sleep-watch/heard",
+        auth: "connect",
+        body: "json",
+        answer: "json",
+        input: SleepHeardBodySchema,
+        output: SleepHeardSchema,
     },
     // A row made again for a sandbox the registry has no record of, on its owner's ticket.
     adopt: { method: "POST", path: "/sandbox/adopt", auth: "connect", body: "json", answer: "json", input: AdoptionBodySchema, output: AdoptedSchema },
@@ -294,6 +323,18 @@ export const PLATFORM_INGRESS = {
     /* The edge, a hosted image's builder, and anyone asking which database this is. */
     reachability: { method: "GET", path: "/api/reachability/{sandboxId}", auth: "none", body: "none", answer: "json", output: ReachabilitySchema },
     edgeCertificate: { method: "GET", path: "/api/ingress/certificate", auth: "platform-token", body: "none", answer: "json", output: EdgeCertificateSchema },
+    // (2026-11-27) Whether a plain request to a hosted sandbox holding no tunnel may wake it: asked by the edge with the
+    // digests of what the request carries, answered at once whatever the machine then does (wake-schemas.ts). A platform
+    // from before it answers 404, which the edge takes as no.
+    requestWake: {
+        method: "POST",
+        path: "/api/ingress/wake",
+        auth: "platform-token",
+        body: "json",
+        answer: "json",
+        input: RequestWakeBodySchema,
+        output: RequestWakeAnswerSchema,
+    },
     // A build's exit code and digest in headers, its log tail as the raw body.
     hostedBuildReport: {
         method: "POST",

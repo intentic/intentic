@@ -4,6 +4,7 @@ import { type GatewayHooks, runConnectorGateway } from "@intentic/connector-runt
 import { type Client, REST } from "discord.js";
 import { type DiscordConnectorConfig, discordGatewayState, ensureDiscordClient, releaseDiscordClient } from "./client.js";
 import { type ChannelLookup, clientLookup, createDiscordListener, deliverToChannel, restLookup } from "./listener.js";
+import { heardReplay } from "./replay.js";
 import { activeVoiceSession, joinVoice, leaveVoice, sayInVoice, stopSpeaking, stopVoice, voiceStatus } from "./voice.js";
 
 // Discord gateway: a baked extension's autoStart process. Reconciles a discord.js connection per bot token, dispatches
@@ -20,6 +21,37 @@ const fieldOf = (raw: string, key: "channelId" | "text"): string => {
     return String(parsed?.[key] ?? "").trim();
 };
 
+type ControlRoutes = NonNullable<GatewayHooks<DiscordConnectorConfig, Client>["routes"]>;
+
+// The discord-voice CLI's loopback routes. Voice reads the first connector's config; multi-bot voice is a ponytail.
+const voiceRoutes =
+    (ctx: Parameters<typeof joinVoice>[0], firstConfig: () => DiscordConnectorConfig | undefined): ControlRoutes =>
+    async (req, body) => {
+        const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+        if (path === "/voice/status") {
+            return { body: voiceStatus() };
+        }
+        if (req.method === "POST" && path === "/voice/leave") {
+            return { body: await leaveVoice() };
+        }
+        if (req.method === "POST" && path === "/voice/say") {
+            const text = fieldOf(await body(), "text");
+            return text === "" ? { status: 400, body: "text required" } : { body: await sayInVoice(text) };
+        }
+        if (req.method === "POST" && path === "/voice/stop") {
+            return { body: stopSpeaking() };
+        }
+        if (req.method === "POST" && path === "/voice/join") {
+            const channelId = fieldOf(await body(), "channelId");
+            if (channelId === "") {
+                return { status: 400, body: "channelId required" };
+            }
+            const config = firstConfig();
+            return { body: config === undefined ? "No Discord bot is connected: add the Discord capability first." : await joinVoice(ctx, channelId, config) };
+        }
+        return undefined;
+    };
+
 void runConnectorGateway<DiscordConnectorConfig, Client>({
     provider: "discord",
     publishGatewayUrl: true,
@@ -31,6 +63,9 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
         // How much of the agent's work a bot's threads show, from the connector whose token that bot logged in with.
         const progressOf = (client: Client): string | undefined => connectors.find(({ config }) => subscribed.get(config.botToken) === client)?.config.progress;
         const listener = createDiscordListener(ctx, subscribed, { progressOf });
+        // (2026-11-27) What Intentic's servers heard for a bot whose owner let them hold it while the sandbox slept,
+        // asked once at this start and answered as each bot connects, through the live handler (replay.ts).
+        const replay = heardReplay(ctx, listener.onMessage);
         // One REST handle per bot token, for a delivery while no client is connected (no automation holds one), made
         // on first use and kept: each carries its own rate-limit buckets.
         const rests = new Map<string, REST>();
@@ -63,6 +98,8 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
                     client.on("messageCreate", listener.onMessage);
                     client.on("interactionCreate", listener.onInteraction);
                     client.on("guildCreate", listener.onGuildJoin);
+                    const connections = connectors.filter(({ config }) => config.botToken === token).map(({ id }) => id);
+                    void replay.connected(client, connections);
                     return client;
                 } catch (error) {
                     releaseDiscordClient(token, "listener");
@@ -88,36 +125,7 @@ void runConnectorGateway<DiscordConnectorConfig, Client>({
             // of its own, so posting there is posting to its id).
             deliver: (channelId, text, thread) => deliverToChannel(deliveringBots(), thread ?? channelId, text),
             // Loopback control surface for the discord-voice CLI; same-container only, so no extra auth beyond that.
-            routes: async (req, body) => {
-                const path = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
-                if (path === "/voice/status") {
-                    return { body: voiceStatus() };
-                }
-                if (req.method === "POST" && path === "/voice/leave") {
-                    return { body: await leaveVoice() };
-                }
-                if (req.method === "POST" && path === "/voice/say") {
-                    const text = fieldOf(await body(), "text");
-                    return text === "" ? { status: 400, body: "text required" } : { body: await sayInVoice(text) };
-                }
-                if (req.method === "POST" && path === "/voice/stop") {
-                    return { body: stopSpeaking() };
-                }
-                if (req.method === "POST" && path === "/voice/join") {
-                    const channelId = fieldOf(await body(), "channelId");
-                    if (channelId === "") {
-                        return { status: 400, body: "channelId required" };
-                    }
-                    const config = connectors[0]?.config;
-                    return {
-                        body:
-                            config === undefined
-                                ? "No Discord bot is connected: add the Discord capability first."
-                                : await joinVoice(ctx, channelId, config),
-                    };
-                }
-                return undefined;
-            },
+            routes: voiceRoutes(ctx, () => connectors[0]?.config),
             // Clients die with the process; only the voice session needs an orderly goodbye.
             shutdown: () => stopVoice(),
         };

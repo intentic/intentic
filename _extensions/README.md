@@ -18,6 +18,15 @@ flowchart LR
 - Nothing outside this area depends on an extension, apart from its hosts: the web app, which compiles the UI extensions into its bundle; the desktop app's files sidecar ([local-files](../_devices/local-files)), which runs ONLYOFFICE's browser engine for folders on the user's own disk through the one entry the extension exports for it, `@intentic/ext-onlyoffice/local-office`; and (2026-11-26) the owner's browser extension ([webext](../_devices/webext)), which runs the ChatGPT kit's engine in their own Chrome through `@intentic/ext-chatgpt/kit/chatgpt`. Each engine stays in its extension, which also runs it in a sandbox; `CONSUMERS` in [lib/extension-deps.mjs](../_tools/checks/lib/extension-deps.mjs) holds each host to its entries, and refuses another.
 - UI extensions compile into the web bundle ([builtins.ts](../_editor/web/src/extension-host/builtins.ts)) and bake only their manifest into the sandbox image, so the Extensions tab lists them beside every other extension with one on/off switch. The four with a backend, onlyoffice, repo-apps, visitor-chat and pipelines, bake their built `dist` beside it as well (`BUNDLES` in [prepare-image-trees.sh](../_tools/scripts/image/prepare-image-trees.sh)); visitor-chat's also holds its gateway process and the widget a customer's page loads.
 - Data-only packs (cards, skills, Dockerfile fragments) copy into the image as they are. connectors and chatgpt bake their backend's built `dist` beside their manifest too (`BUNDLES`), so every sandbox runs them. Gateway extensions bake their manifest everywhere and ship their runnable tree in the `messaging` image pack.
+- A sandbox the platform hosts sleeps when nobody uses it, and a gateway's live connection sleeps with it. An extension
+  that must hear what arrives meanwhile declares a public route with `wakes: true` and hands its provider the URL
+  `api.sleep.wakeUrl(path, { automationId })` answers (a webhook in place of long polling or a socket): a call there
+  while the machine sleeps is answered 503 with `Retry-After` and wakes it, so the provider's retry reaches it, while an
+  automation on the extension's provider is switched on. `api.sleep.beforeSleep(handler)` runs in the backend or a
+  gateway process right before the machine sleeps (about ten seconds, shared), and `api.sleep.boot()` says whether the
+  last stop was such a sleep and whether a request woke this boot (2026-11-27,
+  [extension-api](../_shared/extension-api#hosted-sleep)). A provider that never retries still loses what it sent while
+  the machine slept.
 - Optional first-party extensions live in their own repositories and install from the registry like third-party ones: acceptance, deployments, documentation, e-urzad (EZD RP and e-Doręczenia for Polish public offices, [intentic/extension-e-urzad](https://github.com/intentic/extension-e-urzad)), issues, knowledge, maintenance, prawo (Polish acts and rulings, [intentic/extension-prawo](https://github.com/intentic/extension-prawo)) and workflows (the workflows page; the engine that runs workflows, their release gate and the run cards on the agents board stay in the daemon and the web app). The daemon ([src/extensions](../_sandbox/sandbox/src/extensions)) enumerates baked, git-installed and workspace extensions as one list.
 
 | Package | Role |
@@ -41,7 +50,7 @@ flowchart LR
 | [pipelines](pipelines) | Rail view of CI runs on the workspace repositories' remotes, with a backend holding main's one fix agent and the board's reads (2026-11-26, the daemon's `ci/` repair until then). |
 | [preview](preview) | Sandbox tabs for exposed ports and the served `public/` directory. |
 | [repo-apps](repo-apps) | Per-repository panels for a monorepo's apps, tests and dependencies, with a backend that reads the package graph. |
-| [slack](slack) | Slack card plus a Socket Mode gateway. |
+| [slack](slack) | Slack card plus a gateway heard over Socket Mode, or on a hosted sandbox at a Request URL that wakes it. |
 | [social](social) | Browser cards for acting as the owner on Reddit, X, YouTube, Facebook, Instagram and TikTok. |
 | [telegram](telegram) | Telegram bot card plus a long-polling gateway. |
 | [viewers](viewers) | File viewers for images, PDF, media, office formats and EPUB. |

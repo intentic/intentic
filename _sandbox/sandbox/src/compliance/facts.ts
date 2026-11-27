@@ -1,5 +1,6 @@
 import { accessSync, constants } from "node:fs";
 import { type KindsWhere, traitsOf } from "@intentic/sandbox-contract/policy/capabilities/capability-kinds";
+import { evaluateWhen, parseWhen } from "@intentic/base/when";
 import { z } from "zod";
 import { AT_REST_KEY_FILE_ENV } from "@intentic/sandbox-contract/schemas/data-protection";
 import type { AgentDomainPolicy, SandboxSettings } from "@intentic/sandbox-contract/schemas/settings";
@@ -117,9 +118,13 @@ const ConnectorFieldsSchema = z.looseObject({ provider: z.string().optional() })
 const FilledFieldSchema = z.string().min(1);
 
 // The paths a card's declaration (`processors`) opens for this card as filled in: one naming a server field exists only
-// once that field is, and reaches that server; any other reaches its declared hosts and the credential's.
+// once that field is, and reaches that server; any other reaches its declared hosts and the credential's. One under a
+// `when` exists only while its condition over the answers holds (2026-11-27).
 export const declaredPaths = (processors: readonly ProcessorFacts[] | undefined, config: Capability["config"], guarded: readonly string[]): ConnectorPath[] | undefined =>
     processors?.flatMap((processor): ConnectorPath[] => {
+        if (processor.when !== undefined && !evaluateWhen(parseWhen(processor.when), config)) {
+            return [];
+        }
         const field = processor.hostField;
         const server = field === undefined ? undefined : FilledFieldSchema.safeParse(Object.entries(config).find(([key]) => key === field)?.[1]).data;
         if (field !== undefined && server === undefined) {

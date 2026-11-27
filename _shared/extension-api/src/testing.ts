@@ -35,6 +35,7 @@ import {
 } from "@intentic/sandbox-contract/extension-protocol";
 import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/headers";
 import { activateServerModule, createServerApi, deactivateWithin, healthWithin } from "./runtime.js";
+import { type FakeSleep, fakeSleep } from "./sleep-fake.js";
 import type {
     ApprovedAction,
     ApprovedActionOutcome,
@@ -78,7 +79,7 @@ export interface FakeManifest {
         | {
               readonly listener?: { readonly provider: string } | undefined;
               readonly watchKinds?: readonly { readonly id: string }[] | undefined;
-              readonly publicRoutes?: readonly Pick<PublicRouteContribution, "path" | "methods" | "automation">[] | undefined;
+              readonly publicRoutes?: readonly Pick<PublicRouteContribution, "path" | "methods" | "automation" | "wakes">[] | undefined;
           }
         | undefined;
 }
@@ -167,6 +168,9 @@ export interface FakeExtension {
     readonly browserCalls: readonly FakeBrowserCall[];
     readonly ownerBrowserCalls: readonly FakeOwnerBrowserCall[];
     readonly jobs: readonly FakeJob[];
+    // (2026-11-27) Hosted sleep (`api.sleep`): `now()` tells every before-sleep watch and resolves with how many answered
+    // ready, `boot` is what `api.sleep.boot()` answers, and `wakeUrls` every URL handed out (sleep-fake.ts).
+    readonly sleep: Omit<FakeSleep, "door">;
     // (2026-11-26) The job's end once its work told it, as `wait` hands it to the agent.
     jobEnd(id: string): Promise<JobEnd>;
     // (2026-11-26) The agent or a person stopping the job: its work's signal aborts.
@@ -451,6 +455,7 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
     const execs: ExtensionExec[] = [];
     const activities: ExtensionActivity[] = [];
     const turn = fakeTurn(options, declared.turn);
+    const sleeping = fakeSleep(id, options.manifest.contributes?.publicRoutes ?? []);
     let settings: ExtensionSettingValues = { ...options.settings };
     // Every event stream the extension holds open, each written to by `emit`. A frame sent while none is open waits for
     // the next one: the runtime opens its stream a moment after the first listener registers, and a test that listens
@@ -523,7 +528,7 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
             activities.push(row.data);
             return json({ ok: true });
         }
-        return request.method === "POST" ? await turn.door(request, url) : undefined;
+        return (await sleeping.door(request, url, signal)) ?? (request.method === "POST" ? await turn.door(request, url) : undefined);
     };
 
     const eventStream = (signal: AbortSignal | null): Response => {
@@ -614,6 +619,7 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
         get jobs() {
             return turn.jobs();
         },
+        sleep: sleeping,
         jobEnd: turn.jobEnd,
         stopJob: turn.stopJob,
         activate: async (module) => {

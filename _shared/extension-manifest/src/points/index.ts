@@ -26,6 +26,7 @@ export * from "./capabilities.js";
 export * from "./capability-broker.js";
 export * from "./capability-field-shapes.js";
 export * from "./channel-facts.js";
+export * from "./sleep-watch.js";
 export * from "./commands.js";
 export * from "./documents.js";
 export * from "./environment.js";

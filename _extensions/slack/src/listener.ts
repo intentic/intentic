@@ -19,10 +19,10 @@ import { STATUS_BLOCK_ID } from "./card.js";
 import type { SlackConnection } from "./client.js";
 import { createSlackReply, type SlackReplyDeps, statusStyleOf } from "./reply.js";
 
-// Inbound half of the gateway: every Socket Mode envelope becomes a normalized message posted to the daemon's dispatch
-// route. A message addressed to us gets its answer back in its thread through the shared chat reply (reply.ts): 👀 at
-// once, a status card with Stop once the work outlasts a quick answer, the answer posted below it, and a reaction for how
-// it ended. Replies in a thread we answer in need no mention, and one sent while the agent works goes into that turn.
+// Inbound half of the gateway: every Slack envelope (Socket Mode's, or a call to the app's Request URL made into one by
+// http.ts, 2026-11-27) becomes a normalized message posted to the daemon's dispatch route. A message addressed to us
+// gets its answer back in its thread through the shared chat reply (reply.ts): 👀 at once, a status card with Stop once
+// the work outlasts a quick answer, the answer posted below it, and a reaction for how it ended. Replies in a thread we answer in need no mention, and one sent while the agent works goes into that turn.
 // The card's Stop button comes back here as an `interactive` envelope.
 
 // A longer reply spills into follow-up messages in the thread.
@@ -67,23 +67,27 @@ export interface SlackMemberJoined {
     readonly channel: string;
 }
 
-// A button pressed on one of our messages (Socket Mode's `interactive` envelope), narrowed to what Stop reads.
+// A button pressed on one of our messages (an `interactive` envelope, or an interactivity call in HTTP mode), narrowed to
+// what Stop reads.
 export interface SlackBlockActions {
     readonly type: "block_actions";
     readonly user: { readonly id: string };
-    readonly channel?: { readonly id: string };
-    readonly message?: { readonly ts: string; readonly thread_ts?: string };
+    readonly channel?: { readonly id: string } | undefined;
+    readonly message?: { readonly ts: string; readonly thread_ts?: string | undefined } | undefined;
     readonly actions: ReadonlyArray<{ readonly action_id: string }>;
 }
 
-// An `events_api` envelope's body.
+// An `events_api` envelope's body: Slack's `event_callback`, which HTTP mode receives as it is (http.ts).
 export interface SlackEventsBody {
+    readonly type?: string;
+    // Slack's id for this delivery of the event, the same on every retry of it.
+    readonly event_id?: string | undefined;
     readonly event?: SlackMessage | SlackReaction | SlackMemberJoined;
     readonly team_id?: string;
 }
 
 // One `slack_event` envelope, narrowed to what this gateway reads; `ack` must be called for every one, within three
-// seconds, or Slack redelivers it three times, then drops the socket. An event is acked once what it carries is kept
+// seconds, or Slack redelivers it three times, then drops the socket. In HTTP mode `ack` is the answer to Slack's POST. An event is acked once what it carries is kept
 // (connector-runtime's dispatch spool), so one heard by a gateway that died before keeping it comes again.
 export interface SlackEnvelope {
     readonly ack: () => Promise<void>;
@@ -276,8 +280,8 @@ export const createSlackListener = (
         }
     };
     const refusable = (refused: Set<string>, connection: SlackConnection) => ({
-        refused: () => refused.has(connection.appToken),
-        refuse: () => void refused.add(connection.appToken),
+        refused: () => refused.has(connection.id),
+        refuse: () => void refused.add(connection.id),
     });
     // User id to display name, one lookup per user then cached for the process's life; a restart is a fine refresh.
     const names = new Map<string, string>();

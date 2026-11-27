@@ -153,12 +153,14 @@ const PATH_TRAITS = {
 } as const satisfies Readonly<Record<ProcessorFlow, PathTraits>>;
 
 // A card's paths out: each one its card declares, or one generic connector path over the hosts its credential is meant
-// for when it declares none.
+// for when it declares none. A second path of one kind (Discord's to Intentic beside its own, 2026-11-27) is told apart
+// by its place, so the first keeps the id it always had.
 const connectorFlows = (connector: ConnectorFact): DataFlow[] =>
-    (connector.paths ?? [{ flow: "connector" as const, hosts: connector.hosts }]).map((path): DataFlow => {
+    (connector.paths ?? [{ flow: "connector" as const, hosts: connector.hosts }]).map((path, index, paths): DataFlow => {
         const traits: PathTraits = PATH_TRAITS[path.flow];
+        const earlier = paths.slice(0, index).filter((other) => other.flow === path.flow).length;
         return {
-            id: `${path.flow}:${connector.id}`,
+            id: earlier === 0 ? `${path.flow}:${connector.id}` : `${path.flow}:${connector.id}:${earlier + 1}`,
             group: traits.group,
             kind: path.flow,
             name: traits.named === "id" ? connector.id : connector.provider,

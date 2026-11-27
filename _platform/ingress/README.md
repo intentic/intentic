@@ -10,6 +10,7 @@ flowchart LR
     hosted["Hosted sandbox<br/>Fly machine"] -- "the same tunnel" --> ingress
     ingress -- "does it still exist?" --> api["api"]
     ingress -- "its certificate" --> api
+    ingress -- "may this request wake it?" --> api
     ingress -- "local miss" --> peer["Peer ingress machine"]
 ```
 
@@ -92,6 +93,16 @@ flowchart LR
 - A hosted sandbox is no exception: its machine dials the same tunnel with a grant the platform put in its config,
   and nothing else reaches it. One holding no tunnel (stopped, booting) answers the `no-tunnel` verdict, and the
   editor wakes it through the api. The edge replays nothing: no Fly HTTP proxy sits in front of 443 to act on one.
+- A request may wake a sandbox that sleeps (2026-11-27, [wakes.rs](src/wakes.rs)). A plain request (not an upgrade, not
+  a CORS preflight, not hop-marked) to a sandbox the platform has not deleted and no machine holds a tunnel for asks the
+  api `POST /api/ingress/wake` under `INGRESS_PLATFORM_TOKEN`, with the sandbox's id, the request's path and the
+  SHA-256 of each query value and of a bearer token, never the values. When the api says it started the machine for
+  one of the wake doors its daemon slept with (or is still booting it for one), the answer is 503 with `Retry-After`
+  (the api's figure, 60 seconds by default) and the `no-tunnel` verdict, and the request is held for nothing; else the
+  `no-tunnel` answer stands as it was. The sender's retry is what reaches the machine, so a sender that never retries
+  still loses what it sent while the machine slept. The ask has two seconds; a sandbox the api says has no doors is not
+  asked about again for a minute, and an api answering 404 (from before the route) is not asked again for ten, without
+  a word above debug. With no `PLATFORM_URL` or no token the edge asks nothing.
 
 ## Key files
 
@@ -143,7 +154,7 @@ fly secrets set -a intentic-ingress INGRESS_PUBLIC_KEY="$(openssl pkey -in ingre
 | --- | --- |
 | `INGRESS_PUBLIC_KEY` | Public half of the api's `INGRESS_SIGNING_KEY`; the process exits without it. |
 | `PLATFORM_URL` | The api: asked whether a sandbox still exists, and where the certificate is fetched. **Required with the platform token**: without both, the TLS listener refuses to start. |
-| `INGRESS_PLATFORM_TOKEN` | What the edge presents to fetch the certificate; the same value as the api's. |
+| `INGRESS_PLATFORM_TOKEN` | What the edge presents to fetch the certificate and to ask whether a request may wake a sleeping hosted sandbox; the same value as the api's. |
 | `INGRESS_TLS_CACHE_FILE` | Optional. Where the platform's certificate is kept between restarts; default `/var/lib/intentic-ingress/certificate.json`, `off` for none. Survives a Fly restart only on a volume (below). |
 | `INGRESS_TLS_PORT`, `INGRESS_PROXY_PROTOCOL` | 8443 behind PROXY v2 headers, which is where fly.toml's TCP 443 lands. |
 | `INGRESS_QUIC_PORT`, `INGRESS_QUIC_HOST` | Unset while QUIC is off. **443**, on `fly-global-services`. Fly rewrites only a UDP packet's address, never its port, so a QUIC door on any other port hears nothing (8443 left HTTP/3 silent at go-live until it became 443). |

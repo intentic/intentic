@@ -14,18 +14,22 @@ import { bearerFrom, tokenEquals } from "../auth.js";
 // - intake an extension's public door that takes a key (`contributes.publicRoutes`, `key: true`), per automation: the
 //   bug intake's POST /door/intentic.issues/{id}/report since 2026-11-26, POST /intake/{id}/report before, which the
 //   daemon still forwards there, so a key out in the field keeps working
+// - wake (2026-11-27) the wake secret of one public path a request may wake a sleeping hosted machine at, keyed by
+//   that path (/door/<id>/<path>): what `api.sleep.wakeUrl` puts in a URL's `?wake=`, and whose digest the platform
+//   keeps (system/sleep/wake-doors.ts). The door itself does not check it: the route's own protections do.
 // Stored plaintext in the secrets class, since a maintainer must be able to re-display a taught URL; locked from the
 // file API to bound exposure.
 // `ensure` mints on first look and returns the same value until rotated; `rotate` invalidates a leaked URL without
 // re-teaching the caller its id.
 
-export const DOOR_KINDS = ["automation", "gate", "intake"] as const;
+export const DOOR_KINDS = ["automation", "gate", "intake", "wake"] as const;
 export type DoorKind = (typeof DOOR_KINDS)[number];
 
 const StoredDoorsSchema = z.object({
     automation: z.record(z.string(), z.string()).default({}),
     gate: z.record(z.string(), z.string()).default({}),
     intake: z.record(z.string(), z.string()).default({}),
+    wake: z.record(z.string(), z.string()).default({}),
 });
 type StoredDoors = z.infer<typeof StoredDoorsSchema>;
 
@@ -48,7 +52,7 @@ export interface DoorTokens {
 // The other two only ever get pasted into a secret store and stay a bare value.
 const mintFor = (kind: DoorKind): string => (kind === "intake" ? `ik_${randomBytes(18).toString("base64url")}` : randomBytes(24).toString("base64url"));
 
-const EMPTY: StoredDoors = { automation: {}, gate: {}, intake: {} };
+const EMPTY: StoredDoors = { automation: {}, gate: {}, intake: {}, wake: {} };
 
 export const fileDoorTokens = (path: string): DoorTokens => {
     // Refused rather than set aside when this build cannot read it: setting it aside on the next `ensure` would re-mint
@@ -125,7 +129,7 @@ export const doorChange = <T>(work: Promise<T>): Promise<T> =>
 
 // The in-memory twin, for tests and for a composition with no workspace to persist into.
 export const memoryDoorTokens = (): DoorTokens => {
-    const doors: Record<DoorKind, Map<string, string>> = { automation: new Map(), gate: new Map(), intake: new Map() };
+    const doors: Record<DoorKind, Map<string, string>> = { automation: new Map(), gate: new Map(), intake: new Map(), wake: new Map() };
     return {
         ensure: async (kind, id) => {
             const existing = doors[kind].get(id);

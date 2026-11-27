@@ -258,6 +258,15 @@ export const RAW_ROUTES = {
     "POST /extension/jobs/{id}": { floor: "maintainer", panel: false, control: "never" },
     // (2026-11-26) A row in the activity feed, written as the calling extension's own. Reached the same way, undeclared.
     "POST /extension/activity": { floor: "maintainer", panel: false, control: "never" },
+    // (2026-11-27) Hosted sleep as an extension's own code meets it (extension-protocol.ts): the public URL of one of its
+    // `wakes` routes with its wake secret, what this boot follows, and the before-sleep watch it answers ready on.
+    // Reached the same way, undeclared, each answering only about the extension asking.
+    "POST /extension/sleep/wake-url": { floor: "maintainer", panel: false, control: "never" },
+    "GET /extension/sleep/boot": { floor: "maintainer", panel: false, control: "never" },
+    "POST /extension/sleep/watch": { floor: "maintainer", panel: false, control: "never", stream: true },
+    "POST /extension/sleep/ready": { floor: "maintainer", panel: false, control: "never" },
+    // (2026-11-27) What the platform's sleep watch heard for the extension's own connections while the sandbox slept.
+    "POST /extension/sleep/heard": { floor: "maintainer", panel: false, control: "never" },
     // The CI webhook receiver, gated by the per-sandbox webhook secret.
     "POST /ci/webhook/{host}": { auth: "door" },
     // (2026-11-25) What the forges said, as it is heard, for a program (schemas/ci.ts CiFeedEventSchema): Server-Sent

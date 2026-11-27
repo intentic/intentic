@@ -24,6 +24,7 @@ use intentic_ingress::grant::GrantKey;
 use intentic_ingress::registry::Registry;
 use intentic_ingress::revocation::Revocation;
 use intentic_ingress::serve::{self, Listening};
+use intentic_ingress::wakes::Wakes;
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -90,6 +91,7 @@ pub fn lone(keys: &Keys) -> EdgeOptions {
         instance: "solo".into(),
         build: String::new(),
         transports: Vec::new(),
+        wakes: Wakes::new("", ""),
     }
 }
 

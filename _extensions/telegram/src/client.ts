@@ -11,7 +11,7 @@ const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
 // Only kinds this gateway acts on; fewer keeps the rest out of the loop, not filtered after. Messages wake turns, a
 // button press is a status card's Stop, and the bot's own membership changing is it being added to a group.
-const ALLOWED_UPDATES = ["message", "channel_post", "callback_query", "my_chat_member"];
+export const ALLOWED_UPDATES = ["message", "channel_post", "callback_query", "my_chat_member"];
 
 // The bits of a Telegram user this gateway reads. `is_bot` is what keeps a room of bots from waking each other.
 export interface TelegramUser {
@@ -146,7 +146,8 @@ const callWith = async <T>(botToken: string, method: string, body: object | unde
 };
 
 // 401/403/404 mean a dead or wrong token; 409 is a configuration clash, Telegram allows only one reader per bot. Never
-// auto-clears a webhook: it could break whatever else the owner pointed the bot at.
+// clears a webhook it did not set itself: it could break whatever else the owner pointed the bot at. The one it set for a
+// hosted sleep is cleared before the first poll (`OpenOptions.reclaim`, wake.ts).
 const fatalMessage = (error: TelegramApiError): string | undefined => {
     if (error.code === 401 || error.code === 404) {
         return `Telegram rejected the bot token (${error.description}): paste a fresh token from @BotFather on the Telegram capability`;
@@ -160,12 +161,24 @@ const fatalMessage = (error: TelegramApiError): string | undefined => {
     return undefined;
 };
 
-export const openTelegramConnection = async (botToken: string): Promise<TelegramConnection> => {
-    // The two calls that make a connection: a transient failure retries next reconcile, a fatal one names the fix.
+export interface OpenOptions {
+    // (2026-11-27) Clears the webhook this sandbox set for a hosted sleep, before the first poll (wake.ts), and answers
+    // whether Telegram kept the bot's updates for it meanwhile, which are then polled rather than skipped. `conflict`:
+    // the tail read was refused 409, so some webhook is set.
+    readonly reclaim?: (call: TelegramConnection["call"], conflict: boolean) => Promise<boolean>;
+}
+
+// A connect's refusal as the reconcile loop reads it: a fatal one names the fix, anything else retries next reconcile.
+const connectFailure = (error: TelegramApiError): Error => {
+    const message = fatalMessage(error);
+    return message === undefined ? error : new FatalTelegramError(message);
+};
+
+export const openTelegramConnection = async (botToken: string, options: OpenOptions = {}): Promise<TelegramConnection> => {
+    // The calls that make a connection: a transient failure retries next reconcile, a fatal one names the fix.
     const connectCall = async <T>(method: string, body?: object): Promise<T> =>
-        callWith<T>(botToken, method, body, undefined).catch((error: unknown) => {
-            const message = error instanceof TelegramApiError ? fatalMessage(error) : undefined;
-            throw message === undefined ? error : new FatalTelegramError(message);
+        callWith<T>(botToken, method, body, undefined).catch((error: Error) => {
+            throw error instanceof TelegramApiError ? connectFailure(error) : error;
         });
 
     const identity = await connectCall<TelegramUser>("getMe");
@@ -175,10 +188,25 @@ export const openTelegramConnection = async (botToken: string): Promise<Telegram
 
     // Starts from now, not the backlog: Telegram queues updates 24h, and replaying them after a restart would wake the
     // agent on stale chatter. The tail read (`offset: -1`) marks where to resume; a failure here fails the whole
-    // connect.
-    const tail = await connectCall<TelegramUpdate[]>("getUpdates", { offset: -1, timeout: 0 });
-    const last = tail.at(-1);
-    let offset = last === undefined ? undefined : last.update_id + 1;
+    // connect. After a hosted sleep the backlog is the point: it is what arrived while the sandbox slept, so polling
+    // starts from Telegram's queue instead (no offset), once the sandbox's own webhook is gone.
+    const startOffset = async (): Promise<number | undefined> => {
+        if ((await options.reclaim?.(connectCall, false)) === true) {
+            return undefined;
+        }
+        try {
+            const tail = await callWith<TelegramUpdate[]>(botToken, "getUpdates", { offset: -1, timeout: 0 }, undefined);
+            const last = tail.at(-1);
+            return last === undefined ? undefined : last.update_id + 1;
+        } catch (error) {
+            // A webhook this sandbox set itself is no other reader: cleared, and the queue it held polled.
+            if (error instanceof TelegramApiError && error.code === 409 && (await options.reclaim?.(connectCall, true)) === true) {
+                return undefined;
+            }
+            throw error instanceof TelegramApiError ? connectFailure(error) : error;
+        }
+    };
+    let offset = await startOffset();
 
     // Aborts the in-flight poll on close, so it can't outlive its connection and collide with the next (409).
     const aborter = new AbortController();

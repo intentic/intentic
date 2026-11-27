@@ -5,6 +5,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
+import { releaseAssetUrl, sha256Of } from "./upstream.mjs";
 
 export const root = repoRoot(import.meta.url);
 
@@ -17,6 +18,17 @@ const pack = (name) => join("_sandbox", "sandbox", "image-packs", `${name}.Docke
 // INVARIANT every pattern here relies on: the capture is the last occurrence of its own text inside the match, which is
 // what lets a rewrite find it without a second capture group.
 const site = (file, pattern, count, carries = "blessed") => ({ file, pattern, count, carries });
+
+// What a site carrying one architecture's recorded sha256 is keyed by, in the vocabulary the release files it under.
+export const checksumKey = (arch) => `sha256:${arch}`;
+
+// A pack's per-architecture hashes, one `arch=<word>; sha=<hex>` arm of its `case` each: keyed on the release's own word
+// for the build, so an arm that names one architecture to dpkg and another to the release is still found by the latter.
+const checksumSites = (file, arches) =>
+    arches.map((arch) => site(file, new RegExp(`\\barch=${arch}; sha=([a-f0-9]{64})\\b`, "g"), 1, checksumKey(arch)));
+
+// CLIProxyAPI's own words for its two Linux builds (arm is `aarch64`, x86 is `amd64`), the same the daemon asks for.
+const TRANSLATOR_ARCHES = ["amd64", "aarch64"];
 
 // `@openai/codex-sdk` pins its CLI exactly; packs.integration.test.ts holds the pack to that dependency, so the pack's
 // version is derived from the SDK rather than chosen.
@@ -127,13 +139,15 @@ export const ENGINE_PINS = [
         id: "translator",
         label: "Subscription translator",
         // The two archives the pack downloads (arm64 under CLIProxyAPI's own `aarch64` name): a release missing either
-        // is one the image build would 404 on, so it is not a version until both are uploaded.
+        // is one the image build would 404 on, so it is not a version until both are uploaded. Each one's sha256 is
+        // recorded with the version, in engines.json for the daemon's installs and in the pack for the image's.
         upstream: {
             kind: "github-release",
             repo: "router-for-me/CLIProxyAPI",
-            assets: (version) => ["amd64", "aarch64"].map((arch) => `CLIProxyAPI_${version}_linux_${arch}.tar.gz`),
+            arches: TRANSLATOR_ARCHES,
+            asset: (version, arch) => `CLIProxyAPI_${version}_linux_${arch}.tar.gz`,
         },
-        sites: [site(pack("translator"), /version=(\S+)/g, 1)],
+        sites: [site(pack("translator"), /version=(\S+)/g, 1), ...checksumSites(pack("translator"), TRANSLATOR_ARCHES)],
     },
 ];
 
@@ -232,6 +246,67 @@ export const writePin = (engine, versions) => {
 export const blessedFor = async (engine, tracked, fetchManifest) =>
     engine.blessedOf === undefined ? tracked : engine.blessedOf(tracked, fetchManifest);
 
+// The architectures whose builds an engine's pin downloads from its release, each of which gets a recorded sha256; none
+// for an engine that is not a release asset.
+const releaseArches = (engine) => (engine.upstream.kind === "github-release" ? (engine.upstream.arches ?? []) : []);
+
+// The sha256 of every build a release engine's pin downloads, keyed by architecture, hashed from the bytes upstream
+// serves at the moment the version is blessed: that moment is what the recorded hash vouches for, and every later
+// download is held to it. GitHub's own per-asset digest is no trust root, since an asset uploaded again gets a new one.
+// Undefined for an engine with no release builds; throws when one cannot be fetched, so a version is never blessed
+// with half its hashes. Needs the network, like blessedFor.
+export const releaseChecksums = async (engine, version, hashOf = sha256Of) => {
+    const arches = releaseArches(engine);
+    if (arches.length === 0) {
+        return undefined;
+    }
+    const sha256 = {};
+    for (const arch of arches) {
+        const url = releaseAssetUrl(engine.upstream, version, arch);
+        const hash = await hashOf(url);
+        if (hash === undefined) {
+            throw new Error(`${url} could not be hashed, so ${version} cannot be blessed with its checksums`);
+        }
+        sha256[arch] = hash;
+    }
+    return sha256;
+};
+
+// Recorded hashes as the values the pin's sites carry, for writePin.
+export const checksumValues = (sha256) => Object.fromEntries(Object.entries(sha256 ?? {}).map(([arch, hash]) => [checksumKey(arch), hash]));
+
+const SHA256 = /^[0-9a-f]{64}$/;
+
+// What is wrong with the hashes a blessed release engine's entry records: every build its pin downloads needs one, a
+// sha256 in lowercase hex, and the same one the pack verifies that build against. Empty for an engine with no release
+// builds. Read by the engines check, which cannot tell a hash from the network; that the pack's hashes are the
+// version's own is what the image build's sha256sum proves.
+export const checksumProblems = (engine, entry, pin) => {
+    const key = listKeyOf(engine);
+    const problems = [];
+    for (const arch of releaseArches(engine)) {
+        const recorded = entry?.sha256?.[arch];
+        // The test reads the value as text, so a missing hash fails it as a malformed one does.
+        if (!SHA256.test(recorded)) {
+            const found = recorded === undefined ? "no sha256" : `${JSON.stringify(recorded)}, which is not a sha256,`;
+            problems.push(
+                `engines.json records ${found} for ${key}@${entry?.blessed}'s ${arch} build. A release engine is installed only ` +
+                    `against a hash recorded here; \`node _tools/scripts/engines/bump-engines.mjs --apply\` records every build's ` +
+                    `with each version it blesses; one blessed before hashes were recorded needs its assets hashed into both by hand, once.`,
+            );
+            continue;
+        }
+        const packed = pin[checksumKey(arch)];
+        if (packed !== undefined && packed !== recorded) {
+            problems.push(
+                `engines.json records ${recorded} for ${key}@${entry.blessed}'s ${arch} build, but the pack verifies ${packed}; ` +
+                    `they are one hash and move together`,
+            );
+        }
+    }
+    return problems;
+};
+
 const LIST = join(root, "engines.json");
 
 export const readBlessedList = () => JSON.parse(readFileSync(LIST, "utf8"));
@@ -247,4 +322,28 @@ export const withBlessed = (text, id, version) => {
     return text.replace(pattern, `$1${version}$3`);
 };
 
-export const writeBlessed = (id, version) => writeFileSync(LIST, withBlessed(readFileSync(LIST, "utf8"), id, version));
+// One engine's recorded hashes, written beside its blessed version by text for the reason withBlessed is: replaced where
+// the entry carries them, added on the line after `blessed` where it does not, in the entry's own indentation. Scoped
+// to the engine's own object as withBlessed is; an entry holds no other nested object for the scope to stop at.
+export const withChecksums = (text, id, sha256) => {
+    const object = (indent) =>
+        `{\n${Object.entries(sha256)
+            .map(([arch, hash]) => `${indent}    "${arch}": "${hash}"`)
+            .join(",\n")}\n${indent}}`;
+    const recorded = new RegExp(`("${id}":\\s*\\{[^}]*?\\n([ \\t]*)"sha256":\\s*)\\{[^}]*\\}`, "s");
+    if (recorded.test(text)) {
+        return text.replace(recorded, (_whole, head, indent) => `${head}${object(indent)}`);
+    }
+    const blessed = new RegExp(`("${id}":\\s*\\{[^}]*?\\n([ \\t]*)"blessed":\\s*"[^"]+")`, "s");
+    if (!blessed.test(text)) {
+        throw new Error(`engines.json has no "blessed" for ${id} to record checksums beside`);
+    }
+    return text.replace(blessed, (_whole, head, indent) => `${head},\n${indent}"sha256": ${object(indent)}`);
+};
+
+// A version blessed and, for a release engine, its builds' hashes recorded, in one write: engines.json never holds a
+// version beside another version's hashes.
+export const writeBlessed = (id, version, sha256) => {
+    const moved = withBlessed(readFileSync(LIST, "utf8"), id, version);
+    writeFileSync(LIST, sha256 === undefined ? moved : withChecksums(moved, id, sha256));
+};

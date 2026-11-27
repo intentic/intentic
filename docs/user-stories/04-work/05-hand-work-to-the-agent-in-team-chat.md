@@ -6,7 +6,7 @@ I write `@intentic the login redirect loops on Safari, can you fix it?` in a cha
 
 Setting it up is three things: paste the bot token, invite the bot with the link the agent gives, and switch on the Team assistant automation.
 
-Slack works the same way. The answer goes into the mentioned message's own thread, since a Slack thread needs no opening and has no name. Slack's own "is working on it…" line shows under the thread while the agent works, and the answer is written in Markdown that Slack renders as written, tables included. Setting it up is pasting the app's two tokens (the agent writes the app manifest), inviting the app to a channel, and switching on the Team assistant on Slack automation. The app says hello when it is invited somewhere.
+Slack works the same way. The answer goes into the mentioned message's own thread, since a Slack thread needs no opening and has no name. Slack's own "is working on it…" line shows under the thread while the agent works, and the answer is written in Markdown that Slack renders as written, tables included. Setting it up is pasting the app's two tokens (the agent writes the app manifest), inviting the app to a channel, and switching on the Team assistant on Slack automation. The app says hello when it is invited somewhere. On a cloud sandbox, which sleeps when nobody uses it, a mention sent while it sleeps is still answered: the app sends it to an address that wakes the sandbox, and the answer starts a minute or so later. There I paste the app's signing secret in place of its second token, and the agent hands me the link that creates the app that way; an app I set up before keeps answering while the sandbox is awake, and I am told once how to switch it.
 
 ## Acceptance criteria
 
@@ -24,3 +24,4 @@ Slack works the same way. The answer goes into the mentioned message's own threa
 - [ ] Replying in a thread days later continues the same conversation, with the work it already did
 - [ ] The Discord card names the one privileged intent it needs, the invite link carries the thread and reaction permissions, and a Team assistant automation can be set up from Automations without writing a prompt
 - [ ] In Slack, every criterion above holds the same way, with the answer in the mentioned message's thread; the app's manifest switches on the interactivity Stop needs, and a Team assistant on Slack automation can be set up from Automations without writing a prompt
+- [ ] On a cloud sandbox, a Slack mention sent while it sleeps wakes it and is answered once in its thread; a Slack app set up for Socket Mode keeps answering while it is awake, and its owner is told once how to switch it, with the link to an app already switched

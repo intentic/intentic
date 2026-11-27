@@ -1,7 +1,7 @@
 {
     "name": "@intentic/ext-slack",
     "version": "1.0.0",
-    "description": "Slack, the connected workspace as an agent tool, plus the Socket Mode gateway as a baked extension process",
+    "description": "Slack, the connected workspace as an agent tool, plus the gateway (Socket Mode, or Request URLs on a hosted sandbox) as a baked extension process",
     "license": "MIT",
     "private": true,
     "type": "module",
@@ -13,8 +13,10 @@
     "dependencies": {
         "@intentic/base": "workspace:*",
         "@intentic/connector-runtime": "workspace:*",
+        "@intentic/extension-api": "workspace:*",
         "@slack/socket-mode": "catalog:",
-        "@slack/web-api": "catalog:"
+        "@slack/web-api": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@intentic/sandbox-contract": "workspace:*",

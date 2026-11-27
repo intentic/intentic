@@ -11,6 +11,10 @@
 //! sandbox's existence is asked again as its cached answer expires, and one the platform deleted, by its own deletion
 //! record said twice (revocation.rs), is closed with `DELETED_CODE`, rather than staying reachable until its netd
 //! happened to redial.
+//!
+//! A plain request to a sandbox holding no tunnel anywhere may wake it (2026-11-27, wakes.rs): the platform is asked
+//! whether the request is at one of the wake doors the sandbox slept with, and a start it began answers 503 with
+//! `Retry-After` instead of the verdict's 502. The request itself is never held for the boot.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -45,6 +49,7 @@ use crate::peers::Peers;
 use crate::registry::{Elsewhere, Held, Holder, Registry, Slot};
 use crate::revocation::{Revocation, Standing};
 use crate::session::{Failed, Session};
+use crate::wakes::{Ask, Wakes};
 
 // A QUIC connection that has not said who it is by now never will.
 const HELLO_PATIENCE: Duration = Duration::from_secs(10);
@@ -73,6 +78,8 @@ pub struct EdgeOptions {
     /// What this edge serves beyond HTTPS over TCP, because its own configuration binds it: declared to every netd on
     /// its tunnel's answer and to everyone else on `/health`, so nothing has to find out by failing.
     pub transports: Vec<Transport>,
+    /// Whom a plain request to a sandbox holding no tunnel asks whether it may wake it (wakes.rs); off asks nobody.
+    pub wakes: Wakes,
 }
 
 pub struct Edge {
@@ -85,6 +92,7 @@ pub struct Edge {
     instance: String,
     build: String,
     transports: Vec<Transport>,
+    wakes: Wakes,
 }
 
 impl Edge {
@@ -99,6 +107,7 @@ impl Edge {
             instance: options.instance,
             build: options.build,
             transports: options.transports,
+            wakes: options.wakes,
         })
     }
 
@@ -167,6 +176,14 @@ impl Edge {
         }
         if is_cors_preflight(&request) {
             return preflight(verdict);
+        }
+        // Only a sandbox that is simply not connected may be asleep, and a hop-marked miss is the peer's to answer.
+        if !hop
+            && verdict == Verdict::NoTunnel
+            && self.wakes.enabled()
+            && let Some(after) = self.wakes.ask(&id, Ask::of(&request)).await
+        {
+            return waking(&host, after);
         }
         unreachable(&host, verdict)
     }
@@ -806,6 +823,22 @@ fn unreachable(host: &str, verdict: Verdict) -> Response<Body> {
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     with_verdict(response, verdict)
+}
+
+// A request at a wake door of a sandbox that sleeps: its start is under way, and the sender is told when to come back.
+// 503, since the request was not served and retrying is right; the verdict rides it too, since no tunnel is held yet.
+fn waking(host: &str, after: u64) -> Response<Body> {
+    let mut response = text(
+        StatusCode::SERVICE_UNAVAILABLE,
+        &format!(
+            "{} is waking up; try again in {after} seconds.",
+            label_of(host)
+        ),
+    );
+    let headers = response.headers_mut();
+    headers.insert(header::RETRY_AFTER, HeaderValue::from(after));
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    with_verdict(response, Verdict::NoTunnel)
 }
 
 // A preflight for a request about to be refused is admitted: it promises nothing, and the refusal it unlocks is readable.

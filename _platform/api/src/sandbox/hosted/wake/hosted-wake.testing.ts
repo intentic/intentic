@@ -28,10 +28,16 @@ export const hostedWakeSandbox = (id = "s1"): HostedWakeSandbox => ({
 export interface WakeAlarmRow extends Omit<HostedWakeSandbox, "hosted"> {
     hosted: HostedMachine | null;
     tokenDigest: string;
+    tunnelId: string;
     removedAt: Date | null;
     scheduledWakeAt: Date | null;
     scheduledWakeRetryAt: Date | null;
     personSeenAt: Date | null;
+    // (2026-11-27) The doors it slept with and the request wakes they made (hosted-request-wake.ts).
+    wakeDoors: unknown;
+    requestWakeAt: Date | null;
+    requestWakeDay: Date | null;
+    requestWakeCount: number;
 }
 
 export const wakeAlarmRow = (at: number | null, id = "s1"): WakeAlarmRow => {
@@ -39,20 +45,29 @@ export const wakeAlarmRow = (at: number | null, id = "s1"): WakeAlarmRow => {
     return {
         ...sandbox,
         tokenDigest: sha256Hex(sandbox.token),
+        tunnelId: sha256Hex(sandbox.token).slice(0, 12),
         removedAt: null,
         scheduledWakeAt: at === null ? null : new Date(at),
         scheduledWakeRetryAt: null,
         personSeenAt: null,
+        wakeDoors: null,
+        requestWakeAt: null,
+        requestWakeDay: null,
+        requestWakeCount: 0,
     };
 };
 
 interface AlarmWhere {
     readonly id?: string;
     readonly tokenDigest?: string;
+    readonly tunnelId?: string;
     readonly removedAt?: null;
     readonly hosted?: { readonly isNot: null };
     readonly scheduledWakeAt?: Date | { readonly lte: Date };
     readonly scheduledWakeRetryAt?: null | { readonly lte: Date };
+    readonly requestWakeAt?: Date | null | { readonly lte: Date };
+    readonly requestWakeDay?: Date | null;
+    readonly requestWakeCount?: number;
     readonly OR?: readonly AlarmWhere[];
 }
 
@@ -66,6 +81,10 @@ const dateMatches = (value: Date | null, asked: Date | { readonly lte: Date } | 
 const alarmMatches = (row: WakeAlarmRow, where: AlarmWhere): boolean =>
     (where.id === undefined || row.id === where.id) &&
     (where.tokenDigest === undefined || row.tokenDigest === where.tokenDigest) &&
+    (where.tunnelId === undefined || row.tunnelId === where.tunnelId) &&
+    dateMatches(row.requestWakeAt, where.requestWakeAt) &&
+    dateMatches(row.requestWakeDay, where.requestWakeDay) &&
+    (where.requestWakeCount === undefined || row.requestWakeCount === where.requestWakeCount) &&
     (where.removedAt === undefined || row.removedAt === null) &&
     (where.hosted === undefined || row.hosted !== null) &&
     dateMatches(row.scheduledWakeAt, where.scheduledWakeAt) &&
@@ -90,13 +109,20 @@ export const fakeWakeAlarms = (rows: WakeAlarmRow[]) => {
                 .slice(0, take)
                 .map((row) => ({ ...row })),
         ),
-        updateMany: jest.fn(async ({ where, data }: { where: AlarmWhere; data: Partial<Pick<WakeAlarmRow, "scheduledWakeAt" | "scheduledWakeRetryAt" | "personSeenAt">> }) => {
+        // The ingress's and the request wake's read of one row, a snapshot as above.
+        findFirst: jest.fn(async ({ where }: { where: AlarmWhere }) => {
+            const found = rows.find((row) => alarmMatches(row, where));
+            return found === undefined ? null : { ...found };
+        }),
+        updateMany: jest.fn(async ({ where, data }: { where: AlarmWhere; data: Partial<Omit<WakeAlarmRow, "id">> }) => {
             const matched = rows.filter((row) => alarmMatches(row, where));
             for (const row of matched) { Object.assign(row, data); }
             return { count: matched.length };
         }),
     };
-    // SAFETY: the alarm uses only these two sandbox methods, returning the selected row fields above.
-    const prisma = unstubbed<PrismaClient>("prisma", { sandbox: table as never });
-    return { prisma, table };
+    // (2026-11-27) What a sleeping sandbox let the platform hold, which every alarm write lets go (sleep-watch.ts).
+    const sleepWatch = { deleteMany: jest.fn(async (_query: { where: { sandboxId: string } }) => ({ count: 0 })) };
+    // SAFETY: the alarm and the request wake use only these sandbox methods, returning the selected row fields above.
+    const prisma = unstubbed<PrismaClient>("prisma", { sandbox: table as never, sleepWatch: sleepWatch as never });
+    return { prisma, table, sleepWatch };
 };

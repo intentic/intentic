@@ -22,6 +22,11 @@ const BlessedEntrySchema = z.object({
     // Floor upstream enforces itself; advisory here, shown when a turn dies on a version floor.
     minimum: z.string().optional(),
     notes: z.string().optional(),
+    // A release engine's hash of each build of `blessed`, keyed by the word the release files the build under, recorded
+    // by the bumper in the same edit that blesses the version (_tools/scripts/engines/engine-pins.mjs). Optional, and
+    // a key older daemons ignore: the entry is a non-strict object, so none of them refuses the list over it. One that
+    // does not parse reads as absent instead of failing the whole list, which every other engine is read from too.
+    sha256: z.record(z.string(), z.string()).optional().catch(undefined),
 });
 const BlessedListSchema = z.object({ engines: z.record(z.string(), BlessedEntrySchema) });
 export type BlessedEntry = z.infer<typeof BlessedEntrySchema>;
@@ -85,6 +90,18 @@ export const blessedList = async (force = false): Promise<ListCache | undefined>
 };
 
 export const blessedEntry = async (id: EngineId): Promise<BlessedEntry | undefined> => (await blessedList())?.entries[id];
+
+// The sha256 this repository recorded for this machine's build of a release engine's version, which the install refuses
+// a download to differ from. A hash belongs to the version blessed beside it and is never applied to another: a
+// `latest` or `pinned` channel naming some other version has none, and neither does an engine that publishes no release.
+export const recordedSha256 = async (id: EngineId, version: string): Promise<string | undefined> => {
+    const { source } = engineDescriptor(id);
+    if (source.kind !== "github-release") {
+        return undefined;
+    }
+    const entry = await blessedEntry(id);
+    return entry?.blessed === version ? entry.sha256?.[source.arch()] : undefined;
+};
 
 // Read time for the card; undefined means never reached, distinct from a list that blesses nothing.
 export const blessedListReadAt = (): string | undefined => list?.readAt;

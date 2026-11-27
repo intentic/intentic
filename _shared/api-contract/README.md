@@ -42,7 +42,12 @@ flowchart LR
   a person was there since that boot), and answers `{ ok: true }` after storage. A daemon with something due requires
   that acknowledgement before it sleeps, so an older or unreachable platform leaves it awake; one with nothing due
   sleeps whatever the answer. (2026-10-18: accepting sleep before a platform alarm exists could strand a distant
-  scheduled message or automation.)
+  scheduled message or automation.) Since 2026-11-27 it also carries `doors`, the wake doors the daemon sleeps with
+  (`wake-schemas.ts`: a path prefix and the SHA-256 of a secret per door; a list that does not parse is dropped, not
+  refused), and may answer `requestWake: true` to the first word of a boot a request started.
+- `requestWake` is the edge's ask, under the platform token: `POST /api/ingress/wake` with a sandbox id, a request's
+  path and the digests of the values it carries, answered `{ waking, listening, retryAfter? }` at once. An older
+  platform answers 404, which the edge reads as no.
 - A sandbox summary's `sleep` says a sandbox on its owner's own machine is asleep, on every role's row: `heardAt`, when
   that machine last said anything about it (its sleep report, or an ask for wakes), and `wakeable`, whether that was
   within `SLEEP_CHECK_FRESH_MS`, judged on the platform's clock. Null while awake and for a hosted sandbox, whose

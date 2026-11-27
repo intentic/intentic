@@ -6,7 +6,7 @@
     "category": "connections",
     "logo": "discord",
     "engines": {
-        "intentic": "^2.54.0"
+        "intentic": "^2.58.0"
     },
     "server": "dist/server.js",
     "permissions": {
@@ -128,8 +128,21 @@
                             }
                         ],
                         "hint": "What the status card in a thread shows while the agent works on a request. Everyone in the channel can read it."
+                    },
+                    {
+                        "key": "wakeOnMention",
+                        "label": "While this sandbox sleeps, Intentic's servers hold this bot's token to notice a mention and wake the sandbox. The token is deleted when the sandbox wakes.",
+                        "boolean": true,
+                        "hosted": true,
+                        "optional": true,
+                        "hint": "Off (the default), the token never leaves this sandbox, and a mention sent while it sleeps is not heard. On, it is handed to Intentic only as the sandbox goes to sleep and only while a Discord automation is on; a mention, a reply to the bot, a direct message or a message in one of its threads wakes it, and that message is answered once it is up."
                     }
                 ],
+                "sleepWatch": {
+                    "service": "discord",
+                    "credential": "botToken",
+                    "consent": "wakeOnMention"
+                },
                 "env": {
                     "DISCORD_BOT_TOKEN": "${botToken}"
                 },
@@ -213,6 +226,12 @@
                         "region": "US",
                         "thirdCountry": true,
                         "hosts": ["discord.com", "gateway.discord.gg", "cdn.discordapp.com"]
+                    },
+                    {
+                        "flow": "team-chat",
+                        "operator": "Intentic",
+                        "hosts": ["app.intentic.dev"],
+                        "when": "wakeOnMention == 'on'"
                     }
                 ]
             }

@@ -4,7 +4,18 @@
 // CI on engines.yml's PR validates the result: blessed means this repository's suite ran against that version.
 
 import { appendFileSync } from "node:fs";
-import { ENGINE_PINS, blessedFor, enginePin, listKeyOf, readBlessedList, readPin, writeBlessed, writePin } from "./engine-pins.mjs";
+import {
+    ENGINE_PINS,
+    blessedFor,
+    checksumValues,
+    enginePin,
+    listKeyOf,
+    readBlessedList,
+    readPin,
+    releaseChecksums,
+    writeBlessed,
+    writePin,
+} from "./engine-pins.mjs";
 import { isNewer, npmManifest, publishedVersions } from "./upstream.mjs";
 
 const args = process.argv.slice(2);
@@ -86,8 +97,12 @@ const verdictFor = async (engine) => {
         return verdict;
     }
     let blessed;
+    let sha256;
     try {
         blessed = await blessedFor(engine, target.version, npmManifest);
+        // A release engine's builds are hashed now, as the version is blessed, and the hashes are written with it: every
+        // later download of the version, the fleet's and the image build's, is held to what upstream served at this moment.
+        sha256 = await releaseChecksums(engine, blessed);
     } catch (error) {
         // A derived pin that cannot be resolved is unreachable, not a reason to write half of one.
         return { id: engine.id, status: "unreachable", from: pin.blessed, note: error.message };
@@ -102,6 +117,8 @@ const verdictFor = async (engine) => {
         trackedTo: target.version,
         ageHours: Math.round((now - target.at) / HOUR_MS),
         skipped,
+        // Absent for an engine with no release builds, and then dropped from the JSON report.
+        sha256,
     };
 };
 
@@ -119,8 +136,9 @@ const broken = verdicts.filter((verdict) => verdict.status === "broken");
 const written = [];
 if (apply && broken.length === 0) {
     for (const verdict of ready) {
-        writePin(enginePin(verdict.id), { tracked: verdict.trackedTo, blessed: verdict.to });
-        writeBlessed(listKeyOf(enginePin(verdict.id)), verdict.to);
+        const engine = enginePin(verdict.id);
+        writePin(engine, { tracked: verdict.trackedTo, blessed: verdict.to, ...checksumValues(verdict.sha256) });
+        writeBlessed(listKeyOf(engine), verdict.to, verdict.sha256);
         written.push(verdict.id);
     }
 }
@@ -132,7 +150,8 @@ const line = (verdict) => {
         case "ready": {
             const also = verdict.trackedTo === verdict.to ? "" : ` (@…-sdk ${verdict.trackedFrom} → ${verdict.trackedTo})`;
             const over = verdict.skipped === 0 ? "" : `, over ${verdict.skipped} intermediate release${verdict.skipped === 1 ? "" : "s"}`;
-            return `${verdict.id}: ${verdict.from} → ${verdict.to}${also}, published ${verdict.ageHours}h ago${over}`;
+            const hashed = verdict.sha256 === undefined ? "" : `; sha256 recorded for ${Object.keys(verdict.sha256).join(" and ")}`;
+            return `${verdict.id}: ${verdict.from} → ${verdict.to}${also}, published ${verdict.ageHours}h ago${over}${hashed}`;
         }
         case "soaking": {
             return `${verdict.id}: staying on ${verdict.from}; ${verdict.waiting} is ${verdict.ageHours}h old and soaks for ${verdict.soakHours}h`;

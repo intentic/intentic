@@ -790,7 +790,8 @@ or is meant to outlive it and is adopted; nothing is left to whoever happens to 
   sleeps on its heartbeat as it did. Hosted idle-stop saves its distant deadline on the platform and rechecks it before
   stopping; a refused sleep retracts that alarm. Enabled, unexpired webhook and listener automations hold a local
   sandbox's sleep, having no durable inbox outside the running daemon; a hosted machine sleeps through them, since an
-  always-on receiver would spend its month's hours in days. (2026-10-18: a minute-old heartbeat could miss a new
+  always-on receiver would spend its month's hours in days, and saves their wake doors with its alarm instead
+  (2026-11-27, [platform.md](platform.md#hosted-sandboxes)), so a request from a sender that retries wakes it. (2026-10-18: a minute-old heartbeat could miss a new
   booking.)
 - **Unused helpers rest.** The workspace's autostarted apps stop after 15 minutes with no editor connected, no preview
   visit and no open connection, and start again when somebody connects or visits one

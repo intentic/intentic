@@ -19,12 +19,14 @@ export interface HostedWakeSandbox {
     readonly hosted: HostedMachine;
 }
 
-// Who asked: a person's browser, or the platform's alarm on the daemon's behalf (hosted-wake-alarm.ts).
-export type HostedWakeCause = "person" | "alarm";
+// Who asked: a person's browser, the platform's alarm on the daemon's behalf (hosted-wake-alarm.ts), or (2026-11-27) a
+// request at one of the wake doors the daemon slept with, as the edge asked (hosted-request-wake.ts).
+export type HostedWakeCause = "person" | "alarm" | "request";
 
-// The same admission, state gate and billing for a browser's wake and a durable alarm. An alarm is the owner's earlier
-// request; it cannot bypass a suspension, spent hours, a move, a removal or a failed image's rollback. Only a person's
-// wake withdraws an idle notice: an alarm's start is not somebody opening the sandbox (hosted-idle.ts).
+// The same admission, state gate and billing for a browser's wake, a durable alarm and a request at a wake door. An alarm
+// and a door are the owner's earlier word; neither can bypass a suspension, spent hours, a move, a removal or a failed
+// image's rollback. Only a person's wake withdraws an idle notice and moves `personSeenAt`: neither of the others is
+// somebody opening the sandbox (hosted-idle.ts).
 export const wakeHostedSandbox = async (context: HostedWakeContext, sandbox: HostedWakeSandbox, cause: HostedWakeCause = "person"): Promise<void> => {
     const { hosted } = sandbox;
     // A person asked for it, whatever the wake then finds: what the free lane's idle collection measures from.
@@ -59,5 +61,5 @@ export const wakeHostedSandbox = async (context: HostedWakeContext, sandbox: Hos
         }
         throw new ORPCError("BAD_GATEWAY", { message: error instanceof Error ? error.message : "waking the machine failed" });
     }
-    await openStretchOrStop(context, hosted, sandbox.ownerId, { keepIdleWarning: cause === "alarm" });
+    await openStretchOrStop(context, hosted, sandbox.ownerId, { keepIdleWarning: cause !== "person" });
 };

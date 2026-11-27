@@ -29,7 +29,7 @@ import {
 import { recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { hostReportsOf, mintFixCode, sleepOf } from "./host-report.js";
-import { duplicateCopiesOf } from "./announce-copies.js";
+import { duplicateCopiesOf } from "./announce/announce-copies.js";
 import { activeHostOf } from "./active/active-host.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, SandboxHeldByOrganisation, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";

@@ -163,7 +163,7 @@ pnpm checks                                  # all of them; pnpm checks:tidy for
 | [publish-set](publish-set.mjs) | a publish list that is not dependency-closed and ordered |
 | [publish-retry](publish-retry.mjs) | retry patterns that ride out the wrong release failures |
 | [release-api](release-api.mjs) | a `github.sh` helper that masks a failed write |
-| [engines](engines-blessed.mjs) | an `engines.json` version this repository does not pin |
+| [engines](engines-blessed.mjs) | an `engines.json` version this repository does not pin, or a blessed release engine missing a build's `sha256` or recording one its pack does not verify |
 | [tool-pins](tool-pins.mjs) | a tool the sandbox image pins (ripgrep, gh, cloudflared, pnpm…) at two versions in two places |
 | [daemon-indexes](daemon-indexes.mjs) | the daemon's generated `state-registry.ts`, `app-raw-routes.ts` or `slice-registry.ts` drifted from the definitions in its source (`--fix` rewrites them) |
 | [scripts-kit](scripts-kit.mjs) | an install script whose generated kit or download region drifted from its source in `_site/site/scripts-kit/` (`--fix` rewrites it) |

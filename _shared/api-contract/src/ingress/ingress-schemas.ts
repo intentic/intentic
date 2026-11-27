@@ -130,6 +130,11 @@ export const AnnounceBodySchema = z.object({
     // (2026-11-11) The one-shot takeover marker `ic` left for this copy (`TakeoverSchema`): sent until an announce is
     // accepted, then deleted. A malformed one is dropped, never fatal.
     takeover: TakeoverSchema.optional().catch(undefined),
+    // (2026-11-26) When the first turn a person started on this sandbox finished without failing, in epoch ms, as the
+    // daemon recorded it once (its system/boot/first-turn.ts): the activation moment the operator's funnel counts
+    // (Sandbox.firstTurnAt). Absent until such a turn has finished, and from a daemon too old to record one; a value
+    // that is not a moment is dropped like a label, never fatal.
+    firstTurnAt: z.number().int().positive().max(8_640_000_000_000_000).optional().catch(undefined),
 });
 export type AnnounceBody = z.input<typeof AnnounceBodySchema>;
 
@@ -301,14 +306,6 @@ export type BootReportBody = z.input<typeof BootReportBodySchema>;
 
 // What a route that only takes something answers once it has.
 export const IngressOkSchema = z.object({ ok: z.literal(true) });
-
-// A hosted daemon must obtain this durable alarm's acknowledgement before stopping. Null cancels its previous alarm.
-// `personAt` is the last moment a person was here since that boot (0 or absent for none): what the free lane's idle
-// collection measures from, since a boot the alarm made is not somebody opening it (api hosted-idle.ts).
-export const WakeAlarmBodySchema = z.object({
-    at: z.number().int().positive().max(8_640_000_000_000_000).nullable(),
-    personAt: z.number().int().nonnegative().max(8_640_000_000_000_000).optional(),
-});
 
 // An announce the platform took: which database took it, from a platform new enough to say (GET /api/identity).
 // `identityKey` is the public half of the key this platform signs identity assertions with (sandbox-contract

@@ -21,6 +21,9 @@ flowchart LR
   its listener, and `/state` hands it only the connectors whose card that extension contributes. Their paths and the
   `/state` feed's schema come from the contract's `./listener-protocol` subpath, the declaration the daemon serves
   from, so a gateway loads no more of the contract.
+- A gateway's connection sleeps with a hosted machine. `ctx.api.sleep` (2026-11-27) is how a connector hears what arrives
+  meanwhile: point the provider at `ctx.api.sleep.wakeUrl(...)` from a `beforeSleep` handler, and undo it when
+  `ctx.api.sleep.boot()` says the last stop was a sleep ([extension-api](../extension-api#hosted-sleep)).
 - `runConnectorGateway` reconciles the connections a connector wants against the daemon's state on a timer, backs off
   after a fatal connect, reports status, serves `/health`, and shuts down on SIGTERM. A connector supplies only its
   `GatewayHooks`.

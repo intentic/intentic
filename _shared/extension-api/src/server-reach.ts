@@ -1,7 +1,7 @@
 import type { CiFeedEvent } from "@intentic/sandbox-contract/schemas/ci";
 
 // What a backend (and a declared process) hears, holds, runs and writes beside its routes (`ExtensionServerApi`'s
-// `events`, `exec` and `activity`, server.ts), split from server.ts to keep each file one reading.
+// `events`, `exec`, `activity` and `sleep`, server.ts), split from server.ts to keep each file one reading.
 
 // (2026-11-26) A run ending in a conversation this extension started (POST /agent with its own token), as
 // `api.events.onRunSettled` hears it. `stopped`: a person's stop or a parent's cancel ended it, not the turn itself.
@@ -70,4 +70,35 @@ export interface ExecResult {
     readonly truncated: boolean;
     readonly ended?: "timeout" | "aborted" | undefined;
     readonly spawnError?: string | undefined;
+}
+
+// (2026-11-27) The hosted machine about to sleep, as `api.sleep.beforeSleep` hears it: the moment (ms) after which it
+// stops whether or not every handler finished.
+export interface SleepNotice {
+    readonly deadline: number;
+}
+
+export type SleepHandler = (notice: SleepNotice) => Promise<void> | void;
+
+// (2026-11-27) What a boot follows, as `api.sleep.boot()` answers it.
+export interface SleepBoot {
+    // The daemon stopped last time because the hosted machine went to sleep: the before-sleep handlers ran.
+    readonly afterSleep: boolean;
+    // The platform started this machine for a request at one of its wake doors (a webhook's, or a `wakes` route's).
+    readonly requestWake: boolean;
+}
+
+// (2026-11-27) Where one message is that the platform's sleep watch heard for one of this extension's connections while
+// the sandbox slept, as `api.sleep.heard()` answers it: ids only, never what it says.
+export interface SleepHeardMessage {
+    // The service the platform held the connection on (`discord`).
+    readonly service: string;
+    // The card's id in this sandbox.
+    readonly connection: string;
+    readonly channelId: string;
+    readonly messageId: string;
+    // The server it was written in; absent for a direct message.
+    readonly guildId?: string | undefined;
+    // When the platform heard it (ms).
+    readonly at: number;
 }

@@ -179,6 +179,46 @@ flowchart LR
 - `./protocol` exports only the version and the engines matcher, for the daemon, which cannot load the Vue-dependent
   barrel. `./runtime` and `./testing` are Node-only and free of Vue too.
 
+## Hosted sleep
+
+(2026-11-27, 2.57.0) A sandbox the platform hosts stops when nobody uses it, and its gateways' connections stop with it.
+`api.sleep` is what an extension's Node code, the backend and every declared process alike (connector-runtime's
+gateways get it as `ctx.api.sleep`), uses to hear what arrives meanwhile. Nothing is declared under `permissions` for
+it; waking is a power of its own on the route.
+
+- `contributes.publicRoutes[].wakes: true` marks a route whose calls may wake the sleeping machine. Its only `*` is an
+  automation's (`automation: true`), so one URL names one path. The install dialog shows it as a power of its own ("a
+  call to /<path> wakes the sandbox while it sleeps, which spends its awake hours").
+- `api.sleep.wakeUrl(route, { automationId? })` answers the full public URL of such a route, `https://<sandbox>/door/<id>/<path>?wake=<secret>`,
+  its `*` filled with `automationId` for an automation's route. The secret is minted once per path and kept with the
+  sandbox's other door credentials, so the URL is the same on every call and after every restart: it is the one to put in
+  Slack's Request URL or Telegram's `setWebhook`. The door takes `wake` off before the backend hears the call, which
+  is then judged by the route's own protections as ever. Before every hosted sleep the daemon saves the SHA-256 of each
+  such URL's secret with the platform while an automation on the extension's listener provider is switched on (the one
+  the path names, for an automation's route); a call carrying it while the machine sleeps is answered 503 with
+  `Retry-After` (60 seconds) and starts the machine, so the sender's retry is what the backend hears. Slack and
+  Telegram retry; a sender that never retries loses what it sent while the machine slept. A wake that no person joins
+  sleeps again five quiet minutes after its work, and 48 a day at most start the machine.
+- `api.sleep.beforeSleep(handler)` runs `handler({ deadline })` right before a hosted sleep, after the doors were saved:
+  every handler of every extension at once, under one deadline about ten seconds off, after which the machine stops
+  whether or not they finished. Once handlers are asked, the sleep is never called off. A runtime holds one watch while
+  any handler is registered (`POST /extension/sleep/watch`) and answers ready (`POST /extension/sleep/ready`) once
+  its handlers are done, so the machine stops as soon as every extension is.
+- `api.sleep.boot()` answers `{ afterSleep, requestWake }`: whether the last stop was such a sleep (the moment to undo
+  what the hook did, say deleting a Telegram webhook to poll again), and whether the platform started this boot for a
+  request at a wake door. It resolves within about fifteen seconds of the daemon's boot; a daemon from before 2.57.0
+  answers false for both.
+- `api.sleep.heard()` (2.58.0) answers where the messages are that Intentic's servers heard for this extension's own
+  connections while the sandbox slept: a cli card declaring `sleepWatch` (Discord's), whose owner turned its consent
+  switch on, had its credential held by the platform for the sleep, which noted each message for it (`{ service,
+  connection, channelId, messageId, guildId?, at }`, never its words) and woke the sandbox. Fetch each and answer it as
+  if it had just arrived. Handed over once (asking forgets them); empty on a sandbox the platform does not host; it
+  rejects when the platform could not say, leaving them for another ask (`POST /extension/sleep/heard`).
+- `fakeExtensionApi` models all of it as `fake.sleep`: `wakeUrls` lists the URLs handed out
+  (`https://sandbox-fake.sbx.test/door/<id>/<path>?wake=fake-wake-secret`), `now()` tells every watch the machine is
+  about to sleep and resolves with how many answered ready, `boot` is what `api.sleep.boot()` answers, and `heard` is what
+  `api.sleep.heard()` hands over next, once.
+
 ## Key files
 
 - [src/api.ts](src/api.ts) — `IntenticApi`, `ExtensionContext` and the module shape a bundle exports.
