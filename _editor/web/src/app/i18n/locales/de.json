@@ -2310,6 +2310,10 @@
                         "label": "Lokale ID",
                         "placeholder": "der Gruppenname, den Ihr Gateway erwartet"
                     },
+                    "mtu": {
+                        "hint": "Legen Sie diesen Wert fest, wenn kleine Anfragen funktionieren, aber Pushes und Uploads hängen bleiben. Er gibt die maximale Paketgröße im Tunnel an.",
+                        "label": "Tunnel-MTU"
+                    },
                     "password-fortinet": {
                         "label": "Passwort"
                     },

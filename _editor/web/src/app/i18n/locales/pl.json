@@ -2259,6 +2259,10 @@
                         "label": "Lokalny identyfikator (Local ID)",
                         "placeholder": "nazwa grupy, której oczekuje Twoja brama"
                     },
+                    "mtu": {
+                        "hint": "Ustaw tę wartość, gdy małe żądania działają, ale operacje git push i przesyłanie plików się zawieszają. To maksymalny rozmiar pakietu przesyłanego przez tunel.",
+                        "label": "MTU tunelu"
+                    },
                     "password-fortinet": {
                         "label": "Hasło"
                     },

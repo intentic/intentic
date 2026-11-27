@@ -2310,6 +2310,10 @@
                         "label": "Local ID",
                         "placeholder": "the group name your gateway expects"
                     },
+                    "mtu": {
+                        "hint": "Set it when small requests work but pushes and uploads hang: the largest packet the tunnel carries.",
+                        "label": "Tunnel MTU"
+                    },
                     "password-fortinet": {
                         "label": "Password"
                     },

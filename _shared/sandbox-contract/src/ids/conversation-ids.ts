@@ -1,6 +1,6 @@
 // A conversation's id is the most public string this app produces: the git branch, the worktree directory, the URL, and
-// the card title. `word-tail` reads at a glance; the tail keeps it unique and must satisfy
-// ConversationIdSchema. Sandbox-started conversations use their own prefixed, derived ids instead.
+// the card title. The `word-tail` form is short and must satisfy ConversationIdSchema. Sandbox-started conversations
+// can use their own prefixed, derived ids.
 
 import { CONVERSATION_WORDS } from "./conversation-words.js";
 
@@ -17,13 +17,12 @@ export const CONVERSATION_TITLE_MAX = 80;
 export const clipTitle = (title: string): string =>
     title.length <= CONVERSATION_TITLE_MAX ? title : `${title.slice(0, CONVERSATION_TITLE_MAX - 1).trimEnd()}…`;
 
-// One word and a tail: `otter-k7mq`, about ten characters, since every letter counts on the board's rows. The word is
-// what a person reads and says; the tail is what keeps it unique.
+// One word and a tail: `otter-k7mq`, about ten characters. The word is easy to say, and the tail makes collisions rare.
 //
 // The tail is lowercase on purpose. The id is also the branch and the worktree directory, and both reach Windows and
 // macOS filesystems that fold case, where `otter-K7mq` and `otter-k7mq` would be one folder. So the tail's alphabet is
 // base36 with the characters people misread dropped (0/o, 1/l/i): 31 symbols, four of them 923,521 values per word,
-// and with the word list about 2^29 ids in all, far past any workspace's collision risk.
+// and with the word list about 2^29 ids in all.
 export const TAIL_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
 const TAIL_LENGTH = 4;
 
@@ -41,8 +40,7 @@ const randomBelow = (upperBound: number): number => {
     }
 };
 
-// Draws uniformly via the platform CSPRNG, not `Math.random()` (seeded per process): two tabs opened at once must not
-// get the same name.
+// Draws uniformly via the platform CSPRNG so separate tabs can draw independently.
 const pick = <T>(values: readonly T[]): T => values[randomBelow(values.length)]!;
 
 // One TAIL_ALPHABET character per draw, all of which the id guard accepts.

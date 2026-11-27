@@ -2310,6 +2310,10 @@
                         "label": "ID local",
                         "placeholder": "le nom de groupe attendu par votre passerelle"
                     },
+                    "mtu": {
+                        "hint": "Réglez cette valeur si les petites requêtes fonctionnent, mais que les opérations git push et les transferts se bloquent. Elle indique la taille maximale d’un paquet dans le tunnel.",
+                        "label": "MTU du tunnel"
+                    },
                     "password-fortinet": {
                         "label": "Mot de passe"
                     },

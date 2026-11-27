@@ -137,9 +137,28 @@ test("a drawn id under a subagent or link prefix still looks drawn, in either ge
     }
 });
 
-test("ids are unique across a burst", () => {
-    const ids = new Set(Array.from({ length: 5_000 }, newConversationId));
-    expect(ids.size).toBe(5_000);
+test("the word and each tail draw can change the generated id", () => {
+    const nextWord = Math.floor(2 ** 32 / CONVERSATION_WORDS.length);
+    const nextSymbol = Math.floor(2 ** 32 / TAIL_ALPHABET.length);
+    const draws = [
+        [0, 0, 0, 0, 0],
+        [nextWord, 0, 0, 0, 0],
+        [0, nextSymbol, 0, 0, 0],
+        [0, 0, nextSymbol, 0, 0],
+        [0, 0, 0, nextSymbol, 0],
+        [0, 0, 0, 0, nextSymbol],
+    ];
+    const { remaining } = mockRandomValues(draws.flat());
+
+    expect(draws.map(newConversationId)).toEqual([
+        `${CONVERSATION_WORDS[0]}-2222`,
+        `${CONVERSATION_WORDS[1]}-2222`,
+        `${CONVERSATION_WORDS[0]}-3222`,
+        `${CONVERSATION_WORDS[0]}-2322`,
+        `${CONVERSATION_WORDS[0]}-2232`,
+        `${CONVERSATION_WORDS[0]}-2223`,
+    ]);
+    expect(remaining).toEqual([]);
 });
 
 test("a CI fix id is the same string every time it is derived", () => {

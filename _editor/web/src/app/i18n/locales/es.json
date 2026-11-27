@@ -2310,6 +2310,10 @@
                         "label": "ID local",
                         "placeholder": "el nombre de grupo que espera tu pasarela"
                     },
+                    "mtu": {
+                        "hint": "Ajusta este valor si las solicitudes pequeñas funcionan, pero los envíos con git push y las subidas de archivos se bloquean. Es el tamaño máximo de paquete que admite el túnel.",
+                        "label": "MTU del túnel"
+                    },
                     "password-fortinet": {
                         "label": "Contraseña"
                     },
