@@ -1,0 +1,84 @@
+---
+/* A BAND (DESIGN.md, "Grounds", "Band compositions"): the ground it stands on, chosen; the rhythm every band shares
+   (`--band-pad` above and below, `--band-gap` from head to exhibit, content capped at `--shell-max`); the gold hairline
+   that separates it from the band before; and the reveal as it arrives.
+     wall    the 84px gilt grid fading from the top. The default ground of a band.
+     lamp    a warm pool of light behind the exhibit. One per band, never two bands running.
+     plinth  the lit strip with hairlines above and below, for a row of stats: padded by `--plinth-pad`, not a band's.
+     plain   the canvas, for text-dense bands.
+   The plate is not here: it belongs to the page's first screen (PageBackdrop) and the home pages' closing band. */
+
+interface Props {
+    ground: "wall" | "lamp" | "plinth" | "plain";
+    id?: string;
+    /** The id of the band's heading, which names it as a region. */
+    labelledby?: string;
+    /** A name for a band with no visible heading (a strip of stats). */
+    label?: string;
+    /** Rise into place as it scrolls in (`.fade-in`). Off for a band that is on the first screen. */
+    reveal?: boolean;
+    class?: string;
+}
+
+const { ground, id, labelledby, label, reveal = true, class: className } = Astro.props;
+const hasHead = Astro.slots.has("head");
+---
+
+<section
+    class:list={["band", "kit-band", ground === "plinth" && "plinth", className]}
+    data-ground={ground}
+    id={id}
+    aria-labelledby={labelledby}
+    aria-label={labelledby === undefined ? label : undefined}
+>
+    {ground === "wall" && <div class="wall" aria-hidden="true" />}
+    <div class:list={["kit-band-shell", reveal && "fade-in"]}>
+        {
+            hasHead && (
+                <div class="kit-band-head">
+                    <slot name="head" />
+                </div>
+            )
+        }
+        <div class:list={["kit-band-exhibit", hasHead && "kit-band-exhibit-headed"]}>
+            <slot />
+        </div>
+    </div>
+</section>
+
+<style>
+    .kit-band-shell {
+        position: relative;
+        box-sizing: border-box;
+        max-width: var(--shell-max);
+        margin-inline: auto;
+        padding: var(--band-pad) var(--shell-gutter);
+    }
+    .kit-band[data-ground="plinth"] .kit-band-shell {
+        padding-block: var(--plinth-pad);
+    }
+    .kit-band-exhibit {
+        position: relative;
+        isolation: isolate;
+    }
+    .kit-band-exhibit-headed {
+        margin-top: var(--band-gap);
+    }
+
+    /* The lamp stands behind the exhibit, not the band: it lights the thing the band is about. */
+    .kit-band[data-ground="lamp"] .kit-band-exhibit::before {
+        content: "";
+        position: absolute;
+        inset: -22% -12%;
+        z-index: -1;
+        background: var(--role-lamp);
+        pointer-events: none;
+    }
+
+    /* The plinth draws its own hairlines above and below, so neither it nor the band after it takes the band rule. */
+    .kit-band[data-ground="plinth"],
+    .kit-band[data-ground="plinth"] + :global(.band) {
+        border-top: 0;
+        border-image: none;
+    }
+</style>

@@ -31,12 +31,15 @@ export interface AutomateMachine {
     label: string;
 }
 
+/** The first thing that can wake a run, and the one the compact flow below leads with. */
+const push: AutomateTrigger = { label: "A push", source: "GitHub · GitLab", icon: "push" };
+
 export const automateMachine: AutomateMachine = {
     events: {
         eyebrow: "Wakes on",
         // Each item names the concrete system it comes from, not a category.
         items: [
-            { label: "A push", source: "GitHub · GitLab", icon: "push" },
+            push,
             { label: "An alert", source: "Sentry", icon: "alert" },
             { label: "A payment", source: "Stripe", icon: "payment" },
             { label: "An email", source: "any IMAP inbox", icon: "email" },
@@ -63,4 +66,15 @@ export const automateMachine: AutomateMachine = {
         "How an automation runs: a push, an alert, a payment, an email, a message or a schedule wakes it. " +
         "An optional command of yours reads the event first: exit 0 and an agent wakes, anything else is recorded as skipped and costs nothing. " +
         "A run is a fresh agent session on your board, with its own transcript, its own branch and checkout, and nothing landing until you have read the diff.",
+};
+
+/** The same machine at a glance, for a card too small for the stations: what wakes a run, the check, what it becomes.
+ *  Every word is the machine's own, so the card and the figure cannot disagree. */
+export const automateFlow = {
+    caption: "An event wakes your check, and a pass starts a fresh agent session.",
+    nodes: [
+        { title: push.label, label: push.source },
+        { title: automateMachine.check.eyebrow, label: automateMachine.check.pass.code },
+        { title: automateMachine.run.title, label: "its own branch" },
+    ],
 };

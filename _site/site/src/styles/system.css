@@ -1,0 +1,134 @@
+/* THE SITE'S DESIGN SYSTEM, AS TOKENS (_site/site/DESIGN.md says what each one is for and when to reach for it).
+
+   Three kinds of value live here and nowhere else:
+     · the app's own numbers the site was spelling out by hand (motion, the glyph grammar's stroke), so a hover on
+       intentic.dev and a hover in the product take the same time and the same curve;
+     · the steps every band is built from (display sizes, band rhythm, niche sizes), so two pages cannot drift apart
+       by a rem here and a clamp there;
+     · the materials the kit adds (the lamp, the Tip's lacquer, a figure's edges and pulse, the chart series).
+
+   Dark values are here; the desk skin relights the colours in desk.css, as it does every other role. */
+
+@theme {
+    /* ── Motion curves. `ease-smooth` is the app's (_editor/ui/src/styles/motion.css): every UI transition. ─────── */
+    --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+    /* A small overshoot: a glyph lifting in its niche, a node settling into place. Never on text or layout. */
+    --ease-settle: cubic-bezier(0.34, 1.5, 0.64, 1);
+
+    /* ── Display steps. Lora 400 in `--role-display-ink`; the class `.display` sets the face. ──────────────────── */
+    /* The hero's headline. One per page, and only the home pages have one this big. */
+    --text-display-1: clamp(2.6rem, 6.3vw, 5.5rem);
+    --text-display-1--line-height: 1.08;
+    /* A band's heading and an inner page's h1. */
+    --text-display-2: clamp(1.9rem, 3.2vw, 2.75rem);
+    --text-display-2--line-height: 1.24;
+    /* An exhibit's title, a stat's value, a price. */
+    --text-display-3: clamp(1.5rem, 2.2vw, 1.875rem);
+    --text-display-3--line-height: 1.2;
+
+    /* ── Reading steps. ───────────────────────────────────────────────────────────────────────────────────────── */
+    /* The one sentence under a heading. */
+    --text-lede: 1.0625rem;
+    --text-lede--line-height: 1.65;
+    /* A tile's or a node's name. */
+    --text-title: 1rem;
+    --text-title--line-height: 1.35;
+    /* A tile's one line, a Tip's body, a caption. */
+    --text-note: 0.875rem;
+    --text-note--line-height: 1.55;
+}
+
+:root {
+    /* ── Motion durations. The first two are the app's; the rest are the site's, which has room to be slower. ──── */
+    --motion-quick: 150ms; /* hover, press, a niche lighting */
+    --motion-base: 200ms; /* a Tip opening, a tab switching */
+    --motion-reveal: 600ms; /* a band arriving as it scrolls in */
+    --motion-draw: 1400ms; /* a figure's lines drawing themselves */
+    --motion-count: 1600ms; /* a stat counting up to its value */
+    --motion-cycle: 7s; /* one loop of a figure that shows something repeating */
+    --motion-stagger: 80ms; /* between siblings arriving together */
+    --motion-rise: 14px; /* how far a revealed band travels */
+    /* Whether a figure's loop runs. A loop cannot be stopped by zeroing its duration (a zero-length cycle spins), so
+       the preference reaches it as a state: `animation-play-state: var(--motion-loop)` in CSS, or read by a script. */
+    --motion-loop: running;
+
+    /* ── The Tip's timing (DESIGN.md, "Detail on demand"). Not motion: a reader who asked for less movement still
+          needs the intent that stops a pass-over from opening every card, and the grace that lets the pointer reach
+          the card's link. So these are not zeroed under reduced motion. ───────────────────────────────────────── */
+    --tip-intent: 80ms; /* hover this long before a Tip opens */
+    --tip-grace: 150ms; /* the pointer may be outside trigger and card this long before it closes */
+    --tip-width: 20rem; /* the widest a Tip is */
+
+    /* ── Rhythm. Every band is padded, gapped and capped by these, never by its own numbers. ──────────────────── */
+    --shell-max: 84rem; /* the widest a band's content runs */
+    --shell-gutter: 1.5rem;
+    --band-pad: clamp(4rem, 8vw, 6.5rem); /* above and below a band's content */
+    --band-gap: clamp(2rem, 4vw, 3.25rem); /* from a band's head to its exhibit */
+    --tile-gap: 1rem; /* between tiles in a grid */
+    /* A strip on the plinth (a row of stats) is a band too, but a measured row, not a chapter: --band-pad above and
+       below it would stand three numbers in a lit field taller than they are. */
+    --plinth-pad: clamp(1.75rem, 3.5vw, 2.75rem);
+
+    /* ── Glyphs: the app's grammar (24-unit grid, square caps, mitred joins, cut corners, lozenge joints). ─────── */
+    --glyph-stroke: 2; /* the line rendering, at text size: the app's Icon.vue */
+    --glyph-gilt-stroke: 1.6; /* the gilt rendering, in a niche: NavNiche.astro */
+    /* A niche and the glyph set in it, three sizes. A row of niches is always one size. */
+    --niche-sm: 2.25rem;
+    --niche-sm-glyph: 1.3rem;
+    --niche-md: 3rem;
+    --niche-md-glyph: 1.8rem;
+    --niche-lg: 4.25rem;
+    --niche-lg-glyph: 2.5rem;
+
+    /* ── Grounds. The plate, the wall and the plinth are in global.css; the lamp is the one this system adds. ──── */
+    /* THE LAMP: a warm pool of light behind the one thing a band wants looked at. Ember at its heart, gold at its
+       edge, nothing at its rim. One per band, and never on a band that already has the plate. */
+    --role-lamp-core: rgb(240 200 130 / 0.16);
+    --role-lamp-mid: rgb(224 123 39 / 0.07);
+    --role-lamp: radial-gradient(ellipse 52% 46% at 50% 42%, var(--role-lamp-core) 0%, var(--role-lamp-mid) 46%, transparent 74%);
+
+    /* ── The Tip: the app's hover card, in the nav panel's lacquer. ───────────────────────────────────────────── */
+    --role-tip-fill: var(--role-nav-lacquer);
+    --role-tip-edge: var(--role-nav-gilt-edge);
+    --role-tip-line: var(--color-line-strong);
+    --role-tip-shadow: 0 2px 6px rgb(0 0 0 / 0.45), 0 18px 40px -12px rgb(0 0 0 / 0.7);
+    --role-tip-ink: var(--color-content);
+    /* The dotted rule under a term that has a Tip: the reader's cue that there is more under it. */
+    --role-tip-cue: color-mix(in oklab, var(--color-gold) 70%, transparent);
+
+    /* ── Figures. Every drawn diagram uses these five and nothing else for its structure. ──────────────────────── */
+    --role-node-fill: var(--role-figure-panel);
+    --role-node-line: var(--color-line-strong);
+    --role-edge: var(--color-line-strong); /* a wire at rest */
+    --role-edge-lit: var(--color-primary-500); /* a wire carrying something now */
+    --role-pulse: var(--color-primary-400); /* the thing it carries */
+    --role-pulse-glow: 0 0 10px 2px rgb(245 155 63 / 0.55);
+    /* A LIT NODE: gold at its rim (structure, "this one") and ember light thrown from it (DESIGN.md, "Colour"). */
+    --role-node-rim-lit: var(--color-gold);
+    --role-node-glow-lit: var(--role-ember-glow-lit);
+
+    /* ── Chart series, in the order a chart reaches for them. Gold and ember are the brand; verdigris and lapis
+          are the app's Sanctum success and info, so a chart beside a screenshot shares its hues; stone is "the rest". */
+    --series-1: var(--color-gold);
+    --series-2: var(--color-primary-500);
+    --series-3: oklch(70% 0.075 160);
+    --series-4: oklch(70% 0.065 240);
+    --series-5: var(--color-subtle);
+    /* A meter's empty track. */
+    --role-track: rgb(239 227 205 / 0.08);
+}
+
+/* Reduced motion keeps every end state and drops every journey. A token at zero, not a rule per component, so a
+   component that only reads the tokens is correct without knowing the preference exists. */
+@media (prefers-reduced-motion: reduce) {
+    :root {
+        --motion-quick: 0ms;
+        --motion-base: 0ms;
+        --motion-reveal: 0ms;
+        --motion-draw: 0ms;
+        --motion-count: 0ms;
+        --motion-stagger: 0ms;
+        --motion-rise: 0px;
+        --motion-loop: paused;
+    }
+}

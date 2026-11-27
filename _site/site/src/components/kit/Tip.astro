@@ -1,0 +1,285 @@
+---
+/* THE TIP: the app's hover card (the `v-tooltip` Tip, `InfoHint`), carried onto the site (DESIGN.md, "Detail on
+   demand"). Three triggers:
+     info   an (i) after a section's lede, for its how-it-works;
+     term   a word with a dotted gold rule, inside a lede or a line;
+     area   any of the above inside a `[data-tip-area]` (a tile, a node): pointing anywhere on it opens the card, which
+            then hangs from the whole tile. Its (i) stays, as the way in for a keyboard and a finger.
+   THE CARD IS IN THE HTML. It is a popover the trigger opens natively (`popovertarget`), so with no script a tap still
+   opens it, Escape and a tap outside still close it, and one opening closes the last; a crawler and the .md mirror
+   read its words where they stand. tip.ts adds what only a script can: the 80ms intent, the 150ms grace into the card,
+   opening on keyboard focus, and placement that flips above near the viewport's foot and keeps 8px from its edges.
+   THE TERM'S WORD IS OUTSIDE ITS BUTTON, which lies over it: the mirror drops every <button>, and the word would go
+   with it. */
+import { held } from "../../lib/design/copy-budgets";
+import Glyph from "./Glyph.astro";
+import { heldTip, isExternal, kitId, type TipContent } from "./kit";
+
+interface Props extends TipContent {
+    trigger?: "info" | "term";
+    /** The word or two a `term` trigger underlines. */
+    term?: string;
+    /** Open under the pointer anywhere on the nearest `[data-tip-area]`, and hang from it. */
+    area?: boolean;
+    /** Where this Tip is, for a budget error to name. */
+    where?: string;
+    class?: string;
+}
+
+const { trigger = "info", term, area = false, where = "Tip", class: className } = Astro.props;
+const tip = heldTip(Astro.props, where);
+if (trigger === "term" && (term === undefined || term.trim() === "")) {
+    throw new Error(`${where}: a term Tip needs the words it underlines (\`term\`).`);
+}
+const termText = trigger === "term" ? held("label", term, where) : undefined;
+const id = kitId("tip");
+const external = tip.link !== undefined && isExternal(tip.link.href);
+---
+
+<span class:list={["kit-tip", className]} data-kit-tip data-trigger={trigger} data-area={area ? "" : undefined}>
+    {termText !== undefined && <span class="kit-tip-term" id={`${id}-term`}>{termText}</span>}
+    <button
+        type="button"
+        class="kit-tip-button"
+        popovertarget={id}
+        aria-controls={id}
+        aria-label={termText === undefined ? tip.title : undefined}
+        aria-labelledby={termText === undefined ? undefined : `${id}-term`}
+        style={`anchor-name: --${id}`}
+    >
+        {trigger === "info" && <Glyph name="info" rendering="line" />}
+    </button>
+    <span class="kit-tip-card" id={id} popover="auto" style={`position-anchor: --${id}`}>
+        <span class="kit-tip-pointer" aria-hidden="true"></span>
+        <strong class="kit-tip-title">{tip.title}</strong>{" "}
+        <span class="kit-tip-body">{tip.body}</span>{" "}
+        {
+            tip.rows !== undefined && tip.rows.length > 0 && (
+                <span class="kit-tip-rows">
+                    {tip.rows.map((row) => (
+                        <span class="kit-tip-row">
+                            <span class="kit-tip-label">{row.label}</span><span class="sr-only">: </span><span class="kit-tip-value">{row.value}</span>{" "}
+                        </span>
+                    ))}
+                </span>
+            )
+        }
+        {
+            tip.link !== undefined && (
+                <a class="kit-tip-link" href={tip.link.href} target={external ? "_blank" : undefined} rel={external ? "noopener" : undefined}>
+                    {tip.link.label}
+                    <Glyph name="arrow" rendering="line" />
+                </a>
+            )
+        }
+    </span>
+</span>
+
+<script>
+    import { startTips } from "./tip";
+    startTips();
+</script>
+
+<style>
+    /* ── Triggers ───────────────────────────────────────────────────────────────────────────────────────────── */
+    .kit-tip {
+        display: inline;
+    }
+    .kit-tip-button {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        cursor: help;
+    }
+
+    /* The (i): gold, a little under the line's height, with a hit area a finger can find around it. */
+    .kit-tip[data-trigger="info"] .kit-tip-button {
+        display: inline-grid;
+        place-items: center;
+        margin: -0.32em -0.22em -0.32em 0.02em;
+        padding: 0.32em;
+        vertical-align: -0.06em;
+        font-size: 0.95em;
+        color: var(--color-gold);
+        transition: color var(--motion-quick) var(--ease-smooth);
+    }
+    .kit-tip[data-trigger="info"] .kit-tip-button:hover,
+    .kit-tip[data-trigger="info"] .kit-tip-button[aria-expanded="true"] {
+        color: var(--color-gold-bright);
+    }
+
+    /* The term: the reader's cue that there is more under the word. The button lies over the word, not around it. */
+    .kit-tip[data-trigger="term"] {
+        position: relative;
+        white-space: nowrap;
+    }
+    .kit-tip-term {
+        text-decoration-line: underline;
+        text-decoration-style: dotted;
+        text-decoration-color: var(--role-tip-cue);
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 0.26em;
+        transition:
+            color var(--motion-quick) var(--ease-smooth),
+            text-decoration-color var(--motion-quick) var(--ease-smooth);
+    }
+    .kit-tip[data-trigger="term"] .kit-tip-button {
+        position: absolute;
+        inset: -0.1em -0.15em;
+    }
+    .kit-tip[data-trigger="term"]:has(.kit-tip-button:hover, .kit-tip-button[aria-expanded="true"]) .kit-tip-term {
+        color: var(--color-content);
+        text-decoration-color: var(--color-gold);
+    }
+
+    /* ── The card: the nav panel's lacquer, a gilt top edge, a line-strong rule, square corners ─────────────── */
+    .kit-tip-card {
+        /* What the user agent gives a popover, undone. Inset and margin stay its own until a script places the card,
+           so a reader with no script gets it centred, or hung from its trigger where anchors are supported. */
+        overflow: visible;
+        box-sizing: border-box;
+        width: max-content;
+        max-width: min(var(--tip-width), calc(100vw - 16px));
+        padding: 0.8rem 0.95rem 0.85rem;
+        border: 0;
+        background: var(--role-nav-sheen), var(--role-tip-fill);
+        box-shadow:
+            inset 0 0 0 1px var(--role-tip-line),
+            var(--role-tip-shadow);
+        color: var(--role-tip-ink);
+
+        /* It sits inside whatever text its trigger is in (a heading, an eyebrow, a centred lede): none of that is its. */
+        font-family: var(--font-sans);
+        font-size: var(--text-note);
+        font-style: normal;
+        font-weight: var(--font-weight-normal);
+        line-height: var(--text-note--line-height);
+        letter-spacing: normal;
+        text-align: start;
+        text-transform: none;
+        text-wrap: pretty;
+        white-space: normal;
+
+        opacity: 0;
+        translate: 0 var(--tip-from, -4px);
+        transition:
+            opacity var(--motion-base) var(--ease-smooth),
+            translate var(--motion-base) var(--ease-smooth),
+            overlay var(--motion-base) allow-discrete,
+            display var(--motion-base) allow-discrete;
+    }
+    .kit-tip-card[data-side="top"] {
+        --tip-from: 4px;
+    }
+    .kit-tip-card:popover-open {
+        opacity: 1;
+        translate: 0 0;
+    }
+    @starting-style {
+        .kit-tip-card:popover-open {
+            opacity: 0;
+            translate: 0 var(--tip-from, -4px);
+        }
+    }
+    /* The gilt edge along the top, where the light falls: the nav sheet's leaf, one pixel of it. */
+    .kit-tip-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 0;
+        height: 1px;
+        background: var(--role-tip-edge);
+    }
+
+    /* Placed by script: fixed coordinates, worked out against the viewport. */
+    :global(:root[data-kit-tips]) .kit-tip-card {
+        inset: auto;
+        margin: 0;
+    }
+    /* No script, but anchors: hang it under the trigger, above it when there is no room. */
+    @supports (position-area: bottom) {
+        :global(:root:not([data-kit-tips])) .kit-tip-card {
+            inset: auto;
+            margin: 10px 0;
+            position-area: bottom;
+            justify-self: anchor-center;
+            position-try-fallbacks: flip-block;
+        }
+    }
+
+    /* The lozenge set into the edge, pointing at the trigger: the nav sheet's finial, a size down. */
+    .kit-tip-pointer {
+        position: absolute;
+        top: -6px;
+        left: var(--tip-arrow, 50%);
+        width: 11px;
+        height: 11px;
+        margin-left: -5.5px;
+        background:
+            linear-gradient(var(--role-glyph-jewel), var(--role-glyph-jewel)) center / 3px 3px no-repeat,
+            var(--role-tip-fill);
+        border: 1px solid var(--role-glyph-gilt-2);
+        transform: rotate(45deg);
+    }
+    .kit-tip-card[data-side="top"] .kit-tip-pointer {
+        top: auto;
+        bottom: -6px;
+    }
+    :global(:root:not([data-kit-tips])) .kit-tip-pointer {
+        display: none;
+    }
+
+    .kit-tip-title {
+        display: block;
+        margin-bottom: 0.2rem;
+        font-family: var(--font-mark);
+        font-size: 0.9375rem;
+        font-weight: var(--font-weight-semibold);
+        line-height: 1.3;
+        color: var(--role-tip-ink);
+    }
+    .kit-tip-body {
+        display: block;
+        color: var(--color-muted);
+    }
+    /* Facts as label/figure rows, the app's tip card: figures tabular and flush right, under a hairline. */
+    .kit-tip-rows {
+        display: grid;
+        grid-template-columns: minmax(0, auto) minmax(0, auto);
+        column-gap: 1.25rem;
+        row-gap: 0.15rem;
+        margin-top: 0.65rem;
+        padding-top: 0.55rem;
+        border-top: 1px solid var(--color-line);
+    }
+    .kit-tip-row {
+        display: contents;
+    }
+    .kit-tip-label {
+        color: var(--color-subtle);
+    }
+    .kit-tip-value {
+        text-align: end;
+        font-variant-numeric: tabular-nums;
+        font-weight: var(--font-weight-medium);
+        color: var(--role-tip-ink);
+    }
+    .kit-tip-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4em;
+        margin-top: 0.65rem;
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gold-bright);
+        text-decoration: none;
+        transition: color var(--motion-quick) var(--ease-smooth);
+    }
+    .kit-tip-link:hover,
+    .kit-tip-link:focus-visible {
+        color: var(--color-primary-400);
+    }
+</style>

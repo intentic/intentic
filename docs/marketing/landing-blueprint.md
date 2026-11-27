@@ -174,6 +174,9 @@ this paragraph stood alone for a day and was edited on the first turn that touch
   `styles/home.css` holds only this page's own arrangement. There is no second dress on a second URL any
   more, and there is still **no `SITE_VARIANT`, no `/preview` route, and no a/b/c variants**. A second
   set of **words** is the thing that stays retired.
+  Its rules (copy budgets, grounds, materials, glyphs, the Tip, motion, figures, band compositions) are
+  written down in [`_site/site/DESIGN.md`](../../_site/site/DESIGN.md), and the components that hold them
+  are the kit in `_site/site/src/components/kit/`.
 - Meta: title/description come from `_site/site-content/src/page-meta.ts` /
   `_site/site-content/src/site.ts` (ORG_DESCRIPTION): one page, one set of strings.
 - Screenshots: `_site/site/src/assets/product/`, all written by one harness:

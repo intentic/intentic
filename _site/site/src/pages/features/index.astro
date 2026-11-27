@@ -1,4 +1,5 @@
 ---
+import { automateFlow } from "@intentic/site-content/automate";
 import { productHref, productPages } from "@intentic/site-content/product";
 import { APP_URL, HOSTED_START_LABEL, DEMO_PATH } from "@intentic/site-content/site";
 import BaseLayout from "../../layouts/BaseLayout.astro";
@@ -8,6 +9,13 @@ import PageHero from "../../components/content/PageHero.astro";
 import Window from "../../components/Window.astro";
 import { shotAsset } from "../../lib/shots";
 import ProductShot from "../../components/ProductShot.astro";
+import Flow from "../../components/kit/Flow.astro";
+import type { FlowNode } from "../../components/kit/kit";
+
+/* The automation card's figure: the same machine as the Automate page's, at a glance. Its glyphs are the kit's; its
+   words are automate.ts's. */
+const AUTOMATE_GLYPHS = ["branch", "command", "agents"] as const;
+const automateNodes: FlowNode[] = automateFlow.nodes.map((node, index) => ({ ...node, glyph: AUTOMATE_GLYPHS[index] ?? "automations" }));
 
 /* The features index: every verb as a card, in the order the menu lists them. */
 ---
@@ -47,14 +55,8 @@ import ProductShot from "../../components/ProductShot.astro";
                                         />
                                     </div>
                                 ) : (
-                                    <div class="flex aspect-16/10 items-center justify-center border-b border-line bg-canvas p-6">
-                                        <div class="flex items-center gap-2 text-xs font-medium">
-                                            <span class="border border-line bg-overlay/40 px-3 py-2 text-content">Event</span>
-                                            <span class="text-gold" aria-hidden="true">→</span>
-                                            <span class="border border-line bg-overlay/40 px-3 py-2 text-content">Check</span>
-                                            <span class="text-gold" aria-hidden="true">→</span>
-                                            <span class="border border-primary-600/40 bg-primary-600/[0.06] px-3 py-2 text-primary-400">Agent</span>
-                                        </div>
+                                    <div class="flex items-center justify-center border-b border-line bg-canvas p-6 sm:aspect-16/10">
+                                        <Flow nodes={automateNodes} caption={automateFlow.caption} size="sm" captionHidden />
                                     </div>
                                 )}
                                 <div class="p-6">

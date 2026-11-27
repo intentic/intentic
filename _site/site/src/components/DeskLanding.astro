@@ -12,7 +12,7 @@ import Corners from "./Corners.astro";
 import DownloadCta from "./DownloadCta.astro";
 import Footer from "./Footer.astro";
 import Nav from "./Nav.astro";
-import Band from "./landing/Band.astro";
+import IntroBand from "./landing/IntroBand.astro";
 import Economics from "./landing/Economics.astro";
 import FaqList from "./landing/FaqList.astro";
 import Final from "./landing/Final.astro";
@@ -126,7 +126,7 @@ const planSizes = "(min-width: 64rem) min(21vw, 249px), 25vw";
             <Trust />
 
             <!-- Getting started: the download first, and no command anywhere. -->
-            <Band id="connect" intro={content.connect}>
+            <IntroBand id="connect" intro={content.connect}>
                 <div class="flow">
                     <div class="flow-zone">
                         <div class="flow-where">{content.connect.zones.computer}</div>
@@ -156,16 +156,16 @@ const planSizes = "(min-width: 64rem) min(21vw, 249px), 25vw";
                     </div>
                     <a class="btn btn-primary btn-sm" href={APP_URL}>{content.connect.browser.cta}</a>
                 </div>
-            </Band>
+            </IntroBand>
 
             <!-- This page's own questions; native details for keyboard and screen-reader behavior. -->
-            <Band id="faq" intro={{ ...content.faq, sub: content.faq.lede }}>
+            <IntroBand id="faq" intro={{ ...content.faq, sub: content.faq.lede }}>
                 <div class="faq faq-single">
                     <div class="faq-group" id="desk-questions">
                         <FaqList items={content.faq.items} groupId="desk-questions" />
                     </div>
                 </div>
-            </Band>
+            </IntroBand>
 
             <!-- Closing cartouche returns the plate at the page end. -->
             <Final>

@@ -1,7 +1,7 @@
 ---
 import { landingContent, type LandingSectionIntro } from "@intentic/site-content/landing";
 import { PROVIDER_BRAND_PATHS, providerFillRule } from "@intentic/constants";
-import Band from "./Band.astro";
+import IntroBand from "./IntroBand.astro";
 import Bullet from "../Bullet.astro";
 import Corners from "../Corners.astro";
 import Point from "../Point.astro";
@@ -15,7 +15,7 @@ interface Props {
 const { content, accountsLabel, flatLabel } = Astro.props;
 ---
 
-<Band id="economics" intro={content}>
+<IntroBand id="economics" intro={content}>
     <div class="econ">
         <div class="card accounts">
             <Corners set="diag" />
@@ -48,4 +48,4 @@ const { content, accountsLabel, flatLabel } = Astro.props;
             </ul>
         </div>
     </div>
-</Band>
+</IntroBand>

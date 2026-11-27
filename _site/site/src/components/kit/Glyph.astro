@@ -1,0 +1,195 @@
+---
+/* A REGISTRY GLYPH (lib/navIcons.ts) in one of its two renderings (DESIGN.md, "Icons").
+     niche  the nav menu's: an octagonal well with a gilt edge, the glyph laid in gold leaf on a low plane, its jewel in
+            ember. For an icon that names a subject: a tile, a node, a stat. Three sizes from system.css.
+     line   the app's Icon: 1em, currentColor, a 2-unit stroke, square caps, mitred joins. Inside a button, a Tip, a link.
+   The niche is lit by its row the way NavNiche is, through custom properties on any ancestor:
+     --niche-lit 0|1 (the edge brightens), --niche-glow 0|1 (the well fills with light), --niche-sweep 0|1 (the sheen
+   crosses). `lit` sets the first two on the glyph itself: the app's one picked tile.
+   The gold leaf is a gradient each glyph carries itself, so a page with no Nav (whose `#nav-gilt` the menu's niches
+   use) draws the same gilt. */
+import { type GlyphName, glyphLayers } from "../../lib/navIcons";
+import { kitId } from "./kit";
+
+interface Props {
+    name: GlyphName;
+    rendering?: "niche" | "line";
+    /** The niche's size. A row of niches is all one size. */
+    size?: "sm" | "md" | "lg";
+    /** The niche at rest as a lit, picked tile. */
+    lit?: boolean;
+    /** A name for a glyph that stands alone as meaning. Without one it is decoration beside words that say it. */
+    label?: string;
+    class?: string;
+}
+
+const { name, rendering = "niche", size = "md", lit = false, label, class: className } = Astro.props;
+const layers = glyphLayers(name);
+const gilt = kitId("gilt");
+const named = label === undefined ? { "aria-hidden": "true" as const } : { role: "img" as const, "aria-label": label };
+---
+
+{
+    rendering === "line" ? (
+        <svg class:list={["kit-line", className]} viewBox="0 0 24 24" width="1em" height="1em" focusable="false" {...named}>
+            <path class="kit-line-stroke" d={layers.line} />
+            {layers.spark && <path class="kit-line-stroke" d={layers.spark} />}
+            {layers.jewel && <path class="kit-line-solid" d={layers.jewel} />}
+        </svg>
+    ) : (
+        <span class:list={["kit-niche", className]} data-size={size} data-lit={lit ? "" : undefined} {...named}>
+            <span class="kit-niche-well" />
+            <svg class="kit-niche-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <defs>
+                    <linearGradient id={gilt} gradientUnits="userSpaceOnUse" x1="0" y1="2" x2="0" y2="22">
+                        <stop offset="0" style="stop-color: var(--role-glyph-gilt-1)" />
+                        <stop offset="0.5" style="stop-color: var(--role-glyph-gilt-2)" />
+                        <stop offset="1" style="stop-color: var(--role-glyph-gilt-3)" />
+                    </linearGradient>
+                </defs>
+                {layers.plane && <path class="kit-niche-plane" d={layers.plane} />}
+                <path class="kit-niche-line" d={layers.line} style={`stroke: url(#${gilt}) var(--role-glyph-gilt-2)`} />
+                {layers.spark && <path class="kit-niche-spark" d={layers.spark} />}
+                {layers.jewel && <path class="kit-niche-jewel" d={layers.jewel} />}
+            </svg>
+        </span>
+    )
+}
+
+<style>
+    /* ── Line ───────────────────────────────────────────────────────────────────────────────────────────────── */
+    .kit-line {
+        display: inline-block;
+        flex: none;
+        width: 1em;
+        height: 1em;
+        overflow: visible;
+        vertical-align: -0.125em;
+    }
+    .kit-line-stroke {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: var(--glyph-stroke);
+        stroke-linecap: square;
+        stroke-linejoin: miter;
+        stroke-miterlimit: 2;
+    }
+    .kit-line-solid {
+        fill: currentColor;
+    }
+
+    /* ── Niche: NavNiche.astro's recipe, sized by the system's three steps and timed by its motion tokens ─────── */
+    .kit-niche {
+        --niche-size: var(--niche-md);
+        --glyph-size: var(--niche-md-glyph);
+        --cut: calc(var(--niche-size) * 0.22);
+        position: relative;
+        isolation: isolate;
+        display: grid;
+        flex: none;
+        place-items: center;
+        width: var(--niche-size);
+        height: var(--niche-size);
+        background: var(--role-nav-niche-edge);
+        clip-path: polygon(
+            var(--cut) 0,
+            calc(100% - var(--cut)) 0,
+            100% var(--cut),
+            100% calc(100% - var(--cut)),
+            calc(100% - var(--cut)) 100%,
+            var(--cut) 100%,
+            0 calc(100% - var(--cut)),
+            0 var(--cut)
+        );
+    }
+    .kit-niche[data-size="sm"] {
+        --niche-size: var(--niche-sm);
+        --glyph-size: var(--niche-sm-glyph);
+    }
+    .kit-niche[data-size="lg"] {
+        --niche-size: var(--niche-lg);
+        --glyph-size: var(--niche-lg-glyph);
+    }
+    .kit-niche[data-lit] {
+        --niche-lit: 1;
+        --niche-glow: 1;
+    }
+    /* The lit edge is its own layer so it can fade: a gradient cannot transition into another. */
+    .kit-niche::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--role-nav-niche-edge-lit);
+        opacity: var(--niche-lit, 0);
+        transition: opacity var(--motion-quick) var(--ease-smooth);
+    }
+    /* Inset by the edge's one pixel; the cut is 0.41px shorter so the diagonal edge stays a pixel thick too. */
+    .kit-niche-well {
+        --inner: calc(var(--cut) - 0.41px);
+        position: absolute;
+        inset: 1px;
+        z-index: 1;
+        background: var(--role-nav-niche-well);
+        clip-path: polygon(
+            var(--inner) 0,
+            calc(100% - var(--inner)) 0,
+            100% var(--inner),
+            100% calc(100% - var(--inner)),
+            calc(100% - var(--inner)) 100%,
+            var(--inner) 100%,
+            0 calc(100% - var(--inner)),
+            0 var(--inner)
+        );
+    }
+    .kit-niche-well::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--role-nav-niche-glow);
+        opacity: var(--niche-glow, 0);
+        transition: opacity var(--motion-base) var(--ease-smooth);
+    }
+    /* The reflection crosses the well once while the row is targeted. Under reduced motion its journey is zero
+       long, so it is simply never seen. */
+    .kit-niche::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        background: linear-gradient(115deg, transparent 34%, var(--role-nav-niche-sheen) 50%, transparent 66%);
+        transform: translateX(calc(-110% + var(--niche-sweep, 0) * 220%));
+        transition: transform var(--motion-reveal) var(--ease-smooth);
+        pointer-events: none;
+    }
+
+    .kit-niche-glyph {
+        position: relative;
+        z-index: 3;
+        width: var(--glyph-size);
+        height: var(--glyph-size);
+        overflow: visible;
+        filter: var(--role-glyph-bevel);
+        transform: translateY(calc(var(--niche-lit, 0) * -1px));
+        transition: transform var(--motion-base) var(--ease-settle);
+    }
+    .kit-niche-plane {
+        fill: var(--role-glyph-plane);
+    }
+    .kit-niche-line {
+        fill: none;
+        stroke-width: var(--glyph-gilt-stroke);
+        stroke-linecap: square;
+        stroke-linejoin: miter;
+        stroke-miterlimit: 4;
+    }
+    .kit-niche-spark {
+        fill: none;
+        stroke: var(--role-glyph-jewel);
+        stroke-width: 1.8;
+        stroke-linecap: square;
+        stroke-linejoin: miter;
+    }
+    .kit-niche-jewel {
+        fill: var(--role-glyph-jewel);
+    }
+</style>

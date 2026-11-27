@@ -1,11 +1,11 @@
 ---
 import { CREATOR_NAME, creatorBio, creatorRole } from "@intentic/site-content/about";
 import { landingContent } from "@intentic/site-content/landing";
-import Band from "./Band.astro";
+import IntroBand from "./IntroBand.astro";
 import TrustCards from "../TrustCards.astro";
 ---
 
-<Band id="trust">
+<IntroBand id="trust">
     <div class="trust">
         <div>
             <div class="eyebrow">{landingContent.trust.eyebrow}</div>
@@ -18,4 +18,4 @@ import TrustCards from "../TrustCards.astro";
         {/* Trust claims share the about module and build-time commit count. */}
         <TrustCards />
     </div>
-</Band>
+</IntroBand>

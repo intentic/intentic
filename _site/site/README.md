@@ -13,6 +13,7 @@ flowchart LR
 ```
 
 - Pages are `.astro` files under `src/pages/`; their words, navigation and metadata come from `@intentic/site-content`. `/docs`, `/developers` and `/api` share one layout, sidebar and search index (`src/components/docs/`), and `/api` is generated from `@intentic/sandbox-openapi`.
+- **The design system** is [DESIGN.md](DESIGN.md): the principles, copy budgets, grounds, materials, type, colour, glyphs, the Tip hover card, motion, figures and band compositions every page is built from, and the kit under `src/components/kit/` that holds them. Its tokens are `src/styles/system.css`; `src/lib/design/copy-budgets.ts` fails a render whose visible copy runs over its slot.
 - Headings use **Lora** at regular weight in both themes. Its Latin and extended Latin webfonts are self-hosted; regenerate them and `faces.css` with `node _tools/scripts/fonts.mjs site` from the repository root. The font's license is included under `public/fonts/`.
 - Repeated marketing introductions and jump links use `src/components/content/PageHero.astro`; guide and comparison tables use `content/ResponsiveTable.astro`, which owns their desktop columns and labelled mobile cards. `devices/SetupSteps.astro` and `content/NumberedSteps.astro` own the two instruction-list presentations. Phone and watch pairing routes share `devices/DevicePairing.astro`, including the fragment-only handoff to the Android app.
 - The developer and Desk landing pages share their section frames, tours, economics, trust, FAQ and closing sections under `src/components/landing/`. Each page retains its own copy, hero composition and screenshot playback; `landing/hero-cta.ts` owns the navigation action's visibility behavior.
@@ -49,6 +50,7 @@ The flat paths (`/connect`, `/fix.ps1`, …) keep answering as before.
 - [astro.config.mjs](astro.config.mjs) — integrations, sitemap priorities, llms.txt sections and the dev proxy for `/demo`.
 - [worker.ts](worker.ts) — request-time routing and the live-content rewrite in production.
 - [wrangler.jsonc](wrangler.jsonc) — Worker name, build command (demo first, then Astro) and the asset binding.
+- [DESIGN.md](DESIGN.md) — the design system: what every band is built from, and the rules the kit enforces.
 - [src/layouts/BaseLayout.astro](src/layouts/BaseLayout.astro) — the head, JSON-LD, OpenGraph tags and notice strip every page shares.
 - [src/components/Landing.astro](src/components/Landing.astro) — the home page.
 - [src/lib/live.ts](src/lib/live.ts) — the schema, limits and link allowlist for the live document.

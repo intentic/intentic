@@ -5,6 +5,8 @@
 @import "./desk.css";
 /* Every face the site serves, self-hosted. Regenerate with `node _tools/scripts/fonts.mjs`. */
 @import "./faces.css";
+/* The design system's own tokens: motion, display steps, rhythm, niches, the lamp, the Tip, figures (DESIGN.md). */
+@import "./system.css";
 
 /* Site tokens and components use the shared carved-stone vocabulary. */
 
@@ -112,11 +114,11 @@ html[data-variant="desk"] {
    utility can already reach — canvas, content, line, the ember ramp — stays in `@theme` and is overridden there.
    Values are exactly what the rules below used to spell out. */
 :root {
-/* THE HEADLINE'S INK. The display type used to be a photograph of stone clipped into its glyphs, shaded from
-       #cbb08d at the top of each line to #86694f at the foot. Taking the texture and its bevel off left the type
-       falling back to `--color-content`, which is cream — measured against the old screenshots, 1.7x brighter than
-       the stone ever was. This is that stone's own mid stop, flat: the colour without the picture. */
-    --role-display-ink: #ab8c6c;
+/* THE HEADLINE'S INK. It was the temple stone's mid stop, #ab8c6c, until the home page's first screen was relit
+       (2026-11-26, focused-hero.css): at 5.6:1 it lost on reading beside other products' first screens, and the home
+       page moved its display headings to ivory. One ink for every page since (DESIGN.md, "Type"): an inner page's h1
+       in a dimmer bronze than the home page's band headings read as a different site. */
+    --role-display-ink: #e9dbc1;
 
     /* Selection, and the search palette's hit highlight: the accent's wash at the same weight, as the app's Sanctum draws both. */
     --role-selection: rgba(201, 160, 92, 0.32);
@@ -1262,10 +1264,10 @@ html[data-variant="desk"] {
 /* Scroll reveal. The observer that adds `.visible` is in BaseLayout, so a band only has to wear the class. */
 .fade-in {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(var(--motion-rise));
     transition:
-        opacity 0.6s ease,
-        transform 0.6s ease;
+        opacity var(--motion-reveal) var(--ease-smooth),
+        transform var(--motion-reveal) var(--ease-smooth);
 }
 .fade-in.visible {
     opacity: 1;

@@ -12,10 +12,22 @@ export interface AboutLink {
     logo: "github" | "linkedin" | "globe";
 }
 
+/** A hover card's words, held by the site's kit to its budgets (site/DESIGN.md, "Detail on demand"). */
+export interface KitTip {
+    title: string;
+    body: string;
+    rows?: { label: string; value: string }[];
+    link?: { label: string; href: string };
+}
+
 /** One checkable claim as a card; `stat` is filled at build time, never authored. */
 export interface TrustCard {
     title: string;
     body: string;
+    /** For a page built from the site's kit (/about/): the registry glyph, the one line `body` comes down to, the
+     *  rest of `body` as the tile's Tip, and `linkLabel` cut to an action's four words. The landing band reads
+     *  `body` and `linkLabel` as they are. */
+    kit?: { icon: string; line: string; tip: KitTip; action: string };
     /** Which build-time number this card wants, if any. */
     stat?: "commits";
     /** Where the reader goes to check it. */
@@ -33,13 +45,20 @@ export interface BackgroundItem {
     marker: string;
 }
 
-/** One headline figure in the band under the hero. `stat` is filled at build time, never authored. */
+/** One headline figure in the strip under the hero. `stat` is filled at build time, never authored. */
 export interface AboutFigure {
-    /** The figure itself, when it is a constant this file may honestly assert. */
-    value?: string;
+    /** The figure itself, when it is a number this file may honestly assert. */
+    value?: number;
+    /** A figure that is a word, set rather than counted. */
+    word?: string;
+    /** Set after the figure, at its size. */
+    suffix?: string;
     /** Which build-time number this slot wants instead. */
     stat?: "commits";
-    detail: string;
+    /** Four words at most: what the figure counts. */
+    label: string;
+    /** What the label left out. */
+    tip?: KitTip;
 }
 
 /** An open-source library that shipped and got used, independently of intentic. */
@@ -80,6 +99,12 @@ export const trustCards: TrustCard[] = [
         body: "Self-hosted. The platform holds only your identity and sandbox URL, never your code or keys.",
         href: productHref("host"),
         linkLabel: "What the platform actually holds",
+        kit: {
+            icon: "self-hosting",
+            line: "Self-hosted. The platform never holds your code or keys.",
+            tip: { title: "What it holds", body: "The platform holds only your identity and your sandbox URL." },
+            action: "See what it holds",
+        },
     },
     {
         title: "Open source first",
@@ -87,6 +112,16 @@ export const trustCards: TrustCard[] = [
         href: githubUrl,
         linkLabel: "Read the source",
         secondary: { href: "/privacy/", label: "What analytics records" },
+        kit: {
+            icon: "code",
+            line: "All of intentic is MIT on GitHub, with no hidden binaries.",
+            tip: {
+                title: "Optional analytics",
+                body: "A sandbox you run sends us nothing. The app and desktop app have optional product analytics: a masked replay that leaves your workspace text out, and a switch under Settings, Data.",
+                link: { label: "See what it records", href: "/privacy/" },
+            },
+            action: "Read the source",
+        },
     },
     {
         title: "It builds itself",
@@ -94,6 +129,12 @@ export const trustCards: TrustCard[] = [
         stat: "commits",
         href: `${githubUrl}/commits/main`,
         linkLabel: "Read the commit log",
+        kit: {
+            icon: "branch",
+            line: "Agents wrote most of intentic in public.",
+            tip: { title: "Every commit logged", body: "Every commit they made sits in the public log, and this page counts them when it is built." },
+            action: "Read the commit log",
+        },
     },
     {
         title: "It is new",
@@ -116,10 +157,40 @@ export const background: BackgroundItem[] = [
 
 // Only the commit figure is measured at build time; it simply doesn't render if git can't answer.
 export const aboutFigures: AboutFigure[] = [
-    { stat: "commits", detail: "commits written by agents, in public" },
-    { value: "15+ years", detail: "shipping production systems" },
-    { value: "MIT", detail: "the whole engine, no hidden binaries" },
+    {
+        stat: "commits",
+        label: "commits by agents",
+        tip: {
+            title: "Written in public",
+            body: "Commits written by agents, in public, counted from the repository's history when this page was built.",
+            link: { label: "Read the commit log", href: `${githubUrl}/commits/main` },
+        },
+    },
+    { value: 15, suffix: "+", label: "years shipping production systems" },
+    {
+        word: "MIT",
+        label: "the whole engine's licence",
+        tip: { title: "No hidden binaries", body: "The whole engine is MIT, with no hidden binaries.", link: { label: "Read the source", href: githubUrl } },
+    },
 ];
+
+/** What a screen reader calls the strip of figures, which has no heading of its own. */
+export const aboutStripLabel = "Checkable figures";
+
+/** The labels of the build-time commit counts, wherever they are printed as label/value rows. */
+export const commitRows = { agents: "By agents", total: "All commits", since: "Since" };
+
+// The trust band's head on /about/. The fourth card's admission is its lede, and the line that used to follow the
+// cards (every claim is a link out) is the band's how-it-works, behind its (i).
+export const aboutClaims = {
+    eyebrow: "Why trust it",
+    heading: "Three things you can check without asking me.",
+    lede: "It is new: there are no customer counts, testimonials or maturity claims yet.",
+    tip: {
+        title: "Links, not claims",
+        body: "Everything here is a link out to something you can read without taking my word for any of it.",
+    },
+} satisfies { eyebrow: string; heading: string; lede: string; tip: KitTip };
 
 export const openSource: OpenSourceProject[] = [
     {

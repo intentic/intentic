@@ -1,5 +1,7 @@
-// THE NAV MENUS' GLYPHS, keyed by subject the way the app keys its rail (AREA_ICONS in _editor/ui/src/icons/iconSets.ts):
-// the data layer names a subject, the drawing lives here, and a missing key draws nothing.
+// THE SITE'S GLYPHS, keyed by subject the way the app keys its rail (AREA_ICONS in _editor/ui/src/icons/iconSets.ts):
+// the data layer names a subject, the drawing lives here, and a missing key draws nothing. The nav menus draw them
+// through `navGlyphMarkup` (NavNiche.astro); every other page draws them through the kit's `Glyph`
+// (components/kit/Glyph.astro), gilt in a niche or as a 1em line (DESIGN.md, "Icons").
 //
 // Same grammar as the app's own pack (_editor/ui/src/icons/navigationGlyphs.ts): a 24-unit grid, square caps, mitred
 // joins, cut corners, stepped lintels and lozenge joints, no circles. Where the app already draws the subject (chat,
@@ -120,16 +122,48 @@ const NAV_GLYPHS = {
         line: `M8 2v6 M16 2v6 M5 8h14v5l-4 4H9l-4-4Z M12 17v5`,
         jewel: `m12 9.4 1.6 1.6-1.6 1.6-1.6-1.6Z`,
     },
+
+    // The kit's (DESIGN.md, "The kit"). Drawn for the pages' tiles, figures and Tips rather than for a menu row.
+    // The app's git-branch with its three circles cut as lozenges and its arc as a mitred elbow: a trunk of two
+    // commits and a branch joining it, the newest commit the jewel. A push, a commit log.
+    branch: {
+        plane: `M6 2.6 8.4 5 6 7.4 3.6 5Z M6 16.6 8.4 19 6 21.4 3.6 19Z`,
+        line: `M6 7.4v9.2 M18 7.8V10l-4 4H6 M6 2.6 8.4 5 6 7.4 3.6 5Z M6 16.6 8.4 19 6 21.4 3.6 19Z`,
+        jewel: `M18 2.2 20.8 5 18 7.8 15.2 5Z`,
+    },
+    // The app's terminal prompt set in a cut-corner tablet: a command of yours, its cursor lit.
+    command: {
+        plane: `M5 4h14l2 2v12l-2 2H5l-2-2V6Z`,
+        line: `M5 4h14l2 2v12l-2 2H5l-2-2V6Z M7 9l3 3-3 3 M12.5 15h2.5`,
+        jewel: `m17.6 13.4 1.6 1.6-1.6 1.6-1.6-1.6Z`,
+    },
+    // The (i) of a Tip: the app's octagonal stop with a stem, its point a lozenge rather than a dot.
+    info: {
+        plane: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z`,
+        line: `M8 3h8l5 5v8l-5 5H8l-5-5V8Z M12 11.5v5`,
+        jewel: `m12 5.2 1.8 1.8-1.8 1.8-1.8-1.8Z`,
+    },
+    // The app's arrow-right at the nav lintel's length: where a link goes. Line only; it is never set in a niche.
+    arrow: {
+        line: `M4 12h15 M13 6l6 6-6 6`,
+    },
 } satisfies Record<string, NavGlyph>;
 
 /** A subject this file draws. The data layer's keys are open strings, so the check below is what narrows one. */
-type NavGlyphName = keyof typeof NAV_GLYPHS;
+export type GlyphName = keyof typeof NAV_GLYPHS;
 
-const isNavGlyphName = (key: string): key is NavGlyphName => Object.hasOwn(NAV_GLYPHS, key);
+/** Narrows a key the data layer wrote as an open string. */
+export const isGlyphName = (key: string): key is GlyphName => Object.hasOwn(NAV_GLYPHS, key);
+
+/** Every subject the registry draws, in the order it is written: the kit page's specimen sheet. */
+export const GLYPH_NAMES: GlyphName[] = Object.keys(NAV_GLYPHS).filter(isGlyphName);
+
+/** One glyph's layers, for a renderer that draws them as elements (the kit's `Glyph`). */
+export const glyphLayers = (name: GlyphName): NavGlyph => NAV_GLYPHS[name];
 
 /** The inside of one glyph's `<svg viewBox="0 0 24 24">`, layer by layer; empty for an unknown key. */
 export function navGlyphMarkup(key: string | undefined): string {
-    if (key === undefined || !isNavGlyphName(key)) {
+    if (key === undefined || !isGlyphName(key)) {
         return ``;
     }
     const glyph: NavGlyph = NAV_GLYPHS[key];

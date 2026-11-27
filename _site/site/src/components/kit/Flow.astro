@@ -1,0 +1,322 @@
+---
+/* A FLOW (DESIGN.md, "Figures and diagrams"): two to seven nodes joined by wires, left to right because left to right
+   is time and cause. Each node is stone: a small niche glyph, a title, an optional mono label, an optional Tip.
+   ITS MOTION EXPLAINS ONE THING: work moving from each step to the next. Once a third of the figure is in view its
+   wires draw themselves over `--motion-draw`; then a pulse (an ember lozenge) leaves the first node and lights each
+   in turn, one loop per `--motion-cycle`, pausing whenever the figure is off screen or under the pointer. Pointing at
+   a node lights it and its wires and opens its Tip.
+   ITS STILL FRAME is what a reader with no script or with reduced motion sees, and what the HTML holds: every wire
+   drawn, and the last node lit, because where the flow arrives is what it is for.
+   It turns vertical when it is narrower than a row of its nodes can be read in (a container query rather than the
+   viewport's 48rem, so a flow in a half-width card turns when the card does). It is a <figure>, its nodes an ordered
+   list, its wires and pulse hidden from a screen reader. */
+import { held } from "../../lib/design/copy-budgets";
+import Glyph from "./Glyph.astro";
+import type { FlowNode } from "./kit";
+import Tip from "./Tip.astro";
+
+interface Props {
+    nodes: readonly FlowNode[];
+    /** At most fourteen words, under the figure. */
+    caption: string;
+    /** `sm` for a flow inside a card: tighter nodes and wires, no Tips (a card that is a link cannot hold buttons). */
+    size?: "md" | "sm";
+    /** The caption read only by a screen reader, where the card around the figure already captions it. */
+    captionHidden?: boolean;
+    class?: string;
+}
+
+const { nodes, caption, size = "md", captionHidden = false, class: className } = Astro.props;
+const where = `Flow "${caption.slice(0, 40)}"`;
+if (nodes.length < 2 || nodes.length > 7) {
+    throw new Error(`${where}: a flow has 2 to 7 nodes, and this one has ${nodes.length}. More than seven become a precinct.`);
+}
+held("caption", caption, where);
+for (const node of nodes) {
+    held("title", node.title, where);
+    held("label", node.label, where);
+}
+if (size === "sm" && nodes.some((node) => node.tip !== undefined)) {
+    throw new Error(`${where}: a compact flow sits inside a card, and its nodes take no Tips.`);
+}
+---
+
+<figure class:list={["kit-flow", className]} data-kit-flow data-size={size} style={`--nodes: ${nodes.length}; --wires: ${nodes.length - 1}`}>
+    <ol class="kit-flow-nodes">
+        {
+            nodes.map((node, index) => (
+                <li class="kit-flow-node" style={`--i: ${index}`}>
+                    <div class="kit-flow-tile" data-tip-area={node.tip ? "" : undefined}>
+                        <Glyph name={node.glyph} size="sm" />
+                        <span class="kit-flow-text">
+                            <span class="kit-flow-title">{node.title}</span>
+                            {node.label && <span class="kit-flow-label">{node.label}</span>}
+                        </span>
+                        {node.tip && <Tip {...node.tip} area where={where} class="kit-flow-tip" />}
+                    </div>
+                    {index < nodes.length - 1 && (
+                        <span class="kit-flow-wire" aria-hidden="true">
+                            <span class="kit-flow-pulse">
+                                <span class="kit-flow-mote" />
+                            </span>
+                        </span>
+                    )}
+                </li>
+            ))
+        }
+    </ol>
+    <figcaption class:list={["kit-flow-caption", captionHidden && "sr-only"]}>{caption}</figcaption>
+</figure>
+
+<script>
+    import { startFlows } from "./flow";
+    startFlows();
+</script>
+
+<style>
+    .kit-flow {
+        --node-pad: 1.1rem;
+        --node-width: 13rem;
+        --wire-min: 2.5rem;
+        --wire-drop: 1.75rem;
+        --wire-rest: scaleX(0);
+        container-type: inline-size;
+        width: 100%;
+        margin: 0;
+    }
+    .kit-flow[data-size="sm"] {
+        --node-pad: 0.75rem;
+        --node-width: 9.5rem;
+        --wire-min: 1.25rem;
+        --wire-drop: 1.1rem;
+    }
+
+    /* A node keeps a node's width; the wires share whatever the row has left, so a wide band draws long wires rather
+       than wide, empty stones. The row alternates node and wire columns, and each list item (a node and the wire that
+       leaves it) takes its two through a subgrid. */
+    .kit-flow-nodes {
+        display: grid;
+        grid-template-columns:
+            repeat(var(--wires), minmax(0, var(--node-width)) minmax(var(--wire-min), 1fr))
+            minmax(0, var(--node-width));
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .kit-flow-node {
+        display: grid;
+        grid-column: span 2;
+        grid-template-columns: subgrid;
+    }
+    .kit-flow-node:last-child {
+        grid-column: span 1;
+    }
+
+    /* ── The node: stone, its glyph above its words ─────────────────────────────────────────────────────────── */
+    .kit-flow-tile {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.7rem;
+        min-width: 0;
+        padding: var(--node-pad);
+        border: 1px solid var(--role-node-line);
+        background: var(--role-node-fill);
+        text-align: center;
+        transition: border-color var(--motion-base) var(--ease-smooth);
+    }
+    /* The light a lit node throws, on its own layer so it fades rather than repaints a shadow every frame. */
+    .kit-flow-tile::after {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        box-shadow: var(--role-node-glow-lit);
+        opacity: 0;
+        transition: opacity var(--motion-base) var(--ease-smooth);
+        pointer-events: none;
+    }
+    .kit-flow-text {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        min-width: 0;
+    }
+    .kit-flow-title {
+        font-family: var(--font-mark);
+        font-size: var(--text-title);
+        line-height: var(--text-title--line-height);
+        font-weight: var(--font-weight-semibold);
+        color: var(--color-content);
+        text-wrap: balance;
+        transition: color var(--motion-base) var(--ease-smooth);
+    }
+    .kit-flow-label {
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        line-height: var(--text-2xs--line-height);
+        color: var(--color-subtle);
+        overflow-wrap: anywhere;
+    }
+    .kit-flow[data-size="sm"] .kit-flow-title {
+        font-size: var(--text-note);
+    }
+    .kit-flow-tile :global(.kit-flow-tip) {
+        position: absolute;
+        top: 0.45rem;
+        right: 0.45rem;
+        z-index: 2;
+        font-size: 0.9375rem;
+    }
+    .kit-flow-tile :global(.kit-flow-tip .kit-tip-button) {
+        color: var(--color-subtle);
+    }
+    .kit-flow-tile:hover :global(.kit-flow-tip .kit-tip-button) {
+        color: var(--color-gold-bright);
+    }
+
+    /* Lit: gold at the rim, ember light from it, its niche the picked tile. The still frame lights the last node. */
+    .kit-flow-node[data-lit] .kit-flow-tile,
+    .kit-flow:is(:not([data-flow]), [data-flow="still"]) .kit-flow-node:last-child .kit-flow-tile {
+        --niche-lit: 1;
+        --niche-glow: 1;
+        border-color: var(--role-node-rim-lit);
+    }
+    .kit-flow-node[data-lit] .kit-flow-tile::after,
+    .kit-flow:is(:not([data-flow]), [data-flow="still"]) .kit-flow-node:last-child .kit-flow-tile::after {
+        opacity: 1;
+    }
+    .kit-flow-node[data-lit] .kit-flow-title,
+    .kit-flow:is(:not([data-flow]), [data-flow="still"]) .kit-flow-node:last-child .kit-flow-title {
+        color: var(--color-gold-bright);
+    }
+
+    /* ── The wire: from this node's edge to the next's, level with the niches ───────────────────────────────── */
+    .kit-flow-wire {
+        position: relative;
+        align-self: start;
+        height: 0;
+        margin-top: calc(var(--node-pad) + 1px + var(--niche-sm) / 2);
+    }
+    .kit-flow-wire::before,
+    .kit-flow-wire::after {
+        content: "";
+        position: absolute;
+        inset: -0.5px 0;
+        background: var(--role-edge);
+    }
+    /* At rest it draws itself, each wire after the last, in one `--motion-draw` between them. */
+    .kit-flow-wire::before {
+        transform-origin: 0 0;
+        transition: transform calc(var(--motion-draw) / (var(--nodes) - 1)) linear calc(var(--motion-draw) / (var(--nodes) - 1) * var(--i));
+    }
+    .kit-flow[data-drawn="no"] .kit-flow-wire::before {
+        transform: var(--wire-rest);
+        transition: none;
+    }
+    /* Lit: carrying something now, a heavier line in ember laid over the one at rest. */
+    .kit-flow-wire::after {
+        inset: -0.75px 0;
+        background: var(--role-edge-lit);
+        opacity: 0;
+        transition: opacity var(--motion-quick) var(--ease-smooth);
+    }
+    .kit-flow-node[data-wire-lit] .kit-flow-wire::after {
+        opacity: 1;
+    }
+
+    /* The pulse: a box the wire's length, slid from one end to the other, with the lozenge at its leading edge. */
+    .kit-flow-pulse {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        pointer-events: none;
+    }
+    .kit-flow-mote {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        width: 8px;
+        height: 8px;
+        background: var(--role-pulse);
+        box-shadow: var(--role-pulse-glow);
+        transform: rotate(45deg);
+    }
+
+    .kit-flow-caption {
+        margin-top: 1.1rem;
+        font-size: var(--text-note);
+        line-height: var(--text-note--line-height);
+        color: var(--color-subtle);
+        text-align: center;
+    }
+
+    /* ── Vertical: a column of rows, the wire dropping from niche to niche. Narrower than a row of nodes can be
+          read in: about 48rem of viewport for a band's flow, a phone-width card for a compact one. ───────────── */
+    @container (max-width: 44rem) {
+        .kit-flow[data-size="md"] .kit-flow-nodes {
+            --wire-rest: scaleY(0);
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .kit-flow[data-size="md"] .kit-flow-node {
+            display: flex;
+            grid-column: auto;
+            flex-direction: column;
+        }
+        .kit-flow[data-size="md"] .kit-flow-tile {
+            flex-direction: row;
+            gap: 0.9rem;
+            text-align: start;
+        }
+        .kit-flow[data-size="md"] .kit-flow-wire {
+            width: 0;
+            height: var(--wire-drop);
+            margin: 0 0 0 calc(var(--node-pad) + 1px + var(--niche-sm) / 2);
+        }
+        .kit-flow[data-size="md"] .kit-flow-wire::before {
+            inset: 0 -0.5px;
+        }
+        .kit-flow[data-size="md"] .kit-flow-wire::after {
+            inset: 0 -0.75px;
+        }
+        .kit-flow[data-size="md"] .kit-flow-mote {
+            top: auto;
+            right: auto;
+            bottom: -4px;
+            left: -4px;
+        }
+    }
+    @container (max-width: 26rem) {
+        .kit-flow[data-size="sm"] .kit-flow-nodes {
+            --wire-rest: scaleY(0);
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .kit-flow[data-size="sm"] .kit-flow-node {
+            display: flex;
+            grid-column: auto;
+            flex-direction: column;
+        }
+        .kit-flow[data-size="sm"] .kit-flow-tile {
+            flex-direction: row;
+            gap: 0.75rem;
+            text-align: start;
+        }
+        .kit-flow[data-size="sm"] .kit-flow-wire {
+            width: 0;
+            height: var(--wire-drop);
+            margin: 0 0 0 calc(var(--node-pad) + 1px + var(--niche-sm) / 2);
+        }
+        .kit-flow[data-size="sm"] .kit-flow-wire::before {
+            inset: 0 -0.5px;
+        }
+        .kit-flow[data-size="sm"] .kit-flow-wire::after {
+            inset: 0 -0.75px;
+        }
+        .kit-flow[data-size="sm"] .kit-flow-mote {
+            top: auto;
+            right: auto;
+            bottom: -4px;
+            left: -4px;
+        }
+    }
+</style>

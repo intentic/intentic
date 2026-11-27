@@ -129,9 +129,11 @@ const cfBeaconToken = import.meta.env.CF_BEACON_TOKEN;
         <link rel="preload" as="font" type="font/woff2" href="/fonts/lora-400-700-latin.woff2" crossorigin />
         {/* No preconnect to the app: nothing on the page loads from it, so the socket idles until it times out, and
             Lighthouse flags it as unused. A link into the app pays its one round trip on the click. */}
+        {/* `html` is load-bearing: the page's stylesheets come after this block and global.css hides `.fade-in` at
+            the same specificity, so a bare `.fade-in` here lost and every revealed band stayed invisible. */}
         <noscript>
             <style>
-                .fade-in {
+                html .fade-in {
                     opacity: 1;
                     transform: none;
                 }

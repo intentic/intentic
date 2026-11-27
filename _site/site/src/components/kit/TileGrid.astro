@@ -1,0 +1,64 @@
+---
+/* THE GRID TILES AND STATS STAND IN (DESIGN.md, "Band compositions": Grid and Strip).
+     tiles  a list of FeatureTiles: 2, 3 or 4 across, two below 64rem, one below 40rem. A three-up grid at two
+            columns would leave its last tile alone on a row; it spans the row instead.
+     stats  a strip of Stats: as many across as there are, two below 48rem. Figures are short and hold their own
+            at half a phone's width, where three stacked would fill the screen with one number at a time. */
+
+interface Props {
+    cols: 2 | 3 | 4;
+    kind?: "tiles" | "stats";
+    /** Names the list for a screen reader when no heading does. */
+    label?: string;
+    class?: string;
+}
+
+const { cols, kind = "tiles", label, class: className } = Astro.props;
+const Tag = kind === "tiles" ? "ul" : "div";
+---
+
+<Tag class:list={["kit-grid", className]} data-cols={cols} data-kind={kind} aria-label={label} role={kind === "tiles" ? "list" : undefined}>
+    <slot />
+</Tag>
+
+<style>
+    .kit-grid {
+        display: grid;
+        grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+        gap: var(--tile-gap);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+    .kit-grid[data-cols="2"] {
+        --cols: 2;
+    }
+    .kit-grid[data-cols="3"] {
+        --cols: 3;
+    }
+    .kit-grid[data-cols="4"] {
+        --cols: 4;
+    }
+    .kit-grid[data-kind="stats"] {
+        gap: 1.5rem clamp(1.5rem, 4vw, 3.5rem);
+    }
+
+    @media (max-width: 64rem) {
+        .kit-grid[data-kind="tiles"] {
+            --cols: 2;
+        }
+        .kit-grid[data-kind="tiles"] > :global(:last-child:nth-child(odd)) {
+            grid-column: 1 / -1;
+        }
+    }
+    @media (max-width: 48rem) {
+        .kit-grid[data-kind="stats"] {
+            --cols: 2;
+        }
+    }
+    @media (max-width: 40rem) {
+        .kit-grid[data-kind="tiles"] {
+            --cols: 1;
+        }
+    }
+</style>

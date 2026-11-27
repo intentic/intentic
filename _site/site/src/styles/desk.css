@@ -235,6 +235,22 @@ html[data-variant="desk"] {
     --house-ember-stop-glow: none;
     --house-ember-mark-glow: none;
     --house-finial-glow: none;
+
+    /* ── The design system's materials (styles/system.css) ────────────────────────────── */
+    /* The lamp in daylight is the hero's: a warmer patch of paper, never a glow. */
+    --role-lamp-core: rgb(245 155 63 / 0.13);
+    --role-lamp-mid: rgb(245 155 63 / 0.05);
+    /* The Tip is the nav panel's daylight lacquer, so it inherits the lacquer and the edge from above; only its
+       shadow changes, to the app's warm light depth. */
+    --role-tip-shadow: var(--desk-shadow-3);
+    --role-tip-cue: color-mix(in oklab, var(--color-gold) 55%, transparent);
+    /* A pulse on paper is the mark step, and a glow would smudge: a ring of the paper keeps it crisp instead. */
+    --role-pulse: var(--color-primary-500);
+    --role-pulse-glow: 0 0 0 2px var(--color-card);
+    /* The series on paper: the same hues at the app's light text step, so a thin bar still reads. */
+    --series-3: oklch(52% 0.09 160);
+    --series-4: oklch(50% 0.1 240);
+    --role-track: color-mix(in oklab, var(--color-content) 9%, transparent);
 }
 
 /* WHAT MAKES THE INNER PAGES READABLE. Every page but the home page stands its heading, lede and controls directly

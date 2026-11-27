@@ -1,0 +1,170 @@
+---
+/* A NUMBER THAT ARRIVES (DESIGN.md, "Motion", "Colour"): display-3 figures that count up once a third of the stat is in
+   view, a label, an optional meter for a share of a total, and the detail behind a Tip.
+   THE FINAL VALUE IS THE HTML. A reader without the script, a crawler and the .md mirror read the real figure; the
+   count is drawn over a hidden copy of it, so the copy reserves the width and nothing beside the figure moves while it
+   counts. A value that is a word (MIT) is set, not counted. */
+import { held } from "../../lib/design/copy-budgets";
+import type { GlyphName } from "../../lib/navIcons";
+import Glyph from "./Glyph.astro";
+import type { TipContent } from "./kit";
+import Tip from "./Tip.astro";
+
+interface Props {
+    /** The figure, counted up to. */
+    value?: number;
+    /** A figure that is a word ("MIT"), set rather than counted. One of `value` and `word`. */
+    word?: string;
+    /** Set before the figure, at its size: "$". */
+    prefix?: string;
+    /** Set after the figure, at its size: "+", "%". */
+    suffix?: string;
+    /** The total the value is a share of: printed beside it, and drawn as a meter under it. */
+    of?: number;
+    label: string;
+    tip?: TipContent;
+    /** A glyph in a small niche beside the figure, when the subject is not obvious from the label. */
+    glyph?: GlyphName;
+    /** How the figures are grouped: "5,869". */
+    locale?: string;
+}
+
+const { value, word, prefix, suffix, of, label, tip, glyph, locale = "en-GB" } = Astro.props;
+const where = `Stat "${label}"`;
+held("label", label, where);
+held("label", prefix, where);
+held("label", suffix, where);
+
+held("label", word, where);
+if ((value === undefined) === (word === undefined)) {
+    throw new Error(`${where}: a Stat shows either a counted \`value\` or a \`word\`, and exactly one of them.`);
+}
+const counted = value !== undefined;
+const decimals = counted ? (String(value).split(".")[1]?.length ?? 0) : 0;
+const format = new Intl.NumberFormat(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+const shown = counted ? format.format(value) : word;
+const share = counted && of !== undefined && of > 0 ? Math.min(1, Math.max(0, value / of)) : undefined;
+---
+
+<div class="kit-stat" data-kit-stat={counted ? "" : undefined}>
+    {glyph && <Glyph name={glyph} size="sm" class="kit-stat-glyph" />}
+    <p class="kit-stat-figure">
+        {prefix && <span class="kit-stat-affix">{prefix}</span>}
+        <span class="kit-stat-value">
+            <span class="sr-only">{shown}</span>
+            <span class="kit-stat-digits" aria-hidden="true">
+                <span class="kit-stat-reserve">{shown}</span>
+                <span class="kit-stat-live" data-to={counted ? value : undefined} data-decimals={decimals} data-locale={locale}>{shown}</span>
+            </span>
+        </span>
+        {suffix && <span class="kit-stat-affix">{suffix}</span>}
+        {of !== undefined && <span class="kit-stat-of">of {format.format(of)}</span>}
+    </p>
+    {
+        share !== undefined && (
+            <span class="kit-stat-meter" aria-hidden="true">
+                <span class="kit-stat-fill" style={`--share: ${share.toFixed(4)}`} />
+            </span>
+        )
+    }
+    <p class="kit-stat-label">
+        {label}
+        {tip && <Tip {...tip} where={where} />}
+    </p>
+</div>
+
+<script>
+    import { startStats } from "./stat";
+    startStats();
+</script>
+
+<style>
+    .kit-stat {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        column-gap: 0.9rem;
+        align-content: start;
+    }
+    .kit-stat > :not(:global(.kit-stat-glyph)) {
+        grid-column: 2;
+    }
+    .kit-stat:not(:has(:global(.kit-stat-glyph))) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .kit-stat:not(:has(:global(.kit-stat-glyph))) > * {
+        grid-column: 1;
+    }
+    .kit-stat > :global(.kit-stat-glyph) {
+        grid-row: span 3;
+        align-self: start;
+        margin-top: 0.15rem;
+    }
+
+    .kit-stat-figure {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: var(--text-display-3);
+        line-height: var(--text-display-3--line-height);
+        font-weight: 400;
+        font-synthesis: none;
+        font-variant-numeric: lining-nums tabular-nums;
+        color: var(--role-display-ink);
+    }
+    /* Flex, so the source's line breaks between the spoken figure and the drawn one are not set as a space. */
+    .kit-stat-value {
+        display: inline-flex;
+    }
+    /* The hidden copy holds the width; the count is laid over it, flush right, so its digits settle where they end. */
+    .kit-stat-digits {
+        position: relative;
+        display: inline-block;
+        white-space: nowrap;
+    }
+    .kit-stat-reserve {
+        visibility: hidden;
+    }
+    .kit-stat-live {
+        position: absolute;
+        top: 0;
+        right: 0;
+    }
+    .kit-stat-of {
+        margin-left: 0.45em;
+        font-family: var(--font-sans);
+        font-size: var(--text-note);
+        line-height: 1;
+        color: var(--color-subtle);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* The app's usage meter, cut square: a share in the first series on the empty track. */
+    .kit-stat-meter {
+        display: block;
+        max-width: 16rem;
+        height: 4px;
+        margin-top: 0.65rem;
+        overflow: hidden;
+        background: var(--role-track);
+    }
+    .kit-stat-fill {
+        display: block;
+        height: 100%;
+        background: var(--series-1);
+        transform: scaleX(var(--share));
+        transform-origin: left center;
+        transition: transform var(--motion-count) var(--ease-smooth);
+    }
+    .kit-stat[data-stat="waiting"] .kit-stat-fill {
+        transform: scaleX(0);
+    }
+
+    .kit-stat-label {
+        margin: 0.55rem 0 0;
+        font-size: var(--text-note);
+        line-height: var(--text-note--line-height);
+        color: var(--color-muted);
+    }
+</style>

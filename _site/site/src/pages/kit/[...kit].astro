@@ -1,0 +1,454 @@
+---
+/* THE KIT'S SPECIMEN SHEET (DESIGN.md, "The kit"): every token and every component in its variants, for judging both
+   skins side by side. It exists only under `astro dev`: production asks this route for its paths and is given none,
+   so no build ever writes it. Its copy is sample copy (components/kit/samples.ts). */
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Nav from "../../components/Nav.astro";
+import Band from "../../components/kit/Band.astro";
+import FeatureTile from "../../components/kit/FeatureTile.astro";
+import Flow from "../../components/kit/Flow.astro";
+import Glyph from "../../components/kit/Glyph.astro";
+import SectionHead from "../../components/kit/SectionHead.astro";
+import Stat from "../../components/kit/Stat.astro";
+import TileGrid from "../../components/kit/TileGrid.astro";
+import Tip from "../../components/kit/Tip.astro";
+import {
+    compactFlowSample,
+    flowSamples,
+    groundSamples,
+    headSamples,
+    kitPage,
+    longFlowSample,
+    sections,
+    statSamples,
+    tileSamples,
+    tipSamples,
+} from "../../components/kit/samples";
+import { COPY_BUDGETS } from "../../lib/design/copy-budgets";
+import { GLYPH_NAMES } from "../../lib/navIcons";
+
+export function getStaticPaths() {
+    return import.meta.env.DEV ? [{ params: { kit: undefined } }] : [];
+}
+
+const TYPE_STEPS = [
+    { token: "--text-display-1", sample: "Agents that ship.", class: "display text-display-1" },
+    { token: "--text-display-2", sample: "Share the agents, not the keys.", class: "display text-display-2" },
+    { token: "--text-display-3", sample: "5,869 of 6,120", class: "display text-display-3 tabular-nums" },
+    { token: "--text-title", sample: "Agent workspace", class: "font-mark text-title font-semibold text-content" },
+    { token: "--text-lede", sample: "One sentence under a heading, in the muted ink.", class: "text-lede text-muted" },
+    { token: "--text-note", sample: "A tile's line, a Tip's body, a caption.", class: "text-note text-muted" },
+    { token: "eyebrow · --text-2xs", sample: "Eyebrow", class: "eyebrow" },
+    { token: "mono · --text-2xs to sm", sample: "test -n \"$(git diff)\"", class: "font-mono text-sm text-content" },
+];
+const INKS = ["--color-content", "--color-muted", "--color-subtle", "--role-display-ink"];
+const METALS = ["--color-gold", "--color-gold-bright", "--color-accent", "--color-primary-200", "--color-primary-300", "--color-primary-400", "--color-primary-500", "--color-primary-600", "--color-primary-700"];
+const SERIES = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5"];
+const SHARES = [38, 24, 16, 12, 10];
+const MOTION = ["--motion-quick", "--motion-base", "--motion-reveal", "--motion-draw", "--motion-count", "--motion-cycle", "--motion-stagger", "--tip-intent", "--tip-grace"];
+const RHYTHM = ["--shell-max", "--shell-gutter", "--band-pad", "--band-gap", "--plinth-pad", "--tile-gap", "--tip-width", "--niche-sm", "--niche-md", "--niche-lg"];
+const budgets = Object.entries(COPY_BUDGETS);
+---
+
+<BaseLayout title="Design kit · intentic (dev only)" description="The design system's tokens and components, in both skins." noindex>
+    <Nav />
+    <main class="flex-1">
+        <section class="page-hero">
+            <div class="wall" aria-hidden="true"></div>
+            <div class="below-bar relative mx-auto max-w-(--shell-max) px-(--shell-gutter) pb-12">
+                <SectionHead level={1} eyebrow={kitPage.eyebrow} heading={kitPage.heading} lede={kitPage.lede} tip={kitPage.tip} />
+                <p class="mt-6 flex flex-wrap gap-3">
+                    <a class="btn btn-sm" href="?variant=default">{kitPage.skins.dark}</a>
+                    <a class="btn btn-sm" href="?variant=desk">{kitPage.skins.light}</a>
+                </p>
+            </div>
+        </section>
+
+        {/* ── Tokens ────────────────────────────────────────────────────────────────────────────────────────── */}
+        <Band ground="plain" labelledby="kit-tokens">
+            <SectionHead slot="head" id="kit-tokens" {...sections.tokens} />
+            <div class="grid gap-12">
+                <div>
+                    <p class="eyebrow eyebrow-bare">Type</p>
+                    <dl class="mt-4 grid gap-y-5 border-t border-line pt-5">
+                        {
+                            TYPE_STEPS.map((step) => (
+                                <div class="grid items-baseline gap-x-8 gap-y-1 md:grid-cols-[14rem_minmax(0,1fr)]">
+                                    <dt class="font-mono text-2xs text-subtle">{step.token}</dt>
+                                    <dd class:list={["m-0", step.class]}>{step.sample}</dd>
+                                </div>
+                            ))
+                        }
+                    </dl>
+                </div>
+
+                <div class="grid gap-10 lg:grid-cols-2">
+                    <div>
+                        <p class="eyebrow eyebrow-bare">Inks</p>
+                        <ul class="mt-4 grid gap-2">
+                            {
+                                INKS.map((token) => (
+                                    <li class="flex items-center gap-4">
+                                        <span class="kit-swatch" style={`--swatch: var(${token})`} />
+                                        <span class="font-mono text-2xs text-subtle">{token}</span>
+                                        <span class="text-sm" style={`color: var(${token})`}>
+                                            Read this line
+                                        </span>
+                                    </li>
+                                ))
+                            }
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="eyebrow eyebrow-bare">Gold and ember</p>
+                        <ul class="mt-4 grid grid-cols-3 gap-3">
+                            {
+                                METALS.map((token) => (
+                                    <li class="flex items-center gap-3">
+                                        <span class="kit-swatch" style={`--swatch: var(${token})`} />
+                                        <span class="font-mono text-2xs text-subtle">{token.replace("--color-", "")}</span>
+                                    </li>
+                                ))
+                            }
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="grid gap-10 lg:grid-cols-2">
+                    <div>
+                        <p class="eyebrow eyebrow-bare">Series on the track</p>
+                        <div class="mt-4 flex h-3 w-full gap-px bg-(--role-track)">
+                            {SHARES.map((share, index) => <span style={`flex: ${share}; background: var(${SERIES[index]})`} />)}
+                        </div>
+                        <ul class="mt-4 grid grid-cols-5 gap-3">
+                            {
+                                SERIES.map((token) => (
+                                    <li class="grid gap-2">
+                                        <span class="kit-swatch" style={`--swatch: var(${token})`} />
+                                        <span class="font-mono text-2xs text-subtle">{token}</span>
+                                    </li>
+                                ))
+                            }
+                        </ul>
+                        <div class="mt-5 grid gap-2">
+                            {
+                                [72, 45, 18].map((share) => (
+                                    <span class="block h-1 max-w-64 bg-(--role-track)">
+                                        <span class="block h-full bg-(--series-1)" style={`width: ${share}%`} />
+                                    </span>
+                                ))
+                            }
+                        </div>
+                    </div>
+                    <div>
+                        <p class="eyebrow eyebrow-bare">Materials, back to front</p>
+                        <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                            <div class="kit-material border border-line bg-(image:--wash-panel)"><span>Stone</span></div>
+                            <div class="kit-material frame"><span>Frame</span></div>
+                            <div class="kit-material kit-lacquer"><span>Lacquer</span></div>
+                            <div class="kit-material border border-line bg-(--role-code-fill)"><span>Well</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <p class="eyebrow eyebrow-bare">Grounds</p>
+                    <div class="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+                        <div class="kit-ground"><div class="wall" aria-hidden="true"></div><span>Wall</span></div>
+                        <div class="kit-ground"><div class="kit-ground-lamp" aria-hidden="true"></div><span>Lamp</span></div>
+                        <div class="kit-ground plinth"><span>Plinth</span></div>
+                        <div class="kit-ground"><span>Plain</span></div>
+                    </div>
+                </div>
+
+                <div class="grid gap-10 lg:grid-cols-2">
+                    <div>
+                        <p class="eyebrow eyebrow-bare">Motion, on the app's curve</p>
+                        <ul class="mt-4 grid gap-3">
+                            {
+                                MOTION.map((token) => (
+                                    <li class="kit-motion grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-4" style={`--run: var(${token})`}>
+                                        <span class="font-mono text-2xs text-subtle">{token}</span>
+                                        <span class="kit-motion-track" tabindex="0" aria-label={`Run ${token}`}>
+                                            <span class="kit-motion-run">
+                                                <span class="kit-motion-mote" />
+                                            </span>
+                                        </span>
+                                    </li>
+                                ))
+                            }
+                        </ul>
+                        <p class="mt-3 text-2xs text-subtle">Point at a track to run it. Under reduced motion all but the cycle and the Tip's timings read zero.</p>
+                    </div>
+                    <div>
+                        <p class="eyebrow eyebrow-bare">Rhythm</p>
+                        <dl class="mt-4 grid gap-2" data-kit-measure>
+                            {
+                                RHYTHM.map((token) => (
+                                    <div class="grid grid-cols-[9rem_minmax(0,1fr)] items-center gap-4">
+                                        <dt class="font-mono text-2xs text-subtle">{token}</dt>
+                                        <dd class="m-0 flex items-center gap-3">
+                                            <span class="block h-2 bg-(--color-line-strong)" style={`width: min(var(${token}), 100%)`} />
+                                            <span class="font-mono text-2xs text-muted" data-token={token} />
+                                        </dd>
+                                    </div>
+                                ))
+                            }
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </Band>
+
+        {/* ── Budgets ───────────────────────────────────────────────────────────────────────────────────────── */}
+        <Band ground="plain" labelledby="kit-budgets">
+            <SectionHead slot="head" id="kit-budgets" {...sections.budgets} />
+            <table class="kit-table">
+                <thead>
+                    <tr><th>Slot</th><th>Ceiling</th><th>Aim</th></tr>
+                </thead>
+                <tbody>
+                    {
+                        budgets.map(([slot, budget]) => (
+                            <tr>
+                                <td class="font-mono">{slot}</td>
+                                <td class="tabular-nums">{budget.max}</td>
+                                <td class="tabular-nums">{budget.aim}</td>
+                            </tr>
+                        ))
+                    }
+                </tbody>
+            </table>
+        </Band>
+
+        {/* ── Glyph ─────────────────────────────────────────────────────────────────────────────────────────── */}
+        <Band ground="wall" labelledby="kit-glyphs">
+            <SectionHead slot="head" id="kit-glyphs" {...sections.glyphs} />
+            <ul class="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3 lg:grid-cols-5">
+                {
+                    GLYPH_NAMES.map((name) => (
+                        <li class="grid justify-items-start gap-3">
+                            <span class="flex items-end gap-3">
+                                <Glyph name={name} size="sm" />
+                                <Glyph name={name} size="md" />
+                                <Glyph name={name} size="lg" />
+                            </span>
+                            <span class="flex items-center gap-3 text-content">
+                                <Glyph name={name} rendering="line" />
+                                <span class="font-mono text-2xs text-subtle">{name}</span>
+                            </span>
+                        </li>
+                    ))
+                }
+            </ul>
+            <div class="mt-10 flex flex-wrap items-center gap-6 border-t border-line pt-6">
+                <span class="flex items-center gap-3"><Glyph name="automations" lit /><span class="font-mono text-2xs text-subtle">lit</span></span>
+                <a class="btn btn-sm" href="#kit-glyphs"><Glyph name="arrow" rendering="line" />{kitPage.sample}</a>
+                <span class="chip"><Glyph name="info" rendering="line" />{kitPage.sample}</span>
+            </div>
+        </Band>
+
+        {/* ── Tip ───────────────────────────────────────────────────────────────────────────────────────────── */}
+        <Band ground="plain" labelledby="kit-tips">
+            <SectionHead slot="head" id="kit-tips" {...sections.tips} />
+            <div class="grid gap-8 lg:grid-cols-2">
+                <p class="max-w-copy text-lede text-muted">
+                    <span class="chip mr-2 align-middle">{kitPage.sample}</span>
+                    A <Tip trigger="term" term={tipSamples.term.term} {...tipSamples.term.tip} /> is a machine your agents work on, and this sentence explains
+                    nothing else&nbsp;<Tip {...tipSamples.info} />
+                </p>
+                <p class="max-w-copy text-note text-muted">
+                    A Tip with only a title and a body&nbsp;<Tip {...tipSamples.short} />
+                </p>
+            </div>
+        </Band>
+
+        {/* ── SectionHead ───────────────────────────────────────────────────────────────────────────────────── */}
+        <Band ground="wall" labelledby="kit-heads">
+            <SectionHead slot="head" id="kit-heads" {...sections.heads} />
+            <div class="grid gap-16 lg:grid-cols-2">
+                <SectionHead {...headSamples.start} />
+                <SectionHead {...headSamples.centre} align="center" />
+            </div>
+        </Band>
+
+        {/* ── Band grounds ──────────────────────────────────────────────────────────────────────────────────── */}
+        <Band ground="plain" labelledby="kit-grounds">
+            <SectionHead slot="head" id="kit-grounds" {...sections.grounds} />
+        </Band>
+        <Band ground="wall">
+            <SectionHead slot="head" {...groundSamples.wall} />
+            <div class="kit-exhibit">{kitPage.sample}</div>
+        </Band>
+        <Band ground="lamp">
+            <SectionHead slot="head" {...groundSamples.lamp} align="center" />
+            <Flow {...flowSamples} />
+        </Band>
+        <Band ground="plinth" label={groundSamples.plinth.label}>
+            <TileGrid cols={3} kind="stats">
+                <Stat {...statSamples.meter} />
+                <Stat {...statSamples.prefix} />
+                <Stat {...statSamples.word} />
+            </TileGrid>
+        </Band>
+        <Band ground="plain">
+            <SectionHead slot="head" {...groundSamples.plain} />
+        </Band>
+
+        {/* ── FeatureTile and TileGrid ──────────────────────────────────────────────────────────────────────── */}
+        <Band ground="wall" labelledby="kit-tiles">
+            <SectionHead slot="head" id="kit-tiles" {...sections.tiles} />
+            <div class="grid gap-12">
+                <TileGrid cols={3}>
+                    {tileSamples.slice(0, 3).map((tile) => <FeatureTile {...tile} />)}
+                </TileGrid>
+                <TileGrid cols={2}>
+                    {tileSamples.slice(2, 4).map((tile) => <FeatureTile {...tile} />)}
+                </TileGrid>
+                <TileGrid cols={4}>
+                    {tileSamples.map((tile) => <FeatureTile glyph={tile.glyph} title={tile.title} line={tile.line} />)}
+                </TileGrid>
+            </div>
+        </Band>
+
+        {/* ── Stat ──────────────────────────────────────────────────────────────────────────────────────────── */}
+        <Band ground="plain" labelledby="kit-stats">
+            <SectionHead slot="head" id="kit-stats" {...sections.stats} />
+            <TileGrid cols={4} kind="stats">
+                <Stat {...statSamples.meter} />
+                <Stat {...statSamples.suffix} />
+                <Stat {...statSamples.word} />
+                <Stat {...statSamples.glyph} />
+            </TileGrid>
+        </Band>
+
+        {/* ── Flow ──────────────────────────────────────────────────────────────────────────────────────────── */}
+        <Band ground="lamp" labelledby="kit-flows">
+            <SectionHead slot="head" id="kit-flows" {...sections.flows} />
+            <div class="grid gap-16">
+                <Flow {...flowSamples} />
+                <Flow {...longFlowSample} />
+                <div class="grid gap-6 sm:grid-cols-2">
+                    <div class="window">
+                        <div class="flex aspect-16/10 items-center justify-center border-b border-line bg-canvas p-6 max-sm:aspect-auto">
+                            <Flow {...compactFlowSample} size="sm" captionHidden />
+                        </div>
+                        <div class="p-6 font-mark text-content">{kitPage.sample}</div>
+                    </div>
+                </div>
+            </div>
+        </Band>
+    </main>
+
+    <Footer />
+
+    <script>
+        /* The rhythm tokens resolve at the reader's width; print what they came to. */
+        for (const cell of document.querySelectorAll<HTMLElement>("[data-token]")) {
+            const token = cell.dataset.token ?? "";
+            const probe = document.createElement("span");
+            probe.style.cssText = `position:absolute;visibility:hidden;width:var(${token})`;
+            document.body.append(probe);
+            cell.textContent = `${Math.round(probe.getBoundingClientRect().width)}px`;
+            probe.remove();
+        }
+    </script>
+</BaseLayout>
+
+<style>
+    .kit-swatch {
+        display: block;
+        flex: none;
+        width: 2.25rem;
+        height: 1.5rem;
+        border: 1px solid var(--color-line);
+        background: var(--swatch);
+    }
+    .kit-material,
+    .kit-ground,
+    .kit-exhibit {
+        position: relative;
+        display: grid;
+        place-items: end start;
+        min-height: 6.5rem;
+        padding: 0.75rem;
+        overflow: hidden;
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+        color: var(--color-subtle);
+    }
+    .kit-material > span,
+    .kit-ground > span {
+        position: relative;
+    }
+    .kit-lacquer {
+        background: var(--role-nav-sheen), var(--role-tip-fill);
+        box-shadow:
+            inset 0 0 0 1px var(--role-tip-line),
+            var(--role-tip-shadow);
+    }
+    .kit-ground {
+        border: 1px solid var(--color-line);
+        background: var(--color-canvas);
+    }
+    .kit-ground-lamp {
+        position: absolute;
+        inset: 0;
+        background: var(--role-lamp);
+    }
+    .kit-exhibit {
+        min-height: 12rem;
+        place-items: center;
+        border: 1px solid var(--color-line-strong);
+        background: var(--role-frame-fill);
+    }
+    .kit-motion-track {
+        position: relative;
+        display: block;
+        height: 1rem;
+        border-bottom: 1px solid var(--color-line);
+    }
+    /* A box the track's length, slid from one end to the other: a transform, never a `left`. */
+    .kit-motion-run {
+        position: absolute;
+        inset: 0;
+        transform: translateX(calc(-100% + 8px));
+        transition: transform var(--run) var(--ease-smooth);
+    }
+    .kit-motion-mote {
+        position: absolute;
+        top: 50%;
+        right: 0;
+        width: 8px;
+        height: 8px;
+        margin-top: -4px;
+        background: var(--color-primary-500);
+        transform: rotate(45deg);
+    }
+    .kit-motion:hover .kit-motion-run,
+    .kit-motion-track:focus-visible .kit-motion-run {
+        transform: none;
+    }
+    .kit-table {
+        width: 100%;
+        max-width: 32rem;
+        border-collapse: collapse;
+        font-size: var(--text-note);
+    }
+    .kit-table th {
+        border-bottom: 1px solid var(--color-line-strong);
+        padding: 0.5rem 0.75rem;
+        text-align: left;
+        font-size: var(--text-2xs);
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--color-gold);
+    }
+    .kit-table td {
+        border-bottom: 1px solid var(--color-line);
+        padding: 0.5rem 0.75rem;
+        color: var(--color-muted);
+    }
+</style>

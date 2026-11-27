@@ -1,0 +1,149 @@
+---
+/* ONE TILE (DESIGN.md, "Materials and depth"): stone, its subject's glyph in a niche, a title, one line, and the
+   detail the line left out behind a Tip that opens from anywhere on the tile. No corners (they mark a band's exhibit,
+   and a tile is one of several) and no box inside it. A pressable tile answers the pointer as a nav row does: its edge
+   goes from line to line-strong and its niche lights; it does not lift.
+   It is a list item: TileGrid lays tiles out as a list. */
+import { held } from "../../lib/design/copy-budgets";
+import type { GlyphName } from "../../lib/navIcons";
+import Glyph from "./Glyph.astro";
+import { isExternal, type TipContent } from "./kit";
+import Tip from "./Tip.astro";
+
+interface Props {
+    glyph: GlyphName;
+    title: string;
+    /** The one line under the title. */
+    line: string;
+    /** The tile's detail, opened by pointing anywhere on it, or by its (i). */
+    tip?: TipContent;
+    /** The whole tile goes here. */
+    href?: string;
+    /** What the tile's link says, at its foot. Without one the title is the link. */
+    action?: string;
+    /** The title's heading level: 3 under a band's h2. */
+    level?: 3 | 4;
+}
+
+const { glyph, title, line, tip, href, action, level = 3 } = Astro.props;
+const where = `FeatureTile "${title}"`;
+held("title", title, where);
+held("line", line, where);
+held("action", action, where);
+const external = href !== undefined && isExternal(href);
+const linkAttrs = { href, target: external ? "_blank" : undefined, rel: external ? "noopener" : undefined };
+const Heading = level === 3 ? "h3" : "h4";
+---
+
+<li class="kit-tile" data-tip-area={tip ? "" : undefined} data-pressable={href ? "" : undefined}>
+    <Glyph name={glyph} size="md" />
+    <Heading class="kit-tile-title">
+        {href && action === undefined ? <a class="kit-tile-link" {...linkAttrs}>{title}</a> : title}
+    </Heading>
+    <p class="kit-tile-line">{line}</p>
+    {
+        href && action && (
+            <a class="kit-tile-link kit-tile-action" {...linkAttrs}>
+                {action}
+                <Glyph name="arrow" rendering="line" />
+            </a>
+        )
+    }
+    {/* Last in reading order, so a screen reader and the .md mirror meet the tile's title before its detail; drawn
+        level with the niche, top right. */}
+    {tip && <Tip {...tip} area where={where} class="kit-tile-tip" />}
+</li>
+
+<style>
+    .kit-tile {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        padding: 1.4rem 1.4rem 1.3rem;
+        border: 1px solid var(--color-line);
+        background: var(--wash-panel);
+        transition: border-color var(--motion-quick) var(--ease-smooth);
+    }
+    /* A tile that answers the pointer: it goes somewhere, or it has more to say. */
+    .kit-tile:is([data-pressable], [data-tip-area]):hover,
+    .kit-tile:has(.kit-tile-link:focus-visible) {
+        --niche-lit: 1;
+        --niche-sweep: 1;
+        border-color: var(--color-line-strong);
+    }
+
+    /* Above the tile's stretched link, so a press on it opens the card rather than leaving the page. */
+    .kit-tile > :global(.kit-tile-tip) {
+        position: absolute;
+        top: 1.4rem;
+        right: 1.1rem;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        height: var(--niche-md);
+        font-size: 1.0625rem;
+    }
+    .kit-tile > :global(.kit-tile-tip .kit-tip-button) {
+        color: var(--color-subtle);
+    }
+    .kit-tile:hover > :global(.kit-tile-tip .kit-tip-button),
+    .kit-tile > :global(.kit-tile-tip .kit-tip-button[aria-expanded="true"]) {
+        color: var(--color-gold-bright);
+    }
+
+    .kit-tile-title {
+        margin: 1.1rem 0 0;
+        font-family: var(--font-mark);
+        font-size: var(--text-title);
+        line-height: var(--text-title--line-height);
+        font-weight: var(--font-weight-semibold);
+        color: var(--color-content);
+    }
+    .kit-tile-line {
+        margin: 0.4rem 0 0;
+        font-size: var(--text-note);
+        line-height: var(--text-note--line-height);
+        color: var(--color-muted);
+    }
+
+    .kit-tile-link {
+        color: inherit;
+        text-decoration: none;
+    }
+    /* The whole tile is the link's target; the focus ring is drawn on the tile, not around a few words. */
+    .kit-tile-link::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+    }
+    .kit-tile-link:focus-visible {
+        outline: none;
+    }
+    .kit-tile:has(.kit-tile-link:focus-visible) {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+
+    .kit-tile-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45em;
+        align-self: flex-start;
+        margin-top: auto;
+        padding-top: 1.1rem;
+        font-size: var(--text-note);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gold-bright);
+        transition: color var(--motion-quick) var(--ease-smooth);
+    }
+    .kit-tile-action :global(svg) {
+        transition: transform var(--motion-base) var(--ease-settle);
+    }
+    .kit-tile:hover .kit-tile-action {
+        color: var(--color-primary-400);
+    }
+    .kit-tile:hover .kit-tile-action :global(svg) {
+        transform: translateX(3px);
+    }
+</style>

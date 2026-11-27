@@ -1,6 +1,6 @@
 ---
 import type { LandingContent } from "@intentic/site-content/landing";
-import Band from "./Band.astro";
+import IntroBand from "./IntroBand.astro";
 import Corners from "../Corners.astro";
 import Point from "../Point.astro";
 
@@ -12,7 +12,7 @@ interface Props {
 const { content, cta = { href: "/features/review/", label: "How reviewing agent work works" } } = Astro.props;
 ---
 
-<Band id="workspace" intro={content}>
+<IntroBand id="workspace" intro={content}>
     <div class="compare">
         <div class="card compare-ours">
             <Corners />
@@ -49,4 +49,4 @@ const { content, cta = { href: "/features/review/", label: "How reviewing agent 
         <p>{content.comparison.footnote}</p>
         <a href={cta.href} class="link">{cta.label} →</a>
     </div>
-</Band>
+</IntroBand>

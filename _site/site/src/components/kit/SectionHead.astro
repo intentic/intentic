@@ -1,0 +1,144 @@
+---
+/* A BAND'S HEAD (DESIGN.md, "Words", "Type"): the eyebrow that names its subject, the heading that makes its claim at
+   display-2, one sentence of lede, the (i) at the lede's end for the section's how-it-works, and at most one action.
+   Every string passes its budget here, so a head that wants to say more has to say it in its Tip. */
+import { held } from "../../lib/design/copy-budgets";
+import Glyph from "./Glyph.astro";
+import { isExternal, type KitAction, splitTerms, type TipContent } from "./kit";
+import Tip from "./Tip.astro";
+
+interface Props {
+    eyebrow?: string;
+    heading: string;
+    /** An inner page's h1, or a band's h2. */
+    level?: 1 | 2;
+    /** One sentence. */
+    lede?: string;
+    /** Words of the lede that open a Tip of their own, keyed by the words as they appear in it. */
+    terms?: Readonly<Record<string, TipContent>>;
+    /** The section's how-it-works, behind an (i) at the end of the lede. Once per section. */
+    tip?: TipContent;
+    action?: KitAction;
+    align?: "start" | "center";
+    /** The heading's id, for the band's `aria-labelledby`. */
+    id?: string;
+    class?: string;
+}
+
+const { eyebrow, heading, level = 2, lede, terms = {}, tip, action, align = "start", id, class: className } = Astro.props;
+const where = `SectionHead "${heading.slice(0, 40)}"`;
+
+held("eyebrow", eyebrow, where);
+held("heading", heading, where);
+held("lede", lede, where);
+if (action !== undefined) {
+    held("action", action.label, where);
+}
+
+// The (i) is bound to the lede's last word, so it never wraps onto a line of its own.
+const parts = splitTerms(lede ?? "", terms, where);
+const last = parts.at(-1);
+const tail = tip !== undefined && last?.kind === "text" ? /(\S+)\s*$/u.exec(last.text) : null;
+const leading = tail === null || last === undefined ? parts : [...parts.slice(0, -1), { kind: "text" as const, text: last.text.slice(0, tail.index) }];
+const Heading = level === 1 ? "h1" : "h2";
+const external = action !== undefined && isExternal(action.href);
+---
+
+<header class:list={["kit-head", className]} data-align={align}>
+    {eyebrow && <p class="eyebrow kit-head-eyebrow">{eyebrow}</p>}
+    <Heading class="display kit-head-heading" id={id}>{heading}</Heading>
+    {
+        parts.length > 0 && (
+            <p class="kit-head-lede">
+                {leading.map((part) => (part.kind === "text" ? part.text : <Tip trigger="term" term={part.text} {...part.tip} where={where} />))}
+                {tail !== null && tip !== undefined && (
+                    <span class="kit-head-tail">
+                        {tail[1]}
+                        <Tip {...tip} where={where} />
+                    </span>
+                )}
+                {tail === null && tip !== undefined && <Tip {...tip} where={where} />}
+            </p>
+        )
+    }
+    {
+        action && (
+            <p class="kit-head-action">
+                <a
+                    href={action.href}
+                    class:list={[
+                        action.kind === "primary" && "btn btn-primary",
+                        action.kind === "button" && "btn btn-secondary",
+                        (action.kind ?? "link") === "link" && "kit-head-link",
+                    ]}
+                    target={external ? "_blank" : undefined}
+                    rel={external ? "noopener" : undefined}
+                >
+                    {action.label}
+                    {(action.kind ?? "link") === "link" && <Glyph name="arrow" rendering="line" />}
+                </a>
+            </p>
+        )
+    }
+</header>
+
+<style>
+    .kit-head {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .kit-head[data-align="center"] {
+        align-items: center;
+        text-align: center;
+    }
+    /* Centred, the eyebrow's hairline is drawn on both sides, or the name would sit off its own axis. */
+    .kit-head[data-align="center"] .kit-head-eyebrow::before {
+        content: "";
+        width: 3.5rem;
+        height: 1px;
+        background: linear-gradient(270deg, var(--color-line-bright), transparent);
+    }
+    .kit-head-eyebrow {
+        margin: 0;
+    }
+    .kit-head-heading {
+        max-width: 24ch;
+        margin: 0.9rem 0 0;
+        font-size: var(--text-display-2);
+        line-height: var(--text-display-2--line-height);
+    }
+    .kit-head-lede {
+        max-width: var(--container-copy);
+        margin: 1rem 0 0;
+        font-size: var(--text-lede);
+        line-height: var(--text-lede--line-height);
+        color: var(--color-muted);
+    }
+    .kit-head-tail {
+        white-space: nowrap;
+    }
+    .kit-head-action {
+        margin: 1.75rem 0 0;
+    }
+    .kit-head-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5em;
+        font-size: 0.9375rem;
+        font-weight: var(--font-weight-medium);
+        color: var(--color-gold-bright);
+        text-decoration: none;
+        transition: color var(--motion-quick) var(--ease-smooth);
+    }
+    .kit-head-link:hover,
+    .kit-head-link:focus-visible {
+        color: var(--color-primary-400);
+    }
+    .kit-head-link :global(svg) {
+        transition: transform var(--motion-base) var(--ease-settle);
+    }
+    .kit-head-link:hover :global(svg) {
+        transform: translateX(3px);
+    }
+</style>

@@ -16,7 +16,7 @@ import DownloadCta from "./DownloadCta.astro";
 import Footer from "./Footer.astro";
 import Nav from "./Nav.astro";
 import AccessBand from "./landing/AccessBand.astro";
-import Band from "./landing/Band.astro";
+import IntroBand from "./landing/IntroBand.astro";
 import Economics from "./landing/Economics.astro";
 import FaqList from "./landing/FaqList.astro";
 import Final from "./landing/Final.astro";
@@ -252,7 +252,7 @@ const { steps: appSteps, alternatives } = content.connect;
             <Trust />
 
             <!-- Show how to get started. -->
-            <Band id="connect" intro={content.connect}>
+            <IntroBand id="connect" intro={content.connect}>
                 {/* Same sequence as /download/: install, sign in, Run on this computer. Alternatives sit in their own labelled zone. */}
                 <div class="flow">
                     <div class="flow-zone">
@@ -291,10 +291,10 @@ const { steps: appSteps, alternatives } = content.connect;
                         </Station>
                     </div>
                 </div>
-            </Band>
+            </IntroBand>
 
             <!-- FAQ uses native details for keyboard and screen-reader behavior. -->
-            <Band id="faq" intro={{ eyebrow: "FAQ", heading: "Before you install it.", sub: "What it costs, where your code sits, and what is not built yet." }}>
+            <IntroBand id="faq" intro={{ eyebrow: "FAQ", heading: "Before you install it.", sub: "What it costs, where your code sits, and what is not built yet." }}>
                 <div class="faq">
                     {
                         faqGroups.map((group) => (
@@ -308,7 +308,7 @@ const { steps: appSteps, alternatives } = content.connect;
                         ))
                     }
                 </div>
-            </Band>
+            </IntroBand>
 
             <!-- Closing cartouche returns the plate at the page end. -->
             <Final>
