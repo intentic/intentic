@@ -13,6 +13,7 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
+import * as productHealth from "@intentic/ext-product-health";
 
 // Exercises each compiled-in extension package the way loadBuiltins does: activate() against a minimal fake
 // IntenticApi, without the app singletons createExtensionApi pulls in. Proves the packages register a working view
@@ -37,11 +38,12 @@ await Promise.all(
 // A fake host that accepts every registration an extension can make. It must accept all of them, not just the one a
 // test reads: activate() runs top to bottom, so a registry the stub is missing throws halfway through and later
 // registrations never happen.
-const capture = () => {
+const capture = (backend: Pick<IntenticApi[`backend`], `available`> = { available: true }) => {
     const views: ViewRegistration[] = [];
     const documents: DocumentProviderRegistration[] = [];
     const sideViews: SideViewRegistration[] = [];
     const api = {
+        backend,
         views: {
             register: (view: ViewRegistration) => {
                 views.push(view);
@@ -81,6 +83,7 @@ const activateAndCapture = (module: { activate: (api: IntenticApi, ctx: Extensio
 
 const noRepos: readonly RepoFacts[] = [];
 const discordCap: CapabilityFacts = { id: `bot`, kind: `cli`, config: { provider: `discord` } };
+const postHogCap: CapabilityFacts = { id: `analytics`, kind: `cli`, config: { provider: `posthog` } };
 // One connected capability per provider any rail view gates on. A single discord capability was not enough: a detect()
 // gated on a provider the fixture never supplies returns nothing, so its icons are never collected and checks pass it
 // by silently. Add a capability here whenever a rail view starts gating on a new provider.
@@ -88,7 +91,7 @@ const richCapabilities: readonly CapabilityFacts[] = [
     discordCap,
     { id: `repos`, kind: `cli`, config: { provider: `github` } },
     { id: `production`, kind: `cli`, config: { provider: `komodo` } },
-    { id: `analytics`, kind: `cli`, config: { provider: `posthog` } },
+    postHogCap,
 ];
 // Every fact true, so a detect() that gates on evidence still yields its activations and its icons can be checked.
 const richRepo: RepoFacts = {
@@ -189,6 +192,25 @@ describe(`ext-activity`, () => {
         expect(view.surface).toBe(`sandbox`);
         expect(view.detect(noRepos, [])).toEqual([{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]);
         expect(view.detect(noRepos, [discordCap])).toEqual([{ key: `activity`, title: `Activity`, icon: `wave-pulse` }]);
+    });
+});
+
+describe(`ext-product-health`, () => {
+    it.each([undefined, false])(`registers no view or poll when backend availability is %s`, (available) => {
+        const { api, views } = capture({ available });
+        const context: ExtensionContext = { extensionId: `intentic.product-health`, subscriptions: [] };
+        productHealth.activate(api, context);
+        for (const subscription of context.subscriptions) {
+            subscription.dispose();
+        }
+        expect(views).toEqual([]);
+        expect(context.subscriptions).toEqual([]);
+    });
+
+    it(`offers the view when the sandbox has the backend and a PostHog connection`, () => {
+        const view = activateAndCapture(productHealth);
+        expect(view.detect(noRepos, [])).toEqual([]);
+        expect(view.detect(noRepos, [postHogCap])).toEqual([{ key: `product-health`, title: `Product health`, icon: `usage` }]);
     });
 });
 

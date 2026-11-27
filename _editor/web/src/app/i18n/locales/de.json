@@ -9621,6 +9621,7 @@
             "leftStillListed": "Sie haben „{name}“ aus Ihrem Konto entfernt, aber sie war nicht erreichbar, um Sie von ihrer eigenen Mitgliederliste zu nehmen; daher führt sie Sie weiter, bis ihr Eigentümer Sie unter Zugriff entfernt. ({reason})",
             "leftStillListedHeader": "Verlassen, aber noch aufgeführt",
             "asleep": "im Ruhezustand: öffnet sich beim Auswählen",
+            "asleepShort": "schläft",
             "starting": "startet: gleich bereit",
             "notAnswering": "Antwortet nicht",
             "sandboxes": "Sandboxes",

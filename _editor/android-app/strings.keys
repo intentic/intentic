@@ -34,7 +34,7 @@ agents.agentStatus.untitledAgent
 agents.agentsView.noAgentsWorkingStart
 sandbox.useSandboxLiveness.noSandboxSelected
 sandbox.sandboxSwitcher.sandboxes
-settings.settingsBilling.machineAsleep
+sandbox.sandboxSwitcher.asleepShort
 shared.menu
 shell.words.signOut
 sandbox.connectionNotice.connectingTo

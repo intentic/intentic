@@ -9621,6 +9621,7 @@
             "leftStillListed": "You left \"{name}\" on your account, but it could not be reached to take you off its own member list, so it still lists you until its owner removes you under Access. ({reason})",
             "leftStillListedHeader": "Left, but still listed",
             "asleep": "asleep: opens when you select it",
+            "asleepShort": "asleep",
             "starting": "starting: ready in a moment",
             "notAnswering": "Not answering",
             "sandboxes": "Sandboxes",

@@ -10,9 +10,9 @@ import { planLadder, rungOf } from "./planLadder";
 
 const STANDARD = hostedTier(`standard`);
 const MAX = hostedTier(`max`);
-const RENEWS_AT = `2026-12-26T00:00:00.000Z`;
-// Halfway through the period that began on 26 Nov and renews on 26 Dec (30 days).
-const HALFWAY = Date.parse(`2026-12-11T00:00:00.000Z`);
+// Billing displays the renewal in the reader's time zone. Start on Dec 26 locally and serialize it as the API does.
+const RENEWS_AT = new Date(2026, 11, 26).toISOString();
+const HALFWAY = Date.parse(RENEWS_AT) - 15 * 86_400_000;
 
 const paidHours = (tier: string) => spentHours(0, hostedTier(tier).monthlyHours * 60, `slot`);
 const machine = (id: string, tier: string, extra: Partial<HostedPlanMachine> = {}): HostedPlanMachine => ({

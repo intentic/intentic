@@ -9621,6 +9621,7 @@
             "leftStillListed": "Vous avez quitté « {name} » sur votre compte, mais il était injoignable pour vous retirer de sa propre liste de membres. Vous y restez donc jusqu'à ce que son propriétaire vous retire sous Accès. ({reason})",
             "leftStillListedHeader": "Quitté, mais toujours répertorié",
             "asleep": "en veille : s’ouvre lorsque vous le sélectionnez",
+            "asleepShort": "en veille",
             "starting": "démarrage : prêt dans un instant",
             "notAnswering": "Ne répond pas",
             "sandboxes": "Sandboxes",

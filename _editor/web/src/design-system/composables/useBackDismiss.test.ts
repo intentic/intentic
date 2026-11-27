@@ -86,7 +86,7 @@ it(`gives the entry back when the sheet closes without navigating, so one back p
         expect(position()).toBe(below + 1);
         open.value = false;
         await nextTick();
-        await settle(100);
+        await overlayBackSettled();
         expect(position()).toBe(below);
         expect(location.pathname).toBe(`/agents`);
     });

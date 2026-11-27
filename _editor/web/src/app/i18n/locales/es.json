@@ -9621,6 +9621,7 @@
             "leftStillListed": "Has dejado «{name}» en tu cuenta, pero no se pudo acceder a él para sacarte de su propia lista de miembros, así que te seguirá listando hasta que su propietario te quite en Acceso. ({reason})",
             "leftStillListedHeader": "Has salido, pero sigues en la lista",
             "asleep": "en reposo: se abre al seleccionarlo",
+            "asleepShort": "dormida",
             "starting": "iniciándose: listo en un momento",
             "notAnswering": "No responde",
             "sandboxes": "Sandboxes",

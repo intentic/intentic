@@ -30,7 +30,7 @@
     <string name="agents_agents_view_no_agents_working_start">Aucun agent au travail. Lancez-en un et déléguez.</string>
     <string name="sandbox_use_sandbox_liveness_no_sandbox_selected">Aucun sandbox n\'est sélectionné.</string>
     <string name="sandbox_sandbox_switcher_sandboxes">Sandboxes</string>
-    <string name="settings_settings_billing_machine_asleep">en veille</string>
+    <string name="sandbox_sandbox_switcher_asleep_short">en veille</string>
     <string name="shared_menu">Menu</string>
     <string name="shell_words_sign_out">Se déconnecter</string>
     <string name="sandbox_connection_notice_connecting_to">Connexion à « %1$s »…</string>

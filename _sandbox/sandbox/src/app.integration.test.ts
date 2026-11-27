@@ -1093,6 +1093,7 @@ test("agent.run merges internal (env) tools with the mcp-kind capabilities for t
         { name: "linear", url: expect.stringMatching(/\/mcp\/linear$/), token: expect.any(String) },
         { name: "chatgpt", url: expect.stringMatching(/\/mcp\/chatgpt$/), token: expect.any(String) },
         { name: "pipelines", url: expect.stringMatching(/\/mcp\/pipelines$/), token: expect.any(String) },
+        { name: "product-health", url: expect.stringMatching(/\/mcp\/product-health$/), token: expect.any(String) },
     ]);
     expect(remote?.[1]?.token).not.toBe("external");
 });

@@ -284,7 +284,8 @@ describe(`every snapshot of the composer`, () => {
         expect(total).toBe(CARDS * PICK_UPS.length * 2 * 2 * BLOCKS.length * BOOLEANS_PER_COMBINATION + 2 ** BOOLEAN_AXES.length);
         expect(BOOLEAN_AXES.length).toBe(13);
         expect([...seen].sort()).toEqual([...INTENTS].sort());
-    });
+        // The full sample took 47 seconds on a busy CI runner.
+    }, 120_000);
 
     // Every intent says what a press there does, in every set of words a pane can hand it.
     test(`has a placeholder and a Send hint for every intent, in every set of words`, () => {

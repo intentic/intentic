@@ -254,6 +254,12 @@ const ROWS: readonly Row[] = [
         with: contributes({ publicRoutes: [{ path: "hook", methods: ["POST"], signature: { scheme: "github", secret: "HOOK_SECRET" } }] }, SERVER),
         adds: ["public:hook", "anyone on the internet can call its backend at POST /hook when signed with your secret HOOK_SECRET"],
     },
+    {
+        power: "wakes:${path}",
+        without: contributes({ publicRoutes: [{ path: "hook", methods: ["POST"] }] }, SERVER),
+        with: contributes({ publicRoutes: [{ path: "hook", methods: ["POST"], wakes: true }] }, SERVER),
+        adds: ["wakes:hook", "a call to /hook wakes the sandbox while it sleeps, which spends its awake hours"],
+    },
     { power: "bin", without: contributes({}), with: contributes({ bin: "bin" }), adds: ["bin", "puts its shipped tools on the agent's PATH"] },
     {
         power: "tools${perCard?-${perCard}:}",

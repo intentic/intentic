@@ -53,7 +53,7 @@ class SandboxSheet(private val activity: Activity, private val pick: (SandboxRow
 
     private fun row(sandbox: SandboxRow, isOpen: Boolean, onClick: () -> Unit): View {
         val name = ui.text(sandbox.name, 16f, if (isOpen) 600 else 500, R.color.content)
-        val meta = listOfNotNull(sandbox.role, activity.getString(R.string.settings_settings_billing_machine_asleep).takeIf { sandbox.asleep })
+        val meta = listOfNotNull(sandbox.role, activity.getString(R.string.sandbox_sandbox_switcher_asleep_short).takeIf { sandbox.asleep })
         val text = ui.column(name, ui.text(meta.joinToString(" · "), 13f, 400, R.color.muted)).apply {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }

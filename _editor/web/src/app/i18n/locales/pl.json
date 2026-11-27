@@ -9060,6 +9060,7 @@
             "leftStillListed": "Opuszczono „{name}” na twoim koncie, ale nie udało się z nim połączyć, żeby usunąć cię z jego własnej listy członków, więc nadal cię wymienia, dopóki właściciel nie usunie cię w zakładce Dostęp. ({reason})",
             "leftStillListedHeader": "Opuszczono, ale nadal na liście",
             "asleep": "uśpiona: otworzy się po wybraniu",
+            "asleepShort": "śpi",
             "starting": "uruchamia się: za chwilę gotowa",
             "notAnswering": "Nie odpowiada",
             "sandboxes": "Sandboksy",

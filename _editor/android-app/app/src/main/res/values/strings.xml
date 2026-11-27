@@ -30,7 +30,7 @@
     <string name="agents_agents_view_no_agents_working_start">No agents working. Start one and delegate.</string>
     <string name="sandbox_use_sandbox_liveness_no_sandbox_selected">No sandbox is selected.</string>
     <string name="sandbox_sandbox_switcher_sandboxes">Sandboxes</string>
-    <string name="settings_settings_billing_machine_asleep">asleep</string>
+    <string name="sandbox_sandbox_switcher_asleep_short">asleep</string>
     <string name="shared_menu">Menu</string>
     <string name="shell_words_sign_out">Sign out</string>
     <string name="sandbox_connection_notice_connecting_to">Connecting to \"%1$s\"…</string>

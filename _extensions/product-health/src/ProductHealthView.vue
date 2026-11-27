@@ -2,6 +2,7 @@
 import {
     type AgentRunBooking,
     type AgentRunChoice,
+    appLink,
     Button,
     Icon,
     messageOr,
@@ -114,7 +115,8 @@ const wireHere = (connection: string): void => {
     }, t(`view.pressFailed`));
 };
 
-const connect = (): void => api.navigate(api.links.capabilities(`posthog`));
+const postHogPage = api.links.capabilities(`posthog`);
+const connectLink = computed(() => appLink(api.href(postHogPage), () => api.navigate(postHogPage)));
 </script>
 
 <template>
@@ -139,7 +141,7 @@ const connect = (): void => api.navigate(api.links.capabilities(`posthog`));
 
             <div v-else-if="connections.length === 0" :class="ui.emptyState(`flex flex-col items-center gap-3 py-8`)">
                 <p>{{ t(`view.noConnection`) }}</p>
-                <Button :label="t(`view.connect`)" size="small" tier="accent" @click="connect" />
+                <Button as="a" v-bind="connectLink" size="small" tier="accent">{{ t(`view.connect`) }}</Button>
             </div>
 
             <div v-else class="flex flex-col gap-4">

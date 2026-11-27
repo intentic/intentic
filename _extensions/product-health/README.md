@@ -18,8 +18,8 @@ flowchart LR
   image. It also carries the **PostHog card**, its skill and the CLI's image fragment, which lived in connectors until
   2026-11-27: the daemon serves a connection's credential only to the extension that contributes its card, and this
   backend needs the key to read PostHog. Saved connections kept their id (`cli:posthog`) and resolve here unchanged.
-- The tile appears once a PostHog connection exists, one tile however many there are; a row names its connection when
-  there is more than one.
+- The tile appears when the sandbox advertises the Product health backend and has a PostHog connection. Multiple
+  connections share one tile, and each row names its connection.
 
 ## What a round reads, and what it becomes
 

@@ -11,6 +11,10 @@ const postHogConnected = (capabilities: readonly CapabilityFacts[]): boolean =>
 // and Deployments are: the tile appears once PostHog is connected, one tile however many projects are, since the
 // backend reads every connection and the view names a row's connection when there is more than one.
 export const activate = (api: IntenticApi, context: ExtensionContext): void => {
+    // Older sandboxes still supply the PostHog card through Connectors. The view needs its own backend.
+    if (api.backend.available !== true) {
+        return;
+    }
     bindHost(api);
     // Before the registration, so a tile can badge on its first render rather than a minute later.
     context.subscriptions.push(startBadge());
