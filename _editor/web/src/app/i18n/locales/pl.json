@@ -10248,6 +10248,8 @@
         },
         "deviceFacts": {
             "agentStopped": "agent zatrzymany",
+            "runCommandsOff": "„Uruchamianie poleceń” jest wyłączone",
+            "neverReported": "agent nigdy się nie zgłosił",
             "commands": "polecenia",
             "desktopSync": "synchronizacja z pulpitem",
             "lastSeen": "ostatnio widziane {ago}",

@@ -22,7 +22,10 @@ const describedOs = (device: Device): string | undefined => {
     if (described !== undefined && /^darwin\b/i.test(described)) {
         return `macOS`;
     }
-    return described === undefined || described === `` ? undefined : described;
+    // Windows names its vendor first (`Microsoft Windows 11 Home`); the Windows mark beside every label already says
+    // whose it is, and the vendor is the word that pushed the line's useful end off the tile. The title keeps it.
+    const bare = described?.replace(/^microsoft\s+(?=windows\b)/i, ``);
+    return bare === undefined || bare === `` ? undefined : bare;
 };
 
 // What the platform slug is worth saying on its own: the last resort, since every machine of an OS answers it
@@ -163,6 +166,20 @@ export const machineWarnings = (device: Device, readAt: number): readonly string
         warnings.push(t(`sandbox.deviceFacts.agentStopped`));
     }
     return warnings;
+};
+
+// What the board's band says about one side: its faults, then why it reads amber where they have no line for it (a
+// switch that is off, an agent that never reported, a report gone stale), so no amber dot or edge goes unexplained. A
+// stale report beside a stopped agent is the same errand, said once; an asleep side is grey and needs no reason.
+export const sideWarnings = (device: Device, readAt: number): readonly string[] => {
+    const own = machineWarnings(device, readAt);
+    if (device.gap === `scope-off`) {
+        return [...own, t(`sandbox.deviceFacts.runCommandsOff`)];
+    }
+    if (device.gap === `unreported`) {
+        return [...own, t(`sandbox.deviceFacts.neverReported`)];
+    }
+    return device.gap === undefined && own.length === 0 && deviceQuiet(device, readAt) ? [t(`sandbox.deviceRows.stateQuiet`)] : own;
 };
 
 // Only shown when offline: noise on a live row, the most useful fact on one that isn't.

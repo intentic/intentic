@@ -27,6 +27,7 @@ import {
     machineVerdict,
     managerOf,
     notOnAccount,
+    ownMachineFirst,
     removableHere,
     rowMatches,
     rowRemoval,
@@ -224,7 +225,8 @@ test(`folds a Windows install and its distro into one machine, Windows first, wi
 test(`draws a many-sided machine's environments as lines of their own, and names the side a warning is about`, () => {
     const body = boardBody(pc()[0]!, ``, `work-abc`, NOW);
     expect(body.doors).toEqual([]);
-    expect(body.environments.map((environment) => environment.label)).toEqual([`Microsoft Windows 11 Home`, `Arch Linux on WSL`]);
+    // The vendor drops out of a Windows label: the Windows mark beside it already says whose it is.
+    expect(body.environments.map((environment) => environment.label)).toEqual([`Windows 11 Home`, `Arch Linux on WSL`]);
     expect(body.environments.map((environment) => environment.state)).toEqual([`live`, `live`]);
     // Either door onto the container serving this page marks the machine as the one in use.
     expect(body.self?.title).toBe(`work`);
@@ -334,13 +336,18 @@ test(`calls a PC live while its Windows side answers, partly connected on a dist
             undefined,
             NOW,
         )[0]!;
-    expect(machineVerdict(pcWith(true, false), NOW)).toEqual({ status: `live`, word: `live`, variant: `success` });
+    const answers = { word: `live`, tone: `success`, returning: false } as const;
+    expect(machineVerdict(pcWith(true, false), NOW)).toEqual({ status: `live`, word: `live`, variant: `success`, presence: answers });
     expect(machineVerdict(pcWith(false, true), NOW)).toMatchObject({ status: `attention` });
     const asleep = card(deviceRow(device({ online: false, gap: `offline`, report: undefined }), undefined));
-    expect(machineVerdict(asleep, NOW)).toEqual({ status: `offline`, word: `offline`, variant: `neutral` });
+    const gone = { word: `offline`, tone: `neutral`, returning: false } as const;
+    expect(machineVerdict(asleep, NOW)).toEqual({ status: `offline`, word: `offline`, variant: `neutral`, presence: gone });
     // One side on its way back is the word worth reading on a machine nothing else on answers.
     const returning = card(deviceRow(device({ online: false, gap: `offline`, lastSeen: NOW - 5_000, report: undefined }), undefined));
     expect(machineVerdict(returning, NOW).word).toBe(`reconnecting`);
+    expect(machineVerdict(returning, NOW).presence).toEqual({ word: `reconnecting`, tone: `neutral`, returning: true });
+    // A machine that wants a hand still answers: its dot says so, and the corner's words say the rest.
+    expect(machineVerdict(pcWith(false, true), NOW).presence).toEqual(answers);
 });
 
 test(`asks for attention for the machine's own trouble and for any sandbox's`, () => {
@@ -423,6 +430,25 @@ test(`puts what is wrong with a sandbox in the machine's band, under the sandbox
     expect(boardBody(card(row({}, conflicted)), ``, undefined, NOW).warnings).toEqual([`intentic-dev: 2 conflicts`]);
 });
 
+test(`gives every amber side a line in the band, so no amber dot or edge is left without a reason`, () => {
+    // A switch that is off and an agent that never reported were amber with nothing said.
+    expect(boardBody(card(row({ gap: `scope-off`, report: undefined })), ``, undefined, NOW).warnings).toEqual([`"Run commands" is off`]);
+    expect(boardBody(card(row({ gap: `unreported`, report: undefined })), ``, undefined, NOW).warnings).toEqual([`agent never reported`]);
+    // A report gone stale, named on the side it is about.
+    const stale = report({ os: `linux`, wsl: { distro: `Arch` }, capturedAt: NOW - 120_000 });
+    const quiet = machineRows(
+        [device({ key: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, report: stale }), device({ key: `rog`, hostId: `rog`, facts: WINDOWS, report: report({ os: `win32` }) })],
+        undefined,
+        NOW,
+    )[0]!;
+    expect(boardBody(quiet, ``, undefined, NOW).environments.map((side) => side.tone)).toEqual([`success`, `warning`]);
+    expect(boardBody(quiet, ``, undefined, NOW).warnings).toEqual([`Arch Linux on WSL: gone quiet`]);
+    // A stopped agent already says why; its stale report is the same errand and is not said again.
+    expect(boardBody(card(row({}, { agent: { running: false }, capturedAt: NOW - 120_000 })), ``, undefined, NOW).warnings).toEqual([`agent stopped`]);
+    // An asleep machine is grey, not amber: nothing to explain.
+    expect(boardBody(card(row({ online: false, gap: `offline`, report: undefined })), ``, undefined, NOW).warnings).toEqual([]);
+});
+
 test(`marks the sandbox serving this page, and only when both slugs are known`, () => {
     const mine = boardBody(card(row({}, PAIRED)), ``, `work-abc`, NOW).self;
     expect(mine?.title).toBe(`intentic-dev`);
@@ -430,6 +456,14 @@ test(`marks the sandbox serving this page, and only when both slugs are known`, 
     // Two unknowns must not compare equal: a pairing with no container on an unknown-URL sandbox is not "you".
     const bare: Partial<Report> = { pairings: PAIRED.pairings };
     expect(boardBody(card(row({}, bare)), ``, undefined, NOW).self).toBeUndefined();
+});
+
+test(`lifts the machine this sandbox runs on to the front of the board, and leaves the rest in their order`, () => {
+    const other = (key: string) => card(row({ key, label: key, hostId: `host-${key}` }));
+    const board = [other(`ann`), other(`bob`), card(row({ key: `zed`, label: `zed`, hostId: `host-zed` }, PAIRED))];
+    expect(ownMachineFirst(board, `work-abc`).map((machine) => machine.label)).toEqual([`zed`, `ann`, `bob`]);
+    // Not knowing which sandbox this is moves nothing.
+    expect(ownMachineFirst(board, undefined).map((machine) => machine.label)).toEqual([`ann`, `bob`, `zed`]);
 });
 
 test(`finds a machine by a port number, by its sandbox, and by its folder`, () => {

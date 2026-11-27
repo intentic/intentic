@@ -110,7 +110,7 @@ it(`offers a folder per environment, each in that environment's own filesystem`,
 it(`names an environment by its distro as well as its OS`, async () => {
     const el = await mountOpen(pc());
     const labels = [...el.querySelectorAll(`label`)].map((label) => label.textContent?.trim());
-    expect(labels[0]).toBe(`Microsoft Windows 11 Home`);
+    expect(labels[0]).toBe(`Windows 11 Home`);
     expect(labels[1]).toContain(`archlinux`);
 });
 

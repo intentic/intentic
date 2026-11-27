@@ -2087,21 +2087,23 @@ it(`draws a Windows PC and its distro as one card, with each side's own state`, 
     const el = mount([distroSide(), windowsSide(), loneMachine]);
     await showBoard();
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Microsoft Windows 11 Home`);
+    expect(text).toContain(`Windows 11 Home`);
     expect(text).toContain(`Arch Linux on WSL`);
     // One card, not two: two machines on the board, and the PC's card leaves its container to the page.
     const cards = [...el.querySelectorAll(`a`)];
     expect(cards).toHaveLength(2);
-    const pc = cards.find((card) => card.textContent?.includes(`Microsoft Windows 11 Home`));
+    const pc = cards.find((card) => card.textContent?.includes(`Windows 11 Home`));
     expect(pc?.textContent).not.toContain(`work`);
     // A lone machine's one environment is the machine itself: its OS rides the tile's own line, with no chip for a
     // side. The PC carries one chip per side, each under its own OS's mark.
     const lone = cards.find((card) => card.textContent?.includes(`radarsu-omen`));
-    const sides = [`Microsoft Windows 11 Home`, `Arch Linux on WSL`];
+    const sides = [`Windows 11 Home`, `Arch Linux on WSL`];
     const chips = (card: Element | undefined): string[] =>
         [...(card?.querySelectorAll(`li`) ?? [])].flatMap((item) => sides.filter((side) => item.textContent?.trim() === side));
     expect(chips(lone)).toEqual([]);
-    expect(lone?.textContent).toContain(`Microsoft Windows 11 Pro`);
+    // The vendor drops out of a Windows label: the mark beside it already says whose it is.
+    expect(lone?.textContent).toContain(`Windows 11 Pro`);
+    expect(lone?.textContent).not.toContain(`Microsoft`);
     expect(chips(pc)).toEqual(sides);
 });
 
@@ -2113,7 +2115,7 @@ it(`opens the PC as one page: an environment row per side, the sandbox once, and
     const text = el.textContent ?? ``;
     // The page IS the device, so the heading is the noun: "on this device" was said by all four of them.
     expect(text).toContain(`Environments`);
-    expect(text).toContain(`Microsoft Windows 11 Home`);
+    expect(text).toContain(`Windows 11 Home`);
     expect(text).toContain(`Arch Linux on WSL`);
     // Each side's door, which is what every command is addressed to; its shell and home are one hover away.
     expect(text).toContain(`rog::wsl:Arch`);
@@ -2172,8 +2174,8 @@ it(`gives a PC whose sides both keep folders one button per half, its menu namin
     await openSwitch(el, `Files`);
     const rows = [...document.body.querySelectorAll(`.p-contextmenu a`)].map((row) => (row.textContent ?? ``).trim());
     expect(rows).toEqual([
-        `Resume allMicrosoft Windows 11 Home · Paused for 1 of 2 sandboxes`,
-        `Pause allMicrosoft Windows 11 Home · Paused for 1 of 2 sandboxes`,
+        `Resume allWindows 11 Home · Paused for 1 of 2 sandboxes`,
+        `Pause allWindows 11 Home · Paused for 1 of 2 sandboxes`,
         `Pause allArch Linux on WSL · On for all 2 sandboxes`,
     ]);
 });

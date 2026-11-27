@@ -5,7 +5,7 @@ import { computed, ref } from "vue";
 import DeviceBoardCard from "./DeviceBoardCard.vue";
 import PhoneRows from "../phones/PhoneRows.vue";
 import LinkedSandboxRows from "../links/LinkedSandboxRows.vue";
-import { fleetCounts, type MachineRow, type MachineStatus, machineVerdict, rowMatches, showFilter } from "../../../../models/sandbox/devices/deviceRows";
+import { fleetCounts, type MachineRow, type MachineStatus, machineVerdict, ownMachineFirst, rowMatches, showFilter } from "../../../../models/sandbox/devices/deviceRows";
 import { desktopApp } from "../../../../app/environments/desktop";
 import { useT } from "@intentic/ui/i18n";
 
@@ -48,9 +48,13 @@ const statusOptions = computed(() => [
 // The pills only say something once the fleet holds two states; a board all of one verdict has nothing to narrow.
 const mixed = computed(() => Object.values(counts.value).filter((count) => count > 0).length > 1);
 
+// The machine this sandbox runs on leads: its tile is marked only by a small logo, so its place says it too.
 const shown = computed<readonly MachineRow[]>(() =>
-    rows.filter(
-        (row) => (needle.value === `` || rowMatches(row, needle.value)) && (status.value === `all` || machineVerdict(row, readAt).status === status.value),
+    ownMachineFirst(
+        rows.filter(
+            (row) => (needle.value === `` || rowMatches(row, needle.value)) && (status.value === `all` || machineVerdict(row, readAt).status === status.value),
+        ),
+        ownSlug,
     ),
 );
 const statusWord = computed(() => statusOptions.value.find((option) => option.value === status.value)?.label.toLowerCase() ?? ``);

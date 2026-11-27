@@ -10928,6 +10928,8 @@
         },
         "deviceFacts": {
             "agentStopped": "Agent gestoppt",
+            "runCommandsOff": "„Befehle ausführen“ ist aus",
+            "neverReported": "Agent hat sich nie gemeldet",
             "commands": "Befehle",
             "desktopSync": "Desktop-Synchronisierung",
             "lastSeen": "zuletzt gesehen {ago}",

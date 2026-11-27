@@ -10928,6 +10928,8 @@
         },
         "deviceFacts": {
             "agentStopped": "agente detenido",
+            "runCommandsOff": "«Ejecutar comandos» está desactivado",
+            "neverReported": "el agente nunca informó",
             "commands": "comandos",
             "desktopSync": "sincronización del escritorio",
             "lastSeen": "visto por última vez {ago}",

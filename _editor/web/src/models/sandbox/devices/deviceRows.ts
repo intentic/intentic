@@ -34,6 +34,7 @@ import {
     machineWarnings,
     osLabel,
     osMark,
+    sideWarnings,
 } from "./deviceFacts";
 import { engineCapacity, type OsMark } from "@intentic/ui/device-machine";
 import { t } from "@intentic/ui/i18n";
@@ -133,6 +134,9 @@ export interface MachineVerdict {
     readonly status: MachineStatus;
     readonly word: string;
     readonly variant: StatusVariant;
+    /** Whether it answers, apart from whether it wants a hand: the tile's presence dot, green while anything on it
+     *  answers, grey once nothing does, pulsing while it redials. So `live` needs no word. */
+    readonly presence: { readonly word: string; readonly tone: StatusVariant; readonly returning: boolean };
 }
 
 const answering = (code: DeviceStateCode): boolean => code !== `offline` && code !== `reconnecting`;
@@ -143,15 +147,18 @@ export const machineVerdict = (machine: MachineRow, readAt: number): MachineVerd
     const presence = machinePresence(sides.map((side) => ({ key: deviceEnvironment(side.device) ?? HOST_NATIVE_ENVIRONMENT, online: answering(side.code) })));
     if (presence.kind === `offline`) {
         // Coming back outranks gone: one side reconnecting is the word worth reading.
-        return { status: `offline`, word: stateWord(sides.some((side) => side.code === `reconnecting`) ? `reconnecting` : `offline`), variant: `neutral` };
+        const returning = sides.some((side) => side.code === `reconnecting`);
+        const word = stateWord(returning ? `reconnecting` : `offline`);
+        return { status: `offline`, word, variant: `neutral`, presence: { word, tone: `neutral`, returning } };
     }
     const asking =
         presence.kind === `partly` ||
         awake.some((side) => side.code !== `live` || machineWarnings(side.device, readAt).length > 0) ||
         machine.groups.some((group) => groupSummary(group).warnings.length > 0);
+    const answers = { word: stateWord(`live`), tone: `success`, returning: false } as const;
     return asking
-        ? { status: `attention`, word: stateWord(`attention`), variant: `warning` }
-        : { status: `live`, word: stateWord(`live`), variant: `success` };
+        ? { status: `attention`, word: stateWord(`attention`), variant: `warning`, presence: answers }
+        : { status: `live`, word: stateWord(`live`), variant: `success`, presence: answers };
 };
 
 /** How many machines stand at each verdict: the board's pills, so a fleet is read before a tile is. */
@@ -391,6 +398,11 @@ export const isSelfMachine = (machine: MachineRow, group: DeviceSandboxGroup, ow
 export const selfGroup = (machine: MachineRow, ownSlug: string | undefined): DeviceSandboxGroup | undefined =>
     machine.groups.find((group) => isSelfMachine(machine, group, ownSlug));
 
+// The board's order with the machine this sandbox runs on lifted to the front: its tile is marked only by a small logo,
+// so its place has to say it too. The rest keep `sortMachines`' order.
+export const ownMachineFirst = (machines: readonly MachineRow[], ownSlug: string | undefined): MachineRow[] =>
+    machines.toSorted((a, b) => Number(selfGroup(b, ownSlug) !== undefined) - Number(selfGroup(a, ownSlug) !== undefined));
+
 // The machine holding this sandbox's desktop-sync pairing and no command door. A different question from
 // `hostRunningSandbox`, which asks whose docker holds the container and can only ever answer with a device already
 // connected — the answer every "do it for you instead of printing a command" path needs, and the one that is
@@ -572,9 +584,9 @@ const boardEnvironment = (row: DeviceRow, readAt: number): BoardEnvironment => (
 const boardWarnings = (machine: MachineRow, readAt: number): readonly string[] =>
     manySided(machine)
         ? machine.environments.flatMap((environment) =>
-              machineWarnings(environment.device, readAt).map((warning) => `${osLabel(environment.device) ?? environment.device.label}: ${warning}`),
+              sideWarnings(environment.device, readAt).map((warning) => `${osLabel(environment.device) ?? environment.device.label}: ${warning}`),
           )
-        : machineWarnings(machine.environments[0]?.device ?? { key: ``, label: `` }, readAt);
+        : sideWarnings(machine.environments[0]?.device ?? { key: ``, label: `` }, readAt);
 
 // The tile counts nothing and lists no sandbox: the machine's page does both. It keeps what a glance acts on: the
 // faults (a sandbox's named by it, so an amber edge always says why), the sandbox you are using, and what a filter hit.

@@ -10928,6 +10928,8 @@
         },
         "deviceFacts": {
             "agentStopped": "agent stopped",
+            "runCommandsOff": "\"Run commands\" is off",
+            "neverReported": "agent never reported",
             "commands": "commands",
             "desktopSync": "desktop sync",
             "lastSeen": "last seen {ago}",
