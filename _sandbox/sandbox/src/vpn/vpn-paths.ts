@@ -24,5 +24,7 @@ export const upMarkerPath = (id: string): string => join(vpnDir(), `${interfaceN
 export const IPSEC_INCLUDE_DIR = "/etc/ipsec.d/intentic";
 export const ipsecConnPath = (id: string): string => join(IPSEC_INCLUDE_DIR, `${connName(id)}.conf`);
 export const ipsecSecretsPath = (id: string): string => join(IPSEC_INCLUDE_DIR, `${connName(id)}.secrets`);
+// The connection's leftupdown script, there only while the capability sets a tunnel MTU.
+export const ipsecUpdownPath = (id: string): string => join(IPSEC_INCLUDE_DIR, `${connName(id)}.updown`);
 // Connection names are whitespace-delimited tokens; capability ids already qualify, so this is a passthrough.
 export const connName = (id: string): string => id;

@@ -1,4 +1,4 @@
-import type { VpnConfig } from "@intentic/sandbox-contract/schemas/vpn";
+import type { FortinetVpnConfig, IpsecVpnConfig, VpnConfig } from "@intentic/sandbox-contract/schemas/vpn";
 import { tunnelHandler, tunnelStatus } from "../../tunnel/tunnel-handler.js";
 import { vpnDrivers } from "../../vpn/vpn-drivers.js";
 import { connectVpn, disconnectVpn, vpnLink } from "../../vpn/vpn-links.js";
@@ -54,6 +54,11 @@ Notes:
   connection out of this sandbox: is being handed to a gateway that drops most of it. Disconnect it to get back,
   and tell the user to narrow that VPN capability's "Routed networks" to the networks behind the gateway; both
   work at once after that. Never work around it by editing /etc/ipsec.d: connect rewrites those files.
+- Small requests to a host behind a tunnel work, but a git push, an upload or a large download hangs and ends in a
+  timeout or a 502? The tunnel carries smaller packets than this sandbox sends and drops the rest silently. TCP
+  recovers on its own after a few seconds per connection; for an IPsec tunnel, tell the user to set "Tunnel MTU" on
+  its capability so it never stalls. Find the size with \`ping -M do -s <bytes> <host>\`: the largest that answers,
+  plus 28, is the MTU.
 - You cannot read a VPN's credentials, and you do not need to: \`vpn connect\` uses the stored ones.
 - A one-time code cannot be guessed or stored: if a connect fails asking for one, ask the user for a current code.
 - A tunnel marked \`unavailable\` needs a sandbox rebuild (the user does this from Sandbox ▸ Environment); say so
@@ -61,6 +66,47 @@ Notes:
 - A tunnel the user set to auto-connect comes back on its own after a sandbox restart, and the daemon redials it
   within a minute or so when it drops mid-session (\`vpn disconnect\` keeps it down): only toggle it when asked.
 `;
+
+type Echo = Record<string, string | number | boolean>;
+
+// Copies the optional settings that are set; a missing one stays missing rather than echoed as undefined.
+const echoOptional = (echo: Echo, settings: Readonly<Record<string, string | number | undefined>>): Echo => {
+    for (const [key, value] of Object.entries(settings)) {
+        if (value !== undefined) {
+            echo[key] = value;
+        }
+    }
+    return echo;
+};
+
+const echoFortinet = (vpn: FortinetVpnConfig): Echo =>
+    echoOptional(
+        { provider: vpn.provider, autoConnect: vpn.autoConnect, server: vpn.server, port: vpn.port, username: vpn.username },
+        { trustedCert: vpn.trustedCert, realm: vpn.realm },
+    );
+
+const echoIpsec = (vpn: IpsecVpnConfig): Echo =>
+    echoOptional(
+        {
+            provider: vpn.provider,
+            autoConnect: vpn.autoConnect,
+            server: vpn.server,
+            ikeVersion: vpn.ikeVersion,
+            aggressive: vpn.aggressive,
+            pfs: vpn.pfs,
+            dhGroup: vpn.dhGroup,
+            routedNetworks: vpn.routedNetworks,
+        },
+        { username: vpn.username, localId: vpn.localId, remoteId: vpn.remoteId, mtu: vpn.mtu },
+    );
+
+// A wireguard tunnel's whole config is its secret, so only the intent is echoed.
+const echoVpn = (vpn: VpnConfig) => {
+    if (vpn.provider === "wireguard") {
+        return { provider: vpn.provider, autoConnect: vpn.autoConnect };
+    }
+    return vpn.provider === "fortinet" ? echoFortinet(vpn) : echoIpsec(vpn);
+};
 
 export const vpnHandler = tunnelHandler<VpnConfig>({
     kind: "vpn",
@@ -83,34 +129,7 @@ export const vpnHandler = tunnelHandler<VpnConfig>({
     },
     // Explicit per-provider allowlist, never a spread: a credential can't leak by being forgotten in a new field. The
     // rest must stay complete too, or a left-out field like `pfs` fails schema and drops the whole tunnel.
-    echo: (config) => {
-        const vpn = config as VpnConfig;
-        return {
-            provider: vpn.provider,
-            autoConnect: vpn.autoConnect,
-            ...(vpn.provider === "wireguard"
-                ? {}
-                : vpn.provider === "fortinet"
-                  ? {
-                        server: vpn.server,
-                        port: vpn.port,
-                        username: vpn.username,
-                        ...(vpn.trustedCert !== undefined ? { trustedCert: vpn.trustedCert } : {}),
-                        ...(vpn.realm !== undefined ? { realm: vpn.realm } : {}),
-                    }
-                  : {
-                        server: vpn.server,
-                        ikeVersion: vpn.ikeVersion,
-                        aggressive: vpn.aggressive,
-                        pfs: vpn.pfs,
-                        dhGroup: vpn.dhGroup,
-                        routedNetworks: vpn.routedNetworks,
-                        ...(vpn.username !== undefined ? { username: vpn.username } : {}),
-                        ...(vpn.localId !== undefined ? { localId: vpn.localId } : {}),
-                        ...(vpn.remoteId !== undefined ? { remoteId: vpn.remoteId } : {}),
-                    }),
-        };
-    },
+    echo: (config) => echoVpn(config as VpnConfig),
     // Two blocks: this kind's clients, and the tun privilege shared byte-for-byte with `exit`.
     fragment: () => [VPN_FRAGMENT, TUN_PRIVILEGES_FRAGMENT],
     driverOf: (config) => vpnDrivers[config.provider],

@@ -10,6 +10,7 @@ import { outwardRequest, type OutwardDeps } from "./broker-actions.js";
 import { brokerRoutes, type ExpandedRoute, GATEWAY_PLACEHOLDER } from "./broker-routes.js";
 import { effectiveRules, evaluateRules, ruleIdentity } from "./broker-rules.js";
 import type { BrokerSessions } from "./broker-session.js";
+import { upstreamFailure } from "./upstream-failure.js";
 import { createOpenCalls, credentialPrint, type OpenCall, type OpenCalls } from "../credentials/open-calls.js";
 
 // The credential gateway: where a brokered credential is attached to a request, and the only place it ever is. A request
@@ -390,8 +391,7 @@ const checkAndForward = (deps: GatewayDeps) => {
                 signal,
             } as RequestInit);
         } catch (error) {
-            // The host and a code only: an error's own text can quote the URL, and a path-borne credential is in it.
-            return refused(502, `${route.upstream.host} could not be reached through the gateway (${errorCode(error)}).`);
+            return refused(502, upstreamFailure(route.upstream.host, errorCode(error), body !== null));
         }
         deps.used({ capability, fields: route.fields, conversationId, detail, ...(approvedBy !== undefined ? { approvedBy } : {}) });
 

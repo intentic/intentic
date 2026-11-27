@@ -7,7 +7,7 @@ import { errorMessage } from "@intentic/base/errors";
 import type { IpsecVpnConfig, VpnConfig } from "@intentic/sandbox-contract/schemas/vpn";
 import { activeResolvers, toolMissing } from "../tunnel/net-probe.js";
 import type { VpnDriver, VpnProbe } from "./vpn-driver.js";
-import { connName, IPSEC_INCLUDE_DIR, ipsecConnPath, ipsecSecretsPath } from "./vpn-paths.js";
+import { connName, IPSEC_INCLUDE_DIR, ipsecConnPath, ipsecSecretsPath, ipsecUpdownPath } from "./vpn-paths.js";
 
 // IKEv1/IKEv2 with a pre-shared key and optional XAuth (FortiClient's <ipsecvpn>), run by strongSwan.
 // No per-tunnel interface: strongSwan installs kernel XFRM policies, so state comes from charon's status and the
@@ -125,6 +125,8 @@ export const ipsecConnConfig = (id: string, raw: IpsecVpnConfig): string => {
         `    leftauth=psk`,
         `    rightauth=psk`,
         ...(xauth === undefined ? [] : [`    leftauth2=xauth`, `    xauth_identity=${confValue(writableId("XAuth username", xauth))}`]),
+        // Only with a tunnel MTU: without one no updown runs at all, exactly as before (strongSwan sets none by default).
+        ...(raw.mtu === undefined ? [] : [`    leftupdown=${confValue(ipsecUpdownPath(id))}`]),
         // Loaded, not dialled; connecting stays a separate explicit operation.
         `    auto=add`,
         `    dpdaction=restart`,
@@ -144,6 +146,35 @@ export const ipsecSecretsConfig = (raw: IpsecVpnConfig): string => {
             ? `${secretsId("XAuth username", raw.username)} : XAUTH ${secretValue(raw.password)}`
             : undefined;
     return `${[psk, xauth].filter((line) => line !== undefined).join("\n")}\n`;
+};
+
+// strongSwan installs each routed network's route into table 220 at the interface's MTU. A path that carries less and
+// drops the rest without an ICMP "fragmentation needed" (an IPsec tunnel measured at 1195 bytes) then hangs every TCP
+// transfer bigger than one segment. charon runs this after installing a network's route, on every dial, dead-peer
+// restart and redial, with the network in PLUTO_PEER_CLIENT, so the cap is re-applied each time the route is rebuilt.
+// A locked route MTU bounds what TCP sends; advmss bounds what the far side sends back.
+// IPv6 cannot go below 1280, so a lower cap holds only for IPv4 networks.
+const IPV6_MIN_MTU = 1280;
+export const ipsecUpdownScript = (id: string, mtu: number): string => {
+    const v6 = Math.max(mtu, IPV6_MIN_MTU);
+    return `#!/bin/sh
+# Written by the intentic sandbox daemon for the "${id}" vpn capability: do not edit by hand.
+# Caps the route charon just installed for one routed network at the tunnel's MTU (${mtu} bytes).
+case "$PLUTO_VERB" in
+    up-client-v6 | up-host-v6) family=-6 mtu=${v6} advmss=${v6 - 60} ;;
+    up-client | up-host) family=-4 mtu=${mtu} advmss=${mtu - 40} ;;
+    *) exit 0 ;;
+esac
+# The route as the kernel holds it, minus any cap from an earlier run, so replacing it changes nothing but the cap.
+route=$(ip "$family" route show table 220 exact "$PLUTO_PEER_CLIENT" | head -n 1 |
+    sed -e 's/ table [^ ]*//' -e 's/ mtu lock [0-9]*//' -e 's/ mtu [0-9]*//' -e 's/ advmss [0-9]*//')
+if [ -z "$route" ]; then
+    echo "intentic: no route for $PLUTO_PEER_CLIENT in table 220, so its MTU cap was not applied" >&2
+    exit 0
+fi
+# Unquoted on purpose: the route's own words are the arguments that rebuild it.
+exec ip "$family" route replace $route table 220 mtu lock "$mtu" advmss "$advmss"
+`;
 };
 
 // strongSwan has no drop-in directory for connections; these top-level files' include line is what makes per-connection
@@ -271,10 +302,17 @@ export const ipsecDriver: VpnDriver = {
         await writeFile(ipsecConnPath(id), ipsecConnConfig(id, ipsec), { mode: 0o644 });
         // Holds the PSK and the XAuth password, never group/world readable.
         await writeFile(ipsecSecretsPath(id), ipsecSecretsConfig(ipsec), { mode: 0o600 });
+        // Executable by charon (root) only. A cleared MTU removes it with the leftupdown line that named it.
+        if (ipsec.mtu === undefined) {
+            await rm(ipsecUpdownPath(id), { force: true });
+        } else {
+            await writeFile(ipsecUpdownPath(id), ipsecUpdownScript(id, ipsec.mtu), { mode: 0o700 });
+        }
     },
     erase: async (id) => {
         await rm(ipsecConnPath(id), { force: true });
         await rm(ipsecSecretsPath(id), { force: true });
+        await rm(ipsecUpdownPath(id), { force: true });
         // Drop the removed connection from charon's view; harmless when charon isn't running.
         await exec("ipsec", ["rereadall"]).catch(() => undefined);
         await exec("ipsec", ["reload"]).catch(() => undefined);

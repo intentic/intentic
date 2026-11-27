@@ -35,6 +35,10 @@ export const FortinetVpnConfigSchema = z.object({
     realm: z.string().min(1).optional(),
     autoConnect,
 });
+// IPv4's own floor, and the Ethernet ceiling the sandbox's interface already sends at.
+export const IPSEC_MTU_MIN = 576;
+export const IPSEC_MTU_MAX = 1500;
+const IPSEC_MTU_RANGE = `The tunnel MTU is a packet size between ${IPSEC_MTU_MIN} and ${IPSEC_MTU_MAX} bytes, like 1300.`;
 export const IpsecVpnConfigSchema = z.object({
     provider: z.literal("ipsec"),
     server: z.string().min(1),
@@ -67,6 +71,15 @@ export const IpsecVpnConfigSchema = z.object({
                     "Routed networks is a comma-separated list of CIDRs, like 10.0.0.0/8,192.168.0.0/16. A single host needs its prefix too (192.168.0.168/32). Leave it at 0.0.0.0/0 to send everything through the gateway.",
             },
         ),
+    // The largest packet the tunnel carries, for a path that drops bigger ones without saying so: small requests work
+    // and large ones (a git push) hang. Caps the routes into the tunnel; absent leaves them at the interface's MTU, with
+    // TCP's black-hole detection as the only remedy.
+    mtu: z.coerce
+        .number()
+        .int()
+        .min(IPSEC_MTU_MIN, { message: IPSEC_MTU_RANGE })
+        .max(IPSEC_MTU_MAX, { message: IPSEC_MTU_RANGE })
+        .optional(),
     autoConnect,
 });
 export const VpnConfigSchema = z.discriminatedUnion("provider", [WireguardVpnConfigSchema, FortinetVpnConfigSchema, IpsecVpnConfigSchema]);

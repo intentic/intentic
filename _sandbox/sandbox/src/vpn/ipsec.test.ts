@@ -1,5 +1,6 @@
 import type { IpsecVpnConfig } from "@intentic/sandbox-contract/schemas/vpn";
-import { ipsecConnConfig, ipsecFailureHint, ipsecSecretsConfig, parseIpsecLoaded, parseIpsecStatus } from "./ipsec.js";
+import { ipsecConnConfig, ipsecFailureHint, ipsecSecretsConfig, ipsecUpdownScript, parseIpsecLoaded, parseIpsecStatus } from "./ipsec.js";
+import { ipsecUpdownPath } from "./vpn-paths.js";
 
 // FortiClient <ipsecvpn> shape: IKEv1 aggressive, a group PSK, a phase-1 local ID, and per-user XAuth.
 const systemEg: IpsecVpnConfig = {
@@ -49,6 +50,28 @@ test("the routed networks are what the tunnel asks the gateway to route, not a f
 test("a blank routed-networks value still produces a loadable file", () => {
     // An empty rightsubnet would make charon reject the whole included config, taking every other tunnel down with it.
     expect(ipsecConnConfig("x", { ...systemEg, routedNetworks: " , " })).toContain("rightsubnet=0.0.0.0/0");
+});
+
+test("a tunnel MTU hooks an updown script into the conn, and no MTU leaves charon with none", () => {
+    // strongSwan runs no updown unless one is named, so an unset MTU must not name one: that is the old behaviour.
+    expect(ipsecConnConfig("systemeg", systemEg)).not.toContain("leftupdown");
+    expect(ipsecConnConfig("systemeg", { ...systemEg, mtu: 1190 })).toContain(`leftupdown=${ipsecUpdownPath("systemeg")}`);
+});
+
+test("the updown script caps the network's own table-220 route, both families, and ignores every other verb", () => {
+    const script = ipsecUpdownScript("systemeg", 1190);
+    expect(script.startsWith("#!/bin/sh\n")).toBe(true);
+    // A locked route MTU bounds what TCP sends; advmss (MTU minus the 40-byte IPv4+TCP headers) what comes back.
+    expect(script).toContain("up-client | up-host) family=-4 mtu=1190 advmss=1150");
+    // IPv6 has a 1280 floor, so a lower cap is raised to it rather than refused by the kernel.
+    expect(script).toContain("up-client-v6 | up-host-v6) family=-6 mtu=1280 advmss=1220");
+    expect(script).toContain('ip "$family" route show table 220 exact "$PLUTO_PEER_CLIENT"');
+    expect(script).toContain('route replace $route table 220 mtu lock "$mtu" advmss "$advmss"');
+    // down-client and the rest: charon removes the route itself.
+    expect(script).toContain("*) exit 0 ;;");
+    // An earlier cap is stripped before the new one, so a rerun on a surviving route does not stack two.
+    expect(script).toContain("s/ mtu lock [0-9]*//");
+    expect(ipsecUpdownScript("x", 1400)).toContain("family=-6 mtu=1400 advmss=1340");
 });
 
 test("omits aggressive mode for IKEv2 and for an explicitly disabled IKEv1 tunnel", () => {

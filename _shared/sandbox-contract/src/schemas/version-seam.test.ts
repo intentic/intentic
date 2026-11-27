@@ -59,6 +59,15 @@ test("routed networks take a CIDR list and reject what charon could not load", (
     expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, routedNetworks: "" }).success).toBe(false);
 });
 
+// The tunnel MTU arrives as a form's text; absent means no cap at all, never a default one.
+test("an ipsec tunnel MTU is optional, read from text, and bounded to a real packet size", () => {
+    expect(IpsecVpnConfigSchema.parse(ipsec).mtu).toBeUndefined();
+    expect(IpsecVpnConfigSchema.parse({ ...ipsec, mtu: "1190" }).mtu).toBe(1190);
+    expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, mtu: "500" }).success).toBe(false);
+    expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, mtu: "9000" }).success).toBe(false);
+    expect(IpsecVpnConfigSchema.safeParse({ ...ipsec, mtu: "1300.5" }).success).toBe(false);
+});
+
 const smb = { provider: "smb", server: "nas.local", share: "archive", username: "agent" };
 
 test("a network disk is read-only, auto-negotiated and mounted on start unless it says otherwise", () => {

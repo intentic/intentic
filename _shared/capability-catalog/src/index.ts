@@ -466,6 +466,16 @@ export const CAPABILITY_CATALOG: readonly CapabilityCatalogEntry[] = [
                 hint: "0.0.0.0/0 sends everything through the gateway, this sandbox's own internet included.",
                 when: "provider == 'ipsec'",
             },
+            // No symptom until a large transfer: small requests fit one packet, a git push hangs.
+            {
+                key: "mtu",
+                label: "Tunnel MTU",
+                optional: true,
+                advanced: true,
+                placeholder: "1300",
+                hint: "Set it when small requests work but pushes and uploads hang: the largest packet the tunnel carries.",
+                when: "provider == 'ipsec'",
+            },
 
             // The only persisted connection intent; connecting itself is a live action on this tile.
             {

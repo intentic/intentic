@@ -4,6 +4,7 @@ import type { VpnConfig, VpnLink } from "@intentic/sandbox-contract/schemas/vpn"
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { restoreTunnels, type TunnelEntry, tunnelEntries, tunnelUp } from "../tunnel/tunnel-links.js";
 import { upSince } from "../tunnel/tunnel-state.js";
+import { enableTcpMtuProbing } from "./tcp-mtu-probing.js";
 import { vpnDrivers } from "./vpn-drivers.js";
 import { upMarkerPath, vpnDir } from "./vpn-paths.js";
 
@@ -37,13 +38,21 @@ export const vpnLink = async (entry: VpnEntry): Promise<VpnLink> => {
 export const vpnLinks = async (capabilities: CapabilitiesStore): Promise<VpnLink[]> =>
     Promise.all(tunnelEntries(await capabilities.list(), "vpn").map((entry) => vpnLink(entry)));
 
-// Dials one tunnel, streaming progress.
+// Dials one tunnel, streaming progress. Every dial (first, boot restore, keepalive redial) also turns on TCP's MTU
+// black-hole detection, since a tunnel's real packet ceiling is something no driver can read off the gateway.
 export async function* connectVpn(entry: VpnEntry, options: { readonly otp?: string | undefined } = {}): AsyncGenerator<IntenticLine> {
     const driver = vpnDrivers[entry.config.provider];
     yield* tunnelUp("vpn", await driver.missingTool(), () => driver.connect(entry.id, entry.config, options), {
         dir: vpnDir(),
         path: upMarkerPath(entry.id),
     });
+    const probing = await enableTcpMtuProbing();
+    if (probing !== undefined) {
+        yield {
+            kind: "log",
+            message: `Could not turn on TCP's MTU black-hole detection (${probing}). If small requests through ${entry.id} work but larger ones (a git push, an upload) hang, the tunnel carries smaller packets than this sandbox sends: set its MTU on the capability.`,
+        };
+    }
 }
 
 // Drops one tunnel; an already-down tunnel counts as success, since the goal state is just "not up".
