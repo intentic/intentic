@@ -39,11 +39,11 @@
             "notes": "npm @openai/codex, pinned to @openai/codex-sdk's own dependency."
         },
         "cursor": {
-            "blessed": "1.5.0",
+            "blessed": "1.5.2",
             "notes": "npm @cursor/sdk. Never baked into a published image: its licence grants no redistribution."
         },
         "devin": {
-            "blessed": "3000.14.30821",
+            "blessed": "3000.15.14",
             "notes": "npm devin, Cognition's Devin CLI, spawned as `devin acp` for Devin turns. Never baked into a published image: its licence grants no redistribution."
         },
         "grok-build": {
@@ -51,7 +51,7 @@
             "notes": "xAI's Grok Build CLI (`grok`), Apache-2.0 source, fetched as xAI's own build from https://x.ai/cli; spawned as `grok agent stdio` for Grok turns on its own loop."
         },
         "kimi": {
-            "blessed": "2.7.3",
+            "blessed": "2.8.1",
             "notes": "npm @moonshot-ai/kimi-code, Moonshot's Kimi Code CLI (MIT); spawned as `kimi acp` for Kimi turns on its own loop."
         },
         "muse": {
@@ -64,14 +64,14 @@
             "notes": "npm opencode-ai, the runtime behind Grok turns."
         },
         "opencode-v2": {
-            "blessed": "2.4.1",
+            "blessed": "2.4.2",
             "notes": "npm @opencode/cli, the runtime behind Grok and Gemini turns. Its own key, so released daemons, which drive OpenCode 1, never read a 2.x number."
         },
         "translator": {
-            "blessed": "8.1.3",
+            "blessed": "8.1.8",
             "sha256": {
-                "amd64": "f9c6651318d833a6c84d8b260554872fdee04ab78cfa8e16e270bc4ba7e7947e",
-                "aarch64": "ea767472aaa8eedf0415a62942a55ea3f65f04f666b479b1e293effb4832df31"
+                "amd64": "3043da238fe86cd336dc8d30eed727a0ce3e0d30c7f9ee014a50576b2f11c6c8",
+                "aarch64": "e0e3da2c044b26639165970d4486650477fd39ec492351542c3dc354944f8b41"
             },
             "notes": "CLIProxyAPI GitHub release, the subscription translator behind Gemini, Kimi and ChatGPT turns."
         }
