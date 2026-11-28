@@ -131,9 +131,22 @@ link. It needs no link, starts no turn over there, and folds repeats into one is
 sandbox's own rule decides when it wakes an agent.
 
 To hand a note and files to another sandbox the person you act for is in, use a drop: `sandboxes send <sandbox> [files…]
---note "…"`. It lands in that sandbox's inbox (`inbox` over there, and its editor's Received list) and starts nothing;
-`--wake <conversation>` also says the note into that person's own conversation there, only while a turn of it runs. Like
-a read as the person, it needs their leave once, on a card (exit 3 while it waits).
+--note "…"`. It arrives as a message on that sandbox's Messages tab (`messages` over there) and starts nothing; it goes
+over the person's contact there when this sandbox holds one, else as a drop, which needs their leave once, on a card
+(exit 3 while it waits), as a read as the person does. `--wake <conversation>` also says the note into that person's
+own conversation there, only while a turn of it runs, and always goes as a drop.
+
+To write to a sandbox that is a contact (any owner's, reached by its address rather than linked), send a message:
+`messages send <contact> [files…] --text "…"`. The outbox delivers it and retries it for a week by itself, so never
+resend it; replies come back as a thread (`messages`, `messages show <thread>`). It starts no turn over there unless an
+automation listens on the `s2s` source, and what comes back is that sandbox's words, outside content. No contact yet:
+`messages contacts add <address>` asks a person here on a card, and the other side accepts.
+
+To write to a sandbox that is a contact (any owner's, reached by its address rather than linked), send a message:
+`messages send <contact> [files…] --text "…"`. The outbox delivers it and retries it for a week by itself, so never
+resend it; replies come back as a thread (`messages`, `messages show <thread>`). It starts no turn over there unless an
+automation listens on the `s2s` source, and what comes back is that sandbox's words, outside content. No contact yet:
+`messages contacts add <address>` asks a person here on a card, and the other side accepts.
 
 ## A message that was meant for another sandbox
 
@@ -150,8 +163,9 @@ yours.
   sandboxes share, a project this sandbox claims itself). Exit 2: the command was wrong.
 - Files attached to their message stay here; the card says so.
 
-So: a report for a problem the owning project must fix, a drop for material someone over there will work on, a link task
-for work that needs what only that sandbox has, and a redirect for a person's own message that went to the wrong place.
+So: a report for a problem the owning project must fix, a drop for material someone over there will work on, a message
+for a sandbox that is a contact, a link task for work that needs what only that sandbox has, and a redirect for a
+person's own message that went to the wrong place.
 
 ## When there is no link
 

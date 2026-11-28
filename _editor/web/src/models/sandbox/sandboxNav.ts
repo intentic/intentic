@@ -32,6 +32,8 @@ export interface SandboxSection {
      * the part (router/index.ts), and names no extension may take.
      */
     readonly within?: readonly SandboxSection[];
+    /** A daemon route the section is drawn from: a daemon that does not serve it leaves the section out of the index. */
+    readonly route?: string;
 }
 
 /**
@@ -99,6 +101,8 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
             // Who this box acts as outward; not beside `agent` in Configuration, easy to conflate, opposite in stakes.
             // Devices was the last row here until 2026-10-01; it is a rail view of its own now (/devices).
             { slug: `roles`, label: t(`shared.roles`), icon: `user`, maintainer: true },
+            // Messages with other sandboxes (messages.md): a person's own threads too; an older daemon leaves it out.
+            { slug: `messages`, label: t(`sandbox.sandboxNav.messages`), icon: `envelope`, route: `GET /s2s/threads` },
             // The whole of the group on one drawing: who gets in, the box, and everything it reaches, each line drawn from
             // what the daemon enforces. Last, not first: it sets nothing, and every line on it is changed on one of the
             // rows above (or Models, Secrets, Devices), which its caption links to. It was the group's first row until
@@ -254,6 +258,21 @@ export const MEMBER_ACCESS_PARTS: readonly AccessPart[] = [`people`, `sign-in`];
 
 /** The parts drawn below maintainer for someone given People & access: who has access, and the profiles and areas it is built from. */
 export const PEOPLE_ACCESS_PARTS: readonly AccessPart[] = [`people`, `profiles`, `areas`, `sign-in`];
+
+/**
+ * Messages' parts (features/sandbox/messages/SandboxMessages.vue), drawn as tabs and kept in the query as Access's are;
+ * the first writes no param. A thread open in the Inbox is `?open=<thread>`.
+ */
+export const MESSAGES_PARTS = [`inbox`, `contacts`, `identity`] as const;
+export type MessagesPart = (typeof MESSAGES_PARTS)[number];
+
+/** One part of Messages by address, and in the Inbox a thread open in it; the Inbox, the first, writes no param. */
+export const messagesPath = (part: MessagesPart = `inbox`, open?: string): string =>
+    here(page.sandboxSettings(`messages`, { query: { section: part === `inbox` ? undefined : part, open } }));
+
+/** Messages ▸ Contacts on the named sandbox, inside it: where a task handed to it as a contact waits for its owner's Allow. */
+export const contactsHrefIn = (sandboxId: string): string =>
+    toInside(sandboxId, page.sandboxSettings(`messages`, { query: { section: `contacts` satisfies MessagesPart } }));
 
 /** One part of Access by address; People, the first, writes no param. */
 export const accessPath = (part: AccessPart = `people`): string =>

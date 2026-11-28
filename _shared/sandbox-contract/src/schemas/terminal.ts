@@ -408,6 +408,12 @@ export const SubagentSessionSchema = z.object({
                 .describe(
                     "Handed over as the person the asking conversation acts for, not over a link card: that person is in the conversation there and reads it, and nothing waits for that sandbox's owner to allow it.",
                 ),
+            contact: z
+                .string()
+                .optional()
+                .describe(
+                    "Handed to a contact (messages.md, Tasks), not over a link card: the contact's id here. A task waiting for its owner is allowed on this sandbox's contact over there, on its Messages tab; `conversationId` is empty until the far side says which conversation it opened.",
+                ),
         })
         .optional()
         .describe("For a task handed to another sandbox: which one, and the conversation it runs in there."),

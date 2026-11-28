@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
+import type { S2sPayload } from "@intentic/sandbox-contract/schemas/s2s";
 import { childReportPrompt } from "@intentic/sandbox-contract/events/agent-words";
 import { linkedQuestionWords } from "@intentic/sandbox-contract/events/child-news";
-import { LINK_MAX_HOPS, type LinkHello, type LinkTask, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
+import { LINK_MAX_HOPS, type LinkTask, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
 import { LINKED_PREFIX, newConversationId, ROUTE_CONVERSATION_PREFIX } from "@intentic/sandbox-contract/ids/conversation-ids";
 import type { TurnProfile } from "@intentic/sandbox-contract/schemas/agent";
 import type { Logger } from "pino";
-import type { LinkListing } from "./link-listing.js";
+import { type LinkListing, listLinkCards } from "./link-listing.js";
 import { parentOfActor } from "../auth/principal.js";
 import type { ChildActionResult, ChildParent, ChildSpawnResult, PendingChildCard } from "../agent/subagents/children.js";
 import { noteQueuedReport } from "../agent/subagents/waiting/queued-reports.js";
@@ -22,13 +23,28 @@ import {
 import { deliverWake, type WakeDoors } from "../seams/wake-delivery.js";
 import type { ConversationActors } from "../conversations/actor/conversation-actors.js";
 import type { TurnStanding } from "../conversations/actor/turn-standing.js";
-import { conversationTaintSource, markConversationTaint, taintWords } from "../guard/turn-taint.js";
+import { conversationTaintWords as taintOf, markConversationTaint } from "../guard/turn-taint.js";
 import { opt } from "../opt.js";
-import { type LinkAnswerOf, linkAnswer, linkAsk, linkHello, linkMessage, linkStatus, linkStop } from "../sandboxes/link-client.js";
-import { askedOf, type AskedChild, childrenFile, type ChildrenFile, type StoredChild } from "./linked-children-store.js";
+import { linkAnswer, linkAsk, linkHello, linkMessage, linkStatus, linkStop } from "../sandboxes/link-client.js";
+import { askedOf, type AskedChild, childrenFile, type ChildrenFile, type Live, type StoredChild } from "./linked-children-store.js";
+import {
+    answerContact,
+    cancelContact,
+    type ContactEngine,
+    contactDestination,
+    type ContactSends,
+    delegateToContact,
+    heardRefusal,
+    heardUpdate,
+    moveCardToContact,
+    type MoveToContact,
+    resumeContact,
+    sendToContact,
+    withContact,
+} from "./contact-children.js";
 import { LINK_CONVERSATION_PREFIX } from "./link-tasks.js";
 import { answeringWire, createLinkBackoff, type LinkBackoff, nextRetry } from "./link-backoff.js";
-import { cardDestination, type Destination, isLinkCard, type PersonRoutes, personDestination, sandboxNameOf, targetFor, unreachedWords } from "./linked-destinations.js";
+import { cardDestination, type PersonRoutes, personDestination, targetFor, unreachedWords } from "./linked-destinations.js";
 
 // THE ASKING SIDE OF A LINK: a task this sandbox's agent handed to another of the owner's sandboxes (`delegate`), kept on
 // the parent's roster as a `linked` subagent so `wait`, `send`, `answer` and `cancel` reach it the way they reach a child
@@ -47,16 +63,15 @@ const RETRY_FIRST_MS = 5_000;
 const RETRY_MAX_MS = 60_000;
 // Characters of a report a wake says inline; the rest stays over there, and a wait hands it whole.
 const REPORT_CHARS = 4_000;
-// How long `links` waits on each linked sandbox's answer before calling it offline.
-const HELLO_MS = 8_000;
 // How far up a family `hopsOf` walks; nesting stops far below this, it only bounds a corrupt registry's loop.
 const FAMILY_WALK = 32;
 
 export interface DelegateAsk {
     // The link card's id: the agent's name for the other sandbox; with `via: "person"`, a sandbox's name or id that the
-    // person this conversation acts for is in (linked-destinations.ts).
+    // person this conversation acts for is in (linked-destinations.ts); with `via: "contact"`, a contact's id (its tool
+    // server, s2s/contacts/contact-mounts.ts). Any name is first looked for among the contacts the conversation may use.
     readonly to: string;
-    readonly via?: "person" | undefined;
+    readonly via?: "person" | "contact" | undefined;
     readonly task: string;
     readonly description?: string | undefined;
 }
@@ -90,6 +105,8 @@ export interface LinkedChildrenDeps {
     readonly wire?: LinkWire;
     // Handing work on as the person a conversation acts for (person-routes.ts); absent, only link cards take tasks.
     readonly personRoutes?: PersonRoutes;
+    // Handing work to a contact as `task.*` messages (contact-children.ts, s2s/tasks/asking.ts); absent, none.
+    readonly contacts?: ContactSends;
 }
 
 export interface LinkedChildren {
@@ -104,17 +121,13 @@ export interface LinkedChildren {
     readonly report: (childId: string) => string | undefined;
     readonly pendingQuestion: (childId: string) => PendingChildCard | undefined;
     readonly landing: (childId: string) => string | undefined;
+    // A status a contact pushed for one of its tasks (`task.update`), and a `task.*` message to a contact let go undelivered.
+    readonly heard: (contactId: string, requestId: string, status: LinkTaskStatus) => Promise<void>;
+    readonly refused: (contactId: string, payload: S2sPayload, reason: string) => Promise<void>;
+    readonly moveToContact: MoveToContact;
     // Picks the following back up for every task still out at boot.
     readonly resume: () => Promise<void>;
     readonly close: () => void;
-}
-
-// What the follower knows of one task between polls, in memory beside its stored record.
-interface Live {
-    stored: AskedChild;
-    last: LinkTaskStatus | undefined;
-    report: string | undefined;
-    following: AbortController | undefined;
 }
 
 // Everything the engine's parts share: its deps, the wire, every task it knows, its file, and whether it has closed.
@@ -134,18 +147,21 @@ const reportCut = (report: string, childId: string): string =>
     report.length <= REPORT_CHARS ? report : `${report.slice(0, REPORT_CHARS)}… (cut here: wait(target: "${childId}") returns its whole report)`;
 
 // The source a linked task's words are marked with, wherever they reach this sandbox.
-const outsideFrom = (sandbox: string): string => `the report of a task the linked sandbox "${sandbox}" ran`;
-
-// What the asking turn had itself taken in, in words, for the far side to carry on.
-const taintOf = (conversationId: string): string | undefined => {
-    const source = conversationTaintSource(conversationId);
-    return source === undefined ? undefined : taintWords(source).slice(0, 500);
-};
+const outsideFrom = (stored: Pick<StoredChild, "sandbox" | "via">): string =>
+    `the report of a task ${stored.via === "contact" ? "the contact" : "the linked sandbox"} "${stored.sandbox}" ran`;
 
 const birthOf = (stored: AskedChild, status: LinkedChildBirth["status"], again: boolean): LinkedChildBirth => ({
     id: stored.id,
     ...opt("description", stored.description),
-    linked: { link: stored.link, sandbox: stored.sandbox, ...opt("sandboxId", stored.sandboxId), conversationId: stored.remote, ...opt("via", stored.via) },
+    linked: {
+        link: stored.link,
+        sandbox: stored.sandbox,
+        ...opt("sandboxId", stored.sandboxId),
+        conversationId: stored.remote,
+        // The roster's `via` stays the person's alone: a contact's task says so by `contact`, which an older editor drops.
+        ...opt("via", stored.via === "person" ? ("person" as const) : undefined),
+        ...opt("contact", stored.contact),
+    },
     status,
     ...opt("again", again ? (true as const) : undefined),
 });
@@ -163,7 +179,7 @@ const sayToParent = async (engine: Engine, stored: StoredChild, prompt: string, 
         conversationId: stored.parent,
         prompt,
         voice: "sandbox",
-        outside: outsideFrom(stored.sandbox),
+        outside: outsideFrom(stored),
         profile,
         messageId,
         source: "links",
@@ -181,7 +197,7 @@ const settle = async (engine: Engine, child: Live, status: "completed" | "failed
     const { conversations, logger } = engine.deps;
     child.report = report;
     // The far side's words reach the parent's live turn whichever door hands them over.
-    markConversationTaint(stored.parent, outsideFrom(stored.sandbox));
+    markConversationTaint(stored.parent, outsideFrom(stored));
     if (stored.settledAt === undefined) {
         stored.settledAt = Date.now();
         stored.report = report === "" ? undefined : report;
@@ -335,8 +351,25 @@ const hopsOf = async (deps: LinkedChildrenDeps, conversationId: string): Promise
     return at.startsWith(LINK_CONVERSATION_PREFIX) || at.startsWith(ROUTE_CONVERSATION_PREFIX) ? ((await deps.inboundHops(at)) ?? 0) + 1 : 0;
 };
 
+// The contact engine over this one's records (contact-children.ts), when this sandbox reaches contacts.
+const contactEngineOf = (engine: Engine, sends: ContactSends): ContactEngine => ({
+    sends,
+    live: engine.live,
+    put: engine.put,
+    drop: engine.drop,
+    open: (stored, status, again) => openRecord(engine, stored, status, again),
+    take: (child, status) => take(engine, child, status),
+    settle: (child, status, report, error) => settle(engine, child, status, report, error),
+    note: (childId, summary) => noteSpawnedChild(engine.deps.conversations, childId, { summary }),
+    taint: taintOf,
+    logger: engine.deps.logger,
+});
+
 const delegate = async (engine: Engine, parent: ChildParent, ask: DelegateAsk): Promise<ChildSpawnResult> => {
-    const where: Destination = await (ask.via === "person" ? personDestination : cardDestination)(engine.deps, parent.conversationId, ask.to);
+    // A contact this conversation may use goes first (contact-children.ts), then a person route or a link card.
+    const where =
+        (await contactDestination(engine.deps.contacts, engine.deps.capabilities, parent.conversationId, ask)) ??
+        (await (ask.via === "person" ? personDestination : cardDestination)(engine.deps, parent.conversationId, ask.to));
     if ("refused" in where) {
         return { ok: false, message: where.refused, ...opt("open", where.open) };
     }
@@ -356,12 +389,16 @@ const delegate = async (engine: Engine, parent: ChildParent, ask: DelegateAsk): 
         ...opt("tainted", taintOf(parent.conversationId)),
         from: { conversation: parent.conversationId, ...opt("title", engine.deps.entryOf(parent.conversationId)?.title?.slice(0, 200)) },
     };
+    const description = ask.description ?? ask.task.split("\n")[0]?.slice(0, 120);
+    if ("contact" in where) {
+        return delegateToContact(contactEngineOf(engine, where.sends), where.contact, { id, parent: parent.conversationId, asking, description }, linkedLandingWords);
+    }
     const pending: StoredChild = {
         id,
         parent: parent.conversationId,
         ...where.filed,
         asking,
-        ...opt("description", ask.description ?? ask.task.split("\n")[0]?.slice(0, 120)),
+        ...opt("description", description),
         startedAt: Date.now(),
     };
     // Filed before it is asked: a daemon that stops between the two asks again at boot (reask), rather than leaving a
@@ -382,33 +419,6 @@ const delegate = async (engine: Engine, parent: ChildParent, ask: DelegateAsk): 
         ? `Handed to "${stored.sandbox}", where it waits for that sandbox's owner to allow it: its Access, Programs, Linked sandboxes has the Allow, and turning off "Ask me first" there lets the link's next tasks start at once.`
         : `Handed to "${stored.sandbox}", which is working on it in its own conversation${stored.person === undefined ? "" : ` for ${stored.person}, who reads it there`}. ${linkedLandingWords(stored.sandbox)}`;
     return { ok: true, id, note: `${note} Supervise it with wait(target: "${id}").` };
-};
-
-const listLinks = async (engine: Engine, conversationId: string, only?: string): Promise<readonly LinkListing[]> => {
-    const standing = engine.deps.standingOf(conversationId);
-    const cards = (await engine.deps.capabilities())
-        .filter(isLinkCard)
-        .filter((card) => (standing === undefined || standing.granted.includes(card.id)) && (only === undefined || card.id === only));
-    return Promise.all(
-        cards.map(async (card): Promise<LinkListing> => {
-            const hello: LinkAnswerOf<LinkHello> = await engine.wire.hello({ id: card.id, config: card.config }, AbortSignal.timeout(HELLO_MS));
-            if (!hello.ok) {
-                return { to: card.id, sandbox: sandboxNameOf(card), online: false, why: hello.message };
-            }
-            const { terms } = hello.value;
-            return {
-                to: card.id,
-                // The name the owner knows it by, from pairing; what it calls itself is only its container's name.
-                sandbox: card.config.name ?? hello.value.sandbox,
-                online: true,
-                ...opt("role", terms.role),
-                approve: terms.approve,
-                turnsPerHour: terms.turnsPerHour,
-                records: terms.records === true,
-                operate: terms.operate === true,
-            };
-        }),
-    );
 };
 
 const SENT_NOTES = {
@@ -510,8 +520,14 @@ const reask = async (engine: Engine, pending: StoredChild & { asking: LinkTask }
 
 const resume = async (engine: Engine): Promise<void> => {
     const stored = (await engine.read()).children;
+    const sends = engine.deps.contacts;
     for (const entry of stored) {
         const { remote, asking } = entry;
+        // A contact's task is not followed: its updates are pushed, so it only goes back on the roster.
+        if (entry.via === "contact") {
+            void withContact(sends === undefined ? undefined : contactEngineOf(engine, sends), (reach) => resumeContact(reach, entry));
+            continue;
+        }
         if (remote === undefined) {
             void (asking === undefined ? engine.drop(entry.id) : reask(engine, { ...entry, asking })).catch((error: Error) =>
                 engine.deps.logger.warn({ err: error, child: entry.id }, "linked task: not asked again"),
@@ -540,22 +556,28 @@ export const createLinkedChildren = (deps: LinkedChildrenDeps): LinkedChildren =
         return child?.stored.parent === parent.conversationId ? child : undefined;
     };
     const notMine: ChildActionResult = { ok: false, message: "No such task of this conversation. `list` shows yours." };
+    // A contact's task through the contact engine, a link's or a person route's through the follower's.
+    const contacts = (): ContactEngine | undefined => (deps.contacts === undefined ? undefined : contactEngineOf(engine, deps.contacts));
+    const byWire = async (child: Live, contact: (reach: ContactEngine) => Promise<ChildActionResult>, link: () => Promise<ChildActionResult>): Promise<ChildActionResult> => {
+        const reach = contacts();
+        return child.stored.via !== "contact" ? link() : reach === undefined ? { ok: false, message: "This sandbox cannot reach its contacts now." } : contact(reach);
+    };
     return {
         owns: (childId) => childId.startsWith(LINKED_PREFIX) && engine.live.has(childId),
         delegate: (parent, ask) => delegate(engine, parent, ask),
-        links: (conversationId) => listLinks(engine, conversationId),
-        about: async (conversationId, link) => (await listLinks(engine, conversationId, link))[0],
+        links: (conversationId) => listLinkCards({ ...deps, wire: engine.wire }, conversationId),
+        about: async (conversationId, link) => (await listLinkCards({ ...deps, wire: engine.wire }, conversationId, link))[0],
         send: async (parent, childId, message) => {
             const child = mine(parent, childId);
-            return child === undefined ? notMine : sendTo(engine, child, message);
+            return child === undefined ? notMine : byWire(child, (reach) => sendToContact(reach, child, message), () => sendTo(engine, child, message));
         },
         answer: async (parent, childId, answers) => {
             const child = mine(parent, childId);
-            return child === undefined ? notMine : answerTo(engine, child, answers);
+            return child === undefined ? notMine : byWire(child, (reach) => answerContact(reach, child, answers), () => answerTo(engine, child, answers));
         },
         cancel: async (parent, childId) => {
             const child = mine(parent, childId);
-            return child === undefined ? notMine : cancelOf(engine, child);
+            return child === undefined ? notMine : byWire(child, (reach) => cancelContact(reach, child), () => cancelOf(engine, child));
         },
         report: (childId) => {
             const report = engine.live.get(childId)?.report;
@@ -569,6 +591,9 @@ export const createLinkedChildren = (deps: LinkedChildrenDeps): LinkedChildren =
             const child = engine.live.get(childId);
             return child === undefined ? undefined : linkedLandingWords(child.stored.sandbox);
         },
+        heard: async (contactId, requestId, status) => void (await withContact(contacts(), (reach) => heardUpdate(reach, contactId, requestId, status))),
+        refused: async (contactId, payload, reason) => void (await withContact(contacts(), (reach) => heardRefusal(reach, contactId, payload, reason))),
+        moveToContact: async (card, upgrade) => moveCardToContact(contacts(), engine.read, card, upgrade, (child) => follow(engine, child)),
         resume: () => resume(engine),
         close: () => {
             engine.state.closed = true;

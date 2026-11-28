@@ -3444,11 +3444,12 @@
                             "description": "The event types this source can fire, with the wording the automation editor offers them under. The daemon accepts no others."
                         },
                         "strangers": {
-                            "description": "Set when anyone on the internet can reach this source without the owner adding them (a chat on a public page, a crash reporter), which holds its wakes to the owner's floor for strangers: `visitor`, someone talking with an assistant; `report`, a stranger's report setting work going, held for approval unless the owner says otherwise. Absent: its senders are people the owner connected, held to the floor for a team chat message.",
+                            "description": "Set when anyone on the internet can reach this source without the owner adding them (a chat on a public page, a crash reporter), which holds its wakes to the owner's floor for strangers: `visitor`, someone talking with an assistant; `report`, a stranger's report setting work going, held for approval unless the owner says otherwise; `contact`, a sandbox that is not a contact yet asking to become one, held for approval unless the owner says otherwise. Absent: its senders are people the owner connected, held to the floor for a team chat message.",
                             "type": "string",
                             "enum": [
                                 "visitor",
-                                "report"
+                                "report",
+                                "contact"
                             ],
                             "power": {
                                 "key": "listener-strangers:${provider}",

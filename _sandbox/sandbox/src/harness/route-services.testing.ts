@@ -52,6 +52,7 @@ import { testConfig } from "../env.config.testing.js";
 import { testTurnMounts } from "../agent/tools/turn-mounts.testing.js";
 import { webextSliceFake } from "../webext/webext-slice.testing.js";
 import { phonesSliceFake } from "../phones/phone-slice.testing.js";
+import { s2sSliceFake } from "../s2s/s2s-slice.testing.js";
 import { depsSliceFake } from "../workspace/deps/deps-slice.testing.js";
 import { workspaceSliceFake } from "../workspace/workspace-slice.testing.js";
 import { fakeHistory } from "./route-fakes.testing.js";
@@ -188,6 +189,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         ...sessionsSliceFake(context),
         ...webextSliceFake(),
         ...phonesSliceFake(),
+        ...s2sSliceFake(context),
         ...workspaceSliceFake(),
         ...claudeSliceFake({ claudeStore }),
         ...codexSliceFake(),

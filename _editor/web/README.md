@@ -185,8 +185,16 @@ flowchart LR
   rail tile, the page or the control itself, the closest one on screen leading (`features/tour/`). The list is never
   offered on a sandbox where work has already landed, so nobody who is past their first run meets it. `?mode=fresh`
   in `_site/demo` shows it.
-- **Map.** `/sandbox/map` (`features/sandbox/map/`, maintainer and up) closes the hub's Reach group and draws the three
-  rows above it as one picture. On the left are the ways in: people, control tokens and other sandboxes' links. In the
+- **Messages.** `/sandbox/messages` (`features/sandbox/messages/`, docs/architecture/messages.md) sits in the hub's
+  Reach group, badged with unread threads and waiting contact requests: the Inbox (threads, each read and answered in
+  place, files downloaded or taken into a folder), Contacts (requests first, then each contact's key, notices and
+  grants, added by address or by pairing two of the reader's sandboxes, which this editor does since it is signed in to
+  both) and Identity (address, fingerprint, own domains and their TXT records, rotation, the owner's recovery key). Its reads,
+  derivations and words live in `models/messages/` (the `contact` need card reads them too), every call through
+  `messagesApi.ts`, injected (`MESSAGES_API`) so its suites hand it a fake; a daemon that serves no `/s2s/threads`
+  leaves the row out. It replaced the Overview's Received card.
+- **Map.** `/sandbox/map` (`features/sandbox/map/`, maintainer and up) closes the hub's Reach group and draws Access and
+  Roles, the rows that set who gets in and what the box reaches, as one picture. On the left are the ways in: people, control tokens and other sandboxes' links. In the
   middle is the box, with its areas, roles and secrets. On the right is everything it reaches: services, accounts
   and browsers, machines, other sandboxes, what it publishes, and models. Pointing at a way in lights what it reaches
   and dims the rest. Pointing at a thing lights who reaches it, and threads it to what it is tied to (a role to its

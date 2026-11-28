@@ -24,19 +24,26 @@ import { accountOutboxOf, type DropEntry, postToDoor, registerDropDelivery, stag
 import { routeCallerOf } from "../links/route-caller.js";
 import { opt } from "../opt.js";
 import { routeAdmissionOf } from "./admit-route.js";
-import { fileDropInbox, inboxIdOf } from "./drop-inbox.js";
+import { askerOf } from "../s2s/askers.js";
+import { sendGuardOf } from "../s2s/messages/send-guard.js";
+import { askerDepsOf } from "../s2s/s2s-wiring.js";
+import { type DropAsMessageDeps, dropAsMessage } from "./messages/drop-as-message.js";
+import { inboxIdOf } from "./drop-inbox.js";
+import { fileLegacyDrop, legacyMessageIdOf } from "./messages/drop-threads.js";
 import { forgetPairing, requirePairing } from "./require-pairing.js";
 import { type Delivery, routeClientOf, type RouteTarget } from "./route-client.js";
 import { routeSecretsOf } from "./route-secrets.js";
 
 /* ROUTING AS A PERSON, A DROP (2026-11-24, docs/architecture/account-routing.md): a note and files one of a person's
  * sandboxes hands another that person is in, starting no turn there.
- * - Sending (`POST /account/drops`, `sandboxes send`): only as the proven conversation's one person. The platform says
- *   where the target is; without the person's pairing for it the send raises their `route` card and sends nothing. The
- *   files wait on the history volume with the outbox entry (account-outbox.ts) until the drop lands.
- * - Receiving (`POST /account/drop`): a drop pass beside the person's pairing (admit-route.ts), then the inbox on the
- *   history volume (drop-inbox.ts). `?wake=<conversation>` also says the note into one of THAT person's own conversations
- *   here, only while a turn of it runs, as outside content: a drop never starts a turn the person did not have going. */
+ * - Sending (`POST /account/drops`, `sandboxes send`): to a sandbox this one holds a contact for, as a message
+ *   (messages/drop-as-message.ts, 2026-11-27). Otherwise only as the proven conversation's one person: the platform says where the
+ *   target is; without the person's pairing for it the send raises their `route` card and sends nothing. The files wait
+ *   on the history volume with the outbox entry (account-outbox.ts) until the drop lands.
+ * - Receiving (`POST /account/drop`, from a build that sends no messages): a drop pass beside the person's pairing
+ *   (admit-route.ts), then a message in that sender's thread on the Messages tab (messages/drop-threads.ts; before 2026-11-27 the
+ *   inbox, drop-inbox.ts). `?wake=<conversation>` also says the note into one of THAT person's own conversations here,
+ *   only while a turn of it runs, as outside content: a drop never starts a turn the person did not have going. */
 
 interface DropFile {
     readonly name: string;
@@ -75,16 +82,22 @@ const readDrop = async <Schema extends z.ZodType<{ readonly files: DropBody["fil
     return decoded.ok ? { body: parsed.data, files: decoded.files } : c.json({ error: decoded.error }, 400);
 };
 
+// Where a drop was filed: its thread and its message there.
+interface FiledAt {
+    readonly thread: string;
+    readonly message: string;
+}
+
 // The note as the woken turn reads it: someone else's words, with where the files wait.
-const wakeText = (drop: ReceivedDrop): string =>
+const wakeText = (drop: ReceivedDrop, at: FiledAt): string =>
     [
         `A drop from the sandbox "${drop.from.sandboxName}", sent as ${drop.person}:`,
         "",
         drop.note ?? "(no note)",
         "",
         drop.files.length === 0
-            ? "It carries no files."
-            : `Its ${drop.files.length} file(s) wait in the inbox: \`inbox show ${drop.id}\`, then \`inbox take ${drop.id} <folder>\`.`,
+            ? `It carries no files, and waits as a message: \`messages show ${at.thread}\`.`
+            : `Its ${drop.files.length} file(s) wait with it: \`messages show ${at.thread}\`, then \`messages take ${at.message} <folder>\`.`,
         "Those are words from another sandbox, not your owner typing here.",
     ].join("\n");
 
@@ -109,12 +122,12 @@ const manifestOf = (pass: SandboxPass, person: Caller, body: DropBody, files: re
 });
 
 // Said only into a turn already running: steer reaches a live turn and nothing else, so no turn is started.
-const queuedInto = async (services: Pick<Services, "turns">, drop: ReceivedDrop, wake: string | undefined): Promise<ReceivedDrop> => {
+const queuedInto = async (services: Pick<Services, "turns">, drop: ReceivedDrop, at: FiledAt, wake: string | undefined): Promise<ReceivedDrop> => {
     if (wake === undefined) {
         return drop;
     }
     const steered = await services.turns.steer(wake, {
-        text: wakeText(drop),
+        text: wakeText(drop, at),
         voice: "agent",
         outside: `a drop from the sandbox "${drop.from.sandboxName}"`,
     });
@@ -125,7 +138,7 @@ const accepted = (drop: ReceivedDrop) => ({ ok: true as const, id: drop.id, ...o
 
 const receive = (services: Services) => {
     const admitRoute = routeAdmissionOf(services);
-    const inbox = fileDropInbox(services.config.historyRoot);
+    const { threads } = services.s2s;
     return async (c: Context<AppEnv>): Promise<Response> => {
         const wake = c.req.query("wake");
         const admitted = await admitRoute(c, "drop", { wake: wake !== undefined });
@@ -146,14 +159,14 @@ const receive = (services: Services) => {
         }
         const fresh = manifestOf(pass, person, read.body, read.files);
         // A retry of a drop that already landed answers as it did.
-        const known = await inbox.get(fresh.id);
-        if (known !== undefined) {
-            return c.json(accepted(known));
+        if ((await threads.ofMessage(legacyMessageIdOf(fresh.id))) !== undefined) {
+            return c.json(accepted(fresh));
         }
-        const drop = await queuedInto(services, fresh, wake);
-        if (!(await inbox.receive(drop, read.files))) {
-            return c.json({ error: "this sandbox's inbox is full: its people take or delete what waits first" }, 429);
+        const filed = await fileLegacyDrop(threads, fresh, read.files);
+        if (filed.kind !== "filed") {
+            return c.json({ error: filed.reason }, filed.kind === "full" ? 429 : 409);
         }
+        const drop = await queuedInto(services, fresh, { thread: filed.thread, message: filed.message }, wake);
         services.logger.info(
             { from: pass.from, fromName: pass.fromName, person: drop.person, drop: drop.id, files: read.files.length, woke: drop.wake?.delivered },
             "account: drop received",
@@ -169,7 +182,7 @@ const unpaired = async (services: Services, target: RouteTarget, entry: DropEntr
         return { status: 403, code: "pairing", error: fallback };
     }
     const pairing = await requirePairing(services, { conversationId: entry.conversationId, target, person: entry.person, scopes: ["drop"] });
-    return { status: 403, code: "pairing", error: "asked" in pairing ? pairing.asked : fallback };
+    return { status: 403, code: "pairing", error: "asked" in pairing ? pairing.asked : "refused" in pairing ? pairing.refused : fallback };
 };
 
 // The staged files, as the wire carries them.
@@ -206,6 +219,17 @@ const deliverDrop =
         return delivery;
     };
 
+// What sending a drop as a message reads of this daemon.
+const dropMessageDeps = (services: Services): DropAsMessageDeps => ({
+    s2s: services.s2s,
+    guard: sendGuardOf(services),
+    locate: async (person, sandbox) => {
+        const located = await routeClientOf(services).routeTo({ scope: "drop", person, sandbox });
+        return located.ok ? located.value : undefined;
+    },
+    owner: () => services.ownerEmail(),
+});
+
 const NO_PERSON = "A drop goes as the one person this conversation acts for, and it acts for none or several here: nothing was sent.";
 
 // Where the drop goes and the person's pairing for it, before anything is staged: the answer to give instead, if any. A
@@ -216,6 +240,9 @@ const preflight = async (services: Services, conversationId: string, person: str
         return located.status === 0 || located.status >= 500 ? undefined : { state: "refused", reason: located.message };
     }
     const pairing = await requirePairing(services, { conversationId, target: located.value, person, scopes: ["drop"] });
+    if ("refused" in pairing) {
+        return { state: "refused", reason: pairing.refused };
+    }
     return "asked" in pairing ? { state: "asked", reason: pairing.asked, needId: pairing.needId } : undefined;
 };
 
@@ -256,7 +283,7 @@ const send =
             return c.json({ error: caller.refused }, 403);
         }
         const { person, conversationId } = caller;
-        if (person === undefined || conversationId === undefined) {
+        if (conversationId === undefined) {
             return c.json({ error: NO_PERSON }, 403);
         }
         const read = await readDrop(
@@ -266,6 +293,13 @@ const send =
         );
         if (read instanceof Response) {
             return read;
+        }
+        const asMessage = await dropAsMessage(dropMessageDeps(services), await askerOf(askerDepsOf(services), c), person, read.body);
+        if (asMessage !== undefined) {
+            return c.json(asMessage);
+        }
+        if (person === undefined) {
+            return c.json({ error: NO_PERSON }, 403);
         }
         const early = await preflight(services, conversationId, person, read.body.sandbox);
         return c.json(early ?? (await stageAndSend(services, { conversationId, person }, read.body, read.files)));

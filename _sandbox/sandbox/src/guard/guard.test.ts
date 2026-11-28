@@ -3,13 +3,14 @@ import { COMMAND_CLASS_LABELS } from "@intentic/sandbox-contract/policy/command-
 import { childSpawn, commandRun, outboundSend, secretSend, sessionStart, wakeSourceOf } from "./actions.js";
 import { defineGuardedAction, guard, type GuardedAction, HOLD, isGuardedAction, listGuardedActions } from "./guard.js";
 
-// Spelled out, not from schema defaults: `issues` defaults to hold, which would test policy, not mechanism.
+// Spelled out, not from schema defaults: `issues` and `contact` default to hold, which would test policy, not mechanism.
 const allowAll: AdmissionPolicy = {
     schedule: "allow",
     event: "allow",
     listener: "allow",
     webchat: "allow",
     issues: "allow",
+    contact: "allow",
     workspace: "allow",
     workflow: "allow",
 };
@@ -161,6 +162,18 @@ describe("wakeSourceOf", () => {
         expect(wakeSourceOf({ kind: "listener", provider: "acme-crashes" }, "report")).toBe("issues");
         // A declaration means nothing on a trigger that is not a listener.
         expect(wakeSourceOf({ kind: "event" }, "report")).toBe("event");
+    });
+
+    test("holds a contact source to the contact floor only where a stranger's contact request can reach the trigger", () => {
+        expect(wakeSourceOf({ kind: "listener", provider: "s2s" }, "contact")).toBe("contact");
+        expect(wakeSourceOf({ kind: "listener", provider: "s2s", eventType: "contact.request" }, "contact")).toBe("contact");
+        // Only a contact a person accepted sends these, so they answer to the team chat's floor.
+        expect(wakeSourceOf({ kind: "listener", provider: "s2s", eventType: "message" }, "contact")).toBe("listener");
+        expect(wakeSourceOf({ kind: "listener", provider: "s2s", eventType: "report" }, "contact")).toBe("listener");
+        expect(wakeSourceOf({ kind: "listener", provider: "s2s", eventType: "task.request" }, "contact")).toBe("listener");
+        // A visitor or a reporter may send anything its source carries, so an event filter keeps their floor.
+        expect(wakeSourceOf({ kind: "listener", provider: "acme-chat", eventType: "message" }, "visitor")).toBe("webchat");
+        expect(wakeSourceOf({ kind: "listener", provider: "acme-crashes", eventType: "report" }, "report")).toBe("issues");
     });
 });
 

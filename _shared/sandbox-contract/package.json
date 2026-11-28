@@ -140,6 +140,17 @@
                 "default": "./dist/protocol/peer-mcp-server.js"
             }
         },
+        "./s2s": {
+            "types": "./dist/protocol/s2s/index.d.ts",
+            "import": {
+                "@intentic/src": "./src/protocol/s2s/index.ts",
+                "default": "./dist/protocol/s2s/index.js"
+            },
+            "require": {
+                "@intentic/src": "./src/protocol/s2s/index.ts",
+                "default": "./dist/protocol/s2s/index.js"
+            }
+        },
         "./tunnel-ids": {
             "types": "./dist/ids/tunnel-ids.d.ts",
             "import": {
@@ -407,6 +418,10 @@
         "@intentic/constants": "workspace:*",
         "@intentic/extension-manifest": "workspace:*",
         "@intentic/registry": "workspace:*",
+        "@noble/ciphers": "catalog:",
+        "@noble/curves": "catalog:",
+        "@noble/hashes": "catalog:",
+        "@noble/post-quantum": "catalog:",
         "@orpc/contract": "catalog:",
         "zod": "catalog:"
     },

@@ -49,6 +49,8 @@ export interface PersonTasksStore {
     readonly unstarted: () => Promise<readonly { readonly key: PersonRouteKey; readonly task: StoredLinkTask }[]>;
     // Which pair opened this conversation; undefined for any other.
     readonly ownerOf: (conversationId: string) => Promise<{ readonly key: PersonRouteKey; readonly task: StoredLinkTask } | undefined>;
+    // Every pair and its tasks: what a contact's status push looks over (links/contacts/task-push.ts).
+    readonly list: () => Promise<readonly { readonly key: PersonRouteKey; readonly tasks: readonly StoredLinkTask[] }[]>;
 }
 
 const same = (route: PersonRoute, key: Pick<PersonRouteKey, "from" | "person">): boolean => route.from === key.from && route.person === key.person.toLowerCase();
@@ -117,5 +119,6 @@ export const filePersonTasks = (path: string): PersonTasksStore => {
                 route.tasks.filter((task) => task.state === "running" && task.task !== undefined).map((task) => ({ key: keyOf(route), task })),
             ),
         ownerOf: find,
+        list: async () => (await file.read()).routes.map((route) => ({ key: keyOf(route), tasks: route.tasks })),
     };
 };

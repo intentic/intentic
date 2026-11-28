@@ -10,9 +10,10 @@ import { CORE_TRIGGER_SOURCES } from "../catalog.js";
 // WHICH ADMISSION FLOOR A WAKE ANSWERS TO, read off what its source declares (2026-11-26). A listener source anyone on the
 // internet reaches says so (`strangers` on the core's own sources and on an extension's `contributes.listener`), and its
 // wakes are held to the owner's floor for that kind of stranger instead of the team chat's. The core's own sources answer
-// first, as in the catalogue, so no extension can relabel them (none of them is reached by strangers since the Visitor
-// chat moved out); then the extension that owns the provider's listener (listener-state.ts), the one whose gateway or
-// doors actually fire it: the issues extension's bug reports and the visitor-chat extension's chats since 2026-11-26.
+// first, as in the catalogue, so no extension can relabel them (of them only `s2s` is reached by strangers since the
+// Visitor chat moved out, a sandbox that is not a contact asking to become one, 2026-11-27); then the extension that owns
+// the provider's listener (listener-state.ts), the one whose gateway or doors actually fire it: the issues extension's
+// bug reports and the visitor-chat extension's chats since 2026-11-26.
 
 /** What the provider's source declares about strangers, or undefined for a source only the owner's people reach. */
 export const strangersOf = async (services: ExtensionHost, provider: string): Promise<ListenerStrangers | undefined> => {

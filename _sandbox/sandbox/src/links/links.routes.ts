@@ -13,7 +13,7 @@ import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import { opt } from "../opt.js";
-import type { ResolvedLink, StoredLinkTask } from "./inbound-links.js";
+import type { InboundLinks, ResolvedLink, StoredLinkTask } from "./inbound-links.js";
 import {
     answerTask,
     askTask,
@@ -36,6 +36,8 @@ import { linkBody as bodyOf, presentedLink } from "./link-door.js";
 // nothing else, which is the whole of what a link reaches here.
 
 export interface LinkRoutesDeps extends LinkTaskDeps {
+    // The links themselves, not only their task book: the owner's routes mint, re-term and revoke them.
+    readonly links: InboundLinks;
     readonly auth: Services["auth"];
     // What this sandbox calls itself, told to the asking side so its agent can name where the work went.
     readonly sandboxName: () => string;
@@ -48,6 +50,7 @@ export interface LinkRoutesDeps extends LinkTaskDeps {
 /** The routes' deps, read off the daemon's services. */
 const linkRoutesDepsOf = (services: LinkServices & Pick<Services, "auth" | "info" | "roles">): LinkRoutesDeps => ({
     ...linkTaskDepsOf(services),
+    links: services.inboundLinks,
     auth: services.auth,
     sandboxName: () => services.info?.name ?? "this sandbox",
     roles: async () => (await services.roles.list()).map((role) => ({ id: role.id, label: role.label })),

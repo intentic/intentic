@@ -24,6 +24,10 @@ import { wakeLinkTaskStatus } from "./link-task-status-wait.js";
 // A link reaches only the conversations it opened: each one is filed on the link as a task, and the link doors answer
 // for nothing else (links.routes.ts). That list is the whole of a link's reach, which is why it lives with the
 // credential rather than in the conversation registry.
+//
+// Once both sandboxes speak s2s/1 a link is upgraded into a contact (links/upgrade/, 2026-11-27): its tasks move to the
+// contact's book and its token resolves at no door any more. The record stays, marked with the contact it became, so the
+// owner still reads where the link went, and its hash answers only a repeat of the upgrade itself (the same contact).
 
 // What a stored task remembers. `held` and the settled states are written here; whether a running task is parked on a card
 // is read off its live run as it is asked (link-tasks.ts), since that moves without anything being written.
@@ -60,6 +64,9 @@ const StoredLinkSchema = z.object({
     createdBy: z.string().optional(),
     lastUsedAt: z.number().optional(),
     tasks: z.array(StoredLinkTaskSchema),
+    // Set once it became a contact (links/upgrade/): the contact's id here, when, and the key the token vouched for, which a
+    // repeat of the upgrade must post again (absent on a link upgraded before it was kept: such a token answers no repeat).
+    upgraded: z.object({ contact: z.string(), at: z.number(), fingerprint: z.string().optional() }).optional(),
 });
 type StoredLink = z.infer<typeof StoredLinkSchema>;
 const StoredLinksSchema = z.object({ links: z.array(StoredLinkSchema) });
@@ -102,11 +109,29 @@ const TOUCH_INTERVAL_MS = 60_000;
 
 const LIVE_STATES: ReadonlySet<StoredState> = new Set(["held", "running"]);
 
-// A presented token, resolved: which link it is and what that link is held to.
+// The stored link a presented token was minted as, upgraded or not.
+const presentedAs = (stored: StoredLinks, presented: string): StoredLink | undefined => {
+    if (!presented.startsWith(LINK_TOKEN_PREFIX)) {
+        return undefined;
+    }
+    const hash = sha256Hex(presented);
+    // Fixed-length hex digests, so the comparison is timing-safe whatever was presented.
+    return stored.links.find((candidate) => tokenEquals(candidate.hash, hash));
+};
+
+// A presented token, resolved: which link it is, what that link is held to, and the sandbox it was minted for.
 export interface ResolvedLink {
     readonly id: string;
     readonly label: string;
     readonly terms: LinkTerms;
+    readonly from?: LinkPeer | undefined;
+}
+
+// Who handed a task over, as the task code (link-tasks.ts) reads it: a link resolved from its token, or since 2026-11-27 a
+// contact (links/contacts/), whose tasks are held to the terms its `task` grant carries under the same names. `contact` changes
+// only the words the task is drawn with and the key its hourly allowance is booked under.
+export interface TaskOrigin extends ResolvedLink {
+    readonly contact?: { readonly address: string } | undefined;
 }
 
 // New terms as a request carries them: any field left out (or undefined) keeps what the link has.
@@ -121,6 +146,9 @@ export interface MintedLink {
     readonly id: string;
     readonly token: string;
 }
+
+// What a retired link keeps of the contact it became.
+export type UpgradedLink = NonNullable<StoredLink["upgraded"]>;
 
 // A task as the store files it at its first ask.
 export interface NewLinkTask {
@@ -153,6 +181,11 @@ export interface InboundLinks {
     readonly summary: (id: string) => Promise<InboundLinkSummary | undefined>;
     readonly update: (id: string, change: LinkTermsChange & { readonly label?: string | undefined }) => Promise<InboundLinkSummary | undefined>;
     readonly revoke: (id: string) => Promise<boolean>;
+    // The link a presented token was minted as, once it was upgraded into a contact: what a repeat of the upgrade reads.
+    readonly resolveUpgraded: (presented: string) => Promise<(ResolvedLink & { readonly upgraded: UpgradedLink }) | undefined>;
+    // Marks the link upgraded into `contact` for the key `fingerprint` and takes every task it filed out of it, answered
+    // for the contact's book; undefined when it was upgraded already, which an upgrade never does twice.
+    readonly upgrade: (id: string, contact: string, fingerprint: string, now?: number) => Promise<readonly StoredLinkTask[] | undefined>;
     // The task this link opened under that request id or that conversation id, or undefined: the link's whole reach.
     readonly task: (linkId: string, key: { readonly requestId?: string; readonly conversationId?: string }) => Promise<StoredLinkTask | undefined>;
     readonly addTask: (linkId: string, task: NewLinkTask, now?: number) => Promise<StoredLinkTask | undefined>;
@@ -163,6 +196,12 @@ export interface InboundLinks {
     readonly linkOf: (conversationId: string) => Promise<{ readonly linkId: string; readonly task: StoredLinkTask } | undefined>;
 }
 
+// The tasks one kind of origin filed here, as the task code reads and moves them: the links' own (this file), or the
+// contacts' (links/contacts/contact-tasks-store.ts), each keyed by its origin's id.
+export type LinkTaskBook = Pick<InboundLinks, "task" | "addTask" | "moveTask" | "linkOf"> & {
+    readonly unstarted: () => Promise<readonly { readonly link: TaskOrigin; readonly task: StoredLinkTask }[]>;
+};
+
 const summaryOf = (link: StoredLink): InboundLinkSummary => ({
     id: link.id,
     label: link.label,
@@ -172,6 +211,7 @@ const summaryOf = (link: StoredLink): InboundLinkSummary => ({
     ...opt("createdBy", link.createdBy),
     ...opt("lastUsedAt", link.lastUsedAt),
     conversations: link.tasks.filter((task) => task.state !== "held" && task.state !== "declined").length,
+    ...opt("upgraded", link.upgraded === undefined ? undefined : { contact: link.upgraded.contact, at: link.upgraded.at }),
     requests: link.tasks
         .filter((task) => task.state === "held")
         .toSorted((left, right) => left.askedAt - right.askedAt)
@@ -278,13 +318,23 @@ export const fileInboundLinks = (path: string): InboundLinks => {
             return { id, token };
         },
         resolve: async (presented) => {
-            if (!presented.startsWith(LINK_TOKEN_PREFIX)) {
-                return undefined;
-            }
-            const hash = sha256Hex(presented);
-            // Fixed-length hex digests, so the comparison is timing-safe whatever was presented.
-            const link = (await file.read()).links.find((candidate) => tokenEquals(candidate.hash, hash));
-            return link === undefined ? undefined : { id: link.id, label: link.label, terms: link.terms };
+            const link = presentedAs(await file.read(), presented);
+            return link === undefined || link.upgraded !== undefined ? undefined : { id: link.id, label: link.label, terms: link.terms, ...opt("from", link.from) };
+        },
+        resolveUpgraded: async (presented) => {
+            const link = presentedAs(await file.read(), presented);
+            return link?.upgraded === undefined ? undefined : { id: link.id, label: link.label, terms: link.terms, ...opt("from", link.from), upgraded: link.upgraded };
+        },
+        upgrade: async (id, contact, fingerprint, now = Date.now()) => {
+            let taken: readonly StoredLinkTask[] | undefined;
+            await changeLink(id, (link) => {
+                if (link.upgraded !== undefined) {
+                    return link;
+                }
+                taken = link.tasks;
+                return { ...link, tasks: [], upgraded: { contact, at: now, fingerprint } };
+            });
+            return taken;
         },
         touch: async (id, now = Date.now()) => {
             await file.update((stored) => {

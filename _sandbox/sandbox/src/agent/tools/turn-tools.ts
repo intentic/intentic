@@ -1,4 +1,5 @@
 import { opt } from "../../opt.js";
+import { RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract/policy/reserved-servers";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
 import { accountSitesOf } from "../../browser/tools/account-hosts.js";
 import { browserServersOf, type BrowserTurnTools } from "../../browser/tools/browser-tools.js";
@@ -25,7 +26,7 @@ export interface TurnRemoteTools {
 
 // What a turn mounts through the daemon's MCP door. Named, because the suites' one stand-in for it (turn-mounts.testing.ts)
 // is typed by it: a mount a turn starts reading is a compile error there, not a throw in every suite that plans a turn.
-export type TurnMountDeps = Pick<Services, "turnMounts" | "browserRouters" | "desktopServers" | "linkMounts">;
+export type TurnMountDeps = Pick<Services, "turnMounts" | "browserRouters" | "desktopServers" | "linkMounts" | "contactMounts">;
 
 // `accountSignInUrls` optional, so a suite's stand-in that predates it composes the same mounts minus the steer.
 export type TurnToolsDeps = TurnMountDeps & Pick<Services, "tools"> & Partial<Pick<Services, "accountSignInUrls">> & ExtensionHost;
@@ -35,6 +36,9 @@ export type TurnToolsDeps = TurnMountDeps & Pick<Services, "tools"> & Partial<Pi
 // connected machines, linked sandboxes and browsers it was granted, its extension cards' endpoints and its browser routers. One composer
 // for every runtime, so a capability the owner connected can't reach one loop and miss another. Internal first; a
 // same-named later entry overrides, matching mcpServersOf's last-wins merge, so the browsers (reserved names) come last.
+// The guests, a linked sandbox's server and a contact's, are named by another sandbox, so none of them ever replaces
+// another server: a contact's is named clear of every other name the turn mounts (s2s/contacts/contact-mounts.ts), and
+// any guest that still names a daemon server or one mounted before it is left out (withoutShadowing).
 export const turnToolsOf = async (
     services: TurnToolsDeps,
     granted: readonly Capability[],
@@ -82,19 +86,20 @@ export const turnToolsOf = async (
         // Mounted beside the browsers rather than by browser-tools.ts, since the desktop builds on the browser stack's
         // display: the same pack brings it. It needs the role's browser power and its shell power (desktop-tools.ts).
         const desktop = services.desktopServers(lease, { browser: turn.anonymousBrowser, shell: turn.shell });
+        const own = [
+            ...services.tools,
+            ...mcpToolsOf(granted, lease),
+            ...peerToolsOf("device", granted, lease),
+            ...peerToolsOf("webext", granted, lease),
+            ...peerToolsOf("phone", granted, lease),
+        ];
+        // The owner's other sandboxes this turn may hand work to, each a server of its own like a computer, and the
+        // contacts it may use (s2s/contacts/contact-mounts.ts), named clear of every server above and below.
+        const links = withoutShadowing(services.linkMounts(granted, lease, turn.conversationId), [...own, ...extension, ...browser.servers, ...desktop]);
+        const taken = new Set([...own, ...links, ...extension, ...browser.servers, ...desktop].map((tool) => tool.name));
+        const contacts = withoutShadowing(await services.contactMounts(granted, lease, turn.conversationId, taken), [...own, ...links, ...extension, ...browser.servers, ...desktop]);
         return {
-            tools: [
-                ...services.tools,
-                ...mcpToolsOf(granted, lease),
-                ...peerToolsOf("device", granted, lease),
-                ...peerToolsOf("webext", granted, lease),
-                ...peerToolsOf("phone", granted, lease),
-                // The owner's other sandboxes this turn may hand work to, each a server of its own like a computer.
-                ...services.linkMounts(granted, lease, turn.conversationId),
-                ...extension,
-                ...browser.servers,
-                ...desktop,
-            ],
+            tools: [...own, ...links, ...contacts, ...extension, ...browser.servers, ...desktop],
             browser,
             desktop: desktop.length > 0,
             lease: { open: lease.open, holdWith: lease.holdWith },
@@ -104,4 +109,16 @@ export const turnToolsOf = async (
         lease.release();
         throw error;
     }
+};
+
+/** The guests (a linked sandbox's servers, a contact's) that name no daemon server and none of `hosts`, in order. */
+export const withoutShadowing = (guests: readonly AgentTool[], hosts: readonly AgentTool[]): AgentTool[] => {
+    const held = new Set([...RESERVED_MCP_SERVER_NAMES, ...hosts.map((tool) => tool.name)]);
+    return guests.filter((guest) => {
+        if (held.has(guest.name)) {
+            return false;
+        }
+        held.add(guest.name);
+        return true;
+    });
 };

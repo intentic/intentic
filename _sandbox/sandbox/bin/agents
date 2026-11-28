@@ -97,9 +97,11 @@ LOOK UP — reach for these instead of searching /history by hand
                                        sandbox's own test runs on clean trees at main commits saw fail (suites
                                        CI does not run too): the commit, the command, who ran it and when. Main's
                                        CI half comes from the Pipelines extension, from an agent's turn
-  ... --on <link>                      ls, find, show and bundle read a LINKED sandbox's conversations
-                                       instead, when its owner shares records on the link (\`agents links\`
-                                       says which do); \`diagnostics … --on <link>\` reads its logs
+  ... --on <name>                      ls, find, show and bundle read ANOTHER sandbox's conversations instead:
+                                       a contact by that name first (\`messages contacts\`), when it grants this
+                                       sandbox its records, then a linked sandbox whose owner shares records on
+                                       the link (\`agents links\` says which do); \`diagnostics … --on <name>\`
+                                       reads its logs
 
 SAY SOMETHING TO ANOTHER CONVERSATION, OR PRESS ITS CONTINUE
   agents message <handle> '<text>' [--wait] [--timeout <seconds>]
@@ -189,7 +191,10 @@ SPAWN AND SUPERVISE
                                        hand a task to another sandbox the person this conversation works for
                                        is in, as them, with no link: it runs there with their access and
                                        their accounts, and they read it there. The first time, a card asks
-                                       them to allow it (exit 3: carry on, ask again once they have)
+                                       them to allow it (exit 3: carry on, ask again once they have).
+                                       Either way, a contact of this sandbox that gives it tasks, named by its
+                                       name or address (\`messages contacts\`), takes the task first, as a
+                                       message under its grant; its status is sent back as it moves
   agents redirect <sandbox> | --project <repo> --why "…" [--wait <seconds>]
                                        the person's message belongs in another of their sandboxes (it names a
                                        project this workspace lacks, say): a card offers THEIR OWN words, as

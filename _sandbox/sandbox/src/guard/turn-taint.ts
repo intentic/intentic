@@ -72,6 +72,12 @@ export const conversationTainted = (conversationId: string): boolean => live.get
 // What first brought outside content into the live turn, for a caller that wants to name the source.
 export const conversationTaintSource = (conversationId: string): string | undefined => live.get(conversationId)?.source();
 
+/** What a conversation's live turn has taken in, in words cut for another sandbox to carry on (a linked task's `tainted`). */
+export const conversationTaintWords = (conversationId: string): string | undefined => {
+    const source = conversationTaintSource(conversationId);
+    return source === undefined ? undefined : taintWords(source).slice(0, 500);
+};
+
 // Marks the live turn's taint from outside the generator (the child service's composition seam): a child beyond every
 // gate taints its parent too. No live turn is a no-op.
 export const markConversationTaint = (conversationId: string, source: string): void => {

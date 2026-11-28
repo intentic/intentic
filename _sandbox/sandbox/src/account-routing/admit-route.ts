@@ -45,6 +45,11 @@ export interface RouteAdmissionDeps {
     readonly now?: () => number;
 }
 
+export interface AdmitOptions {
+    readonly wake?: boolean;
+    readonly upgraded?: boolean;
+}
+
 // A sliding minute per key, in memory: a restart forgets it, which costs at most one more minute.
 const minuteLimiter = (now: () => number) => {
     const minute = new Map<string, number[]>();
@@ -66,8 +71,11 @@ export const createRouteAdmission = (deps: RouteAdmissionDeps) => {
     const now = deps.now ?? Date.now;
     const limited = minuteLimiter(now);
 
-    /** Admits a request at a door of `scope`, or answers the refusal. `wake` is a drop that asks to start a turn. */
-    const admitRoute = async (c: Context<AppEnv>, scope: PassScope, options: { readonly wake?: boolean } = {}): Promise<RouteAdmitted | Response> => {
+    /**
+     * Admits a request at a door of `scope`, or answers the refusal. `wake` is a drop that asks to start a turn;
+     * `upgraded` is the pairing upgrade's own door, where a pairing already upgraded still answers its repeat.
+     */
+    const admitRoute = async (c: Context<AppEnv>, scope: PassScope, options: AdmitOptions = {}): Promise<RouteAdmitted | Response> => {
         const key = await deps.identityKey(KEY_WAIT_MS);
         if (key === undefined || deps.self === undefined) {
             return refuse(c, 503, "unready", "this sandbox has not heard from the platform yet, so it cannot check a pass: try again shortly");
@@ -87,7 +95,7 @@ export const createRouteAdmission = (deps: RouteAdmissionDeps) => {
     };
 
     // The person a non-report pass routes as, as this sandbox admits them.
-    const admitPerson = async (c: Context<AppEnv>, pass: SandboxPass, scope: PassScope, options: { readonly wake?: boolean }): Promise<RouteAdmitted | Response> => {
+    const admitPerson = async (c: Context<AppEnv>, pass: SandboxPass, scope: PassScope, options: AdmitOptions): Promise<RouteAdmitted | Response> => {
         const email = pass.person ?? "";
         const person = email === "" ? undefined : (await deps.roster()).callerOf(email);
         if (person === undefined) {
@@ -97,7 +105,8 @@ export const createRouteAdmission = (deps: RouteAdmissionDeps) => {
         if (below !== undefined) {
             return refuse(c, 403, "floor", `${email} may not ${scope} here: ${below.error}`);
         }
-        if (!(await deps.pairings().verify(pass.from, email, c.req.header(ROUTE_SECRET_HEADER)))) {
+        const upgraded = options.upgraded === true ? { upgraded: now() } : undefined;
+        if (!(await deps.pairings().verify(pass.from, email, c.req.header(ROUTE_SECRET_HEADER), upgraded))) {
             return refuse(
                 c,
                 403,

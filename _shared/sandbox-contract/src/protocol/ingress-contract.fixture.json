@@ -64,7 +64,9 @@
         "POST /system/runners/git/{repo}/git-upload-pack",
         "POST /system/runners/git/{repo}/git-receive-pack",
         "POST /account/drop",
-        "GET /account/inbox/{id}/files"
+        "GET /account/inbox/{id}/files",
+        "POST /s2s/inbox",
+        "GET /s2s/messages/{id}/files/{name}"
     ],
     "lanes": [
         { "host": "sandbox-abcdef012345.sbx.example.test", "method": "GET", "path": "/workspace/media?path=a.mp4", "lane": "bulk" },
@@ -86,6 +88,9 @@
         { "host": "sandbox-abcdef012345.sbx.example.test", "method": "get", "path": "/workspace/raw?path=a", "lane": "bulk" },
         { "host": "sandbox-abcdef012345.sbx.example.test", "method": "POST", "path": "/account/drop?wake=home-abc", "lane": "bulk" },
         { "host": "sandbox-abcdef012345.sbx.example.test", "method": "GET", "path": "/account/inbox/drop-abc/files", "lane": "bulk" },
+        { "host": "sandbox-abcdef012345.sbx.example.test", "method": "POST", "path": "/s2s/inbox?wake=s3cret", "lane": "bulk" },
+        { "host": "sandbox-abcdef012345.sbx.example.test", "method": "GET", "path": "/s2s/messages/0190a5b2-0000-7000-8000-000000000000/files/plan.md", "lane": "bulk" },
+        { "host": "sandbox-abcdef012345.sbx.example.test", "method": "POST", "path": "/s2s/session", "lane": "interactive" },
         { "host": "sandbox-abcdef012345.sbx.example.test", "method": "GET", "path": "/workspace/thumb?path=a.png", "lane": "interactive" },
         { "host": "sandbox-abcdef012345.sbx.example.test", "method": "POST", "path": "/workspace/upload-diff", "lane": "interactive" },
         { "host": "sandbox-abcdef012345.sbx.example.test", "method": "GET", "path": "/agents", "lane": "interactive" },

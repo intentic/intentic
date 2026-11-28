@@ -407,7 +407,8 @@ const spawningTools = (deps: SubagentWaitDeps): ServerTool[] => [
 ];
 
 // Handing a task to another sandbox as the person this conversation works for (links/linked-destinations.ts,
-// 2026-11-24): no link card, so it lives here beside spawn; a link card keeps its own `mcp__<card>__delegate`.
+// 2026-11-24): no link card, so it lives here beside spawn; a link card keeps its own `mcp__<card>__delegate`. Since
+// 2026-11-27 `to` names a contact first (links/contact-children.ts), which also has its own `mcp__<contact>__delegate`.
 const delegateTool = (deps: SubagentWaitDeps): ServerTool =>
     sdk().tool(
         "delegate",
@@ -419,9 +420,10 @@ const delegateTool = (deps: SubagentWaitDeps): ServerTool =>
             "sandbox raises a card asking the person to allow it: the answer is `open`, nothing was sent; carry on and call " +
             "again once they have. Returns a subagent id at once: supervise it with wait, follow up with send, answer its " +
             "questions with answer, stop it with cancel. Give it a self-contained task: it sees none of this conversation, " +
-            "and its closing report, read as outside content, is all that comes back.",
+            "and its closing report, read as outside content, is all that comes back. A contact of this sandbox that gives it " +
+            "tasks, named by its name or address, takes it first, as a message under the grant it gave.",
         {
-            to: z.string().min(1).describe("The sandbox's name or id, as the person knows it."),
+            to: z.string().min(1).describe("The sandbox's name or id, as the person knows it, or a contact's name or address."),
             task: z.string().min(1).describe("The whole task, self-contained."),
             description: z.string().max(200).optional().describe("One line naming the task, for the board on both sides."),
         },

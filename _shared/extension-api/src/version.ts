@@ -150,4 +150,9 @@
 // `api.sleep.heard()` answers those notes for the extension's own connections, once. A processor path may sit under a
 // `when` over the card's answers. Additive: a manifest that declares none of it is unchanged, and `fakeExtensionApi`
 // models `heard` (`sleep.heard`). The recorded surface grows the manifest schema.
-export const extensionApiVersion = "2.58.0";
+// 2.59.0 (2026-11-27) adds a third kind of stranger a listener may declare, `contact` (a sandbox that is not a contact yet
+// asking to become one), held to the owner's floor for a contact request, which holds by default; the daemon's own
+// `s2s` source (what other sandboxes send) declares it. A trigger source's `strangers` and an agent's needs carry it
+// too (a `contact` need, raised when an agent would make or accept a contact). Additive: a manifest without it is
+// unchanged. The recorded surface grows the manifest schema and the wire's agents and automations schemas.
+export const extensionApiVersion = "2.59.0";

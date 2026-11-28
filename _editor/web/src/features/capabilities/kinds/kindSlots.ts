@@ -60,6 +60,8 @@ export interface NeedSlotContext {
     /** The sandbox or host the agent named. */
     readonly target: string | undefined;
     readonly paired: (link: PairedLink) => Promise<void>;
+    /** The pairing made a contact instead of a link card (both sandboxes speak s2s/1): the need is met by it. */
+    readonly contacted: () => Promise<void>;
     readonly allow: (input: AddCapabilityInput) => Promise<void>;
     readonly notice: (notice: NoticeModel | null) => void;
 }
@@ -253,7 +255,7 @@ export const KIND_SLOTS = {
             },
         }),
         addsByItself: true,
-        needLead: ({ target, paired, notice }) => ({ is: LinkPairing, props: { prefer: target, onPick: paired, onNotice: notice } }),
+        needLead: ({ target, paired, contacted, notice }) => ({ is: LinkPairing, props: { prefer: target, onPick: paired, onContact: contacted, onNotice: notice } }),
     },
 } as const satisfies Record<CapabilityKind, KindSlots>;
 

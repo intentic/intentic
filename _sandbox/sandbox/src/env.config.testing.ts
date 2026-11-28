@@ -19,6 +19,7 @@ export const testConfig: Config = {
     logPretty: false,
     idleStopMinutes: 0,
     zone: "",
+    s2sPrivateHosts: false,
     connectToken: "",
     owner: { email: "" },
     syncPairToken: "",

@@ -73,10 +73,14 @@ const USAGE = `sandboxes — the owner's sandboxes, and how a new one is made
 
   sandboxes send <sandbox> [files…] --note "…" [--wake <conversation id>]
                                        hand a note and up to 20 files (10 MB in all) to another sandbox the person
-                                       this conversation acts for is in, as them. It lands in that sandbox's inbox
-                                       (its \`inbox\` command, its editor's Received list) and starts no turn there.
+                                       this conversation acts for is in, as them. It arrives as a message on that
+                                       sandbox's Messages tab (its \`messages\` command) and starts no turn there.
+                                       Where this sandbox holds a contact for it, it goes as a message over that
+                                       contact; otherwise as a drop, the way older sandboxes take it.
                                        --wake      also say the note into that person's own conversation there,
-                                                   only while a turn of it is running
+                                                   only while a turn of it is running. Only a drop can: with it,
+                                                   it always goes as a drop, since a message starts and steers no
+                                                   turn (that sandbox's automations decide what a message wakes)
                                        Exit 3: that person has not allowed this sandbox to act as them there yet;
                                        a card asks them now. Send again once they allow it; do not poll.
 
@@ -354,7 +358,7 @@ const send = async (args) => {
     }
     const outcome = JSON.parse(text);
     if (outcome.state === "delivered") {
-        process.stdout.write(`Delivered to ${outcome.to}: it waits in that sandbox's inbox as ${outcome.id}.\n`);
+        process.stdout.write(`Delivered to ${outcome.to} as ${outcome.id}: it waits there for someone to read it.\n`);
         return;
     }
     if (outcome.state === "queued") {

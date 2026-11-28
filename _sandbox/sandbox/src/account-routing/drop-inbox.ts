@@ -3,10 +3,12 @@ import { join } from "node:path";
 import { parseJsonOr } from "@intentic/base/json";
 import { type ReceivedDrop, ReceivedDropSchema } from "@intentic/sandbox-contract/schemas/account-routes";
 
-/* THE INBOX A DROP LANDS IN (2026-11-24, docs/architecture/account-routing.md): one folder per drop on the HISTORY volume,
+/* THE INBOX A DROP LANDED IN (2026-11-24, docs/architecture/account-routing.md): one folder per drop on the HISTORY volume,
  * `account-inbox/<id>/`, holding its manifest (`drop.json`: who sent it, as whom, the note, the files) and its files under
  * `files/`. Never the workspace: an agent there could write a manifest naming any sandbox and any person, and the inbox
- * would show it as theirs. Reached only through the daemon (inbox.routes.ts), which cuts it to the people a drop names. */
+ * would show it as theirs. Reached only through the daemon (inbox.routes.ts), which cuts it to the people a drop names.
+ * Since 2026-11-27 a drop lands as a message instead (messages/drop-threads.ts), which also moves what waited here into threads
+ * once, at boot. */
 
 // Bounded like the outbox: a sender looping on drops fills a list, never the disk.
 const INBOX_MAX = 200;

@@ -223,7 +223,7 @@ test("a branch filter and a mention filter are drawn only where the source decla
     expect(rooms?.sender?.label).toBe("Member ID");
     expect(rooms?.senderGroup?.label).toBe("Team ID");
     const ci = catalog.sources.find((source) => source.provider === "ci");
-    // The daemon's own sources vouch for nobody's identity, which is what keeps sender rules off them.
+    // CI vouches for nobody's identity, which is what keeps sender rules off it; of the daemon's own, only s2s does.
     expect(ci?.sender).toBeUndefined();
 });
 
@@ -339,6 +339,24 @@ test("the issues source comes from the extension that declares it, with the bug-
     expect(CORE_TRIGGER_SOURCES.map((source) => source.provider)).not.toContain("issues");
     expect((await automationCatalog(host)).sources.find((source) => source.provider === "issues")?.strangers).toBe("report");
     expect(await wakeSourceFor(host, { kind: "listener", provider: "issues" })).toBe("issues");
+});
+
+// (2026-11-27) What other sandboxes send is the daemon's own source, and no extension can relabel it: a contact request
+// answers to the contact floor, what only an accepted contact sends to the team chat's.
+test("the daemon's s2s source holds a stranger's contact request to the contact floor, and an accepted contact's message to a team chat's", async () => {
+    const baked = mkdtempSync(join(tmpdir(), "catalog-baked-"));
+    await writeManifest(join(baked, "acme.s2s"), pack("s2s", { listener: { ...ROOMS, provider: "s2s" } }));
+    const host = services(mkdtempSync(join(tmpdir(), "catalog-work-")), baked);
+
+    const catalog = await automationCatalog(host);
+
+    expect(catalog.sources.filter((source) => source.provider === "s2s").map((source) => [source.label, source.strangers])).toEqual([
+        ["Messages from sandboxes", "contact"],
+    ]);
+    expect(triggerSourceEvents(catalog).get("s2s")).toEqual(new Set(["message", "report", "contact.request", "task.request"]));
+    expect(await wakeSourceFor(host, { kind: "listener", provider: "s2s" })).toBe("contact");
+    expect(await wakeSourceFor(host, { kind: "listener", provider: "s2s", eventType: "contact.request" })).toBe("contact");
+    expect(await wakeSourceFor(host, { kind: "listener", provider: "s2s", eventType: "message" })).toBe("listener");
 });
 
 test("a switched-off extension's stranger declaration holds nothing, since its listener fires nothing", async () => {

@@ -8,16 +8,16 @@ import { timeAgo } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from "vue";
-import { useRoute } from "vue-router";
+import { RouterLink, useRoute } from "vue-router";
 import { sandboxRaw } from "../../../client/sandbox/sandboxRaw";
 import { useTier } from "../../../client/sandbox/useTier";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
 import { useMintedTokens } from "../../../workbench/operations/useMintedTokens";
 import { useRoles } from "../../../models/sandbox/roles/useRoles";
-import { LINKED_SANDBOXES_ANCHOR } from "../../../models/sandbox/sandboxNav";
+import { LINKED_SANDBOXES_ANCHOR, messagesPath } from "../../../models/sandbox/sandboxNav";
 import { inboundLinksChanged } from "../../../models/sandbox/useInboundLinks";
 
-// INBOUND LINKS: the owner's other sandboxes allowed to hand this one tasks. Each link's terms are written here and
+// INBOUND LINKS: the owner's other sandboxes allowed to hand this one tasks, while their link is not yet a contact. Each link's terms are written here and
 // enforced here: the role its tasks wear, whether each waits for the owner, how many turns an hour it may start, and
 // whether it may read this sandbox's records (its conversations, logs and diagnostics) without starting a turn, and
 // whether it may operate this sandbox (run commands, read and write files, as the owner's own terminal would). A task
@@ -75,9 +75,14 @@ const stopScroll = watch(
     },
 );
 
-// A link answered in place (new terms, a waiting task let through or declined): its row is the daemon's answer.
+// A link answered in place (new terms, a waiting task let through or declined): its row is the daemon's answer. A link
+// both sandboxes upgraded into a contact (2026-11-27, docs/architecture/links.md) is not listed: its token works nowhere,
+// what it allowed is that contact's grants, and its tasks wait on the contact, all on the Messages tab, which a note
+// under the rows points at.
 const replaced = shallowRef<Readonly<Record<string, InboundLinkSummary>>>({});
-const shown = computed<readonly InboundLinkSummary[]>(() => links.value.map((link) => replaced.value[link.id] ?? link));
+const shown = computed<readonly InboundLinkSummary[]>(() => links.value.filter((link) => link.upgraded === undefined).map((link) => replaced.value[link.id] ?? link));
+const becameContacts = computed(() => links.value.length - shown.value.length);
+const contactsHref = computed(() => messagesPath(`contacts`));
 const rowNotice = shallowRef<ReturnType<typeof noticeFrom>>();
 const settle = async (id: string, answer: () => Promise<InboundLinkSummary>, failed: string): Promise<void> => {
     rowNotice.value = undefined;
@@ -386,10 +391,17 @@ const address = computed(() => daemonUrl.value ?? ``);
                 </RowNote>
             </template>
 
+            <!-- The links that became contacts, which live on the Messages tab now, counted rather than listed. -->
+            <RowNote v-if="becameContacts > 0" icon="users" data-became-contacts>
+                <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span>{{ t(`sandbox.linkedSandboxes.becameContacts`, { count: becameContacts }, becameContacts) }}</span>
+                    <RouterLink :to="contactsHref" :class="ui.textButton({ size: `xs`, flush: true })">{{ t(`sandbox.linkedSandboxes.openContacts`) }}</RouterLink>
+                </span>
+            </RowNote>
             <!-- An answer on a link's row that was refused (new terms, a task let through or declined), under the rows. -->
             <RowNote v-if="rowNotice" variant="block"><Notice :of="rowNotice" /></RowNote>
             <!-- No link, and none being made: how one is usually made, so the empty card is not a blank. -->
-            <RowNote v-if="shown.length === 0 && !creating && !minted" variant="empty">{{ t(`sandbox.linkedSandboxes.empty`) }}</RowNote>
+            <RowNote v-if="shown.length === 0 && becameContacts === 0 && !creating && !minted" variant="empty">{{ t(`sandbox.linkedSandboxes.empty`) }}</RowNote>
         </RowGroup>
     </section>
 </template>

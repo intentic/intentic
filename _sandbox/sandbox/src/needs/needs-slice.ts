@@ -29,6 +29,7 @@ import { automationNeed } from "./kinds/automation-need.js";
 import { environmentNeed } from "./kinds/environment-need.js";
 import { instructionNeed, type InstructionNeedDeps } from "./kinds/instruction-need.js";
 import { claimNeed } from "./kinds/claim-need.js";
+import { contactNeedOf } from "./kinds/contact-need.js";
 import { deployNeed } from "./kinds/deploy-need.js";
 import { pairedDevice } from "../secrets/stack-grants/stack-grants.js";
 import { routeNeedOf } from "./kinds/route-need.js";
@@ -41,6 +42,7 @@ import { refuseInvalidAutomation, saveAutomation } from "../automations/automati
 import { checkWatchSource } from "../automations/watch/contributed-check.js";
 import { catalogWatchKinds } from "../automations/watch/watch-kinds.js";
 import { grantNeed } from "./kinds/grant-need.js";
+import { contactForOf, metByContact } from "./link-contact-need.js";
 import { hostPowerNeed } from "./kinds/host-power-need.js";
 import { wslMemoryNeed } from "./kinds/wsl-memory-need.js";
 import { runDeviceAgentFlow } from "../hosts/device-reports.js";
@@ -266,13 +268,13 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
     const needs = createNeeds({
         store: fileNeedsStore(join(workspaceRoot, needsDocument.path)),
         kinds: {
-            capability: capabilityNeed({
+            capability: metByContact(contactForOf(whole), capabilityNeed({
                 entries: () => connectableEntries(whole()),
                 capabilities,
                 status: (capability) => registry[capability.kind].status(capabilityCtx(whole()), capability.id, capability.config),
                 gates: () => whole().credentialGates.list(),
                 usableNow: (capability) => usableNow(whole(), capability),
-            }),
+            })),
             secret,
             grant: grantNeed({
                 capabilities,
@@ -324,6 +326,7 @@ const createNeedsSlice = ({ workspaceRoot, logger, whole }: NeedsSliceDeps): Nee
             // A person's leave to route as them into another sandbox; the pairing itself is their press.
             route: routeNeedOf(whole),
             redirect: redirectNeedOf(whole),
+            contact: contactNeedOf(whole),
             // A managed stack's secrets, granted by the owner's press into the auth root a managed deploy reads
             // (secrets/stack-grants/stack-grants.ts).
             deploy: deployNeed({

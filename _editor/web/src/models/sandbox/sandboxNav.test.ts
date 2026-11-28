@@ -1,4 +1,6 @@
-import { isTabbedRow, sandboxEmbedOf, sandboxKeyAllowed, sandboxSectionGroups, sandboxSections } from "./sandboxNav";
+import { insidePath, page } from "@intentic/sandbox-contract/app-routes";
+import { activeSandboxId } from "../../app/storage/activeSandbox";
+import { isTabbedRow, messagesPath, sandboxEmbedOf, sandboxKeyAllowed, sandboxSectionGroups, sandboxSectionOf, sandboxSections } from "./sandboxNav";
 
 // How the Sandbox hub's index is filed. The reach group leads with the three pages that each set one part of who gets in
 // and what the box reaches, and closes on the map, the read-only drawing of all of it. What this box does with what
@@ -15,7 +17,7 @@ it(`files what is set about data and what happened as two rows, after everything
     expect(filing()).toEqual([
         [`box`, [`overview`, `usage`]],
         [`configuration`, [`models`, `agent`, `environment`, `secrets`, `extensions`]],
-        [`reach`, [`access`, `roles`, `map`]],
+        [`reach`, [`access`, `roles`, `messages`, `map`]],
         [`oversight`, [`privacy`, `activity`]],
     ]);
 });
@@ -57,7 +59,7 @@ it(`leaves every other name to whichever extension asks`, () => {
 it(`lists the built-in sections a reader can open`, () => {
     expect(sandboxSections(true).map((section) => section.slug)).toContain(`activity`);
     // Below maintainer: Activity is their own turns; every privacy and safety page is refused by the daemon.
-    expect(sandboxSections(false).map((section) => section.slug)).toEqual([`overview`, `environment`, `extensions`, `access`, `activity`]);
+    expect(sandboxSections(false).map((section) => section.slug)).toEqual([`overview`, `environment`, `extensions`, `access`, `messages`, `activity`]);
     expect(sandboxSections(false, true).map((section) => section.slug)).toEqual([`access`]);
 });
 
@@ -78,4 +80,19 @@ it(`leaves out what an organisation hides`, () => {
     expect(slugs).not.toContain(`guardrails`);
     expect(slugs).not.toContain(`retention`);
     expect(slugs).toContain(`privacy-shield`);
+});
+
+// Messages is a person's own threads as well as the sandbox's, so it opens below maintainer; it is drawn from the threads
+// route, which a daemon from before contacts does not serve, and the hub leaves it out there.
+it(`files Messages under Reach, below maintainer too, drawn from the threads route`, () => {
+    expect(sandboxSectionOf(`messages`)).toMatchObject({ slug: `messages`, icon: `envelope`, route: `GET /s2s/threads` });
+    expect(sandboxSectionOf(`messages`)?.maintainer).toBeUndefined();
+    expect(sandboxKeyAllowed(`messages`)).toBe(false);
+});
+
+it(`addresses Messages' parts and an open thread in the query, the Inbox writing no part`, () => {
+    activeSandboxId.value = `sbx1`;
+    expect(messagesPath()).toBe(insidePath(`sbx1`, page.sandboxSettings(`messages`)));
+    expect(messagesPath(`contacts`)).toBe(insidePath(`sbx1`, page.sandboxSettings(`messages`, { query: { section: `contacts` } })));
+    expect(messagesPath(`inbox`, `t-1`)).toBe(insidePath(`sbx1`, page.sandboxSettings(`messages`, { query: { open: `t-1` } })));
 });

@@ -235,6 +235,18 @@ catalogs:
     '@muse-code/sdk':
       specifier: 1.4.25
       version: 1.4.25
+    '@noble/ciphers':
+      specifier: 2.4.0
+      version: 2.4.0
+    '@noble/curves':
+      specifier: 2.2.0
+      version: 2.2.0
+    '@noble/hashes':
+      specifier: 2.4.0
+      version: 2.4.0
+    '@noble/post-quantum':
+      specifier: 0.6.1
+      version: 0.6.1
     '@openai/codex-sdk':
       specifier: 0.172.0
       version: 0.172.0
@@ -3382,6 +3394,18 @@ importers:
       '@intentic/registry':
         specifier: workspace:*
         version: link:../registry
+      '@noble/ciphers':
+        specifier: 'catalog:'
+        version: 2.4.0
+      '@noble/curves':
+        specifier: 'catalog:'
+        version: 2.2.0
+      '@noble/hashes':
+        specifier: 'catalog:'
+        version: 2.4.0
+      '@noble/post-quantum':
+        specifier: 'catalog:'
+        version: 0.6.1
       '@orpc/contract':
         specifier: 'catalog:'
         version: 1.16.1(@opentelemetry/api@1.10.0)
@@ -14478,6 +14502,10 @@ snapshots:
       '@intentic/constants': file:_tools/constants
       '@intentic/extension-manifest': file:_shared/extension-manifest
       '@intentic/registry': file:_shared/registry
+      '@noble/ciphers': 2.4.0
+      '@noble/curves': 2.2.0
+      '@noble/hashes': 2.4.0
+      '@noble/post-quantum': 0.6.1
       '@orpc/contract': 1.16.1(@opentelemetry/api@1.10.0)
       zod: 4.6.7
     transitivePeerDependencies:

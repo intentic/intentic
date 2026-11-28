@@ -24,14 +24,23 @@ export const wakeSourceOf = (trigger: Trigger, strangers?: ListenerStrangers): W
         case "event":
             return "event";
         case "listener":
-            return strangers === undefined ? "listener" : STRANGER_FLOORS[strangers];
+            return strangers === undefined || !hearsStrangers(trigger, strangers) ? "listener" : STRANGER_FLOORS[strangers];
         case "workspace":
             return "workspace";
     }
 };
 
 // The owner's floor for each kind of stranger a source declares, under the admission policy's stored keys.
-const STRANGER_FLOORS = { visitor: "webchat", report: "issues" } as const satisfies Readonly<Record<ListenerStrangers, WakeSource>>;
+const STRANGER_FLOORS = { visitor: "webchat", report: "issues", contact: "contact" } as const satisfies Readonly<
+    Record<ListenerStrangers, WakeSource>
+>;
+
+// Whether a stranger can reach this trigger at all. A visitor or a reporter can send whatever the source carries, but a
+// sandbox that is not a contact can send only `contact.request` (2026-11-27): a message, a report or a task request
+// comes from a contact a person accepted, so a trigger narrowed to one of those answers to the team chat's floor, and
+// holding it to the contact floor would hold every accepted contact's message as if a stranger had sent it.
+const hearsStrangers = (trigger: Extract<Trigger, { kind: "listener" }>, strangers: ListenerStrangers): boolean =>
+    strangers !== "contact" || trigger.eventType === undefined || trigger.eventType === "contact.request";
 
 export interface SessionStartInput {
     readonly source: WakeSource;

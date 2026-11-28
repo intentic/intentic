@@ -1,21 +1,19 @@
-import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { DropTakeSchema, type ReceivedDrop } from "@intentic/sandbox-contract/schemas/account-routes";
 import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { Context } from "hono";
 import type { AppEnv } from "../app-env.js";
-import { callerEditFence } from "../areas/area-scope.js";
 import type { Services } from "../composition.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
 import { provesOwner } from "../seams/workload-stamp.js";
-import { fenceOpens } from "../workspace/layout/workspace-fence.js";
-import { resolveWorkspacePath } from "../workspace/files/workspace-files-paths.js";
+import { takeTarget } from "../workspace/take-target.js";
 import { fileDropInbox } from "./drop-inbox.js";
 import { peopleFor } from "./who-asks.js";
 
-/* THE INBOX, READ (2026-11-24, docs/architecture/account-routing.md): what other sandboxes dropped here as one of this
- * sandbox's people (drop.routes.ts), for the `inbox` command and the editor's Received list. Each drop is shown to the
- * person it names and to maintainers:
+/* THE OLD INBOX, READ (2026-11-24, docs/architecture/account-routing.md): what other sandboxes dropped here as one of
+ * this sandbox's people. Since 2026-11-27 nothing files here: a drop lands as a message in its sender's thread
+ * (messages/drop-threads.ts), a boot step moved what waited, and the `inbox` command runs `messages`. These routes still answer,
+ * for a caller from before. Each drop is shown to the person it names and to maintainers:
  * - a person signed in: their own drops, or every drop for a maintainer;
  * - a turn proving which it is: drops naming one of the people it acts for (the owner, when it names none);
  * - a shell naming no conversation at all: none. Reading it as a maintainer's terminal was the first cut; an agent that
@@ -49,32 +47,6 @@ const dropReaderOf = async (services: Pick<Services, "agents" | "ownerEmail">, c
 };
 
 const NOT_HERE = (id: string): string => `No drop ${id} waits in this inbox for you: \`inbox\` lists what does.`;
-
-// Where taking a drop writes, or why it cannot: inside the workspace, outside its locked state, within the caller's fence,
-// and onto no file already there.
-const takeTarget = async (
-    services: Pick<Services, "workspace" | "areas">,
-    c: Context<AppEnv>,
-    dest: string,
-    drop: ReceivedDrop,
-): Promise<string | Response> => {
-    const resolved = await resolveWorkspacePath(services.workspace.root, dest);
-    if (resolved.kind !== "inside") {
-        return c.json({ error: `${dest} is not a folder of this workspace a drop can be taken into` }, 400);
-    }
-    const fence = callerEditFence(await services.areas.list(), c.get("identity"));
-    if (!fenceOpens(fence, resolved.realRel)) {
-        return c.json({ error: "outside your access to this workspace" }, 403);
-    }
-    for (const file of drop.files) {
-        // allow(silent-catch): a file that cannot be reached is one that is not there, which is what this asks.
-        const there = await access(join(resolved.path, file.name)).then(() => true, () => false);
-        if (there) {
-            return c.json({ error: `${dest} already holds ${file.name}: take it into another folder` }, 409);
-        }
-    }
-    return resolved.path;
-};
 
 export const inboxRawRoutes = defineRawRoutes((services: Services) => {
     const inbox = fileDropInbox(services.config.historyRoot);
@@ -111,7 +83,7 @@ export const inboxRawRoutes = defineRawRoutes((services: Services) => {
             if (!parsed.success) {
                 return c.json({ error: "name the folder to take it into: {dest}" }, 400);
             }
-            const target = await takeTarget(services, c, parsed.data.dest, drop);
+            const target = await takeTarget(services, c, parsed.data.dest, drop.files.map((file) => file.name), "a drop");
             if (target instanceof Response) {
                 return target;
             }

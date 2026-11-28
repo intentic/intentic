@@ -12,6 +12,7 @@ import { pipelinesBackend } from "./board/ci.handler";
 import { productHealthBackend } from "./extensions/product-health.backend";
 import { visitorChatBackend } from "./extensions/visitor-chat.backend";
 import { linksRoutes } from "./machine/links.routes";
+import { s2sRoutes } from "./s2s/s2s.routes";
 import { machineRoutes } from "./machine/machine.routes";
 import { signInRoutes } from "./account/signIn.routes";
 import { KNOWLEDGE_BASE } from "../../vendor/knowledge/wire-types";
@@ -240,6 +241,7 @@ export const raw = {
     // Each area's routes from a file of its own (`<area>/<name>.routes.ts`), so they can be answered without touching this table.
     ...workspaceRoutes,
     ...linksRoutes,
+    ...s2sRoutes,
     ...machineRoutes,
     ...signInRoutes,
 } satisfies RawRoutes;

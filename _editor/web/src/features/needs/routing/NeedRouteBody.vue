@@ -2,7 +2,9 @@
      (docs/architecture/account-routing.md). The target admits anything but a report only beside a pairing secret that
      person minted there, so the press is theirs alone and runs from this editor, signed in to both: it mints the secret
      at the target under their session there, keeps it here, then answers the need, which the daemon meets once it holds
-     the secret. Anyone else reads whom it waits on. -->
+     the secret. Where both sandboxes speak s2s/1 no pairing is minted: the press makes the person's own contact between
+     the two instead (components/contactPairing.ts), which the daemon meets the need by just the same. Anyone else reads
+     whom it waits on. -->
 <script setup lang="ts">
 import { RAW_JSON_ROUTES } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
 import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
@@ -15,6 +17,9 @@ import { useAuth } from "../../../client/auth/useAuth";
 import { sandboxJson, sandboxJsonAt } from "../../../client/sandbox/sandboxClient";
 import { SandboxHttpError } from "../../../client/sandbox/sandboxHttpError";
 import { useSandbox } from "../../../client/sandbox/useSandbox";
+import { supportsRoute } from "../../../client/sandbox/useDaemonRoutes";
+import { useTier } from "../../../client/sandbox/useTier";
+import { pairContact, pairPreferringContact, PERSON_ROUTE_GRANTS, ROUTE_ASKER_GRANTS, useContactPairingApi } from "../../../components/contactPairing";
 import { useNeeds } from "../../../models/needs/useNeeds";
 import { useNeedAnswer } from "../needAnswer";
 import { farSandboxOf } from "./routeTarget";
@@ -26,6 +31,8 @@ const props = defineProps<{ need: Need; subject: RouteNeed }>();
 const needs = useNeeds();
 const { user } = useAuth();
 const { active, sandboxes } = useSandbox();
+const { canShip } = useTier();
+const contacts = useContactPairingApi();
 // The leave is the person's own: the daemon's answer checks the same address.
 const theirs = computed(() => user.value?.email.toLowerCase() === props.subject.person.toLowerCase());
 const far = computed(() => farSandboxOf(sandboxes.value, props.subject));
@@ -56,8 +63,15 @@ const allow = async (): Promise<void> => {
     await answer({
         failed: t(`needs.card.couldNotAnswer`),
         task: async () => {
-            const minted = await mintAt(target, from);
-            await sandboxJson(rawRouteUrl(`POST /account/routes/secret`), { ...JSON_POST, body: JSON.stringify({ target: props.subject.target, secret: minted.secret }) });
+            const tooOld = t(`needs.route.tooOld`, { target: target.name });
+            await pairPreferringContact(
+                supportsRoute(`POST /s2s/contacts/paired`),
+                () => pairContact(contacts, { far: target, scope: `person`, here: ROUTE_ASKER_GRANTS, there: PERSON_ROUTE_GRANTS }, canShip.value, { tooOld }),
+                async () => {
+                    const minted = await mintAt(target, from);
+                    await sandboxJson(rawRouteUrl(`POST /account/routes/secret`), { ...JSON_POST, body: JSON.stringify({ target: props.subject.target, secret: minted.secret }) });
+                },
+            );
             await needs.answer.mutateAsync({ id, answer: { kind: `approve` } });
         },
     });

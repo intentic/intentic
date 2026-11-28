@@ -15,4 +15,6 @@ export const testTurnMounts = (): TurnMountDeps => ({
     desktopServers: () => [],
     // No linked sandbox in a suite unless it mounts one itself (links/tests/link-mounts.integration.test.ts).
     linkMounts: () => [],
+    // No contact either (s2s/contacts/contact-mounts.ts).
+    contactMounts: async () => [],
 });

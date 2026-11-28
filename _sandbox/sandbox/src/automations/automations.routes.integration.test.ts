@@ -54,8 +54,9 @@ test("run now still refuses an automation that isn't there at all", async () => 
     await expect(call(routes.run, { id: "ghost" }, { context })).rejects.toThrow(/no automation/);
 });
 
-// Sender rules need a source that vouches for `author.id`; the catalogue says which do. The daemon's own sources never
-// declare one, so an empty extensions dir is exactly the case where every listener refuses them.
+// Sender rules need a source that vouches for `author.id`; the catalogue says which do. Of the daemon's own sources only
+// s2s declares one (a contact's verified address, 2026-11-27), so with an empty extensions dir every other listener
+// refuses them.
 const catalogServices = (root: string, overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
@@ -216,6 +217,22 @@ test("upsert refuses sender rules on a source that does not identify who is writ
     const guest = { ...automation("guest", { kind: "listener", provider: "ci" }), senders };
     await expect(call(routes.upsert, guest, { context })).rejects.toThrow(/does not identify who is writing/);
     expect(await services.automations.get("guest")).toBeUndefined();
+});
+
+// (2026-11-27) The s2s source's event types carry a dot, as the messages wire names them, and its sender is the
+// contact's address, which the daemon verified: both pass upsert, and an event type it does not carry is refused.
+test("upsert takes an s2s trigger narrowed to a dotted event type and to a contact's address, and refuses an event s2s lacks", async () => {
+    const services = catalogServices(mkdtempSync(join(tmpdir(), "routes-")));
+    const routes = createAutomationsRoutes(services);
+    const trigger: Automation["trigger"] = { kind: "listener", provider: "s2s", channelId: "ops.acme.example", eventType: "contact.request" };
+    const fromOps: Automation["senders"] = { rules: [{ ids: ["ops.acme.example"] }], others: "ignore" };
+
+    await call(routes.upsert, { ...automation("requests", trigger), senders: fromOps }, { context });
+    await expect(
+        call(routes.upsert, automation("underscored", { kind: "listener", provider: "s2s", eventType: "contact_request" }), { context }),
+    ).rejects.toThrow('provider "s2s" has no event type "contact_request"');
+
+    expect((await services.automations.list()).map((saved) => [saved.id, saved.trigger, saved.senders])).toEqual([["requests", trigger, fromOps]]);
 });
 
 // A door file this build cannot read is refused rather than re-minted (auth/tokens/door-tokens.ts). An operator's list

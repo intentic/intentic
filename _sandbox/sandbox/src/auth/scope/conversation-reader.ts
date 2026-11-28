@@ -36,6 +36,17 @@ export const conversationReader = (caller: Caller | undefined, agentOf: (id: str
     };
 };
 
+// What one person may read, whatever their tier: a conversation the registry knows and they may see (visibleTo), a private
+// one only as its reader. Never `readsEverything`'s shortcut, which also reads conversations the registry does not know and
+// other members' homes: for a read made as a person from another sandbox (account-routing/read.routes.ts, a person-scoped
+// contact's records call), where no private conversation may be read by anyone but its readers.
+export const personReader =
+    (person: Caller, agentOf: (id: string) => Provenance | undefined): ConversationReader =>
+    (conversationId) => {
+        const agent = conversationId === undefined ? undefined : agentOf(conversationId);
+        return agent !== undefined && visibleTo(person, agent);
+    };
+
 // The registry's answer to whose a conversation is, live and archived alike.
 export const registryProvenance =
     (agents: { readonly entry: (id: string) => PersistedAgent | undefined }) =>

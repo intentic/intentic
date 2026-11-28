@@ -77,6 +77,7 @@ export type IssueIngest = z.infer<typeof IssueIngestSchema>;
 export const IssueSenderSchema = z.object({
     sandboxId: z.string().max(40).describe("The reporting sandbox's id."),
     sandboxName: z.string().max(120).describe("Its name on your account."),
+    address: z.string().max(300).optional().describe("Its address, when the report came as a message from a contact (docs/architecture/messages.md)."),
     project: z.string().max(200).describe("The project it reported about, as this sandbox claims it."),
     conversationId: z.string().max(120).optional().describe("The conversation over there that reported it."),
     person: z

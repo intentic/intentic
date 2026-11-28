@@ -18,6 +18,7 @@ const SandboxEnvironment = lazySection(`SandboxEnvironment`, () => import("./env
 const SandboxMap = lazySection(`SandboxMap`, () => import("./map/SandboxMap.vue"));
 const SandboxAccess = lazySection(`SandboxAccess`, () => import("./access/SandboxAccess.vue"));
 const SandboxRoles = lazySection(`SandboxRoles`, () => import("./roles/SandboxRoles.vue"));
+const SandboxMessages = lazySection(`SandboxMessages`, () => import("./messages/SandboxMessages.vue"));
 const SandboxModels = lazySection(`SandboxModels`, () => import("./models/SandboxModels.vue"));
 const SandboxAgent = lazySection(`SandboxAgent`, () => import("./overview/SandboxAgent.vue"));
 const SandboxExtensions = lazySection(`SandboxExtensions`, () => import("./extensions/SandboxExtensions.vue"));
@@ -36,6 +37,7 @@ const SECTIONS = new Map<string, Component>([
     [`map`, SandboxMap],
     [`access`, SandboxAccess],
     [`roles`, SandboxRoles],
+    [`messages`, SandboxMessages],
     [`models`, SandboxModels],
     [`agent`, SandboxAgent],
     [`extensions`, SandboxExtensions],
@@ -83,6 +85,8 @@ import { sourcesNeedingSomeone } from "./models/modelSources";
 import { useModelSources } from "./models/useModelSources";
 import { providerDisplayLabel } from "../../models/providers/providerCatalog";
 import { useChat } from "../../models/conversations/run/useChat";
+import { supportsRoute } from "../../client/sandbox/useDaemonRoutes";
+import { useMessagesBadges } from "../../models/messages/useMessages";
 import { toListing, updateCount } from "../../models/sandbox/discoverListing";
 import OrgHeldSection from "../organisations/OrgHeldSection.vue";
 import { useOrgPolicy } from "../organisations/useOrgPolicy";
@@ -99,7 +103,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const DEFAULT = SANDBOX_DEFAULT_SECTION;
-// A role a link names (`?open=<id>`, the chat rail's Edit role), handed to its page to land on open.
+// A role a link names (`?open=<id>`, the chat rail's Edit role), or a thread on Messages, handed to its page to land on open.
 const route = useRoute();
 const openRole = computed(() => (typeof route.query[`open`] === `string` ? route.query[`open`] : undefined));
 
@@ -117,6 +121,7 @@ interface Counts {
     readonly updates: number;
     readonly models: number;
     readonly wants: number;
+    readonly messages: number;
 }
 const countOf = (slug: string, counts: Counts): number => {
     switch (slug) {
@@ -126,6 +131,8 @@ const countOf = (slug: string, counts: Counts): number => {
             return counts.models;
         case `secrets`:
             return counts.wants;
+        case `messages`:
+            return counts.messages;
         default:
             return 0;
     }
@@ -144,6 +151,9 @@ const sectionBadge = (slug: string, counts: Counts, running: string | undefined)
         }
         if (slug === `secrets`) {
             badge.tooltip = t(`sandbox.sandboxSecrets.wantsBadge`, { count }, count);
+        }
+        if (slug === `messages`) {
+            badge.tooltip = t(`sandbox.messages.badge`, { count }, count);
         }
     }
     if (running !== undefined) {
@@ -204,6 +214,10 @@ const secretsOpen = computed(() => {
 const { needs: wantNeeds } = useWants(secretsOpen);
 const wantsWaiting = computed(() => wantNeeds.value.filter((need) => need.state === `pending`).length);
 
+// What Messages' row says without being opened: threads with something unread, contact requests waiting on a person, and
+// contacts' tasks waiting for the owner's Allow.
+const { tab: messagesWaiting } = useMessagesBadges();
+
 // The environment build the platform runs for a hosted sandbox: minutes long, server-side, and followed here rather
 // than by the section, since the row has to keep saying so while the section is closed. Everything else a section
 // starts reports itself through the ledger as it runs (hubWork.ts).
@@ -250,14 +264,19 @@ const sectionOf = (row: SandboxSection): readonly HubTab[] => {
     if (row.embeds !== undefined && !canShip.value && embedded(row.slug) === undefined) {
         return [];
     }
-    // A section the sandbox's organisation hides leaves the index (organisations/useOrgPolicy.ts).
-    if (orgHidden.value.has(row.slug)) {
+    // A section the sandbox's organisation hides leaves the index (organisations/useOrgPolicy.ts), as does one drawn from a
+    // route this sandbox's daemon does not serve.
+    if (orgHidden.value.has(row.slug) || (row.route !== undefined && !supportsRoute(row.route))) {
         return [];
     }
     return [
         {
             ...row,
-            badge: sectionBadge(row.slug, { updates: updatable.value, models: modelsNeedingSomeone.value, wants: wantsWaiting.value }, runningIn(row.slug)),
+            badge: sectionBadge(
+                row.slug,
+                { updates: updatable.value, models: modelsNeedingSomeone.value, wants: wantsWaiting.value, messages: messagesWaiting.value },
+                runningIn(row.slug),
+            ),
         },
     ];
 };
@@ -328,6 +347,7 @@ useSectionWarmup(() => groups.value.flatMap((group) => group.items.flatMap(hubRo
                 <SandboxMap v-else-if="slug === `map`" :models="sources" />
                 <SandboxAccess v-else-if="slug === `access`" :open="openRole" />
                 <SandboxRoles v-else-if="slug === `roles`" :open="openRole" />
+                <SandboxMessages v-else-if="slug === `messages`" :open="openRole" />
                 <SandboxModels v-else-if="slug === `models`" />
                 <SandboxAgent v-else-if="slug === `agent`" />
                 <SandboxExtensions v-else-if="slug === `extensions`" />

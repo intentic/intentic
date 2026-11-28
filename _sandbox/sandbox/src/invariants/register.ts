@@ -15,6 +15,7 @@ import { checks as phoneChecks, owner as phoneOwner } from "../phones/invariant.
 import { checks as orgChecks, owner as orgOwner } from "../org/invariant.js";
 import { checks as runnerChecks, owner as runnerOwner } from "../runners/invariant.js";
 import { checks as linkChecks, owner as linkOwner } from "../links/invariant.js";
+import { checks as s2sChecks, owner as s2sOwner } from "../s2s/invariant.js";
 import { checks as areaChecks, owner as areaOwner, type AreaRosterDeps } from "../areas/invariant.js";
 import { checks as accessChecks, owner as accessOwner, type AccessRosterDeps } from "../access/invariant.js";
 import { checks as fenceChecks, owner as fenceOwner } from "../fences/invariant.js";
@@ -56,6 +57,7 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(webextOwner, webextChecks());
     registry.register(runnerOwner, runnerChecks());
     registry.register(linkOwner, linkChecks());
+    registry.register(s2sOwner, s2sChecks());
     registry.register(needsOwner, needsChecks());
     registry.register(offloadOwner, offloadChecks());
     registry.register(phoneOwner, phoneChecks());

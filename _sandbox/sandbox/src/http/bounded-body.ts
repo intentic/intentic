@@ -11,15 +11,18 @@ export type BoundedBody<T> =
     | { readonly kind: "invalid" };
 
 const TOO_LARGE = { kind: "tooLarge" } as const;
+
+// What a bounded read reads: a request's body, or an answer's (a fetch's Response carries the same two).
+type BodySource = Pick<Request, "body" | "headers">;
 const INVALID = { kind: "invalid" } as const;
 
-const declaredTooLarge = (request: Request, max: number): boolean => {
+const declaredTooLarge = (request: BodySource, max: number): boolean => {
     const declared = Number(request.headers.get("content-length"));
     return Number.isFinite(declared) && declared > max;
 };
 
 // The body's bytes, or undefined once more than `max` arrived. An absent body reads as empty.
-const readBytes = async (request: Request, max: number): Promise<Uint8Array | undefined> => {
+const readBytes = async (request: BodySource, max: number): Promise<Uint8Array | undefined> => {
     if (request.body === null) {
         return new Uint8Array();
     }
@@ -50,7 +53,7 @@ const readBytes = async (request: Request, max: number): Promise<Uint8Array | un
 };
 
 /** The body's raw bytes, at most `max` of them. */
-export const readBoundedBytes = async (request: Request, max: number): Promise<BoundedBody<Uint8Array>> => {
+export const readBoundedBytes = async (request: BodySource, max: number): Promise<BoundedBody<Uint8Array>> => {
     if (declaredTooLarge(request, max)) {
         return TOO_LARGE;
     }
@@ -59,7 +62,7 @@ export const readBoundedBytes = async (request: Request, max: number): Promise<B
 };
 
 /** The body as UTF-8 text, at most `max` bytes of it; bytes that are not UTF-8 are `invalid`. */
-export const readBoundedText = async (request: Request, max: number): Promise<BoundedBody<string>> => {
+export const readBoundedText = async (request: BodySource, max: number): Promise<BoundedBody<string>> => {
     const read = await readBoundedBytes(request, max);
     if (read.kind !== "ok") {
         return read;
@@ -72,7 +75,7 @@ export const readBoundedText = async (request: Request, max: number): Promise<Bo
 };
 
 /** The body parsed as JSON, at most `max` bytes of it; anything that does not parse is `invalid`. */
-export const readBoundedJson = async (request: Request, max: number): Promise<BoundedBody<unknown>> => {
+export const readBoundedJson = async (request: BodySource, max: number): Promise<BoundedBody<unknown>> => {
     const read = await readBoundedText(request, max);
     if (read.kind !== "ok") {
         return read;

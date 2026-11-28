@@ -40,10 +40,16 @@ export const PUBLIC_OFFICE_RETENTION: RetentionSettings = {
 // then starting a subagent, the sandbox's own. The preset holds all of them.
 export const publicOfficeActionKeys = (offered: readonly OutwardAction[]): string[] => [...offered.map((action) => action.key), SPAWN_ACTION_KEY];
 
-// Work started from outside the sandbox: a webhook, a team-chat message, a visitor's web chat, a bug report. A clock
-// (`schedule`) and the workspace's own files are the office's own doing, and `workflow` takes no hold (a CI runner
-// would time out waiting).
-export const PUBLIC_OFFICE_ADMISSION_KEYS = ["event", "listener", "webchat", "issues"] as const satisfies readonly (keyof AdmissionPolicy)[];
+// Work started from outside the sandbox: a webhook, a team-chat message, a visitor's web chat, a bug report, another
+// sandbox's contact request (2026-11-27). A clock (`schedule`) and the workspace's own files are the office's own doing,
+// and `workflow` takes no hold (a CI runner would time out waiting).
+export const PUBLIC_OFFICE_ADMISSION_KEYS = [
+    "event",
+    "listener",
+    "webchat",
+    "issues",
+    "contact",
+] as const satisfies readonly (keyof AdmissionPolicy)[];
 
 const STRICTNESS = { allow: 0, hold: 1, deny: 2 } as const satisfies Record<AdmissionRule, number>;
 const stricter = (current: AdmissionRule, wanted: AdmissionRule): AdmissionRule => (STRICTNESS[current] >= STRICTNESS[wanted] ? current : wanted);

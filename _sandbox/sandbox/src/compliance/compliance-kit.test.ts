@@ -209,6 +209,13 @@ describe("preset", () => {
         expect(items.find((item) => item.id === "admission.webchat")).toMatchObject({ current: "allow", proposed: "hold" });
         // Already hold by default.
         expect(items.find((item) => item.id === "admission.issues")).toMatchObject({ changes: false });
+        expect(items.filter((item) => item.id.startsWith("admission.")).map((item) => [item.id, item.current, item.proposed])).toEqual([
+            ["admission.event", "allow", "hold"],
+            ["admission.listener", "allow", "hold"],
+            ["admission.webchat", "allow", "hold"],
+            ["admission.issues", "hold", "hold"],
+            ["admission.contact", "hold", "hold"],
+        ]);
         expect(items.filter((item) => item.id.startsWith("actionRules.")).map((item) => item.id)).toEqual([
             "actionRules.discord.message.send",
             "actionRules.discord.reaction.add",

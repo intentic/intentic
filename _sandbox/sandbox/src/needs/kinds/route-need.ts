@@ -4,6 +4,7 @@ import type { RouteAnswer } from "../../account-routing/route-client.js";
 import { routeNeedTitle, routeSubject } from "../../account-routing/route-subject.js";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { routeClientOf } from "../../account-routing/route-client.js";
+import { personContactFor } from "../../account-routing/require-pairing.js";
 import { routeSecretsOf } from "../../account-routing/route-secrets.js";
 import { peopleFor } from "../../account-routing/who-asks.js";
 import type { Services } from "../../composition.js";
@@ -14,14 +15,15 @@ import type { AskContext, Answerer, Met, NeedKindHandler, Resolved } from "../ne
 // sandbox. Only they can give it, and only from an editor signed in to both sandboxes: the card's press mints the secret
 // at the target (`POST /account/pairings` there), keeps it here (`POST /account/routes/secret`), then answers the need.
 // Raised by a send that found no secret for (target, person) (account-routing/require-pairing.ts), or by an agent asking
-// ahead (`needs ask route`); met once this sandbox holds a secret for the pair, however it got there.
+// ahead (`needs ask route`); met once this sandbox holds a secret for the pair, however it got there, or the person's own
+// contact for the target (2026-11-27, messages.md: the editor pairs a contact there instead once both speak s2s/1).
 
 export interface RouteNeedDeps {
     // The one person the raising conversation acts for, or why it cannot route as anyone.
     readonly personOf: (conversationId: string) => Promise<{ readonly person: string } | { readonly refused: string }>;
     // Where the platform says the target is, for that person.
     readonly locate: (target: string, person: string, scope: PassScope) => Promise<RouteAnswer>;
-    // Whether this sandbox holds a secret for (target's tunnel id, person).
+    // Whether this sandbox holds a secret for (target's tunnel id, person), or that person's own accepted contact there.
     readonly held: (target: string, person: string) => Promise<boolean>;
     // This sandbox's own tunnel id, which the target keys the pairing on.
     readonly self: () => string | undefined;
@@ -107,6 +109,7 @@ export const routeNeedOf = (whole: () => Services) =>
             return person === undefined ? { refused: "this sandbox has no owner yet to route as" } : { person: person.toLowerCase() };
         },
         locate: (target, person, scope) => routeClientOf(whole()).routeTo({ scope, person, sandbox: target }),
-        held: async (target, person) => (await routeSecretsOf(whole()).secretFor(target, person)) !== undefined,
+        held: async (target, person) =>
+            (await routeSecretsOf(whole()).secretFor(target, person)) !== undefined || (await personContactFor(whole().s2s, target, person)) !== undefined,
         self: () => sandboxIdFromToken(whole().config.connectToken),
     });

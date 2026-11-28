@@ -20,6 +20,15 @@ describe(`linkedConversationHref`, () => {
         );
     });
 
+    // 2026-11-27: a task handed to a contact waits on the far sandbox's Messages ▸ Contacts; its Linked sandboxes no longer lists it.
+    it(`opens the far sandbox's Contacts while a task handed to a contact waits for its owner's Allow`, () => {
+        const viaContact = { ...linked, contact: `c-ops` };
+        expect(linkedConversationHref({ kind: `linked`, status: `pending`, linked: viaContact })).toBe(
+            insidePath(`sbx 1`, page.sandboxSettings(`messages`, { query: { section: `contacts` } })),
+        );
+        expect(linkedConversationHref({ kind: `linked`, status: `running`, linked: viaContact })).toBe(`/?sandbox=sbx+1&conversation=link-brave-otter-1`);
+    });
+
     // 2026-11-24: a task handed over as the person is theirs over there; nothing waits on an owner's Allow.
     it(`opens a task handed over as the person in its conversation, whatever its status`, () => {
         const routed = { link: `route:sbx2`, sandbox: `ops`, sandboxId: `sbx2`, conversationId: `route-brave-otter-1`, via: `person` as const };

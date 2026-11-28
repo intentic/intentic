@@ -15,6 +15,8 @@ import { needsSlice, type NeedsSlice } from "../../needs/needs-slice.js";
 import { phonesSlice, type PhonesSlice } from "../../phones/phone-slice.js";
 import { rulesSlice, type RulesSlice } from "../../rules/rules-slice.js";
 import { runnersSlice, type RunnersSlice } from "../../runners/runners-slice.js";
+import { s2sIdentitySlice, type S2sIdentitySlice } from "../../s2s/identity/identity-slice.js";
+import { s2sSlice, type S2sSlice } from "../../s2s/s2s-slice.js";
 import { safetySlice, type SafetySlice } from "../../safety/safety-slice.js";
 import { shareSlice, type ShareSlice } from "../../share/share-slice.js";
 import { walletSlice, type WalletSlice } from "../../wallet/wallet-slice.js";
@@ -32,6 +34,8 @@ export type LeafMembers = TranslatorGatewaySlice &
     PhonesSlice &
     RulesSlice &
     RunnersSlice &
+    S2sIdentitySlice &
+    S2sSlice &
     SafetySlice &
     ShareSlice &
     WalletSlice &
@@ -52,6 +56,8 @@ export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
         phonesSlice: phonesSlice.build(core),
         rulesSlice: rulesSlice.build(core),
         runnersSlice: runnersSlice.build(core),
+        s2sIdentitySlice: s2sIdentitySlice.build(core),
+        s2sSlice: s2sSlice.build(core),
         safetySlice: safetySlice.build(core),
         shareSlice: shareSlice.build(core),
         walletSlice: walletSlice.build(core),
@@ -74,6 +80,8 @@ export const buildLeafSlices = (core: CompositionCore): LeafMembers => {
         ...built.phonesSlice,
         ...built.rulesSlice,
         ...built.runnersSlice,
+        ...built.s2sIdentitySlice,
+        ...built.s2sSlice,
         ...built.safetySlice,
         ...built.shareSlice,
         ...built.walletSlice,
@@ -95,6 +103,8 @@ export const leafTeardown = (services: Services): readonly (() => SliceStopped)[
     ...stopsOf(phonesSlice, services),
     ...stopsOf(rulesSlice, services),
     ...stopsOf(runnersSlice, services),
+    ...stopsOf(s2sIdentitySlice, services),
+    ...stopsOf(s2sSlice, services),
     ...stopsOf(safetySlice, services),
     ...stopsOf(shareSlice, services),
     ...stopsOf(walletSlice, services),

@@ -4,8 +4,10 @@ import type { ContributionPoint } from "../contribution-point.js";
 // (2026-11-26) Who reaches a source that anyone on the internet can, without the owner wiring each sender in, and so
 // which of the owner's admission floors (Guardrails ▸ Work started from outside) its wakes answer to: `visitor`, someone
 // talking with an assistant (the floor for a website visitor), `report`, a stranger's report setting work going (the
-// floor for a bug report, held by default). Read by the daemon in place of a table of provider names.
-export const LISTENER_STRANGERS = ["visitor", "report"] as const;
+// floor for a bug report, held by default). Read by the daemon in place of a table of provider names. (2026-11-27)
+// `contact`, a sandbox that is not a contact yet asking to become one (the floor for a contact request, held by
+// default): only its `contact.request` reaches the source unasked, everything else comes from a contact a person accepted.
+export const LISTENER_STRANGERS = ["visitor", "report", "contact"] as const;
 export type ListenerStrangers = (typeof LISTENER_STRANGERS)[number];
 
 // One narrowing field the generic automation editor draws for a source (a channel, a branch).
@@ -43,7 +45,7 @@ export const ListenerContributionSchema = z.object({
         .meta({ power: { key: "listener-strangers:${provider}", sentence: 'anyone on the internet can wake an agent through its "${provider}" listener' } })
         .optional()
         .describe(
-            "Set when anyone on the internet can reach this source without the owner adding them (a chat on a public page, a crash reporter), which holds its wakes to the owner's floor for strangers: `visitor`, someone talking with an assistant; `report`, a stranger's report setting work going, held for approval unless the owner says otherwise. Absent: its senders are people the owner connected, held to the floor for a team chat message.",
+            "Set when anyone on the internet can reach this source without the owner adding them (a chat on a public page, a crash reporter), which holds its wakes to the owner's floor for strangers: `visitor`, someone talking with an assistant; `report`, a stranger's report setting work going, held for approval unless the owner says otherwise; `contact`, a sandbox that is not a contact yet asking to become one, held for approval unless the owner says otherwise. Absent: its senders are people the owner connected, held to the floor for a team chat message.",
         ),
     automation: z
         .object({

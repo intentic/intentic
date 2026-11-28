@@ -13,6 +13,9 @@ import type { AutomationRecord } from "../../automations/automations-store.js";
  * - an extension's public route declaring `wakes: true`, while an enabled automation listens on the provider that
  *   extension's listener owns (the one the path names, for an automation's route): `/door/<id>/<path>`, the wake secret
  *   minted for that path the secret (door-tokens.ts `wake`), the one `api.sleep.wakeUrl` hands out.
+ * - the sandbox-to-sandbox inbox, while a contact holds this sandbox's one inbound wake secret (docs/architecture/
+ *   messages.md, "Waking"): `/s2s/inbox`, that secret (`?wake=`) its secret. One door for every contact, since the edge
+ *   takes at most WAKE_DOORS_MAX.
  * The list is rebuilt at every sleep, so a door goes with the automation that opened it; the composition root reads
  * the sources (bootstrap/platform-presence.ts `wakeDoorsFor`). */
 
@@ -30,8 +33,13 @@ export interface WakeDoorSources {
     readonly fireToken: (automationId: string) => Promise<string | undefined>;
     // The wake secret of one door path, minted on first ask and the same ever after.
     readonly wakeSecret: (path: string) => Promise<string>;
+    // The sandbox-to-sandbox inbox's one wake secret, while some contact holds it.
+    readonly s2s?: string | undefined;
     readonly now: number;
 }
+
+// The inbox every contact posts to, which a contact holding the inbound wake secret may wake the machine at.
+const S2S_WAKE_PATH = "/s2s/inbox";
 
 const sha256 = (secret: string): string => createHash("sha256").update(secret).digest("hex");
 
@@ -70,5 +78,6 @@ export const wakeDoorsOf = async (sources: WakeDoorSources): Promise<WakeDoor[]>
     );
     const paths = [...new Set(sources.extensions.flatMap((extension) => extensionPaths(extension, live)))];
     const routed = await Promise.all(paths.map(async (path): Promise<WakeDoor> => ({ path, digest: sha256(await sources.wakeSecret(path)) })));
-    return [...fired.filter((door) => door !== undefined), ...routed].toSorted((a, b) => a.path.localeCompare(b.path)).slice(0, WAKE_DOORS_MAX);
+    const s2s = sources.s2s === undefined ? [] : [{ path: S2S_WAKE_PATH, digest: sha256(sources.s2s) }];
+    return [...fired.filter((door) => door !== undefined), ...routed, ...s2s].toSorted((a, b) => a.path.localeCompare(b.path)).slice(0, WAKE_DOORS_MAX);
 };

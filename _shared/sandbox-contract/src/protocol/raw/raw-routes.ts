@@ -401,9 +401,10 @@ export const RAW_ROUTES = {
     "POST /account/routes/secret": { floor: "viewer", panel: false, control: "never" },
     "GET /account/routes": { floor: "viewer", control: "never" },
     // Routing as a person, a drop (schemas/account-routes.ts): another sandbox the person is in handing a note and files
-    // into this one's inbox, admitted in the handler by a drop pass beside the person's pairing (admit-route.ts); it starts
-    // no turn. The sending side, for `sandboxes send` on the agent's PATH. The inbox, for the `inbox` command and the
-    // editor's Received list: each shown to the people a drop names and to maintainers, the handler cutting the list.
+    // into this one, admitted in the handler by a drop pass beside the person's pairing (admit-route.ts); it starts no
+    // turn, and lands as a message in its sender's thread (2026-11-27). The sending side, for `sandboxes send` on the
+    // agent's PATH. The old inbox, which nothing files into since: each drop shown to the people it names and to
+    // maintainers, the handler cutting the list.
     "POST /account/drop": { auth: "door", control: "never", lane: "bulk" },
     "POST /account/drops": { agent: true, control: "never" },
     "GET /account/inbox": { floor: "viewer", agent: true, control: "never" },
@@ -442,6 +443,56 @@ export const RAW_ROUTES = {
     "POST /link/operate/exec/{id}/stop": { auth: "door", control: "never" },
     "POST /link/operate/read": { auth: "door", control: "never" },
     "POST /link/operate/write": { auth: "door", control: "never" },
+    // SANDBOX-TO-SANDBOX (schemas/s2s.ts, docs/architecture/messages.md). The doors another daemon calls: this one's
+    // public identity (no credential: answering at all says it speaks s2s/1), the inbox each signed envelope is admitted
+    // at, call sessions and calls, and the one-time upgrades an existing link, route pairing or report pass vouches for.
+    "GET /s2s/identity": { auth: "door", control: "never" },
+    "POST /s2s/inbox": { auth: "door", control: "never", lane: "bulk" },
+    "POST /s2s/session": { auth: "door", control: "never" },
+    "POST /s2s/call/{method}": { auth: "door", control: "never" },
+    "POST /link/upgrade": { auth: "door", control: "never" },
+    "POST /account/pairings/upgrade": { auth: "door", control: "never" },
+    "POST /account/contact-bootstrap": { auth: "door", control: "never" },
+    // This sandbox's identity: its own domains and their checks, rotation, and the recovery key, which is the owner's alone.
+    "GET /s2s/me": { floor: "maintainer", control: "never" },
+    "POST /s2s/me/domains": { panel: false, control: "never" },
+    "DELETE /s2s/me/domains/{domain}": { panel: false, control: "never" },
+    "POST /s2s/me/domains/{domain}/check": { control: "never" },
+    "POST /s2s/me/rotate": { panel: false, control: "never" },
+    "POST /s2s/me/recovery": { floor: "owner", panel: false, control: "never" },
+    "POST /s2s/me/recover": { floor: "owner", panel: false, control: "never" },
+    // Contacts: a sandbox-scoped one is the owner's or a maintainer's to make, accept, re-grant and block. A person-scoped
+    // one is that person's own (a viewer's too), so listing, pairing back, removing and trusting a new key floor at the
+    // viewer and the handler holds a person to their own. `paired` first: it would otherwise read as a contact's id. The
+    // `messages` command lists the contacts and the outbox with its turn proof: the handler cuts both to the contacts that
+    // turn may use, as it cuts a person's to their own.
+    "GET /s2s/contacts": { floor: "viewer", agent: true, control: "never" },
+    "POST /s2s/contacts/paired": { floor: "viewer", panel: false, control: "never" },
+    "POST /s2s/contacts": { panel: false, control: "never" },
+    "POST /s2s/contacts/{id}": { panel: false, control: "never" },
+    "DELETE /s2s/contacts/{id}": { floor: "viewer", panel: false, control: "never" },
+    "POST /s2s/contacts/{id}/accept": { panel: false, control: "never" },
+    "POST /s2s/contacts/{id}/block": { panel: false, control: "never" },
+    "POST /s2s/contacts/{id}/trust-key": { floor: "viewer", panel: false, control: "never" },
+    // The tasks contacts handed this sandbox (cut to the contacts the reader may use), and the owner's or a maintainer's
+    // Allow or Decline for one that waits on them: what a link's task waiting on Access ▸ Programs was.
+    "GET /s2s/tasks": { control: "never" },
+    "POST /s2s/contacts/{id}/tasks/{request}": { panel: false, control: "never" },
+    // A task this sandbox handed a contact, its live status asked of that contact (`task.watch`), for whoever may use the
+    // contact (the handler holds a person to their own, as the contacts' list does).
+    "GET /s2s/contacts/{id}/tasks/{request}/watch": { floor: "viewer", control: "never" },
+    "GET /s2s/outbox": { floor: "viewer", agent: true, control: "never" },
+    // A signed-in person's side: pairing with a sandbox they are also in, and the inbox, each thread shown to the people it
+    // is for and to maintainers (the handler cuts the list); the `messages` command reads and sends with its turn proof.
+    // Taking files writes into the workspace, so it is the collaborator's.
+    "POST /s2s/pairings": { floor: "viewer", panel: false, control: "never" },
+    "GET /s2s/threads": { floor: "viewer", agent: true, control: "never" },
+    "GET /s2s/threads/{id}": { floor: "viewer", agent: true, control: "never" },
+    "DELETE /s2s/threads/{id}": { floor: "viewer", control: "never" },
+    "POST /s2s/threads/{id}/read": { floor: "viewer", control: "never" },
+    "POST /s2s/messages": { floor: "viewer", agent: true, control: "never" },
+    "GET /s2s/messages/{id}/files/{name}": { floor: "viewer", agent: true, control: "never", lane: "bulk" },
+    "POST /s2s/messages/{id}/take": { floor: "collaborator", agent: true, control: "never" },
     "POST /system/control/tokens": { panel: false, control: "never" },
     "GET /system/control/tokens": { floor: "maintainer", panel: false, control: "never" },
     "DELETE /system/control/tokens/{id}": { panel: false, control: "never" },

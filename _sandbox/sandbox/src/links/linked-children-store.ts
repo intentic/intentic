@@ -1,4 +1,4 @@
-import { LinkTaskSchema } from "@intentic/sandbox-contract/schemas/links";
+import { LinkTaskSchema, type LinkTaskStatus } from "@intentic/sandbox-contract/schemas/links";
 import { z } from "zod";
 import { opt } from "../opt.js";
 import { defineDocument } from "../store/evolution/documents.js";
@@ -24,8 +24,12 @@ const StoredChildSchema = z.object({
     // Handed over as the person the parent acts for, on the `/account/task` doors, rather than over a link card
     // (linked-destinations.ts, 2026-11-24): `link` is then `route:<sandboxId>`, and every later call asks the platform for
     // a pass naming `person` and carries their pairing secret.
-    via: z.literal("person").optional(),
+    // Since 2026-11-27 also handed to a contact (`contact`, its id here) as a `task.request` message, its status pushed
+    // back as `task.update` messages rather than followed: `link` is then `contact:<id>`, and `remote` is unknown until
+    // the first update names the conversation the far side opened.
+    via: z.enum(["person", "contact"]).optional(),
     person: z.string().optional(),
+    contact: z.string().optional(),
     // The far side's conversation: absent only between filing the task and the far side taking it.
     remote: z.string().optional(),
     // The ask as handed over, kept until the far side answers it: a restart in between asks again under the same request
@@ -37,6 +41,8 @@ const StoredChildSchema = z.object({
     settledAt: z.number().optional(),
     // The report it settled on, cut to what the far side keeps, so a wait after a restart still hands it.
     report: z.string().optional(),
+    // The last status version a contact pushed for it, so an update heard again after a restart moves nothing.
+    version: z.number().int().nonnegative().optional(),
 });
 export type StoredChild = z.infer<typeof StoredChildSchema>;
 // A task the far side took: everything about following it reads its conversation there.
@@ -54,6 +60,15 @@ export const linkedChildrenDocument = defineDocument({
     portability: "carry",
     schema: StoredChildrenSchema,
 });
+
+// What the asking side knows of one task between status reads, in memory beside its stored record: the last status, the
+// report it settled on, and the follower's handle (a link's or a person route's; a contact's status is pushed instead).
+export interface Live {
+    stored: AskedChild;
+    last: LinkTaskStatus | undefined;
+    report: string | undefined;
+    following: AbortController | undefined;
+}
 
 // The task once the far side took it: its conversation there on file, and the ask no longer kept.
 export const askedOf = (pending: StoredChild, remote: string): AskedChild => {

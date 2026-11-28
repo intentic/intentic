@@ -5,8 +5,9 @@
 // the daemon in the same words the `diagnostics` tools give a Claude turn (src/logs/diagnostics-queries.ts). A shell is
 // what every other runtime has, and a person in a terminal too, so this is the same door for them.
 //
-// `--on <link>` asks a linked sandbox instead: the daemon relays the query through that link, and answers only while
-// its owner shares records on it (src/links/link-records.ts). Nothing here can change anything, here or there.
+// `--on <name>` asks another sandbox instead: a contact by that name first, by a `records.diagnostics` call while it grants
+// this sandbox its records (src/s2s/calls/), else a linked sandbox, relayed through that link while its owner shares records
+// on it (src/links/link-records.ts). Nothing here can change anything, here or there.
 //
 // Auth is the per-boot agent token from /run/intentic/agent.token, with the turn's stamp and proof, as `agents` sends.
 
@@ -49,9 +50,9 @@ const USAGE = `diagnostics — what this sandbox's daemon recorded, read-only. A
                                  one field of the resource series over time, e.g. system.cgroup.event_oom_kill,
                                  processes.top, window.eventLoop.delayP99Ms, daemon.memory.rssBytes
 
-  --on <link>   ask a linked sandbox's records instead of this one's: its owner must share records on the link
-                (\`agents links\` names the links and says which do). \`agents show <id> --on <link>\` reads its
-                conversations the same way
+  --on <name>   ask another sandbox's records instead of this one's: a contact by that name that grants this
+                sandbox its records (\`messages contacts\`), else a linked sandbox whose owner shares records on the
+                link (\`agents links\` says which do). \`agents show <id> --on <name>\` reads its conversations the same way
   --json        the answer as JSON
 
 Every answer says what it searched and how far back the record reaches, so an empty one can be told from one that

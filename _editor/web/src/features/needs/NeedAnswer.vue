@@ -8,6 +8,7 @@ import { ref } from "vue";
 import NeedAutomationBody from "./NeedAutomationBody.vue";
 import NeedCapabilityBody from "./NeedCapabilityBody.vue";
 import NeedClaimBody from "./routing/NeedClaimBody.vue";
+import NeedContactBody from "./NeedContactBody.vue";
 import NeedRouteBody from "./routing/NeedRouteBody.vue";
 import NeedRedirectBody from "./routing/NeedRedirectBody.vue";
 import NeedDecline from "./NeedDecline.vue";
@@ -82,6 +83,9 @@ const decline = async (): Promise<void> => {
     <NeedRedirectBody v-else-if="need.subject.kind === `redirect`" :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="false" :label="t(`needs.redirect.keep`)" @open="decline" /></template>
     </NeedRedirectBody>
+    <NeedContactBody v-else-if="need.subject.kind === `contact`" :need="need" :subject="need.subject">
+        <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
+    </NeedContactBody>
     <NeedDeployBody v-else-if="need.subject.kind === `deploy`" :need="need" :subject="need.subject">
         <template #decline><NeedDecline :busy="busy" :declining="declining" @open="declining = true" @send="decline" @cancel="declining = false" /></template>
     </NeedDeployBody>

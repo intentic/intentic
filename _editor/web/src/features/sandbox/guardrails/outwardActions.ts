@@ -104,10 +104,20 @@ export const ruleOptions = (): readonly PickerOption<AdmissionRule>[] => [
     { value: `deny`, label: t(`sandbox.guardrails.rule.deny`), icon: `times` },
 ];
 
-// Work started from outside, the ones a stranger can reach without the owner wiring anything first, then the ones the
-// owner set up, then the box's own: a clock, the workspace's own events, and a CI workflow, which takes no hold (a runner
-// would time out waiting).
-export const ADMISSION_KEYS = [`webchat`, `issues`, `listener`, `event`, `schedule`, `workspace`, `workflow`] as const satisfies readonly (keyof AdmissionPolicy)[];
+// Work started from outside, the ones a stranger can reach without the owner wiring anything first (a visitor, a bug
+// report, and since 2026-11-27 a sandbox that is not a contact asking to become one), then the ones the owner set up,
+// then the box's own: a clock, the workspace's own events, and a CI workflow, which takes no hold (a runner would time
+// out waiting).
+export const ADMISSION_KEYS = [
+    `webchat`,
+    `issues`,
+    `contact`,
+    `listener`,
+    `event`,
+    `schedule`,
+    `workspace`,
+    `workflow`,
+] as const satisfies readonly (keyof AdmissionPolicy)[];
 export type AdmissionKey = (typeof ADMISSION_KEYS)[number];
 
 export const admissionOptions = (key: AdmissionKey): readonly PickerOption<AdmissionRule>[] =>

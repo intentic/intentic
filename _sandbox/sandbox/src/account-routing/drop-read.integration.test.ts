@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { mintSandboxPass, type PassScope, ROUTE_SECRET_HEADER, SANDBOX_PASS_HEADER } from "@intentic/sandbox-contract/sandbox-pass";
 import type { Need } from "@intentic/sandbox-contract/schemas/needs";
+import { S2sThreadSchema, S2sThreadsListSchema } from "@intentic/sandbox-contract/schemas/s2s";
 import { unstubbed } from "@intentic/testing";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
@@ -17,16 +18,18 @@ import { memoryMembersStore } from "../harness/route-stores.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { runAgentTurn } from "../harness/route-turns.testing.js";
 import { accountOutboxOf } from "./account-outbox.js";
+import { legacyMessageIdOf } from "./messages/drop-threads.js";
 import { turnProof } from "../seams/workload-stamp.js";
 import { filePairingsStore } from "./pairings-store.js";
 import { routeSecretsOf } from "./route-secrets.js";
 
 // Routing as a person, both halves over HTTP: a sending sandbox's daemon (its `sandboxes send` door and its `--on`
-// relay) and a receiving one's (the drop door, the inbox, the read doors), with the platform's directory faked on a
-// local port and the receiver's address answered by its own app. What matters: only a person on the receiving roster at
-// the drop floor and paired with the sender gets anything in; a drop lands in the inbox and is taken from there; `wake`
-// reaches only that person's own conversation; a target that is down gets the drop later; a read sees only what the
-// person may read there, a private conversation never.
+// relay) and a receiving one's (the drop door, the Messages tab's threads, the read doors), with the platform's directory
+// faked on a local port and the receiver's address answered by its own app. Neither holds a contact for the other, so
+// the drop goes the old way. What matters: only a person on the receiving roster at the drop floor and paired with the
+// sender gets anything in; a drop lands as a message in its sender's thread and is taken from there; `wake` reaches only
+// that person's own conversation; a target that is down gets the drop later; a read sees only what the person may read
+// there, a private conversation never.
 
 const { privateKey, publicKey } = generateKeyPairSync("ed25519", {
     publicKeyEncoding: { type: "spki", format: "pem" },
@@ -215,6 +218,11 @@ const send = (from: ReturnType<typeof sending>, body: object, conversationId = "
 
 const file = (name: string, text: string) => ({ name, data: Buffer.from(text).toString("base64") });
 
+// The receiver's threads, as whoever the headers make the asker (Ada signed in, with none).
+const threadsOf = async (to: ReturnType<typeof receiving>, headers: Record<string, string> = {}) =>
+    S2sThreadsListSchema.parse(await (await to.app.request("http://sandbox.test/s2s/threads", { headers })).json()).threads;
+const threadOf = async (to: ReturnType<typeof receiving>, id: string) => S2sThreadSchema.parse(await (await to.app.request(`http://sandbox.test/s2s/threads/${id}`)).json());
+
 describe("a drop", () => {
     test("is refused to a person below the drop floor there, a viewer", async () => {
         receiver = receiving();
@@ -222,7 +230,7 @@ describe("a drop", () => {
         await pair(from, receiver, "vic@acme.test");
         const answer = await send(from, { sandbox: "home", note: "the logs you asked for" });
         expect(answer).toMatchObject({ status: 200, body: { state: "refused", reason: expect.stringContaining("may not drop here") } });
-        expect((await json(receiver.app.request("http://sandbox.test/account/inbox", { headers: AGENT }))).body).toMatchObject({ drops: [] });
+        expect(await receiver.services.s2s.threads.list()).toEqual([]);
     });
 
     test("without the person's pairing sends nothing and raises their card in the sending conversation", async () => {
@@ -234,12 +242,12 @@ describe("a drop", () => {
             body: { state: "asked", needId: expect.any(String), reason: expect.stringContaining("a card asks them now") },
         });
         expect(from.raised).toEqual([{ conversationId: "sender-talk", kind: "route" }]);
-        expect((await json(receiver.app.request("http://sandbox.test/account/inbox", { headers: AGENT }))).body).toMatchObject({ drops: [] });
+        expect(await receiver.services.s2s.threads.list()).toEqual([]);
         // Nothing staged was left behind.
         expect(readdirSync(from.historyRoot)).not.toContain("account-outbox-staged");
     });
 
-    test("is delivered into the inbox, shown to its person and never to a shell that names no turn, taken, and deleted", async () => {
+    test("is delivered as a message in its sender's thread, shown to its person and never to a shell that names no turn, taken, and deleted", async () => {
         receiver = receiving();
         const from = sending({ email: ADA });
         await pair(from, receiver, ADA);
@@ -249,36 +257,46 @@ describe("a drop", () => {
             files: [file("app.log", "boom"), file("notes.md", "# why")],
         });
         expect(answer).toMatchObject({ status: 200, body: { state: "delivered", to: "home" } });
-        const id = String(answer.body["id"]);
+        const message = legacyMessageIdOf(String(answer.body["id"]));
 
-        // Ada's editor lists it. A shell naming no conversation is shown none: an agent can unset its own variables.
-        const listed = await json(receiver.app.request("http://sandbox.test/account/inbox"));
-        expect(listed.body).toMatchObject({
-            drops: [
-                {
-                    id,
-                    from: { sandboxId: SENDER, sandboxName: "ops" },
-                    person: ADA,
-                    note: "the logs you asked for",
-                    files: [
-                        { name: "app.log", size: 4 },
-                        { name: "notes.md", size: 5 },
-                    ],
-                },
-            ],
-        });
-        expect((await json(receiver.app.request("http://sandbox.test/account/inbox", { headers: AGENT }))).body["drops"]).toHaveLength(0);
+        // Ada's editor lists the sender's thread, hers. A shell naming no conversation is shown none: an agent can unset
+        // its own variables.
+        const [thread, ...more] = await threadsOf(receiver);
+        expect(more).toEqual([]);
+        if (thread === undefined) {
+            throw new Error("no thread for the drop");
+        }
+        expect(thread).toMatchObject({ contactName: "ops", scope: { kind: "person", person: ADA }, unread: 1, messages: 1, last: { direction: "in", preview: "the logs you asked for" } });
+        const { id } = thread;
+        expect((await threadOf(receiver, id)).messages).toEqual([
+            {
+                id: message,
+                thread: id,
+                contact: thread.contact,
+                direction: "in",
+                kind: "message",
+                text: "the logs you asked for",
+                attachments: [
+                    { name: "app.log", size: 4 },
+                    { name: "notes.md", size: 5 },
+                ],
+                as: ADA,
+                sentAt: expect.any(Number),
+                receivedAt: expect.any(Number),
+                read: false,
+            },
+        ]);
+        expect(await threadsOf(receiver, AGENT)).toEqual([]);
         // A turn acting for nobody on it (the owner here) is shown none of it.
         const turn = { ...AGENT, "x-intentic-conversation": "owner-talk", "x-intentic-turn-proof": turnProof("owner-talk") };
-        expect((await json(receiver.app.request("http://sandbox.test/account/inbox", { headers: turn }))).body).toMatchObject({ drops: [] });
-        expect((await receiver.app.request(`http://sandbox.test/account/inbox/${id}/files`, { headers: turn })).status).toBe(404);
+        expect(await threadsOf(receiver, turn)).toEqual([]);
+        expect((await receiver.app.request(`http://sandbox.test/s2s/messages/${message}/files/app.log`, { headers: turn })).status).toBe(404);
 
-        // The files come back whole to whoever is shown the drop (here Ada, signed in), and Take writes them into a folder of
-        // the workspace.
-        const files = await json(receiver.app.request(`http://sandbox.test/account/inbox/${id}/files`));
-        expect(files.body).toMatchObject({ files: [{ name: "app.log", data: Buffer.from("boom").toString("base64") }, { name: "notes.md" }] });
+        // The files come back whole to whoever is shown the thread (here Ada, signed in), and Take writes them into a
+        // folder of the workspace.
+        expect(await (await receiver.app.request(`http://sandbox.test/s2s/messages/${message}/files/app.log`)).text()).toBe("boom");
         const take = () =>
-            receiver?.app.request(`http://sandbox.test/account/inbox/${id}/take`, {
+            receiver?.app.request(`http://sandbox.test/s2s/messages/${message}/take`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ dest: "from-ops" }),
@@ -288,17 +306,18 @@ describe("a drop", () => {
         // A second take onto the same files is refused rather than overwriting them.
         expect((await take()).status).toBe(409);
         // Never out of the workspace.
-        const outside = await receiver.app.request(`http://sandbox.test/account/inbox/${id}/take`, {
+        const outside = await receiver.app.request(`http://sandbox.test/s2s/messages/${message}/take`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ dest: "../elsewhere" }),
         });
         expect(outside.status).toBe(400);
 
-        expect((await receiver.app.request(`http://sandbox.test/account/inbox/${id}`, { method: "DELETE" })).status).toBe(200);
-        expect((await json(receiver.app.request("http://sandbox.test/account/inbox"))).body).toMatchObject({ drops: [] });
-        // It is on the history volume, gone with the delete; the sender kept nothing staged.
-        expect(readdirSync(join(receiver.historyRoot, "account-inbox"))).toEqual([]);
+        expect((await receiver.app.request(`http://sandbox.test/s2s/threads/${id}`, { method: "DELETE" })).status).toBe(200);
+        expect(await threadsOf(receiver)).toEqual([]);
+        // It is on the history volume, gone with the delete, and never in the old inbox; the sender kept nothing staged.
+        expect(readdirSync(join(receiver.historyRoot, "s2s-files"))).toEqual([]);
+        expect(readdirSync(receiver.historyRoot)).not.toContain("account-inbox");
         expect(readdirSync(join(from.historyRoot, "account-outbox-staged"))).toEqual([]);
     });
 
@@ -322,7 +341,7 @@ describe("a drop", () => {
         const elsewhere = await send(from, { sandbox: "home", note: "for you", wake: "not-hers" });
         expect(elsewhere.body).toMatchObject({ state: "refused", reason: expect.stringContaining("has no conversation not-hers of their own") });
 
-        // Hers, with no turn running: kept in the inbox, nothing started.
+        // Hers, with no turn running: kept in her thread, nothing started.
         const idle = await send(from, { sandbox: "home", note: "for later", wake: "ada-talk" });
         expect(idle.body).toMatchObject({ state: "delivered" });
         expect(receiver.steered).toEqual([]);
@@ -331,14 +350,16 @@ describe("a drop", () => {
         receiver.live.add("ada-talk");
         const live = await send(from, { sandbox: "home", note: "the numbers are in", wake: "ada-talk" });
         expect(live.body).toMatchObject({ state: "delivered" });
+        // Read before the match below, which leaves its matchers in the array it compared.
+        const saidText = receiver.steered[0]?.text ?? "";
         expect(receiver.steered).toMatchObject([
             { conversationId: "ada-talk", text: expect.stringContaining("the numbers are in"), outside: expect.stringContaining("ops") },
         ]);
-        const drops = (await json(receiver.app.request("http://sandbox.test/account/inbox"))).body["drops"];
-        expect(drops).toMatchObject([
-            { wake: { conversationId: "ada-talk", delivered: true } },
-            { wake: { conversationId: "ada-talk", delivered: false } },
-        ]);
+        const [thread] = await threadsOf(receiver);
+        const said = (await threadOf(receiver, thread?.id ?? "")).messages;
+        expect(said.map((message) => message.text)).toEqual(["for later", "the numbers are in"]);
+        // What the woken turn reads points at where the drop waits.
+        expect(saidText).toContain(`messages show ${thread?.id ?? ""}`);
     });
 
     test("to a sandbox that is down waits in the outbox, and lands once it is back", async () => {
@@ -359,9 +380,8 @@ describe("a drop", () => {
         down = false;
         await accountOutboxOf(from.services).drain();
         expect(await accountOutboxOf(from.services).list()).toEqual([]);
-        expect((await json(receiver.app.request("http://sandbox.test/account/inbox"))).body).toMatchObject({
-            drops: [{ note: "when you wake", files: [{ name: "a.txt" }] }],
-        });
+        const [thread] = await threadsOf(receiver);
+        expect((await threadOf(receiver, thread?.id ?? "")).messages).toMatchObject([{ text: "when you wake", attachments: [{ name: "a.txt", size: 1 }] }]);
     });
 });
 

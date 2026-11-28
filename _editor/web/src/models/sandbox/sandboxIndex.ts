@@ -546,6 +546,7 @@ export const SANDBOX_CARDS: readonly SettingEntry[] = [
         terms: () => [
             t(`sandbox.guardrails.admission.webchat`),
             t(`sandbox.guardrails.admission.issues`),
+            t(`sandbox.guardrails.admission.contact`),
             t(`sandbox.guardrails.admission.listener`),
             t(`sandbox.guardrails.admission.event`),
             t(`sandbox.guardrails.admission.schedule`),

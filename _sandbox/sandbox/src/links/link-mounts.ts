@@ -1,6 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract/schemas/capabilities";
-import { DiagnosticsQuerySchema } from "@intentic/sandbox-contract/schemas/diagnostics";
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import type { AgentTool } from "../agent/tools/agent-tools.js";
@@ -12,7 +11,7 @@ import { sdkServerDoor } from "../runtimes/daemon-tools/sdk-door.js";
 import { opt } from "../opt.js";
 import type { LinkListing } from "./link-listing.js";
 import { linkRecordsDiagnostics, linkRecordsRead } from "../sandboxes/link-client.js";
-import { MAX_ANSWER_CHARS } from "../logs/diagnostics-render.js";
+import { type FarRecords, farRecordsTools } from "../s2s/calls/far-records-tools.js";
 import { operateTools } from "./link-operate-tools.js";
 
 // EACH LINKED SANDBOX AS A TURN SEES IT: a tool server named after its card, mounted on the turn's lease the way a
@@ -43,70 +42,27 @@ const answer = <Payload extends object>(payload: Payload): ToolAnswer => ({ cont
 const supervising = (deps: LinkMountDeps, conversationId: string | undefined): ChildSupervisor | undefined =>
     conversationId === undefined ? undefined : supervisorFor(deps.conversations, conversationId);
 
-// A records answer as the model reads it: the far side's JSON, cut at the size every diagnostics answer is held to.
-const recordsAnswer = (text: string): ToolAnswer => ({
-    content: [
-        {
-            type: "text",
-            text: text.length > MAX_ANSWER_CHARS ? `${text.slice(0, MAX_ANSWER_CHARS)}… (cut at ${MAX_ANSWER_CHARS / 1000} KB: narrow it)` : text,
+// The link card's records doors, as the records tools reach them.
+const linkRecords = (card: LinkCard): FarRecords => {
+    const target = { id: card.id, config: card.config };
+    return {
+        fleet: async ({ handle, query }) => {
+            const search = new URLSearchParams({ ...query }).toString();
+            const read = await linkRecordsRead(target, `/link/records/fleet${handle === undefined ? "" : `/${encodeURIComponent(handle)}`}${search === "" ? "" : `?${search}`}`);
+            return read.ok ? { ok: true, body: read.body } : { ok: false, message: read.message };
         },
-    ],
-});
-
-// One fleet read of the linked sandbox, as its records doors answer it.
-const fleetRead = async (card: LinkCard, path: string, params: Record<string, string | undefined>): Promise<ToolAnswer> => {
-    const query = new URLSearchParams(Object.entries(params).flatMap(([key, value]) => (value === undefined ? [] : [[key, value]]))).toString();
-    const read = await linkRecordsRead({ id: card.id, config: card.config }, `/link/records/fleet${path}${query === "" ? "" : `?${query}`}`);
-    return recordsAnswer(JSON.stringify(read.ok ? read.body : { ok: false, message: read.message }));
+        diagnostics: (query) => linkRecordsDiagnostics(target, query),
+    };
 };
 
 // The records tools: reading the linked sandbox's conversations and diagnostics, which only works while its owner shares
-// them on the link, and starts nothing over there.
-const recordsTools = (card: LinkCard, sandbox: string) => {
-    const shared = `Only while "${sandbox}"'s owner shares its records on the link (\`about\` says whether); read-only, starts no turn there.`;
-    return [
-        sdk().tool(
-            "conversations",
-            `The linked sandbox "${sandbox}"'s conversations, most recently active first, or with \`find\` the ones that said or ran a phrase, as its own \`agents ls\` and \`agents find\` answer. ${shared}`,
-            {
-                find: z.string().min(1).optional().describe("A phrase to search for instead of listing."),
-                all: z.boolean().optional().describe("Include the archive."),
-                limit: z.number().int().min(1).max(100).optional(),
-            },
-            async ({ find, all, limit }) => fleetRead(card, "", { q: find, all: all === true ? "1" : undefined, limit: limit?.toString() }),
-            { annotations: toolAnnotations("read") },
-        ),
-        sdk().tool(
-            "conversation",
-            `One of "${sandbox}"'s conversations, whole, as its own \`agents show\` answers: what it was asked, how it ended, its branch; with \`transcript\` its last messages and their tool calls, with \`message\` one message in full. ${shared}`,
-            {
-                handle: z.string().min(1).describe("Its id, an id prefix, words from its title, a session id: anything `agents show` takes."),
-                transcript: z.boolean().optional(),
-                last: z.number().int().min(1).max(100).optional().describe("How many of the last messages (default 20)."),
-                grep: z.string().min(1).optional().describe("Only messages carrying this phrase."),
-                message: z.number().int().min(0).optional().describe("One message whole, by its number."),
-            },
-            async ({ handle, transcript, last, grep, message }) =>
-                fleetRead(card, `/${encodeURIComponent(handle)}`, {
-                    transcript: transcript === true || last !== undefined || grep !== undefined ? "1" : undefined,
-                    last: last?.toString(),
-                    grep,
-                    message: message?.toString(),
-                }),
-            { annotations: toolAnnotations("read") },
-        ),
-        sdk().tool(
-            "diagnostics",
-            `One diagnostics query of "${sandbox}"'s records, as its own \`diagnostics\` tools answer: \`errors\` (its daemon log, or \`source: "browser"\` its editor's reports; \`from\`/\`until\` read around a moment), \`timeline\` (one conversation), \`turns\`, \`restarts\`, \`slow\`, \`resources\`. Arguments as those tools take them, with \`query\` naming which. ${shared}`,
-            { ask: DiagnosticsQuerySchema.describe('The query, e.g. {"query": "timeline", "conversationId": "glad-falcon-puep"}.') },
-            async ({ ask }) => {
-                const answered = await linkRecordsDiagnostics({ id: card.id, config: card.config }, ask);
-                return recordsAnswer(answered.ok ? answered.value.text : `"${sandbox}": ${answered.message}`);
-            },
-            { annotations: toolAnnotations("read") },
-        ),
-    ];
-};
+// them on the link, and starts nothing over there (s2s/calls/far-records-tools.ts, the tools a contact's server carries).
+const recordsTools = (card: LinkCard, sandbox: string) =>
+    farRecordsTools(linkRecords(card), {
+        sandbox,
+        title: `The linked sandbox "${sandbox}"`,
+        shared: `Only while "${sandbox}"'s owner shares its records on the link (\`about\` says whether); read-only, starts no turn there.`,
+    });
 
 const NOT_HERE =
     "This turn may not hand work on: it was started by outside content, or its role does not delegate. Do the work here, or say what you left undone.";

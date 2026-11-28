@@ -182,6 +182,17 @@ const paired = async (link: PairedLink): Promise<void> => {
     await connect();
 };
 
+// The pairing made a contact rather than a link (both sandboxes speak s2s/1): nothing to save, and the daemon meets the
+// need by the contact (needs/link-contact-need.ts) once told.
+const contacted = async (): Promise<void> => {
+    const id = props.need.id;
+    await answer({
+        tag: `connect`,
+        failed: t(`needs.capability.couldNotConnect`),
+        task: () => applyNow(applyDeps(id), true),
+    });
+};
+
 // A kind added in one press (a linked sandbox's pairing, the fleet's Allow; kindSlots.ts `needLead`), in the card.
 const selfAdd = computed(() =>
     props.subject.mode !== `connect` || entry.value === undefined
@@ -189,6 +200,7 @@ const selfAdd = computed(() =>
         : slotsOf(entry.value.kind).needLead?.({
               target: props.subject.target,
               paired,
+              contacted,
               allow: allowFleet,
               notice: (raised) => {
                   pairingNotice.value = raised;

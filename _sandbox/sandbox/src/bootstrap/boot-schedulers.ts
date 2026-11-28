@@ -33,6 +33,15 @@ import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
 import { startAccountOutbox } from "../account-routing/account-outbox.js";
+import { registerReportKind } from "../account-routing/messages/report-kind.js";
+import { reportIntakeOf } from "../account-routing/messages/report-intake.js";
+import { startIdentityDomainChecks } from "../s2s/identity/identity-slice.js";
+import { listenerMessageOf } from "../s2s/heard.js";
+import { startS2s } from "../s2s/s2s-slice.js";
+import { startUpgradeSweep } from "../links/upgrade/upgrade-sweep.js";
+import { startContactCalls } from "../links/contacts/contact-calls.js";
+import { startContactTasks } from "../links/contacts/contact-tasks.js";
+import { dispatchListenerMessage } from "../automations/listeners.js";
 import { startPoolSignalsFor } from "../agent/providers/accounts/pool-signals.js";
 import { createCiPoller } from "../ci/poller.js";
 import { createOriginFollow, type OriginFollowDeps } from "../git/remote/follow-origin.js";
@@ -273,11 +282,28 @@ const startCi = ({ role, services, shutdown }: Pick<BootPhase, "role" | "service
 };
 
 // What crosses to the owner's other sandboxes: reports one could not take yet, retried until they land
-// (account-routing/account-outbox.ts), and the run-outs they met on the accounts this one holds, heard every five minutes
-// (agent/providers/accounts/pool-signals.ts).
+// (account-routing/account-outbox.ts), the run-outs they met on the accounts this one holds, heard every five minutes
+// (agent/providers/accounts/pool-signals.ts), this sandbox's own domains, checked daily (s2s/identity/), and its messages
+// to contacts, retried until they land, with every contact told when its key changes (s2s/s2s-slice.ts). A report a
+// contact sends goes to the issues inbox as one through the account door does (account-routing/messages/report-kind.ts). What a
+// contact sends is heard by automations, through the same listener door as CI, and by nothing else (s2s/heard.ts).
 const startAcrossSandboxes = (services: BootPhase["services"], shutdown: BootPhase["shutdown"]): void => {
+    // Tasks a contact hands this sandbox and this sandbox's tasks to contacts (links/contacts/), heard before the outbox drains.
+    shutdown.push(startContactTasks(services));
+    // What a contact's calls answer: records, operating and a task's live view (links/contacts/contact-calls.ts).
+    shutdown.push(startContactCalls(services));
     shutdown.push(startAccountOutbox(services));
     shutdown.push(startPoolSignalsFor(services));
+    shutdown.push(startIdentityDomainChecks(services));
+    shutdown.push(startS2s(services));
+    // Links and route pairings to sandboxes that speak s2s/1 become contacts (links/upgrade/upgrade-sweep.ts).
+    shutdown.push(startUpgradeSweep(services));
+    shutdown.push(registerReportKind(services.s2s, { intake: reportIntakeOf(services), logger: services.logger }));
+    shutdown.push(
+        services.s2s.onHeard(async (heard) => {
+            await dispatchListenerMessage(services, listenerMessageOf(heard));
+        }),
+    );
 };
 
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.

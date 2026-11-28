@@ -41,9 +41,10 @@ jest.mock(`../../../models/sandbox/useSandboxSettings`, () => ({
 // The disk watch's last reading, none unless a test sets one.
 const disk = shallowRef<DiskPressure | undefined>();
 jest.mock(`./storage/useDiskPressure`, () => ({ useDiskPressure: () => ({ pressure: disk }) }));
-// What other sandboxes dropped here for the reader: nothing unless a test says so.
-const received = shallowRef<readonly { id: string }[]>([]);
-jest.mock(`./received/useReceivedDrops`, () => ({ useReceivedDrops: () => ({ drops: received }) }));
+// The Messages tab's threads: nothing unread and no contact request waiting unless a test says so.
+const unreadThreads = shallowRef(0);
+const contactRequests = shallowRef(0);
+jest.mock(`../../../models/messages/useMessages`, () => ({ useThreads: () => ({ unread: unreadThreads, requests: contactRequests }) }));
 
 // What the Capabilities page recommends for the Extension tile: nothing unless a test offers a moved extension.
 const extensionOffer = shallowRef<{ entry: string; evidence: string; reason: string; prefill: Record<string, string> } | undefined>();
@@ -66,7 +67,8 @@ afterEach(() => {
     extensionOffer.value = undefined;
     delete gpu.pausedFor;
     disk.value = undefined;
-    received.value = [];
+    unreadThreads.value = 0;
+    contactRequests.value = 0;
     pending.value = undefined;
     hostedBuild.value = undefined;
     unbacked.value = false;
@@ -232,10 +234,22 @@ it(`points an extension that moved out at the Extension tile's prefilled install
     ]);
 });
 
-// Drops other sandboxes the reader is in sent here as them wait on the Overview's Received card: counted, and pointing
-// at the card itself.
-it(`counts drops waiting for the reader and points at the Received card`, async () => {
-    received.value = [{ id: `a` }, { id: `b` }];
-    const row = (await attention()).needs.value.find((item) => item.icon === `download`);
-    expect([row?.count, row?.to, row?.message]).toEqual([2, settingsAt(undefined, `sandbox-received`), `2 drops from other sandboxes wait for you`]);
+// What other sandboxes sent waits on the Messages tab (drops arrive as messages now, and the Overview's Received card that
+// held them is gone): unread threads counted by thread, pointing at the Inbox, and contact requests at Contacts.
+it(`counts unread threads and points at the Messages tab's Inbox`, async () => {
+    unreadThreads.value = 2;
+    const row = (await attention()).needs.value.find((item) => item.icon === `envelope`);
+    expect([row?.count, row?.to, row?.message]).toEqual([2, settingsAt(`messages`), `2 unread message threads`]);
+});
+
+it(`counts contact requests waiting on a maintainer and points at Contacts`, async () => {
+    contactRequests.value = 1;
+    const row = (await attention()).needs.value.find((item) => item.icon === `users`);
+    expect([row?.count, row?.to, row?.message]).toEqual([1, insidePath(BOX, page.sandboxSettings(`messages`, { query: { section: `contacts` } })), `1 sandbox asks to be a contact`]);
+});
+
+it(`says nothing of messages while none waits`, async () => {
+    const icons = (await attention()).needs.value.map((item) => item.icon);
+    expect(icons).not.toContain(`envelope`);
+    expect(icons).not.toContain(`users`);
 });

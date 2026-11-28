@@ -3,7 +3,8 @@ import { WAKE_DOORS_MAX } from "@intentic/api-contract/ingress";
 import { type WakeDoorSources, wakeDoorsOf, wakeRoutePath } from "./wake-doors.js";
 
 // The doors a hosted machine sleeps with: a door for every enabled webhook automation whose fire token was handed out,
-// and for every `wakes` route of an extension whose listener provider has an enabled automation behind it; only digests.
+// for every `wakes` route of an extension whose listener provider has an enabled automation behind it, and for the s2s
+// inbox while a contact holds its wake secret; only digests.
 
 const NOW = Date.parse("2026-11-27T12:00:00Z");
 const sha = (secret: string): string => createHash("sha256").update(secret).digest("hex");
@@ -80,4 +81,11 @@ test("the list is stable and held to what the platform keeps", async () => {
     const doors = await wakeDoorsOf(sources({ automations: automations.toReversed() }));
     expect(doors).toHaveLength(WAKE_DOORS_MAX);
     expect(doors[0]?.path).toBe("/automations/auto-000/fire");
+});
+
+test("the sandbox-to-sandbox inbox is one door while a contact holds the inbound wake secret, and none without one", async () => {
+    expect(await wakeDoorsOf(sources({ s2s: "inbound-wake-secret-0123456789abcdef" }))).toEqual([
+        { path: "/s2s/inbox", digest: sha("inbound-wake-secret-0123456789abcdef") },
+    ]);
+    expect(await wakeDoorsOf(sources({ s2s: undefined }))).toEqual([]);
 });

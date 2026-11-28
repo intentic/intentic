@@ -1,12 +1,15 @@
-<!-- Pairs this sandbox with another of the reader's: mints the link over there, under their session there, with the terms they choose here, and fills the Linked sandbox form with what it answered. -->
+<!-- Pairs this sandbox with another of the reader's: where both speak s2s/1, a contact holding the terms they choose here as its grants (no link is minted toward such a sandbox, docs/architecture/messages.md "Across versions"); otherwise mints the link over there, under their session there, and fills the Linked sandbox form with what it answered. -->
 <script setup lang="ts">
 import { type NoticeModel, Button, Picker, type PickerOption, RowGroup, RowNote, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { useT } from "@intentic/ui/i18n";
 import type { LinkTerms } from "@intentic/sandbox-contract/schemas/links";
+import type { S2sContact } from "@intentic/sandbox-contract/schemas/s2s";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import { useSandbox } from "../client/sandbox/useSandbox";
+import { supportsRoute } from "../client/sandbox/useDaemonRoutes";
+import { LINK_ASKER_GRANTS, linkContactGrants, pairContact, pairPreferringContact, useContactPairingApi } from "./contactPairing";
 import {
     DEFAULT_TERMS,
     type FarRole,
@@ -28,6 +31,8 @@ const props = defineProps<{
 const emit = defineEmits<{
     /** What the form is filled with: the card's id, the far address, its token and its name. */
     pick: [paired: PairedLink];
+    /** Paired as a contact instead: no card to fill, the contact is on the Messages tab. */
+    contact: [contact: S2sContact];
     /** What went wrong over there, on the page's own notice, or null to clear it. */
     notice: [notice: NoticeModel | null];
 }>();
@@ -64,6 +69,9 @@ const records = ref(DEFAULT_TERMS.records);
 const operate = ref(DEFAULT_TERMS.operate);
 const pairing = ref(false);
 const paired = ref<PairedLink>();
+// The contact made instead of a link, where both sandboxes speak s2s/1.
+const contact = ref<S2sContact>();
+const contacts = useContactPairingApi();
 
 const roleOptions = computed<readonly PickerOption<string>[]>(() => [
     { value: NO_ROLE, label: t(`capabilities.linkPairing.noRole`), hint: t(`capabilities.linkPairing.noRoleHint`) },
@@ -75,6 +83,7 @@ watch(farId, async (id) => {
     roles.value = [];
     actsAs.value = NO_ROLE;
     paired.value = undefined;
+    contact.value = undefined;
     if (id === undefined) {
         return;
     }
@@ -107,15 +116,33 @@ const pair = async (): Promise<void> => {
         if (actsAs.value !== undefined && actsAs.value !== NO_ROLE) {
             terms.actsAs = actsAs.value;
         }
-        paired.value = await pairWith(
-            {
-                far: { id: far.id, name: far.name, daemonUrl: far.daemonUrl },
-                here: { id: activeSandboxId.value, name: active.value?.name ?? t(`capabilities.linkPairing.thisSandbox`), url: daemonUrl.value },
-                terms,
-            },
-            t(`capabilities.linkPairing.tooOld`, { name: far.name }),
+        const tooOld = t(`capabilities.linkPairing.tooOld`, { name: far.name });
+        const made = await pairPreferringContact(
+            supportsRoute(`POST /s2s/contacts/paired`),
+            () =>
+                pairContact(
+                    contacts,
+                    { far: { id: far.id, name: far.name }, scope: `sandbox`, here: LINK_ASKER_GRANTS, there: linkContactGrants(terms) },
+                    true,
+                    { tooOld },
+                ),
+            () =>
+                pairWith(
+                    {
+                        far: { id: far.id, name: far.name, daemonUrl: far.daemonUrl },
+                        here: { id: activeSandboxId.value, name: active.value?.name ?? t(`capabilities.linkPairing.thisSandbox`), url: daemonUrl.value },
+                        terms,
+                    },
+                    tooOld,
+                ),
         );
-        emit(`pick`, paired.value);
+        if (made.kind === `contact`) {
+            contact.value = made.contact;
+            emit(`contact`, made.contact);
+        } else {
+            paired.value = made.value;
+            emit(`pick`, made.value);
+        }
     } catch (error) {
         emit(`notice`, noticeFrom(error, t(`capabilities.linkPairing.couldntPair`, { name: far.name })));
     } finally {
@@ -187,6 +214,7 @@ const pair = async (): Promise<void> => {
                         </Button>
                     </div>
                     <p v-if="paired" class="text-xs text-success">{{ t(`capabilities.linkPairing.paired`, { name: paired.name }) }}</p>
+                    <p v-if="contact" class="text-xs text-success" data-paired-contact>{{ t(`capabilities.linkPairing.pairedContact`, { name: contact.name }) }}</p>
                 </form>
             </div>
         </RowNote>

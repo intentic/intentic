@@ -7,7 +7,7 @@
         "skipLibCheck": true
     },
     "include": ["./src/**/*"],
-    "exclude": ["./src/**/*.test.ts"],
+    "exclude": ["./src/**/*.test.ts", "./src/**/*.testing.ts"],
     "references": [
         { "path": "../../_tools/base" },
         { "path": "../../_tools/constants" },

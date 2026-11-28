@@ -73,9 +73,10 @@ flowchart LR
   URL may wake a sleeping hosted sandbox, its only `*` an automation's). `publicRouteFor` is the one reading of which declared route a
   request lands on, which the daemon's door and the SDK's fake share; a `superRefine` holds the routes to a `server`
   bundle and an automation's route to the extension's own `contributes.listener`.
-- `listener.strangers` (`visitor` or `report`, 2026-11-26) says anyone on the internet reaches the source, which holds
-  its wakes to the owner's admission floor for a website visitor or a bug report instead of a team chat's; the daemon
-  reads it in place of a table of provider names. It is a power of its own.
+- `listener.strangers` (`visitor` or `report`, 2026-11-26; `contact`, 2026-11-27) says anyone on the internet reaches
+  the source, which holds its wakes to the owner's admission floor for a website visitor, a bug report or a contact
+  request from a sandbox that is not a contact yet, instead of a team chat's; the daemon reads it in place of a table of
+  provider names. It is a power of its own.
 - A cli card may declare `sleepWatch` (`points/sleep-watch.ts`, 2026-11-27): the one credential Intentic's servers may
   hold while a hosted sandbox sleeps, for a service that delivers only over a live connection (`discord`, the only one
   the platform speaks). It names the secret field and a consent field, which the parse holds to a switch (`boolean`)

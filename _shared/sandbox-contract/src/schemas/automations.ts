@@ -586,9 +586,10 @@ export const TriggerSourceSchema = z.object({
     // The provider owns the payload vocabulary, so it owns the first prompt that explains that payload.
     starterPrompt: z.string().min(1).optional(),
     // (2026-11-26) Set on a source anyone on the internet reaches (a listener's `strangers`), naming which of the owner's
-    // admission floors its wakes answer to: `visitor` (a website visitor's), `report` (a bug report's). Absent: a source
-    // whose senders the owner connected, held to the team chat floor.
-    strangers: z.enum(["visitor", "report"]).optional(),
+    // admission floors its wakes answer to: `visitor` (a website visitor's), `report` (a bug report's), and (2026-11-27)
+    // `contact` (a contact request from a sandbox that is not a contact yet). Absent: a source whose senders the owner
+    // connected, held to the team chat floor.
+    strangers: z.enum(["visitor", "report", "contact"]).optional(),
     // Any one connected capability is enough; computed client-side, since capability facts are pushed live and a served
     // boolean would go stale between polls.
     requires: z.array(z.string().min(1)).default([]),

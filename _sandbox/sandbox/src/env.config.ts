@@ -57,6 +57,13 @@ export const configSchema = z.object({
         .prefault({}),
     // ACME directory for the loopback cert; empty ⇒ Let's Encrypt production, else staging for testing.
     acmeDirectoryUrl: z.string().default(""),
+    // Lets the sandbox-to-sandbox layer reach a loopback, private or link-local host (over plain http for a loopback one):
+    // two local daemons talking in development. Off everywhere else, so a contact's address can never aim this daemon at
+    // its own network (s2s/s2s-wiring.ts hostProblem).
+    s2sPrivateHosts: z
+        .string()
+        .default("")
+        .transform((value) => value === "true" || value === "1"),
     // Intent-declared internal MCP tools (base64 JSON), set by the workspace provider; constant for the sandbox.
     intenticAgentTools: z.string().default(""),
     // Daemon-wide default Claude model for turns with none pinned (headless wakes); empty ⇒ account default.

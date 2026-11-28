@@ -64,6 +64,7 @@
                 "public",
                 "share",
                 "account-routing",
+                "s2s",
                 "definition"
             ]
         },

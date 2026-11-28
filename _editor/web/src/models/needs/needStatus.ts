@@ -28,6 +28,8 @@ export const NEED_ICONS: Readonly<Record<NeedKind, IconName>> = {
     redirect: `send`,
     // A managed stack let receive its secrets: the rail's own Deployments glyph.
     deploy: `deployments`,
+    // Another sandbox added or accepted as a contact (docs/architecture/messages.md).
+    contact: `users`,
 };
 
 // The header chip of a need that is no longer waiting; undefined while it is, since the card's own buttons say that.

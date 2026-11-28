@@ -9,6 +9,8 @@ import { accountSendRawRoutes } from "./account-routing/account-send.routes.js";
 import { accountRawRoutes } from "./account-routing/account.routes.js";
 import { dropRawRoutes } from "./account-routing/drop.routes.js";
 import { inboxRawRoutes } from "./account-routing/inbox.routes.js";
+import { contactBootstrapRawRoutes } from "./account-routing/messages/contact-bootstrap.routes.js";
+import { pairingUpgradeRawRoutes } from "./account-routing/messages/pairing-upgrade.js";
 import { pairingRawRoutes } from "./account-routing/pairing.routes.js";
 import { accountReadRawRoutes } from "./account-routing/read.routes.js";
 import { pageMediaRawRoutes } from "./agent/pages/page-media.routes.js";
@@ -46,10 +48,12 @@ import { deviceArtifactRawRoutes } from "./hosts/device-artifacts.routes.js";
 import { deviceDoorRawRoutes } from "./hosts/device-door.routes.js";
 import { deviceFileRawRoutes } from "./hosts/device-files.routes.js";
 import { deviceRunRawRoutes } from "./hosts/runs/device-runs.routes.js";
+import { s2sContactTasksRawRoutes } from "./links/contacts/contact-tasks.routes.js";
 import { linkOperateRawRoutes } from "./links/link-operate.js";
 import { linkRecordsRawRoutes } from "./links/link-records.js";
 import { linkRawRoutes } from "./links/links.routes.js";
 import { personTaskRawRoutes } from "./links/person-task.routes.js";
+import { linkUpgradeRawRoutes } from "./links/upgrade/link-upgrade.routes.js";
 import { diagnosticsRawRoutes } from "./logs/diagnostics.routes.js";
 import { fleetLoopRawRoutes } from "./loops/fleet-loop.routes.js";
 import { peerDoorRawRoutes } from "./peers/peer-doors.routes.js";
@@ -61,6 +65,10 @@ import { runnerSubagentsRawRoutes } from "./runners/fleet/runner-subagents.route
 import { runnerCredentialRawRoutes } from "./runners/runner-credentials.routes.js";
 import { runnerGitRawRoutes } from "./runners/runner-git.routes.js";
 import { runnerDefinitionRawRoutes } from "./runners/runner.routes.js";
+import { s2sCallsRawRoutes } from "./s2s/calls/calls.routes.js";
+import { s2sContactsRawRoutes } from "./s2s/contacts/contacts.routes.js";
+import { s2sIdentityRawRoutes } from "./s2s/identity/identity.routes.js";
+import { s2sMessagesRawRoutes } from "./s2s/messages/messages.routes.js";
 import { sandboxesRawRoutes } from "./sandboxes/sandboxes.routes.js";
 import { hostKeyringRawRoutes } from "./secrets/device/host-keyring.routes.js";
 import { keyringKeysRawRoutes } from "./secrets/device/keyring-keys.routes.js";
@@ -79,6 +87,8 @@ export const appRawRoutes = (services: Services) =>
         accountRawRoutes(services),
         dropRawRoutes(services),
         inboxRawRoutes(services),
+        contactBootstrapRawRoutes(services),
+        pairingUpgradeRawRoutes(services),
         pairingRawRoutes(services),
         accountReadRawRoutes(services),
         pageMediaRawRoutes(services),
@@ -116,10 +126,12 @@ export const appRawRoutes = (services: Services) =>
         deviceDoorRawRoutes(services),
         deviceFileRawRoutes(services),
         deviceRunRawRoutes(services),
+        s2sContactTasksRawRoutes(services),
         linkOperateRawRoutes(services),
         linkRecordsRawRoutes(services),
         linkRawRoutes(services),
         personTaskRawRoutes(services),
+        linkUpgradeRawRoutes(services),
         diagnosticsRawRoutes(services),
         fleetLoopRawRoutes(services),
         peerDoorRawRoutes(services),
@@ -131,6 +143,10 @@ export const appRawRoutes = (services: Services) =>
         runnerCredentialRawRoutes(services),
         runnerGitRawRoutes(services),
         runnerDefinitionRawRoutes(services),
+        s2sCallsRawRoutes(services),
+        s2sContactsRawRoutes(services),
+        s2sIdentityRawRoutes(services),
+        s2sMessagesRawRoutes(services),
         sandboxesRawRoutes(services),
         hostKeyringRawRoutes(services),
         keyringKeysRawRoutes(services),

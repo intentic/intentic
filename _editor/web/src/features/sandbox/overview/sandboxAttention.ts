@@ -31,8 +31,8 @@ import { STORAGE_ANCHOR } from "./storage/storageAnchor";
 import { storageCategoryLabel } from "./storage/storageCategories";
 import { diskPressing, freePercent } from "./storage/diskPressureView";
 import { useDiskPressure } from "./storage/useDiskPressure";
-import { RECEIVED_ANCHOR } from "./received/receivedAnchor";
-import { useReceivedDrops } from "./received/useReceivedDrops";
+import { messagesPath } from "../../../models/sandbox/sandboxNav";
+import { useThreads } from "../../../models/messages/useMessages";
 
 // What the active sandbox needs from its owner, versus what's merely true of it: one list, split by `kind`, read
 // by the getting-started ring on the desktop rail (gettingStarted/SandboxErrands.vue) and the mobile menu so they agree.
@@ -110,21 +110,21 @@ const accessRequestItems = (count: number): SandboxAttentionItem[] =>
         ? []
         : [{ icon: `users`, tone: `info`, message: t(`sandbox.sandboxAttention.peopleAskForAccess`, { count }, count), to: here(page.sandboxSettings(`access`)), kind: `needs`, count }];
 
-// Notes and files other sandboxes the reader is in dropped here as them (account-routing.md), which wait on the Overview's
-// Received card until taken or deleted: the reader's own errand, so it may badge, worded as the count of what waits.
-const receivedItems = (count: number): SandboxAttentionItem[] =>
-    count === 0
-        ? []
-        : [
-              {
-                  icon: `download`,
-                  tone: `info`,
-                  message: t(`sandbox.sandboxAttention.dropsReceived`, { count }, count),
-                  to: here(page.sandboxSettings(undefined, { hash: RECEIVED_ANCHOR })),
-                  kind: `needs`,
-                  count,
-              },
-          ];
+// Messages from other sandboxes the reader has not read yet (docs/architecture/messages.md), counted by thread, and the
+// contact requests waiting on a maintainer's answer: errands read on the Messages tab, so each may badge, worded as the
+// count of what waits. Drops arrive as messages, which is why the Overview's Received card that held them is gone.
+const messageItems = (unread: number, requests: number): SandboxAttentionItem[] => {
+    const items: SandboxAttentionItem[] = [];
+    if (unread > 0) {
+        const message = t(`sandbox.sandboxAttention.messagesUnread`, { count: unread }, unread);
+        items.push({ icon: `envelope`, tone: `info`, message, to: messagesPath(), kind: `needs`, count: unread });
+    }
+    if (requests > 0) {
+        const message = t(`sandbox.sandboxAttention.contactRequests`, { count: requests }, requests);
+        items.push({ icon: `users`, tone: `info`, message, to: messagesPath(`contacts`), kind: `needs`, count: requests });
+    }
+    return items;
+};
 
 // A hosted sandbox's build, which the platform runs for minutes: "Rebuild needed" over a build already under way
 // asked an hour of its reader for something they had already done, or that nobody needed to do. Ticks only while a
@@ -185,7 +185,7 @@ export function useSandboxAttention() {
     const { requests: accessRequests } = useAccessRequests(computed(() => tier.value === `owner`));
     const { settings } = useSandboxSettings();
     const { pressure: diskPressure } = useDiskPressure();
-    const { drops: receivedDrops } = useReceivedDrops();
+    const { unread: unreadThreads, requests: contactRequests } = useThreads();
 
     // Declared worst-first: the head sets the badge, the rest fills the popover. A row is its condition and its
     // item side by side rather than a spread ternary, so adding one is a line and reading the order is a column.
@@ -320,7 +320,7 @@ export function useSandboxAttention() {
                 .concat(gpuPausedItems(settings.value?.gpu?.pausedFor !== undefined))
                 .concat(rows.filter((row) => row.when).map((row) => row.item))
                 // Split by whether the update is already downloaded (updateItems); then who waits on the owner's answer, and what waits for the reader.
-                .concat(updateItems(updateAvailable.value, updateStaged.value), accessRequestItems(accessRequests.value.length), receivedItems(receivedDrops.value.length))
+                .concat(updateItems(updateAvailable.value, updateStaged.value), accessRequestItems(accessRequests.value.length), messageItems(unreadThreads.value, tierAtLeast(tier.value, `maintainer`) ? contactRequests.value : 0))
         );
     });
 

@@ -271,6 +271,13 @@ catalog:
   # with the Muse Code release it speaks to: engines.json blesses the matching CLI build (1.4.6-R…), and
   # _tools/scripts/engines/engine-pins.mjs reads this line as the version it tracks.
   "@muse-code/sdk": 1.4.25
+  # The sandbox-to-sandbox protocol's hybrid primitives (sandbox-contract protocol/s2s/): pure JS, the same under
+  # Node, Bun and a browser, where node:crypto under Bun has no ML-KEM encapsulate. post-quantum is the one
+  # @puristic/env already pulled in.
+  "@noble/ciphers": 2.4.0
+  "@noble/curves": 2.2.0
+  "@noble/hashes": 2.4.0
+  "@noble/post-quantum": 0.6.1
   "@openai/codex-sdk": 0.172.0
   "@opencode/client": 2.4.1
   "@opentelemetry/api": 1.10.0

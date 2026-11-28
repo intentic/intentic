@@ -29,6 +29,12 @@ flowchart LR
   by a user's machine, the browser extension, the phone app and a runner over the socket each one opens, with the
   daemon as the client. The phone's is carried as plain JSON-RPC (`src/protocol/doors/phone-protocol.ts`), since its far end is
   a Kotlin app; `golden/phone-wire.json` holds example frames that both ends test against.
+- The sandbox-to-sandbox protocol (`docs/architecture/messages.md`) lives here whole, since two
+  daemons and the editor must agree on every byte of it: its wire and editor shapes in `src/schemas/s2s.ts`, and its
+  primitives in `src/protocol/s2s/`, imported as `@intentic/sandbox-contract/s2s`: canonical JSON, hybrid Ed25519 and
+  ML-DSA-65 signatures, X25519 and ML-KEM-768 key agreement, the identity document and its rotation table, addresses
+  and their TXT records, the envelope, and call sessions. They are plain JavaScript on the `@noble` libraries, so Node,
+  Bun and a browser run the same code; Bun has no ML-KEM in `node:crypto`.
 - The daemon names the routes it implements on the `/events` hello frame, and the browser diffs that list against its
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404. The desktop app's folder
   sidecar sends the same frame with `surface: "folder"` and only the few routes it serves, which the browser offers

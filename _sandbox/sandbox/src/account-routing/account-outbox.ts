@@ -16,6 +16,7 @@ import { defineDocument } from "../store/evolution/documents.js";
 import { defineStep } from "../store/evolution/state-steps.js";
 import { openDirectory } from "../store/open-document.js";
 import { fingerprintOf } from "./report-fingerprint.js";
+import { type ReportOverS2s, reportOverS2s } from "./messages/report-over-s2s.js";
 
 export type { Delivery } from "./route-client.js";
 
@@ -24,7 +25,8 @@ export type { Delivery } from "./route-client.js";
 // it goes (account-routing/route-client.ts, a directory and a notary, never a mailbox); it then goes straight to that
 // sandbox's daemon under the pass the platform signed. Sandboxes sleep and go offline, so what cannot be delivered now
 // waits, one file per entry: a repeated report folds into a count rather than another file, and each is retried with a
-// growing wait until it lands or a week has passed.
+// growing wait until it lands or a week has passed. A report to a sandbox that speaks s2s/1 goes on as a message
+// (messages/report-over-s2s.ts), and the messages outbox keeps it from there.
 //
 // On the history volume since 2026-11-24, out of every turn's reach. In the workspace (`.intentic/records/outbox/`) an
 // agent could rewrite a queued entry before it drained, and the drain sent whatever the file said under this sandbox's
@@ -99,7 +101,7 @@ type Tried =
 
 // One try at the far side for each kind of entry: the hook a kind's sender registers. A drop with no deliverer waits.
 export interface OutboxDeliverers {
-    readonly report: (target: RouteTarget, body: AccountReport) => Promise<Delivery>;
+    readonly report: (target: RouteTarget, body: AccountReport, entry: ReportEntry) => Promise<Delivery>;
     readonly drop?: (target: RouteTarget, entry: DropEntry, id: string) => Promise<Delivery>;
 }
 
@@ -142,7 +144,11 @@ export const postToDoor = async <Body extends object>(
     }
 };
 
-const reportDelivery: OutboxDeliverers["report"] = (target, body) => postToDoor(target, rawRouteUrl("POST /account/report"), body);
+// A report goes as a message where the target speaks s2s/1 (messages/report-over-s2s.ts), and to its account door otherwise.
+export const reportDeliveryOf =
+    (overS2s: ReportOverS2s | undefined): OutboxDeliverers["report"] =>
+    async (target, body, entry) =>
+        (await overS2s?.(target, entry)) ?? postToDoor(target, rawRouteUrl("POST /account/report"), body);
 
 // Whether a try that did not land is worth another later, or the far side refused this entry for good.
 const retryable = (delivery: Delivery): boolean =>
@@ -180,7 +186,7 @@ const reportBody = (entry: ReportEntry): AccountReport => {
 const attempt = async (deps: Pick<OutboxDeps, "route" | "deliver">, id: string, entry: OutboxEntry): Promise<Tried> => {
     const drop = deps.deliver.drop;
     const send =
-        entry.kind === "report" ? (target: RouteTarget) => deps.deliver.report(target, reportBody(entry)) : drop && ((target: RouteTarget) => drop(target, entry, id));
+        entry.kind === "report" ? (target: RouteTarget) => deps.deliver.report(target, reportBody(entry), entry) : drop && ((target: RouteTarget) => drop(target, entry, id));
     if (send === undefined) {
         return { kind: "unresolved", reason: "this build cannot deliver a drop yet" };
     }
@@ -202,6 +208,12 @@ const waitingBecause = (entry: OutboxEntry, tried: Exclude<Tried, { kind: "refus
         : `${tried.target.name}: ${tried.delivery.error ?? "did not take it"}`;
 };
 
+// A try the far side took: delivered, or gone on as a message the messages outbox keeps trying, which is what waits now.
+const landed = (id: string, entry: OutboxEntry, tried: Extract<Tried, { kind: "tried" }>): SendOutcome =>
+    tried.delivery.handedOn === undefined
+        ? { state: "delivered", to: tried.target.name, id: tried.delivery.id ?? id }
+        : { state: "queued", to: tried.target.name, reason: tried.delivery.handedOn, times: entry.times };
+
 export const createAccountOutbox = (deps: OutboxDeps) => {
     const files = openDirectory(accountOutboxDocument, deps.dir);
     const now = deps.now ?? Date.now;
@@ -220,7 +232,7 @@ export const createAccountOutbox = (deps: OutboxDeps) => {
         }
         if (tried.kind === "tried" && tried.delivery.status === 200) {
             await remove(id, entry);
-            return { state: "delivered", to: tried.target.name, id: tried.delivery.id ?? id };
+            return landed(id, entry, tried);
         }
         if (tried.kind === "tried" && !retryable(tried.delivery)) {
             await remove(id, entry);
@@ -327,7 +339,7 @@ export const accountOutboxOf = (services: Services): AccountOutbox => {
         logger: services.logger,
         route: routeClientOf(services),
         deliver: {
-            report: reportDelivery,
+            report: reportDeliveryOf(reportOverS2s({ s2s: services.s2s, fetch: (url, init) => fetch(url, init), logger: services.logger })),
             drop: async (target, entry, id) => (dropDeliverer === undefined ? { status: 0, error: "this build cannot deliver a drop yet" } : dropDeliverer(target, entry, id)),
         },
         removed: async (_id, entry) => {

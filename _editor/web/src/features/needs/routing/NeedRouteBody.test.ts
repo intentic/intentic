@@ -2,7 +2,7 @@
 // both, mints the pairing at the target, keeps it here, and only then answers the need; anyone else reads whom it waits on.
 import "@intentic/testing/dom";
 import type { Need, RouteNeed } from "@intentic/sandbox-contract/schemas/needs";
-import { createApp, defineComponent, h, nextTick, ref } from "vue";
+import { computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 
 const calls: string[] = [];
 const answer = {
@@ -27,6 +27,10 @@ const sandboxes = ref([
 jest.mock(`../../../models/needs/useNeeds`, () => ({ useNeeds: () => ({ answer }) }));
 jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user }) }));
 jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ active, sandboxes }) }));
+// The far daemon here predates contacts (no `POST /s2s/contacts/paired`), so the press takes the pairing path these
+// tests are about; components/tests/contactPairing.test.ts covers the contact path.
+jest.mock(`../../../client/sandbox/useDaemonRoutes`, () => ({ supportsRoute: () => false }));
+jest.mock(`../../../client/sandbox/useTier`, () => ({ useTier: () => ({ canShip: computed(() => true) }) }));
 jest.mock(`../../../client/sandbox/sandboxClient`, () => ({ sandboxJson, sandboxJsonAt }));
 jest.mock(`../needAnswer`, () => ({
     useNeedAnswer: () => ({

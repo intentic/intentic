@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // The class of thing asking to start a session, the admission policy's key space; derived daemon-side, never sent by a
 // client. Chat and loops are absent since both begin with the owner's own click.
-export const WakeSourceSchema = z.enum(["schedule", "event", "listener", "webchat", "issues", "workspace", "workflow"]);
+export const WakeSourceSchema = z.enum(["schedule", "event", "listener", "webchat", "issues", "contact", "workspace", "workflow"]);
 export type WakeSource = z.infer<typeof WakeSourceSchema>;
 // One admission verdict the owner can configure: let it run, hold it for approval, or refuse it outright.
 export const AdmissionRuleSchema = z.enum(["allow", "hold", "deny"]);
@@ -51,6 +51,9 @@ export const AdmissionPolicySchema = z.object({
     // Defaults to hold, unlike the others: a bug-report wake has full repo powers and a stranger's stack trace as its
     // brief.
     issues: AdmissionRuleSchema.default("hold"),
+    // (2026-11-27) Held by default too, like `issues`: a contact request comes from a sandbox nobody here accepted yet,
+    // and the brief of the work it starts is that stranger's request and note.
+    contact: AdmissionRuleSchema.default("hold"),
     workspace: AdmissionRuleSchema.default("allow"),
     workflow: z.enum(["allow", "deny"]).default("allow"),
 });

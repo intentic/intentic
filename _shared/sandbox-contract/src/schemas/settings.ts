@@ -5,6 +5,7 @@ import { CommandJudgeModeSchema, ProjectInstallModeSchema } from "../policy/safe
 import { ModelRoleSchema } from "../models/model-roles.js";
 import { MODEL_SETUP_ID, ModelSetupSchema } from "../models/model-setups.js";
 import { AdmissionPolicySchema, AdmissionRuleSchema } from "./command-admission.js";
+import { ContactsSettingsSchema } from "./contacts-settings.js";
 import { KeepWarmSettingsSchema } from "./keep-warm.js";
 import { commitAttributionSetting } from "./commit-attribution.js";
 import { autoResumeOnRestartSetting, contextContinuesSetting, continueWhenNeedMetSetting } from "./context-continues.js";
@@ -694,6 +695,7 @@ export const SandboxSettingsSchema = z.object({
         .record(z.string(), AdmissionRuleSchema)
         .default({})
         .describe("What an agent may do out in the world, per kind of action: go ahead, ask first, or never."),
+    contacts: ContactsSettingsSchema,
     // Command policy itself lives at .intentic/config/safety.md (edited by the Safety page), not here; this only says
     // whether the judge runs at all. Which model judges is the `safety-judge` job's setup (`roleSetups`), not a field here.
     commandJudge: CommandJudgeModeSchema.default("off").describe(

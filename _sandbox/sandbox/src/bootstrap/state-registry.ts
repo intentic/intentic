@@ -6,6 +6,7 @@
 import type { DocumentSpec } from "../store/evolution/documents.js";
 import type { StructuralStep } from "../store/evolution/state-steps.js";
 import { accountOutboxDocument, accountOutboxOffWorkspaceStep } from "../account-routing/account-outbox.js";
+import { dropsIntoThreadsStep } from "../account-routing/messages/drop-threads.js";
 import { accountPairingsDocument } from "../account-routing/pairings-store.js";
 import { routeSecretsDocument } from "../account-routing/route-secrets.js";
 import { activityLogDocument } from "../activity/activity-store.js";
@@ -71,6 +72,7 @@ import { memberCommitIdentityDocument } from "../git/attribution/commit-attribut
 import { hookApprovalsDocument, hookRequestsDocument } from "../guard/hook-approvals.js";
 import { hostSetupSeededDocument } from "../hosts/host-seed.js";
 import { connectionHubDocument } from "../hub/hub-store.js";
+import { contactTasksDocument } from "../links/contacts/contact-tasks-store.js";
 import { inboundLinksDocument } from "../links/inbound-links.js";
 import { linkedChildrenDocument } from "../links/linked-children-store.js";
 import { personTasksDocument } from "../links/person-tasks-store.js";
@@ -97,6 +99,13 @@ import { rolesDocument } from "../roles/roles-store.js";
 import { safetyCardLinesStep } from "../roles/safety-card-lines.js";
 import { ruleFiringsDocument } from "../rules/rule-firings.js";
 import { runnerIdentityDocument } from "../runners/runner-identity.js";
+import { s2sContactsDocument } from "../s2s/contacts/contacts-store.js";
+import { s2sSecretsDocument } from "../s2s/contacts/s2s-secrets.js";
+import { identityDomainsDocument } from "../s2s/identity/identity-domains.js";
+import { sandboxIdentityDocument } from "../s2s/identity/identity-keys.js";
+import { s2sOutboxDocument } from "../s2s/messages/outbox.js";
+import { s2sThreadsDocument } from "../s2s/messages/threads-store.js";
+import { s2sSeenIdsDocument } from "../s2s/seen-ids.js";
 import { safetyLogDocument } from "../safety/safety-log.js";
 import { autostartDocument } from "../scaffold/autostart.js";
 import { credentialGatesDocument } from "../secrets/credential-gates.js";
@@ -209,11 +218,11 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     dismissalsDocument,
     ciDocument,
     composerDraftsDocument,
+    projectDeliveriesDocument,
+    conversationRecordDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
-    projectDeliveriesDocument,
-    conversationRecordDocument,
     definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
@@ -230,6 +239,7 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     hookRequestsDocument,
     hostSetupSeededDocument,
     connectionHubDocument,
+    contactTasksDocument,
     inboundLinksDocument,
     linkedChildrenDocument,
     personTasksDocument,
@@ -262,11 +272,18 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     rolesDocument,
     ruleFiringsDocument,
     runnerIdentityDocument,
-    safetyLogDocument,
-    autostartDocument,
+    s2sContactsDocument,
+    s2sSecretsDocument,
+    identityDomainsDocument,
+    sandboxIdentityDocument,
+    s2sOutboxDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
+    s2sThreadsDocument,
+    s2sSeenIdsDocument,
+    safetyLogDocument,
+    autostartDocument,
     credentialGatesDocument,
     credentialReleasesDocument,
     sandboxKeyringKeysDocument,
@@ -329,6 +346,7 @@ export const stateDocuments = (): readonly DocumentSpec[] => [
 export const stateSteps = (): readonly StructuralStep[] =>
     [
         accountOutboxOffWorkspaceStep,
+        dropsIntoThreadsStep,
         identityOffWorkspaceStep,
         passkeysOffWorkspaceStep,
         automationsRelocationStep,

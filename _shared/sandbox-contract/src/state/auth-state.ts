@@ -42,6 +42,9 @@ export const AUTH_STATE_FILES: readonly StateFile[] = [
     // The pairing secrets people minted at other sandboxes so this one may route there as them (the daemon's
     // account-routing/route-secrets.ts).
     { path: "route-secrets.json", portability: "secret" },
+    // This sandbox's one inbound wake secret, which every contact granted `wake` holds, and the wake secrets contacts
+    // handed it (the daemon's s2s/contacts/s2s-secrets.ts).
+    { path: "s2s-secrets.json", portability: "secret" },
     // The personal data the shield masked, by token, and the pictures it painted over.
     { path: "privacy-vault.json", portability: "secret" },
     { path: "privacy-images/", portability: "secret" },
@@ -85,6 +88,13 @@ export const AUTH_STATE_FILES: readonly StateFile[] = [
     // What this sandbox saved to the connections hub and what it made from hub entries shared here (hub/): entry names
     // and the cards they became, no credential.
     { path: "connection-hub.json", portability: "identity" },
+    // This sandbox's sandbox-to-sandbox key sets and its recovery key's public half (the daemon's s2s/identity/): a copy
+    // elsewhere is another sandbox, so it makes its own, and contacts see a new key there.
+    {
+        path: "sandbox-identity.json",
+        portability: "identity",
+        note: "Contacts see a new key: recover the old identity with its recovery key, or ask them to trust the new one.",
+    },
     // The credential broker's signing key and the privacy gateway's token key, each minted on first use.
     { path: "broker-session.key", portability: "identity" },
     { path: "privacy-gateway.key", portability: "identity" },

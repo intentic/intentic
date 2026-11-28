@@ -13,6 +13,13 @@ import { linkedChildrenDocument } from "./linked-children-store.js";
 import { filePersonTasks, type PersonTasksStore, personTasksDocument } from "./person-tasks-store.js";
 import { linkMountsOf } from "./link-mounts.js";
 import { personRoutesOf } from "./person-routes.js";
+import { askerDepsOf } from "../s2s/s2s-wiring.js";
+import { contactSendsOf, type ContactSendsHub } from "../s2s/tasks/asking.js";
+import { contactMountsOf } from "../s2s/contacts/contact-mounts.js";
+import { type ContactTasksStore, contactTasksDocument, fileContactTasks } from "./contacts/contact-tasks-store.js";
+import { supervisorFor } from "../agent/subagents/children.js";
+import { sdkServerDoor } from "../runtimes/daemon-tools/sdk-door.js";
+import { noteLinkCardUsed } from "./upgrade/upgrade-sweep.js";
 
 // LINKED SANDBOXES, both halves: the other sandboxes allowed to hand this one tasks, and the tasks this one handed to
 // others. Either half works without the other; a sandbox is usually one side of a given link and may be both.
@@ -21,10 +28,17 @@ export interface LinksSlice {
     readonly inboundLinks: InboundLinks;
     // Inbound too: the tasks other sandboxes routed here as one of their people (person-tasks.ts), keyed by (sandbox, person).
     readonly personTasks: PersonTasksStore;
+    // Inbound too: the tasks sandbox-scoped contacts handed this one as messages (links/contacts/), keyed by contact.
+    readonly contactTasks: ContactTasksStore;
+    // Outbound to contacts: the `task.*` messages this sandbox's agents send, each one's first attempt waited on.
+    readonly contactSends: ContactSendsHub;
     // Outbound: tasks this sandbox's agents handed over through `link` cards, followed until they settle.
     readonly linkedChildren: LinkedChildren;
     // A turn's linked sandboxes as tool servers on its lease, one per granted card, as its computers are mounted.
     readonly linkMounts: (granted: readonly Capability[], lease: Pick<TurnLease, "open">, conversationId: string | undefined) => AgentTool[];
+    // A turn's contacts as tool servers on its lease, one per contact it may use (s2s/contacts/contact-mounts.ts).
+    // `taken`: every other server name the turn mounts, which no contact's server may take (s2s/contacts/contact-mounts.ts).
+    readonly contactMounts: (granted: readonly Capability[], lease: Pick<TurnLease, "open">, conversationId: string | undefined, taken?: ReadonlySet<string>) => Promise<AgentTool[]>;
 }
 
 const createLinksSlice = ({
@@ -38,6 +52,8 @@ const createLinksSlice = ({
 }): LinksSlice => {
     const inboundLinks = fileInboundLinks(join(historyRoot, inboundLinksDocument.path));
     const personTasks = filePersonTasks(join(historyRoot, personTasksDocument.path));
+    const contactTasks = fileContactTasks(join(historyRoot, contactTasksDocument.path));
+    const contactSends = contactSendsOf({ contacts: () => whole().s2s.contacts, outbox: () => whole().s2s.outbox, askers: () => askerDepsOf(whole()) });
     // Read through `whole` at call time: the registry, the turns and the capabilities are composed after this slice.
     const linkedChildren = createLinkedChildren({
         capabilities: () => whole().capabilities.list(),
@@ -54,16 +70,36 @@ const createLinksSlice = ({
             const entry = whole().agents.entry(conversationId);
             return entry === undefined ? undefined : conversationProfile(entry);
         },
-        // Over a link or routed as a person alike: both count toward LINK_MAX_HOPS (2026-11-24).
-        inboundHops: async (conversationId) => ((await inboundLinks.linkOf(conversationId)) ?? (await personTasks.ownerOf(conversationId)))?.task.hops,
+        // Over a link, routed as a person, or handed by a contact alike: each counts toward LINK_MAX_HOPS (2026-11-24, 11-27).
+        inboundHops: async (conversationId) =>
+            ((await inboundLinks.linkOf(conversationId)) ?? (await contactTasks.linkOf(conversationId)) ?? (await personTasks.ownerOf(conversationId)))?.task.hops,
         doors: { turns: { say: (said) => whole().turns.say(said) } },
         logger,
         historyPath: join(historyRoot, linkedChildrenDocument.path),
         personRoutes: personRoutesOf(whole),
+        contacts: contactSends,
     });
-    const linkMounts: LinksSlice["linkMounts"] = (granted, lease, conversationId) =>
-        linkMountsOf({ conversations: { holdings: (holding) => whole().conversations.holdings(holding) }, about: linkedChildren.about }, granted, lease, conversationId);
-    return { inboundLinks, personTasks, linkedChildren, linkMounts };
+    const linkMounts: LinksSlice["linkMounts"] = (granted, lease, conversationId) => {
+        // A card's use offers its far side the upgrade into a contact again (upgrade/upgrade-sweep.ts).
+        for (const capability of granted.filter((card) => card.kind === "link")) {
+            noteLinkCardUsed(capability.id);
+        }
+        return linkMountsOf({ conversations: { holdings: (holding) => whole().conversations.holdings(holding) }, about: linkedChildren.about }, granted, lease, conversationId);
+    };
+    const contactMounts: LinksSlice["contactMounts"] = (granted, lease, conversationId, taken) =>
+        contactMountsOf(
+            {
+                usable: contactSends.usable,
+                supervisorOf: (id) => supervisorFor(whole().conversations, id),
+                door: sdkServerDoor,
+                call: (row, method, input, signal) => whole().s2s.calls.client.call(row, method, input, signal),
+            },
+            granted,
+            lease,
+            conversationId,
+            taken,
+        );
+    return { inboundLinks, personTasks, contactTasks, contactSends, linkedChildren, linkMounts, contactMounts };
 };
 
 export const linksSlice = defineSlice<LinksSlice>({

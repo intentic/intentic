@@ -5,6 +5,8 @@ import { AutomationSchema, WatchKindSchema } from "./automations.js";
 import { DeployNeedAskSchema, DeployNeedSchema } from "./stack-grants.js";
 import { HostPowerFindingSchema } from "./host-power.js";
 import { WslMemoryNeedSchema } from "./wsl-memory.js";
+import { RedirectNeedSchema } from "./redirect-need.js";
+import { ContactNeedAskSchema, ContactNeedSchema } from "./contact-need.js";
 import { entryId } from "./internal.js";
 import { PASS_SCOPES } from "../protocol/doors/pass-scopes.js";
 import { SECRET_HOSTS_MAX } from "../policy/secret-hosts.js";
@@ -16,6 +18,7 @@ import { SecretHostSchema } from "./secrets.js";
 // (docs/architecture/needs.md). Every word on a need is the daemon's except `why`, the agent's own case.
 
 export { NEED_KINDS, type NeedKind, NeedKindSchema } from "./need-kinds.js";
+export { REDIRECT_WORDS_MAX, type RedirectNeed, RedirectNeedSchema } from "./redirect-need.js";
 
 // `working` is a yes still being carried out: a connection whose form is open, an overlay approved but not yet built.
 export const NeedStatusSchema = z
@@ -242,24 +245,6 @@ export const RouteNeedSchema = z.object({
 });
 export type RouteNeed = z.infer<typeof RouteNeedSchema>;
 
-// A person's message that reached the wrong sandbox, offered to the one it was meant for (account-routing.md, 2026-11-25).
-// The words are the daemon's copy of what the person opened a turn with, never the agent's retelling, and only that
-// person can press it: their editor, signed in to both, opens a chat in the target and sends the words there as they
-// would by hand. No pass and no pairing travel. The platform only found the target among the sandboxes they are in.
-export const REDIRECT_WORDS_MAX = 20_000;
-export const RedirectNeedSchema = z.object({
-    kind: z.literal("redirect"),
-    target: z.string().min(1).max(40).describe("The target sandbox's tunnel id."),
-    targetName: z.string().max(120).describe("Its name, as the platform gave it."),
-    address: z.string().max(400).optional().describe("The target's address, as the platform gave it, which the card finds it by."),
-    person: z.string().min(1).max(254).describe("Whose words they are, and the only one who can send them on."),
-    words: z.string().max(REDIRECT_WORDS_MAX).describe("The message, exactly as the person sent it here."),
-    clipped: z.boolean().optional().describe("The message was longer than the card carries, so only its head goes."),
-    attachments: z.number().int().min(0).optional().describe("How many files went with it, which stay here."),
-    project: z.string().max(400).optional().describe("The project the target was found by, when it was found by its claim."),
-});
-export type RedirectNeed = z.infer<typeof RedirectNeedSchema>;
-
 export const NeedSubjectSchema = z
     .discriminatedUnion("kind", [
         CapabilityNeedSchema,
@@ -275,6 +260,7 @@ export const NeedSubjectSchema = z
         RouteNeedSchema,
         RedirectNeedSchema,
         DeployNeedSchema,
+        ContactNeedSchema,
     ])
     .describe("What exactly is asked for.");
 export type NeedSubject = z.infer<typeof NeedSubjectSchema>;
@@ -357,6 +343,7 @@ export const NeedAskSchema = z.discriminatedUnion("kind", [
         project: z.string().trim().min(1).max(400).optional().describe("Or the project it is about: the sandbox claiming it is the target."),
     }),
     DeployNeedAskSchema,
+    ContactNeedAskSchema,
 ]);
 export type NeedAsk = z.infer<typeof NeedAskSchema>;
 

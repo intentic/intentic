@@ -111,6 +111,9 @@ export const personDestination = async (deps: DestinationDeps, conversationId: s
     if ("asked" in pairing) {
         return { refused: pairing.asked, open: pairing.needId };
     }
+    if ("refused" in pairing) {
+        return { refused: pairing.refused };
+    }
     const route = answer.value;
     return {
         target: personTarget(route, pairing.secret),

@@ -5,11 +5,13 @@
 
 const nudges = new Map<string, number>();
 const waiters = new Map<string, Set<() => void>>();
+// Who else hears every nudge: the status a contact asked for is pushed to it rather than read (links/contacts/task-push.ts).
+const hearers = new Set<(conversationId: string) => void>();
 
 /** The conversation's nudge count; read it before reading the status a wait will compare against. */
 export const linkTaskStatusMark = (conversationId: string): number => nudges.get(conversationId) ?? 0;
 
-/** Wakes every status read held on this conversation. */
+/** Wakes every status read held on this conversation, and tells every hearer it may have moved. */
 export const wakeLinkTaskStatus = (conversationId: string): void => {
     // Counted even with nobody held: a read may be between its look and its wait. One number per linked conversation.
     nudges.set(conversationId, linkTaskStatusMark(conversationId) + 1);
@@ -17,6 +19,17 @@ export const wakeLinkTaskStatus = (conversationId: string): void => {
     for (const wake of [...(waiters.get(conversationId) ?? [])]) {
         wake();
     }
+    for (const hear of hearers) {
+        hear(conversationId);
+    }
+};
+
+/** Hears every nudge, whichever conversation it is for; answers the unsubscribe. */
+export const onLinkTaskStatusNudge = (hear: (conversationId: string) => void): (() => void) => {
+    hearers.add(hear);
+    return () => {
+        hearers.delete(hear);
+    };
 };
 
 /** Resolves on a nudge after `mark`, on abort, or at `deadline` (which may be past), whichever comes first. */

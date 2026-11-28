@@ -3,9 +3,7 @@ import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import type { Context } from "hono";
 import type { AppEnv } from "../app-env.js";
 import type { Caller } from "../auth/auth.js";
-import { visibleTo } from "../auth/fleet-scope.js";
-import type { ConversationReader } from "../auth/scope/conversation-reader.js";
-import { registryProvenance } from "../auth/scope/conversation-reader.js";
+import { personReader, registryProvenance } from "../auth/scope/conversation-reader.js";
 import type { Services } from "../composition.js";
 import { createFleetReads } from "../conversations/recall/fleet-reads.js";
 import { defineRawRoutes } from "../http/raw-route-server.js";
@@ -19,14 +17,6 @@ import { routeAdmissionOf } from "./admit-route.js";
  * conversation-reader.ts's everything-for-a-maintainer shortcut, which also reads conversations the registry does not
  * know and other members' homes. Diagnostics are a maintainer's, as this sandbox's own logs are. Each read is logged with
  * the asking sandbox and the person. */
-
-// What `person` may read: a conversation the registry knows, and they may see, a private one only as its reader.
-const personReader =
-    (services: Pick<Services, "agents">, person: Caller): ConversationReader =>
-    (conversationId) => {
-        const agent = conversationId === undefined ? undefined : registryProvenance(services.agents)(conversationId);
-        return agent !== undefined && visibleTo(person, agent);
-    };
 
 // What one read was, for the log line.
 const readOf = (c: Context<AppEnv>): string => {
@@ -62,7 +52,7 @@ export const accountReadRawRoutes = defineRawRoutes((services: Services) => {
             if (person instanceof Response) {
                 return person;
             }
-            return pick(createFleetReads(services, async () => personReader(services, person)))(c);
+            return pick(createFleetReads(services, async () => personReader(person, registryProvenance(services.agents))))(c);
         };
     return {
         "GET /account/read/agents": fleetRead((reads) => reads.list),

@@ -168,9 +168,15 @@ export const CONTROL_TOKENS = family(`control-tokens`);
 export const INBOUND_LINKS = family(`inbound-links`);
 // The projects the active sandbox's repos could claim (GET /account/projects/suggest), for Settings ▸ Projects.
 export const PROJECT_SUGGESTIONS = family(`project-suggestions`);
-// What other sandboxes dropped here as one of its people (GET /account/inbox), cut by the daemon to the drops naming the
-// reader, or every one for a maintainer: the Overview's Received card and a count on the sandbox's attention.
-export const RECEIVED_DROPS = family(`received-drops`);
+// The Messages tab's reads (docs/architecture/messages.md): the threads the daemon shows the reader (GET /s2s/threads,
+// also the tab's badge and a count on the sandbox's attention), one thread's messages, the contacts, this sandbox's own
+// identity, what waits in the outbox, and the tasks contacts handed this sandbox (GET /s2s/tasks, also in the badge).
+export const S2S_THREADS = family(`s2s-threads`);
+export const S2S_THREAD = family(`s2s-thread`);
+export const S2S_CONTACTS = family(`s2s-contacts`);
+export const S2S_ME = family(`s2s-me`);
+export const S2S_OUTBOX = family(`s2s-outbox`);
+export const S2S_TASKS = family(`s2s-tasks`);
 // What the signed-in person's own grant allows (GET /members/self), read for a writer, whose tier alone does not say
 // whether it runs agents.
 export const SANDBOX_SELF_ACCESS = family(`members-self`);

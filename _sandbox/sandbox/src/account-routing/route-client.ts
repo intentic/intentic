@@ -53,6 +53,9 @@ export interface Delivery {
     readonly id?: string | undefined;
     // The far side's word for why it refused (admit-route.ts RouteRefusalCode): `pairing` is the person's to allow.
     readonly code?: string | undefined;
+    // Taken by this sandbox's messages outbox rather than the far side (account-routing/messages/report-over-s2s.ts), which keeps
+    // trying it: why it has not landed yet.
+    readonly handedOn?: string | undefined;
 }
 
 // A daemon older than a door refuses it as a sign-in it does not know: the bare "unauthorized" every unknown route gets,

@@ -33,7 +33,6 @@ import { useSelfResources } from "../../../models/sandbox/devices/useSelfResourc
 import { useTier } from "../../../client/sandbox/useTier";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxPlanCard from "../../settings/hosted-plan/SandboxPlanCard.vue";
-import SandboxReceivedCard from "./received/SandboxReceivedCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
 import OverviewSettingRow from "./OverviewSettingRow.vue";
@@ -501,8 +500,6 @@ const saveStyledLogo = async ({ image, color }: { image: string; color: string }
         <SandboxPlanCard v-if="hosted && isOwner && sandbox.active.value" :sandbox-id="sandbox.active.value.id" />
 
         <!-- The files here exist nowhere else and the reader is at a computer that could change that; self-hides otherwise. -->
-        <!-- What other sandboxes the reader is in dropped here as them: shown only while something waits. -->
-        <SandboxReceivedCard />
         <SandboxBackupCard />
 
         <!-- A newer sandbox image has shipped; this prompt self-hides otherwise. -->

@@ -16,7 +16,7 @@ import { routeCallerOf } from "./route-caller.js";
 // and the person's pairing rides beside it (a missing one raises their `route` card and reads nothing). What may be read
 // over there is that sandbox's word (account-routing/read.routes.ts), cut to what the person may read there.
 
-export type RoutedReadDeps = Pick<Services, "agents" | "conversations" | "ownerEmail" | "config" | "workspace" | "needs">;
+export type RoutedReadDeps = Pick<Services, "agents" | "conversations" | "ownerEmail" | "config" | "workspace" | "needs" | "s2s">;
 
 const ASK_MS = 30_000;
 
@@ -83,8 +83,8 @@ const routedRead = async (deps: RoutedReadDeps, c: Context<AppEnv>, ask: RoutedA
     let last: FarAnswer = { status: 0, text: "" };
     const routed = await routeClientOf(deps).deliverRouted({ scope: "read", person, sandbox }, async (target) => {
         const pairing = await requirePairing(deps, { conversationId, target, person, scopes: ["read"] });
-        if ("asked" in pairing) {
-            last = { status: 403, text: JSON.stringify({ error: pairing.asked, code: "asked" }) };
+        if (!("secret" in pairing)) {
+            last = { status: 403, text: JSON.stringify({ error: "asked" in pairing ? pairing.asked : pairing.refused, code: "asked" }) };
             return deliveryOf(last);
         }
         last = await askDoor(target, pairing.secret, path, query);

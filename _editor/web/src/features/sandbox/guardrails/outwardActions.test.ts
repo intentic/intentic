@@ -78,7 +78,7 @@ it(`writes every action of the service to its own key, and leaves every other ru
 });
 
 it(`lists the triggers a stranger can reach first, and offers a CI workflow no hold`, () => {
-    expect(ADMISSION_KEYS.slice(0, 2)).toEqual([`webchat`, `issues`]);
+    expect(ADMISSION_KEYS.slice(0, 3)).toEqual([`webchat`, `issues`, `contact`]);
     expect(admissionOptions(`workflow`).map((option) => option.value)).toEqual([`allow`, `deny`]);
     expect(admissionOptions(`webchat`).map((option) => option.value)).toEqual([`allow`, `hold`, `deny`]);
 });

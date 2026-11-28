@@ -94,6 +94,10 @@ export const InboundLinkSummarySchema = z.object({
     lastUsedAt: z.number().optional().describe("The last time it was used, coarse on purpose; absent means never."),
     conversations: z.number().int().nonnegative().describe("How many conversations it has opened here."),
     requests: z.array(LinkRequestSchema).describe("Tasks waiting for the owner's yes, oldest first."),
+    upgraded: z
+        .object({ contact: z.string(), at: z.number() })
+        .optional()
+        .describe("Set once both sandboxes spoke s2s/1 and the link became a contact (its id here, and when): its token works nowhere any more."),
 });
 export type InboundLinkSummary = z.infer<typeof InboundLinkSummarySchema>;
 export const InboundLinksListSchema = z.object({ links: z.array(InboundLinkSummarySchema) });

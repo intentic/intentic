@@ -9,7 +9,8 @@ import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import type { Services } from "../composition.js";
 import { memoryMembersStore } from "../harness/route-stores.testing.js";
-import { createAccountRoutes, fileWithInbox, type Filing } from "./account.routes.js";
+import { createAccountRoutes } from "./account.routes.js";
+import { fileWithInbox, type Filing } from "./messages/report-intake.js";
 
 // The receiving door of account-level report routing. What matters: only a pass the platform signed for THIS sandbox
 // gets in, who reported is read from the pass and never from the body, and what got in is handed to the issues inbox

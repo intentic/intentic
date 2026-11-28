@@ -42,7 +42,12 @@ export const continuousReception = async (services: Pick<BootPhase["services"], 
 // The wake doors a hosted machine sleeps with now (system/sleep/wake-doors.ts), from its automations, its enabled
 // extensions (each `wakes` route counted only for the provider its listener owns) and its door file.
 const wakeDoorsFor = async (services: BootPhase["services"]): Promise<WakeDoor[]> => {
-    const [automations, extensions, ownership] = await Promise.all([services.automations.list(), cachedEnabledExtensions(services), listenerOwnership(services)]);
+    const [automations, extensions, ownership, s2s] = await Promise.all([
+        services.automations.list(),
+        cachedEnabledExtensions(services),
+        listenerOwnership(services),
+        services.s2s.wakeSecret(),
+    ]);
     return wakeDoorsOf({
         automations,
         extensions: extensions.map((extension) => {
@@ -55,6 +60,7 @@ const wakeDoorsFor = async (services: BootPhase["services"]): Promise<WakeDoor[]
         }),
         fireToken: (id) => services.doorTokens.peek("automation", id),
         wakeSecret: (path) => services.doorTokens.ensure("wake", path),
+        s2s,
         now: Date.now(),
     });
 };

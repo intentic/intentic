@@ -95,8 +95,8 @@ flowchart LR
   declaration (size, per-minute window, daily ceiling, an automation's allowed origins or its door key, proof of work, a
   provider's signature with a sandbox secret the extension never sees, a redelivery answered `duplicate`) before
   `api.publicRoutes.serve(handler)` hears it with a `PublicRouteVerification` saying what was checked; never through
-  `/x`. And `contributes.listener.strangers` (`visitor` or `report`) holds a source anyone on the internet reaches to the
-  owner's floor for those wakes. `fakeExtensionApi` models them: `route(path, init, { caller, mintedAgoMs })` attaches
+  `/x`. And `contributes.listener.strangers` (`visitor`, `report`, or `contact` since 2.59.0) holds a source anyone on the
+  internet reaches to the owner's floor for those wakes. `fakeExtensionApi` models them: `route(path, init, { caller, mintedAgoMs })` attaches
   an assertion, its fake daemon believes only those it minted and records the caller a call carried (`calls[].caller`),
   and `publicRoute(path, init, verified)` refuses a path no declared route answers, as the daemon does.
 - `api.backend.available` reads the daemon's installed manifest. It is false when the manifest has no server and undefined when the host has no inventory for the extension. It describes the declaration, so the server may still be starting. It is read again at each access from the newest extension list the page holds, so a view left open across a daemon rebuild follows the rebuilt daemon.

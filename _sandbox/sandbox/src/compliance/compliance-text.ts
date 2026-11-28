@@ -158,7 +158,7 @@ const PL: Words = {
         },
         admission: {
             name: "Zatwierdzanie pracy zleconej z zewnątrz",
-            what: "Praca uruchomiona przez wiadomość z komunikatora, czat na stronie, webhook lub zgłoszenie błędu czeka na zatwierdzenie.",
+            what: "Praca uruchomiona przez wiadomość z komunikatora, czat na stronie, webhook, zgłoszenie błędu lub prośbę o kontakt od innego sandboxa czeka na zatwierdzenie.",
             where: "Sandbox ▸ Bezpieczniki",
         },
         "command-judge": {
@@ -369,7 +369,7 @@ const EN: Words = {
         },
         admission: {
             name: "Approval of work started from outside",
-            what: "Work started by a team-chat message, the website chat, a webhook or a bug report waits for approval.",
+            what: "Work started by a team-chat message, the website chat, a webhook, a bug report or another sandbox's contact request waits for approval.",
             where: "Sandbox ▸ Guardrails",
         },
         "command-judge": {

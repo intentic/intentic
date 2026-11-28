@@ -38,15 +38,19 @@ const token = (command) => {
     }
 };
 
-// One loopback call, held open for as long as the daemon holds it (see the header note).
+// One loopback call, held open for as long as the daemon holds it (see the header note). `bytes` is the answer as it
+// came, for a route that answers a file; `text` decodes it whole, so a character split across two chunks stays whole.
 export const call = (command, method, path, body) =>
     new Promise((resolve, reject) => {
         const req = request({ host: "127.0.0.1", port: PORT, path, method }, (response) => {
-            let raw = "";
+            const chunks = [];
             response.on("data", (chunk) => {
-                raw += chunk.toString();
+                chunks.push(chunk);
             });
-            response.on("end", () => resolve({ status: response.statusCode ?? 502, text: raw }));
+            response.on("end", () => {
+                const bytes = Buffer.concat(chunks);
+                resolve({ status: response.statusCode ?? 502, text: bytes.toString("utf8"), bytes });
+            });
         });
         req.on("error", reject);
         req.setHeader("x-intentic-agent", token(command));
