@@ -11,6 +11,7 @@
             "GET /approvals",
             "POST /approvals",
             "DELETE /approvals/*",
+            "POST /approvals/*/passkey",
             "GET /approvals/hooks",
             "POST /approvals/hooks/*/approve",
             "POST /approvals/hooks/*/dismiss",

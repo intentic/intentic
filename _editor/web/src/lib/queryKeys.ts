@@ -177,6 +177,7 @@ export const S2S_CONTACTS = family(`s2s-contacts`);
 export const S2S_ME = family(`s2s-me`);
 export const S2S_OUTBOX = family(`s2s-outbox`);
 export const S2S_TASKS = family(`s2s-tasks`);
+export const S2S_ATTESTATIONS = family(`s2s-attestations`);
 // What the signed-in person's own grant allows (GET /members/self), read for a writer, whose tier alone does not say
 // whether it runs agents.
 export const SANDBOX_SELF_ACCESS = family(`members-self`);

@@ -1,8 +1,15 @@
-import { EXTENSION_DECLARED_EVENTS, EXTENSION_EXEC_CLASSES, EXTENSION_FIRE_HANDLER, EXTENSION_TURN_POWERS } from "@intentic/extension-manifest/permissions";
+import {
+    EXTENSION_DECLARED_EVENTS,
+    EXTENSION_EXEC_CLASSES,
+    EXTENSION_FIRE_HANDLER,
+    EXTENSION_IDENTITY_VERBS,
+    EXTENSION_TURN_POWERS,
+} from "@intentic/extension-manifest/permissions";
 import { z } from "zod";
 import { MemberTierSchema } from "../../schemas/shared.js";
 import type { WebhookSignatureScheme } from "../../schemas/automations.js";
 import { CiFeedEventSchema } from "../../schemas/ci.js";
+import { HybridSigSchema, S2sFingerprintSchema, SandboxIdentitySchema } from "../../schemas/s2s-identity.js";
 import { rawRouteUrl } from "./raw-routes.js";
 
 // The wire between the daemon and an extension's own code, its backend in the shared host and its declared processes
@@ -432,6 +439,41 @@ export const extensionJobsUrl = (): string => rawRouteUrl("POST /extension/jobs"
 export const extensionJobUrl = (id: string): string => rawRouteUrl("POST /extension/jobs/{id}", { id });
 export const extensionActivityUrl = (): string => rawRouteUrl("POST /extension/activity");
 
+/* (2026-11-28) THIS SANDBOX'S IDENTITY, as an extension's own code meets it (`api.identity` in @intentic/extension-api,
+ * docs/architecture/messages.md "Identity"). GET /extension/identity answers the sandbox's public identity document, as
+ * GET /s2s/identity serves it to anyone; every extension token reaches it undeclared. POST /extension/identity/sign has
+ * the daemon sign a record as this sandbox, refused (403) unless the manifest declares `sign` in `permissions.identity`:
+ * the extension never holds the key. The signature is hybrid, over the payload's canonical JSON, under the domain
+ * `ext:<publisher.name>/<purpose>` (protocol/s2s/extension-sign.ts), so anyone holding the document verifies it with
+ * `verifyExtensionPayload` and no extension's signature verifies as one of the core's. */
+
+export const ExtensionIdentityVerbSchema = z.enum(EXTENSION_IDENTITY_VERBS);
+
+// The ask: what the record is for and the record. The purpose is checked again by the door against
+// EXTENSION_SIGN_PURPOSE (a lowercase word of up to 64 characters, dots and dashes inside: 400), and the payload's
+// canonical JSON against EXTENSION_SIGN_PAYLOAD_MAX_BYTES (256 KiB: 413).
+export const ExtensionIdentitySignSchema = z.object({
+    purpose: z.string().min(1).max(64).describe("What the record is for: a lowercase word of up to 64 characters, dots and dashes inside (`log.entry`)."),
+    payload: z.json().describe("The record, any JSON value, signed as its canonical JSON (keys sorted, no whitespace)."),
+});
+export type ExtensionIdentitySign = z.infer<typeof ExtensionIdentitySignSchema>;
+
+// The answer: the domain signed under, the signature, and the document whose keys it verifies with, so the caller can
+// publish all three together. `fingerprint` is the document's, the key set that signed.
+export const ExtensionIdentitySignedSchema = z.object({
+    domain: z.string().describe("`ext:<publisher.name>/<purpose>`: the extension the daemon read off the token, and the purpose asked."),
+    sig: HybridSigSchema,
+    fingerprint: S2sFingerprintSchema,
+    document: SandboxIdentitySchema,
+});
+export type ExtensionIdentitySigned = z.infer<typeof ExtensionIdentitySignedSchema>;
+
+// How many signatures one extension is answered in a minute; past it the door answers 429 with `Retry-After`.
+export const EXTENSION_SIGN_PER_MINUTE = 600;
+
+export const extensionIdentityUrl = (): string => rawRouteUrl("GET /extension/identity");
+export const extensionIdentitySignUrl = (): string => rawRouteUrl("POST /extension/identity/sign");
+
 /* (2026-11-27) HOSTED SLEEP, as an extension's own code meets it (`api.sleep` in @intentic/extension-api). A sandbox the
  * platform hosts stops when nobody uses it, and is woken again by a request at one of its wake doors (api-contract's
  * wake-schemas.ts): an enabled webhook automation's fire URL, or an extension's public route declaring `wakes: true`,
@@ -523,4 +565,6 @@ export const ExtensionDeclaredReachSchema = z.object({
     fires: z.array(z.string()),
     // (2026-11-26) Absent from a daemon before it: nothing declared.
     turn: z.array(ExtensionTurnPowerSchema).default([]),
+    // (2026-11-28) Absent from a daemon before it: nothing declared.
+    identity: z.array(ExtensionIdentityVerbSchema).default([]),
 });

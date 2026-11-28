@@ -93,7 +93,12 @@
         "startItem": "Uruchom {item}",
         "approveItem": "Zatwierdź {item}",
         "invalidFiles": "Nie dało się odczytać {count} pliku, więc nie zostanie uruchomiony: | Nie dało się odczytać {count} plików, więc nie zostaną uruchomione: | Nie dało się odczytać {count} plików, więc nie zostaną uruchomione:",
-        "unreadableHeldWakes": "Nie dało się odczytać {count} wstrzymanej automatyzacji, więc nie można jej zwolnić: | Nie dało się odczytać {count} wstrzymanych automatyzacji, więc nie można ich zwolnić: | Nie dało się odczytać {count} wstrzymanych automatyzacji, więc nie można ich zwolnić:"
+        "unreadableHeldWakes": "Nie dało się odczytać {count} wstrzymanej automatyzacji, więc nie można jej zwolnić: | Nie dało się odczytać {count} wstrzymanych automatyzacji, więc nie można ich zwolnić: | Nie dało się odczytać {count} wstrzymanych automatyzacji, więc nie można ich zwolnić:",
+        "approveWithPasskey": "Zatwierdź kluczem dostępu",
+        "approveWithPasskeyItem": "Zatwierdź {item} swoim kluczem dostępu",
+        "passkeyNotUsed": "Nie użyto klucza dostępu, więc nie zostało zatwierdzone.",
+        "passkeyUnsupported": "Ta przeglądarka nie obsługuje kluczy dostępu. Zatwierdź w przeglądarce, która je obsługuje.",
+        "passkeyNoneHeld": "Nie masz jeszcze klucza dostępu w tym sandboxie. Dodaj go w sekcji Dostęp, a potem zatwierdź."
     },
     "extension": {
         "approvals": "Zatwierdzenia"

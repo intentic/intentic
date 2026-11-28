@@ -744,6 +744,11 @@ flowchart LR
   yes, is failed with the reason instead of run, and a yes is spent by the run it allowed. Spending is a compare-and-
   remove in one serialized ledger change (`spendApprovals`), so two passes racing for one item cannot both act on it.
   Only a signed-in maintainer or the owner may approve; the panel and control tokens may propose.
+  (2026-11-28) An action its filer marked `cosign` may be approved with the person's own passkey
+  (`approvals/approval-cosign.ts`): `POST /approvals/{id}/passkey` answers the request, whose challenge is the digest of
+  this sandbox, the item and its performer's digest, and the approve carries the assertion, which the passkey
+  ceremonies check like a sign-in's. The co-signature is kept in the ledger beside the yes and handed to the performer;
+  a `required` item is refused a plain yes.
 - An action naming a `performer` (e-urzad's office acts) never reaches a turn: once its yes is spent, the executor hands
   it to that extension's backend through the backend host's `POST /approvals/<id>` door, which no `/x` route, panel or
   agent token reaches (`approvals/approval-performers.ts`), with the yes, the item as approved and the action rules as

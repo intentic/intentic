@@ -1,4 +1,5 @@
 import type {
+    S2sAttestation,
     S2sMessageSend,
     S2sOutbox,
     S2sOutboxEntry,
@@ -13,11 +14,13 @@ import { DEMO_USER } from "../../platform";
 import { DEMO_DAEMON_ORIGIN } from "../../transport";
 import { holdBytes } from "../workspace/bytes";
 import { contactOf, contactsList } from "./s2sContacts";
+import { fingerprintOf, keysOf, SIG } from "./s2sIdentity";
 
 // This sandbox's inbox, as the daemon's threads keep it: a research sandbox's churn figures with their spreadsheets (the
 // newest reply unread, a question of ours still waiting in the outbox because the research machine sleeps), the owner's
-// logos sent over from their laptop, a problem report, and an invoice summary whose answer could not be delivered once
-// the billing sandbox's key changed. Sending, reading, deleting and taking files write here.
+// logos sent over from their laptop, a problem report, an invoice summary whose answer could not be delivered once the
+// billing sandbox's key changed, and vouches: ours asked of the research sandbox, its vouch back (not yet added to this
+// identity) and its own ask. Sending, reading, deleting and taking files write here, and so do asking and vouching.
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -59,6 +62,18 @@ const message = (thread: string, contact: string, direction: `in` | `out`, ago: 
 };
 const files = (...names: string[]) => names.map((name) => ({ name, size: sizeOf(name) }));
 
+// The research sandbox's vouch for this one, as it signed it (shapes only, as every key in the demo).
+const researchVouch = (): S2sAttestation => ({
+    v: 1,
+    type: `sandbox-vouch`,
+    issuer: { sandbox: `research7f2`, address: `research-7f2.intentic.app`, fingerprint: fingerprintOf(`research-desk`), keys: keysOf(`research-desk`), name: `research-desk` },
+    subject: { sandbox: `acmeshop`, address: SHOP.hostname, fingerprint: fingerprintOf(`acme-shop#1`) },
+    claims: { kind: `organisation`, organisation: `Acme Shop`, verifiedBy: `employment`, country: `PL` },
+    issuedAt: Date.now() - 2 * DAY,
+    validUntil: Date.now() + 363 * DAY,
+    sig: SIG,
+});
+
 const seed = (): Held[] => [
     {
         summary: { id: `t-churn`, contact: `research`, contactName: `research-desk`, scope: { kind: `sandbox` }, subject: `October churn` },
@@ -89,6 +104,21 @@ const seed = (): Held[] => [
         summary: { id: `t-report`, contact: `research`, contactName: `research-desk`, scope: { kind: `sandbox` }, subject: `Checkout latency` },
         messages: [
             message(`t-report`, `research`, `in`, 3 * DAY, `p95 of POST /api/cart rose from 380 ms to 2.4 s after Tuesday's deploy; the slow part is the tax lookup.`, { kind: `report` }),
+        ],
+    },
+    {
+        summary: { id: `t-vouch`, contact: `research`, contactName: `research-desk`, scope: { kind: `sandbox` } },
+        messages: [
+            message(`t-vouch`, `research`, `out`, 3 * DAY, `We ran the churn study together; could you vouch for the shop?`, {
+                kind: `attestation.request`,
+                claims: { kind: `organisation`, organisation: `Acme Shop` },
+            }),
+            message(`t-vouch`, `research`, `in`, 2 * DAY, `Gladly: we know you from the study and your payroll.`, { kind: `attestation.issued`, attestation: researchVouch(), read: false }),
+            message(`t-vouch`, `research`, `in`, 2 * DAY - 5 * MINUTE, `And would you vouch for us in return? We are the research team at Acme.`, {
+                kind: `attestation.request`,
+                claims: { kind: `organisation`, organisation: `Acme Research`, verifiedBy: `in-person` },
+                read: false,
+            }),
         ],
     },
     {
@@ -164,6 +194,30 @@ export const send = (input: S2sMessageSend) => {
     }, DELIVERED_AFTER_MS);
     return { state: `queued` as const, id: made.id, thread };
 };
+
+/** An attestation asked for or vouched, filed in the contact's thread: the one the request it answers is in, else a new one. */
+export const sendAttestation = (contactId: string, sent: Pick<S2sThreadMessage, `kind` | `text` | `claims` | `attestation`>, replyTo?: string) => {
+    const contact = contactOf(SHOP, contactId);
+    if (contact.state !== `accepted` || contact.scope.kind !== `sandbox`) {
+        return { state: `refused` as const, reason: `${contact.name} is not an accepted sandbox contact.` };
+    }
+    const answered = replyTo === undefined ? undefined : [...threads.values()].find((held) => held.summary.contact === contact.id && held.messages.some((each) => each.id === replyTo));
+    const thread = answered?.summary.id ?? `t-${crypto.randomUUID().slice(0, 8)}`;
+    const held: Held = answered ?? { summary: { id: thread, contact: contact.id, contactName: contact.name, scope: contact.scope }, messages: [] };
+    const made = message(thread, contact.id, `out`, 0, sent.text, { ...sent, delivery: { state: `queued`, attempts: 0 } });
+    if (replyTo !== undefined) {
+        made.replyTo = replyTo;
+    }
+    held.messages.push(made);
+    threads.set(thread, held);
+    setTimeout(() => {
+        held.messages = held.messages.map((each) => (each.id === made.id ? { ...each, delivery: { state: `sent`, attempts: 1 } } : each));
+    }, DELIVERED_AFTER_MS);
+    return { state: `queued` as const, id: made.id, thread };
+};
+
+/** A received message, by its id: what adding a vouch to this identity reads. */
+export const receivedOf = (id: string): S2sThreadMessage => messageOf(id);
 
 const messageOf = (id: string): S2sThreadMessage =>
     [...threads.values()].flatMap((held) => held.messages).find((each) => each.id === id) ?? refuse(`No message here is called ${id}.`, 404);

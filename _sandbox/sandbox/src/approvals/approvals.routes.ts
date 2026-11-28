@@ -1,5 +1,6 @@
 import { noteAudit } from "../audit/audit-http.js";
-import type { ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
+import type { ApprovalSummary, ApprovalUpsert } from "@intentic/sandbox-contract/schemas/approvals";
+import type { AuthenticationResponse } from "@intentic/sandbox-contract/schemas/system";
 import { APPROVAL_HOLD_MS } from "@intentic/sandbox-contract/policy/approvals-execution";
 import { approvalsContract } from "@intentic/sandbox-contract/contracts/approvals.contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -7,6 +8,8 @@ import { requireMaintainer } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { approveHookSet, dismissHookSet, hookRequests } from "../guard/hook-approvals.js";
+import { opt } from "../opt.js";
+import { approvalCosign, approvalPasskeyOptions } from "./approval-cosign.js";
 import { forgetApprovals, recordApproval } from "./approval-decisions.js";
 import { approvalsExecutorFor } from "./approvals-executor.js";
 
@@ -16,6 +19,15 @@ import { approvalsExecutorFor } from "./approvals-executor.js";
 // ambiguous.
 export const withApprovalHold = <T extends ApprovalSummary>(approval: T, now: number): T =>
     approval.status === "approved" && approval.scheduledAt === undefined ? { ...approval, scheduledAt: now + APPROVAL_HOLD_MS } : approval;
+
+// (2026-11-28) The item an upsert carries, and the passkey assertion that co-signs its yes, which is never written into it.
+const splitUpsert = (input: ApprovalUpsert) => {
+    if (input.kind !== "action") {
+        return { item: input satisfies ApprovalSummary, passkey: undefined };
+    }
+    const { passkey, ...item } = input;
+    return { item: item satisfies ApprovalSummary, passkey: passkey satisfies AuthenticationResponse | undefined };
+};
 
 // The owner's side of the agent-written queue: `upsert` covers approve/edit/reschedule/retry in one shape, `remove` is
 // reject.
@@ -36,21 +48,33 @@ export const createApprovalsRoutes = (services: Services) => {
     return {
         list: i.list.handler(() => services.approvals.list()),
         upsert: i.upsert.handler(async ({ input, context }) => {
-            const item = withApprovalHold(input, Date.now());
-            noteAudit({ target: item.id, details: { status: item.status } });
+            const { item: asked, passkey } = splitUpsert(input);
+            const item = withApprovalHold(asked, Date.now());
+            noteAudit({ target: item.id, details: { status: item.status, ...opt("passkey", passkey === undefined ? undefined : true) } });
             if (item.status === "approved") {
                 await requireMaintainer(
                     services,
                     context.headers,
                     "only the owner or a maintainer, signed in, can approve; a program's token cannot",
                 );
-                await recordApproval(roots, item, context.identity?.email);
+                // (2026-11-28) A passkey co-signs the yes when one came, and must when the item's filer required it.
+                const caller = { email: context.identity?.email, origin: context.headers.get("origin") ?? undefined };
+                await recordApproval(roots, item, context.identity?.email, Date.now(), await approvalCosign(services, item, passkey, caller));
             } else {
                 await forgetApprovals(roots.historyRoot, [item.id]);
             }
             await services.approvals.upsert(item);
             rearm();
             return { ok: true } as const;
+        }),
+        // (2026-11-28) The passkey request for co-signing one item's yes, for the person asking: a maintainer's session.
+        passkeyOptions: i.passkeyOptions.handler(async ({ input, context }) => {
+            await requireMaintainer(services, context.headers, "only the owner or a maintainer, signed in, can approve; a program's token cannot");
+            const item = (await services.approvals.list()).approvals.find((each) => each.id === input.id);
+            if (item === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no approval with that id" });
+            }
+            return approvalPasskeyOptions(services, item, { email: context.identity?.email, origin: context.headers.get("origin") ?? undefined });
         }),
         remove: i.remove.handler(async ({ input }) => {
             await forgetApprovals(roots.historyRoot, [input.id]);

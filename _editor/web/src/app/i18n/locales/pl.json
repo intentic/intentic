@@ -11733,7 +11733,9 @@
                 "task": "Zadanie",
                 "contact": "Kontakt",
                 "identity": "Zmiana klucza",
-                "receipt": "Potwierdzenie"
+                "receipt": "Potwierdzenie",
+                "attestation": "Poręczenie",
+                "attestationRequest": "Prośba o poręczenie"
             },
             "delivery": {
                 "queued": "Czeka na doręczenie",
@@ -11951,6 +11953,59 @@
                     "declined": "Odrzucone",
                     "stopped": "Zatrzymane"
                 }
+            },
+            "claims": {
+                "kind": "Czym jest",
+                "verifiedBy": "Sprawdzone przez",
+                "country": "Kraj",
+                "over18": "Pełnoletni",
+                "displayName": "Nazwa",
+                "organisation": "Organizacja",
+                "kinds": {
+                    "person": "Osoba",
+                    "organisation": "Organizacja"
+                },
+                "methods": {
+                    "inPerson": "Spotkanie osobiste",
+                    "document": "Dokument tożsamości",
+                    "domain": "Ich domena",
+                    "employment": "Zatrudnienie"
+                },
+                "yes": "Tak",
+                "no": "Nie",
+                "none": "Brak twierdzeń",
+                "notClaimed": "Nie twierdzi"
+            },
+            "attestations": {
+                "title": "Poręczone przez",
+                "about": "Co inne sandboxy mówią o tym",
+                "aboutBody": "Każde poręczenie podpisuje sandbox, który poręcza, a tożsamość tego sandboxa przekazuje je każdemu, kto ją czyta. Mówi, kto poręcza i za co, a nie że to prawda: każdy czytelnik sam decyduje, którym poręczycielom ufa.",
+                "none": "Żaden sandbox jeszcze za niego nie poręcza.",
+                "ask": "Poproś kontakt",
+                "until": "do {date}",
+                "lapsed": "Wygasło {date}: tożsamość już go nie zawiera. Poproś o nowe poręczenie albo je usuń.",
+                "notCarried": "Poza tożsamością: {problem}",
+                "otherType": "Poświadczenie typu {type}",
+                "remove": "Usuń",
+                "removeAsk": "Usunąć poręczenie od {name}?",
+                "removeWhat": "Tożsamość tego sandboxa przestanie je zawierać. Aby je odzyskać, {name} musi poręczyć ponownie.",
+                "removeFailed": "Nie udało się usunąć poręczenia",
+                "contact": "Kontakt",
+                "pickContact": "Wybierz kontakt",
+                "noContacts": "Nie ma jeszcze kontaktu-sandboxa, którego można poprosić: dodaj go w Kontaktach.",
+                "note": "Notatka",
+                "send": "Poproś o poręczenie",
+                "askFailed": "Nie udało się poprosić {name}",
+                "claims": "Za co poręczasz",
+                "claimsHint": "Tylko to, co sprawdziłeś sam. Ten sandbox podpisuje to swoim kluczem, a kto mu ufa, może na tym polegać.",
+                "validUntil": "Ważne do",
+                "sign": "Podpisz i wyślij",
+                "vouchFailed": "Nie udało się poręczyć za {name}",
+                "vouch": "Poręcz za ten kontakt",
+                "vouchShort": "Poręcz",
+                "addToIdentity": "Dodaj do tożsamości tego sandboxa",
+                "added": "W tożsamości tego sandboxa",
+                "addFailed": "Nie udało się dodać poręczenia"
             }
         }
     },

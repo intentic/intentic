@@ -93,7 +93,12 @@
         "startItem": "{item} starten",
         "approveItem": "{item} genehmigen",
         "invalidFiles": "{count} Datei ließ sich nicht lesen und wird nicht ausgeführt: | {count} Dateien ließen sich nicht lesen und werden nicht ausgeführt:",
-        "unreadableHeldWakes": "{count} zurückgehaltene Automation ließ sich nicht lesen und kann nicht freigegeben werden: | {count} zurückgehaltene Automationen ließen sich nicht lesen und können nicht freigegeben werden:"
+        "unreadableHeldWakes": "{count} zurückgehaltene Automation ließ sich nicht lesen und kann nicht freigegeben werden: | {count} zurückgehaltene Automationen ließen sich nicht lesen und können nicht freigegeben werden:",
+        "approveWithPasskey": "Mit Passkey genehmigen",
+        "approveWithPasskeyItem": "{item} mit deinem Passkey genehmigen",
+        "passkeyNotUsed": "Es wurde kein Passkey verwendet, daher ist es nicht genehmigt.",
+        "passkeyUnsupported": "Dieser Browser kann keine Passkeys verwenden. Genehmige es in einem Browser, der es kann.",
+        "passkeyNoneHeld": "Du hast noch keinen Passkey für diese Sandbox. Füge unter „Zugriff“ einen hinzu und genehmige es dann."
     },
     "extension": {
         "approvals": "Genehmigungen"

@@ -6,6 +6,7 @@ import type { Logger } from "pino";
 import type { Caller } from "../auth/auth.js";
 import { opt } from "../opt.js";
 import { createAdmission, refusalStatus, type S2sAdmission } from "./admission.js";
+import { registerAttestationKinds } from "./attestations/attestation-kinds.js";
 import { type CallClient, createCallClient } from "./calls/call-client.js";
 import { type CallDoor, createCallDoor } from "./calls/call-door.js";
 import { registerContactKinds } from "./contacts/contact-kinds.js";
@@ -88,6 +89,9 @@ export interface S2sCalls {
     readonly client: CallClient;
 }
 
+// The kinds a person sends that their thread lists, each with its delivery.
+const THREADED_KINDS: ReadonlySet<string> = new Set(["message", "attestation.request", "attestation.issued"]);
+
 const hearingFor = (logger: S2sDeps["logger"]) => {
     const listeners = new Set<S2sHearing>();
     const heard = async (event: S2sHeard): Promise<void> => {
@@ -129,9 +133,10 @@ export const createS2s = (deps: S2sDeps): S2s => {
     };
     registerContactKinds(core, kinds, heard);
     registerMessageKinds(threads, kinds, heard);
-    // A sent message's delivery, as its thread shows it.
+    registerAttestationKinds(threads, kinds, deps.identity);
+    // A sent message's delivery, or an attestation's asked for or sent, as its thread shows it.
     outbox.onSettled(async (entry, settled) => {
-        const thread = entry.payload.kind === "message" && entry.thread !== undefined ? await threads.byWire(entry.contact, entry.thread) : undefined;
+        const thread = THREADED_KINDS.has(entry.payload.kind) && entry.thread !== undefined ? await threads.byWire(entry.contact, entry.thread) : undefined;
         if (thread !== undefined) {
             await threads.changeMessage(thread.id, entry.id, (held) => ({ ...held, delivery: deliveryOf(settled) }));
         }

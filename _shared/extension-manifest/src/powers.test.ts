@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { manifestJsonSchema } from "./json-schema.js";
 import { ExtensionManifestSchema } from "./manifest.js";
-import { powersOf } from "./powers-diff.js";
+import { diffPowers, powersOf } from "./powers-diff.js";
 
 // Every power the schema declares must COUNT: a manifest that sets the field folds to exactly one more power than the
 // same manifest without it, under the key and sentence below. The powers are the owner's approval (a workspace
@@ -113,6 +113,12 @@ const ROWS: readonly Row[] = [
         without: { permissions: { turn: [] } },
         with: { permissions: { turn: ["jobs"] } },
         adds: ["turn:jobs", "its agent tools start background jobs in the calling conversation"],
+    },
+    {
+        power: "identity:sign",
+        without: { permissions: { identity: [] } },
+        with: { permissions: { identity: ["sign"] } },
+        adds: ["identity:sign", "its backend signs records as this sandbox, which anyone can verify with the sandbox's public key"],
     },
     {
         power: "work",
@@ -304,4 +310,16 @@ describe("powersOf", () => {
         expect([...after].filter(([key]) => !before.has(key))).toEqual([[...row.adds]]);
         expect([...before].filter(([key]) => !after.has(key))).toEqual([]);
     });
+});
+
+// (2026-11-28) Signing as the sandbox is a power of its own: an update that starts declaring it asks again, naming it.
+test("an update that declares permissions.identity sign asks for it as a new power", () => {
+    const before = manifest(SERVER);
+    const after = manifest({ ...SERVER, permissions: { identity: ["sign"] } });
+    expect(diffPowers(before, after)).toEqual({
+        added: ["its backend signs records as this sandbox, which anyone can verify with the sandbox's public key"],
+        removed: [],
+        unchanged: ["runs a backend bundle inside the daemon's extension host"],
+    });
+    expect(diffPowers(after, after).added).toEqual([]);
 });

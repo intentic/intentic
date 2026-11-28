@@ -65,6 +65,7 @@ import { runnerSubagentsRawRoutes } from "./runners/fleet/runner-subagents.route
 import { runnerCredentialRawRoutes } from "./runners/runner-credentials.routes.js";
 import { runnerGitRawRoutes } from "./runners/runner-git.routes.js";
 import { runnerDefinitionRawRoutes } from "./runners/runner.routes.js";
+import { s2sAttestationsRawRoutes } from "./s2s/attestations/attestations.routes.js";
 import { s2sCallsRawRoutes } from "./s2s/calls/calls.routes.js";
 import { s2sContactsRawRoutes } from "./s2s/contacts/contacts.routes.js";
 import { s2sIdentityRawRoutes } from "./s2s/identity/identity.routes.js";
@@ -143,6 +144,7 @@ export const appRawRoutes = (services: Services) =>
         runnerCredentialRawRoutes(services),
         runnerGitRawRoutes(services),
         runnerDefinitionRawRoutes(services),
+        s2sAttestationsRawRoutes(services),
         s2sCallsRawRoutes(services),
         s2sContactsRawRoutes(services),
         s2sIdentityRawRoutes(services),

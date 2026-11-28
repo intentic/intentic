@@ -93,7 +93,12 @@
         "startItem": "Start {item}",
         "approveItem": "Approve {item}",
         "invalidFiles": "{count} file couldn't be read and won't run: | {count} files couldn't be read and won't run:",
-        "unreadableHeldWakes": "{count} held automation couldn't be read and can't be released: | {count} held automations couldn't be read and can't be released:"
+        "unreadableHeldWakes": "{count} held automation couldn't be read and can't be released: | {count} held automations couldn't be read and can't be released:",
+        "approveWithPasskey": "Approve with passkey",
+        "approveWithPasskeyItem": "Approve {item} with your passkey",
+        "passkeyNotUsed": "No passkey was used, so it was not approved.",
+        "passkeyUnsupported": "This browser cannot use passkeys. Approve it from a browser that can.",
+        "passkeyNoneHeld": "You have no passkey on this sandbox yet. Add one from Access, then approve it."
     },
     "extension": {
         "approvals": "Approvals"

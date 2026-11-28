@@ -24,13 +24,13 @@ export const fingerprintOf = (seed: string, prefix = `isk1:`): string => {
     return `${prefix}${out}`;
 };
 
-const keysOf = (seed: string): SandboxIdentity[`keys`] => ({
+export const keysOf = (seed: string): SandboxIdentity[`keys`] => ({
     ed25519: `ed${fingerprintOf(seed).slice(5, 40)}`,
     mldsa65: `ml${fingerprintOf(`${seed}/dsa`).slice(5)}`,
     x25519: `x${fingerprintOf(`${seed}/x`).slice(5, 40)}`,
     mlkem768: `kem${fingerprintOf(`${seed}/kem`).slice(5)}`,
 });
-const SIG = { ed25519: `sig`, mldsa65: `sig` } as const;
+export const SIG = { ed25519: `sig`, mldsa65: `sig` } as const;
 
 const documentFor = (sandbox: string, name: string, host: string, seed: string, domains: readonly string[] = [], recovery?: string): SandboxIdentity => {
     const document: SandboxIdentity = {

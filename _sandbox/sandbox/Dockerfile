@@ -354,6 +354,10 @@ COPY --from=trees extensions/pipelines/dist /opt/extensions/pipelines/dist
 # as connectors does, since the skill and the fragment resolve against it.
 COPY _extensions/product-health /opt/extensions/product-health
 COPY --from=trees extensions/product-health/dist /opt/extensions/product-health/dist
+# network is both too (2026-11-28): its view is compiled into the web bundle, and its dist is the backend that reads the
+# owner's feeds, Bluesky, Nostr and Atlas sources into its own SQLite store.
+COPY _extensions/network /opt/extensions/network
+COPY --from=trees extensions/network/dist /opt/extensions/network/dist
 # connectors' dist is its backend (`server.js`): the npm and GitHub release watch kinds' checks. Its cards, skills and
 # image fragments come with the COPY of the whole directory above, which .dockerignore leaves the dist out of.
 COPY --from=trees extensions/connectors/dist /opt/extensions/connectors/dist

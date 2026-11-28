@@ -12,16 +12,23 @@ import {
     extensionEventsUrl,
     ExtensionExecResultSchema,
     extensionExecUrl,
+    type ExtensionIdentitySign,
+    ExtensionIdentitySignedSchema,
+    extensionIdentitySignUrl,
+    extensionIdentityUrl,
     extensionWorkHoldUrl,
 } from "@intentic/sandbox-contract/extension-protocol";
+import { SandboxIdentitySchema } from "@intentic/sandbox-contract/schemas/s2s";
 import type { CiFeedEvent } from "@intentic/sandbox-contract/schemas/ci";
+import type { z } from "zod";
 import type { Disposable } from "./disposable.js";
 import type { ExtensionServerApi } from "./server.js";
 import type { ExecOptions, ExecResult, RunSettled, SandboxActivity } from "./server-reach.js";
 
 // What an extension's Node code hears and asks of the daemon besides its typed calls: the event stream (its settings, the
 // workspace's changes and the kinds its manifest declares), work it holds in flight, commands it runs under a workload
-// class, and (2026-11-26) rows it writes in the sandbox's activity feed. One implementation for the backend host and every declared process (runtime.ts); each declared reach
+// class, (2026-11-26) rows it writes in the sandbox's activity feed, and (2026-11-28) the sandbox's identity: its document
+// and records signed as it. One implementation for the backend host and every declared process (runtime.ts); each declared reach
 // is refused here before anything is sent, naming the manifest field, and the daemon refuses it again when asked.
 
 type DaemonRequest = ExtensionServerApi["daemon"]["request"];
@@ -255,6 +262,14 @@ const execThrough = async (request: DaemonRequest, argv: readonly string[], opti
     return ExtensionExecResultSchema.parse(await answered.json());
 };
 
+// A door's JSON answer read by its schema, or the daemon's refusal as an error naming the route.
+const answerWith = async <S extends z.ZodType>(schema: S, answered: Response, method: string, url: string): Promise<z.output<S>> => {
+    if (!answered.ok) {
+        throw new Error(`daemon answered ${answered.status} for ${method} ${url}: ${(await answered.text()).slice(0, 300)}`);
+    }
+    return schema.parse(await answered.json());
+};
+
 // A refusal before anything is sent, naming the manifest field that would allow it.
 const undeclared = (id: string, what: string, field: string): Error => new Error(`extension "${id}" ${what}: declare it in ${field} in its manifest`);
 
@@ -265,6 +280,7 @@ export interface BackendReach {
     readonly work: ExtensionServerApi["work"];
     readonly exec: ExtensionServerApi["exec"];
     readonly activity: ExtensionServerApi["activity"];
+    readonly identity: ExtensionServerApi["identity"];
     // Ends the event stream; holds belong to their holders.
     readonly close: () => void;
 }
@@ -328,6 +344,20 @@ export const createBackendReach = (id: string, request: DaemonRequest, declared:
                 if (!answered.ok) {
                     throw new Error(`daemon answered ${answered.status} for POST ${extensionActivityUrl()}: ${(await answered.text()).slice(0, 300)}`);
                 }
+            },
+        },
+        identity: {
+            document: async () => answerWith(SandboxIdentitySchema, await request(extensionIdentityUrl()), "GET", extensionIdentityUrl()),
+            sign: async (purpose, payload) => {
+                if (!declared.identity.includes("sign")) {
+                    throw undeclared(id, `signed a record ("${purpose}") as the sandbox without declaring it`, `permissions.identity ["sign"]`);
+                }
+                const answered = await request(extensionIdentitySignUrl(), {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ purpose, payload } satisfies ExtensionIdentitySign),
+                });
+                return answerWith(ExtensionIdentitySignedSchema, answered, "POST", extensionIdentitySignUrl());
             },
         },
         close: hub.close,

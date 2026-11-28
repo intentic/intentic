@@ -19,7 +19,9 @@ import {
 import {
     HybridSigSchema,
     S2sAddressSchema,
+    S2sAttestationSchema,
     S2sBase64UrlSchema,
+    S2sClaimsSchema,
     S2sContactScopeSchema,
     S2sFingerprintSchema,
     S2sGrantsSchema,
@@ -88,6 +90,8 @@ export const S2S_PAYLOAD_KINDS = [
     "task.answer",
     "task.stop",
     "receipt",
+    "attestation.request",
+    "attestation.issued",
 ] as const;
 export const S2sPayloadKindSchema = z.enum(S2S_PAYLOAD_KINDS);
 export type S2sPayloadKind = z.infer<typeof S2sPayloadKindSchema>;
@@ -191,6 +195,36 @@ export const S2sReceiptSchema = z.object({
     at: z.number().int().nonnegative(),
 });
 
+// Attestations (docs/architecture/messages.md, "Attestations"), under the contact's `message` grant and between
+// sandbox-scoped contacts only, since each is the sandbox speaking as itself. Neither is acted on when it arrives: it waits
+// in the contact's thread for a person there, who issues a vouch for a request or adds an issued one to the identity.
+// A request: the sandbox asks the contact to vouch for it, with the claims it hopes for. The issuer signs what it decides.
+export const S2sAttestationRequestSchema = z.object({
+    kind: z.literal("attestation.request"),
+    claims: S2sClaimsSchema.describe("The claims it asks to be vouched for, in its own words."),
+    note: z.string().max(S2S_NOTE_MAX).optional().describe("Why it asks, or how the contact could check."),
+});
+// An issued one: the contact's signed vouch for this sandbox, sent by its issuer; the envelope's `replyTo` names the
+// request it answers, when it answers one.
+export const S2sAttestationIssuedSchema = z.object({
+    kind: z.literal("attestation.issued"),
+    attestation: S2sAttestationSchema.describe("The attestation, signed by the sender about the receiver."),
+    note: z.string().max(S2S_NOTE_MAX).optional(),
+});
+
+/**
+ * The line a thread files an attestation's message under: the note it came with, else its claims by name ("kind:
+ * organisation, country: PL"). The daemon writes it; the editor, which draws the claims themselves, leaves out a line
+ * that is only them.
+ */
+export const attestationText = (claims: Readonly<Record<string, string | number | boolean>>, note?: string): string => {
+    if (note !== undefined && note.trim() !== "") {
+        return note;
+    }
+    const named = Object.entries(claims).map(([name, value]) => `${name}: ${String(value)}`);
+    return named.length === 0 ? "No claims named." : named.join(", ");
+};
+
 export const S2sPayloadSchema = z.discriminatedUnion("kind", [
     S2sContactRequestSchema,
     S2sContactAcceptSchema,
@@ -205,6 +239,8 @@ export const S2sPayloadSchema = z.discriminatedUnion("kind", [
     S2sTaskAnswerSchema,
     S2sTaskStopSchema,
     S2sReceiptSchema,
+    S2sAttestationRequestSchema,
+    S2sAttestationIssuedSchema,
 ]);
 export type S2sPayload = z.infer<typeof S2sPayloadSchema>;
 export type S2sPayloadOf<K extends S2sPayloadKind> = Extract<S2sPayload, { readonly kind: K }>;

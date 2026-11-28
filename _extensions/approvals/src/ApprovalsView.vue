@@ -29,6 +29,7 @@ import { computed, onMounted, ref } from "vue";
 import ActionBody from "./ActionBody.vue";
 import ApprovalMeta from "./ApprovalMeta.vue";
 import ApprovalRail, { type ApprovalScope } from "./ApprovalRail.vue";
+import ApproveControl from "./ApproveControl.vue";
 import { approvalsAttention } from "./extension";
 import HookSetBody from "./HookSetBody.vue";
 import { hookSetSize } from "./hookSet.js";
@@ -37,6 +38,7 @@ import PostBody from "./PostBody.vue";
 import { countdownWords, limitOf, postsATitle } from "./postText";
 import PostText from "./PostText.vue";
 import ScheduleControl from "./ScheduleControl.vue";
+import { approveWithPasskey, passkeyCosignOf } from "./passkeyApprove";
 import { useApprovals } from "./useApprovals";
 import { useHeldWakes, waitingOf } from "./useHeldWakes";
 import { useHookRequests, waitingHooksOf } from "./useHookRequests";
@@ -272,12 +274,19 @@ const settled = (act: () => Promise<unknown>): Promise<void> =>
         await act();
     }, t(`approvalsView.couldntUpdateIt`));
 
-const approve = (item: ApprovalSummary): Promise<void> => settled(() => save.mutateAsync({ ...item, status: `approved` }));
+// (2026-11-28) A passkey's yes, its assertion posted with it (passkeyApprove.ts); the only one an item requiring it gets.
+const approveByPasskey = (item: ApprovalSummary): Promise<void> =>
+    settled(() => approveWithPasskey(item, async (upsert) => void (await save.mutateAsync(upsert))));
+const approve = (item: ApprovalSummary): Promise<void> =>
+    passkeyCosignOf(item) === `required` ? approveByPasskey(item) : settled(() => save.mutateAsync({ ...item, status: `approved` }));
+
+// Approve-all skips an item that requires a passkey: it waits for its own press.
+const approvableAll = computed(() => needsReview.value.filter((item) => passkeyCosignOf(item) !== `required`));
 
 // Snapshots the list before looping: each approval removes a row from `needsReview`, which would shrink underneath a
 // live read.
 const approveAll = (): Promise<void> => {
-    const queue = needsReview.value;
+    const queue = approvableAll.value;
     approvingAll.value = false;
     return run(async () => {
         await edit.flush();
@@ -463,7 +472,7 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtl
                                     size="small"
                                     tier="boring"
                                     :disabled="save.isPending.value"
-                                    @click="settled(() => save.mutateAsync({ ...item, status: `approved` }))"
+                                    @click="approve(item)"
                                 >
                                     <template #icon><Icon name="refresh" /></template>
                                 </Button>
@@ -497,7 +506,7 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtl
                     </RowGroup>
 
                     <RowGroup v-if="needsReview.length > 0" :label="t(`approvalsView.needsReview`)">
-                        <template v-if="needsReview.length > 1" #actions>
+                        <template v-if="approvableAll.length > 1" #actions>
                             <button
                                 v-if="canShip"
                                 type="button"
@@ -505,7 +514,7 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtl
                                 :disabled="save.isPending.value"
                                 @click="approvingAll = true"
                             >
-                                {{ t(`approvalsView.approveAll`, { count: needsReview.length }) }}
+                                {{ t(`approvalsView.approveAll`, { count: approvableAll.length }) }}
                             </button>
                         </template>
                         <Row v-for="item in needsReview" :key="item.id">
@@ -535,15 +544,14 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtl
                                 >
                                     <Icon name="trash" />
                                 </button>
-                                <Button
+                                <ApproveControl
                                     v-if="canShip"
-                                    :label="t(`approvalsView.approve`)"
-                                    size="small" tier="accent"
+                                    :item="item"
+                                    :label="headline(item)"
                                     :disabled="save.isPending.value"
-                                    @click="approve(item)"
-                                >
-                                    <template #icon><Icon name="check" /></template>
-                                </Button>
+                                    @approve="approve(item)"
+                                    @passkey="approveByPasskey(item)"
+                                />
                             </template>
                             <template #below>
                                 <div :class="POST_COLUMN">
@@ -810,11 +818,11 @@ const NOTE = `mt-1.5 line-clamp-2 max-w-read text-2xs leading-relaxed text-subtl
             <ConfirmDialog
                 :open="approvingAll"
                 :header="t(`approvalsView.approveEverythingWaiting`)"
-                :confirm-label="t(`approvalsView.approve2`, { count: needsReview.length })"
+                :confirm-label="t(`approvalsView.approve2`, { count: approvableAll.length })"
                 confirm-icon="check"
                 :description="t(`approvalsView.eachGoesAheadOn`)"
                 :destructive="false"
-                :items="needsReview"
+                :items="approvableAll"
                 :loading="save.isPending.value"
                 @cancel="approvingAll = false"
                 @confirm="approveAll"

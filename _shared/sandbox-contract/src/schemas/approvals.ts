@@ -1,6 +1,8 @@
 // approvals: things the agent prepared and may not do until the owner says yes (.intentic/config/approvals/<id>.json)
 import { z } from "zod";
+import { PasskeyCosignSchema } from "../protocol/s2s/passkey-cosign.js";
 import { entryId } from "./internal.js";
+import { AuthenticationResponseSchema } from "./system.js";
 
 // One queue for anything that needs a yes-click before a machine carries it out and records the outcome: an envelope
 // (who, when, status, result) plus a kind-specific payload, a discriminated union. Excludes a facts inbox and a hold a
@@ -108,6 +110,15 @@ export const ActionApprovalSchema = z.object({
         .describe(
             "Who carries this out instead of an agent turn: once you approve it, the sandbox hands it to that extension's backend, which acts only if what it holds still matches the digest. Written by the extension's own command when it holds an act; an item written by hand never needs one.",
         ),
+    // (2026-11-28) Written by whoever files the item (the performer extension), never by hand, and part of what the yes
+    // pins. The daemon refuses a `required` item approved without a passkey; the performer re-checks what it is handed
+    // (`ApprovedAction.cosign`), since a turn can write this file before anyone approves it.
+    cosign: z
+        .enum(["offered", "required"])
+        .optional()
+        .describe(
+            "Whether approving it with a passkey is offered, or required: the sandbox then keeps the passkey's signature over exactly what is approved and hands it to the extension carrying it out, which anyone can check later. Only an item naming a `performer` takes one.",
+        ),
     ...envelope,
 });
 export type ActionApproval = z.infer<typeof ActionApprovalSchema>;
@@ -124,6 +135,36 @@ export const ActionApprovalSummarySchema = ActionApprovalSchema.extend(withId);
 export type ActionApprovalSummary = z.infer<typeof ActionApprovalSummarySchema>;
 export const ApprovalSummarySchema = z.discriminatedUnion("kind", [PostApprovalSummarySchema, ActionApprovalSummarySchema]);
 export type ApprovalSummary = z.infer<typeof ApprovalSummarySchema>;
+
+// (2026-11-28) What `upsert` takes: an item as the owner wants it, and for an action being approved, optionally the
+// passkey assertion that co-signs the yes (the browser's `PublicKeyCredential.toJSON()` over the challenge
+// `passkeyOptions` answered). Never written into the item: the daemon verifies it, and keeps the co-signature
+// (PasskeyCosignSchema) with the recorded yes, off the workspace.
+export const ApprovalUpsertSchema = z.discriminatedUnion("kind", [
+    PostApprovalSummarySchema,
+    ActionApprovalSummarySchema.extend({
+        passkey: AuthenticationResponseSchema.optional().describe(
+            "Your passkey's assertion over this item's challenge (POST /approvals/{id}/passkey), when approving it with a passkey. Required for an item whose `cosign` is `required`.",
+        ),
+    }),
+]);
+export type ApprovalUpsert = z.infer<typeof ApprovalUpsertSchema>;
+
+// (2026-11-28) The WebAuthn request options for co-signing one action with a passkey, in the JSON form
+// `PublicKeyCredential.parseRequestOptionsFromJSON` takes: the challenge is the approval's own
+// (protocol/s2s/passkey-cosign.ts `cosignChallenge`), and only the signed-in person's own passkeys are allowed.
+export const ApprovalPasskeyOptionsSchema = z.object({
+    rpId: z.string(),
+    challenge: z.string().describe("base64url of SHA-256 over this sandbox, this item and its performer's digest."),
+    timeout: z.number(),
+    userVerification: z.literal("required"),
+    allowCredentials: z.array(z.object({ type: z.literal("public-key"), id: z.string(), transports: z.array(z.string()).optional() })),
+    available: z.boolean().describe("Whether you hold a passkey on this sandbox to answer with; false means add one first, from Access."),
+});
+export type ApprovalPasskeyOptions = z.infer<typeof ApprovalPasskeyOptionsSchema>;
+
+// (2026-11-28) The co-signature a yes was given with, as the sandbox keeps it and hands it on.
+export { PasskeyCosignSchema };
 
 // Filenames that failed to parse; agent-written files are a trust boundary, so these are surfaced, not silently
 // dropped.

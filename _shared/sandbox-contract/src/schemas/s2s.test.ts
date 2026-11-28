@@ -5,10 +5,13 @@ import { NeedAskSchema, NeedSubjectSchema } from "./needs.js";
 import {
     S2S_CALL_METHODS,
     S2S_CALLS,
+    S2S_CLAIM_VALUE_MAX,
+    S2S_CLAIMS_MAX,
     S2S_PAYLOAD_KINDS,
     S2S_REFUSAL_CODES,
     S2S_REFUSAL_STATUS,
     S2sAddressSchema,
+    S2sClaimsSchema,
     S2sContactScopeSchema,
     S2sGrantsSchema,
     S2sPayloadSchema,
@@ -47,7 +50,7 @@ describe("addresses and scopes", () => {
 
 describe("payloads", () => {
     it("have one schema per kind the header may name, and refuse any other", () => {
-        expect(S2S_PAYLOAD_KINDS.length).toBe(13);
+        expect(S2S_PAYLOAD_KINDS.length).toBe(15);
         expect(S2sPayloadSchema.safeParse({ kind: `poll.vote` }).success).toBe(false);
         expect(S2sPayloadSchema.parse({ kind: `message`, text: `hi` })).toEqual({ kind: `message`, text: `hi`, attachments: [] });
         expect(S2sPayloadSchema.parse({ kind: `task.stop`, task: `r-1` })).toEqual({ kind: `task.stop`, task: `r-1` });
@@ -60,6 +63,30 @@ describe("payloads", () => {
         const { project: _project, ...unnamed } = report;
         expect(S2sPayloadSchema.safeParse(unnamed).success).toBe(false);
         expect(S2sPayloadSchema.parse({ kind: `task.request`, requestId: `r-1`, task: `do it` })).toEqual({ kind: `task.request`, requestId: `r-1`, task: `do it`, hops: 0 });
+    });
+});
+
+describe("attestation payloads", () => {
+    it("carry a request's claims and note, and an issued attestation whole, of a type this build reads or not", () => {
+        const request = { kind: `attestation.request`, claims: { kind: `organisation`, over18: true, staff: 12 }, note: `we met in Gdańsk` } as const;
+        expect(S2sPayloadSchema.parse(request)).toEqual(request);
+        expect(S2sPayloadSchema.safeParse({ kind: `attestation.request`, claims: { Kind: `person` } }).success).toBe(false);
+        const later = { kind: `attestation.issued`, attestation: { type: `zk-uniqueness`, v: 2, proof: `…` } } as const;
+        expect(S2sPayloadSchema.parse(later)).toEqual(later);
+        expect(S2sPayloadSchema.safeParse({ kind: `attestation.issued`, attestation: { v: 1 } }).success).toBe(false);
+    });
+
+    it("bound the claims by count, by a word's length and by their bytes whole", () => {
+        const claims = (count: number, value: string) => Object.fromEntries(Array.from({ length: count }, (_, at) => [`c${at}`, value]));
+        expect(S2sClaimsSchema.safeParse(claims(S2S_CLAIMS_MAX, `x`)).success).toBe(true);
+        expect(S2sClaimsSchema.safeParse(claims(S2S_CLAIMS_MAX + 1, `x`)).success).toBe(false);
+        expect(S2sClaimsSchema.safeParse({ name: `x`.repeat(S2S_CLAIM_VALUE_MAX) }).success).toBe(true);
+        expect(S2sClaimsSchema.safeParse({ name: `x`.repeat(S2S_CLAIM_VALUE_MAX + 1) }).success).toBe(false);
+        // Six words of 120 characters come to 769 bytes of JSON, one past the bytes and well inside the count.
+        expect(S2sClaimsSchema.safeParse(claims(6, `x`.repeat(S2S_CLAIM_VALUE_MAX))).success).toBe(false);
+        expect(S2sClaimsSchema.safeParse({ ...claims(5, `x`.repeat(S2S_CLAIM_VALUE_MAX)), c5: `x`.repeat(S2S_CLAIM_VALUE_MAX - 1) }).success).toBe(true);
+        expect(S2sClaimsSchema.safeParse({ "verified by": `x` }).success).toBe(false);
+        expect(S2sClaimsSchema.safeParse({ nested: { a: 1 } }).success).toBe(false);
     });
 });
 
@@ -120,6 +147,21 @@ describe("the s2s routes", () => {
     it("keep the recovery key the owner's alone", () => {
         expect(RAW_ROUTES[`POST /s2s/me/recovery`]).toEqual({ floor: `owner`, panel: false, control: `never` });
         expect(RAW_ROUTES[`POST /s2s/me/recover`]).toEqual({ floor: `owner`, panel: false, control: `never` });
+    });
+
+    it("keep attestations the owner's or a maintainer's, and out of every agent's and panel's reach", () => {
+        const attestations = s2sRoutes.filter(([key]) => key.includes(`attestations`));
+        expect(attestations.map(([key]) => key)).toEqual([
+            `GET /s2s/me/attestations`,
+            `POST /s2s/me/attestations`,
+            `DELETE /s2s/me/attestations/{id}`,
+            `POST /s2s/me/attestations/ask`,
+            `POST /s2s/attestations/issue`,
+        ]);
+        expect(RAW_ROUTES[`GET /s2s/me/attestations`]).toEqual({ floor: `maintainer`, control: `never` });
+        for (const [, meta] of attestations.slice(1)) {
+            expect(meta).toEqual({ panel: false, control: `never` });
+        }
     });
 
     it("register paired before a contact's id, which would otherwise take it", () => {

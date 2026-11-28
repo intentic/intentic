@@ -13,6 +13,7 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
+import * as network from "@intentic/ext-network";
 import * as productHealth from "@intentic/ext-product-health";
 
 // Exercises each compiled-in extension package the way loadBuiltins does: activate() against a minimal fake
@@ -211,6 +212,22 @@ describe(`ext-product-health`, () => {
         const view = activateAndCapture(productHealth);
         expect(view.detect(noRepos, [])).toEqual([]);
         expect(view.detect(noRepos, [postHogCap])).toEqual([{ key: `product-health`, title: `Product health`, icon: `usage` }]);
+    });
+});
+
+describe(`ext-network`, () => {
+    it.each([undefined, false])(`registers no view when backend availability is %s`, (available) => {
+        const { api, views } = capture({ available });
+        const context: ExtensionContext = { extensionId: `intentic.network`, subscriptions: [] };
+        network.activate(api, context);
+        expect(views).toEqual([]);
+        expect(context.subscriptions).toEqual([]);
+    });
+
+    it(`offers the Network view on the rail whenever its backend runs`, () => {
+        const view = activateAndCapture(network);
+        expect(view.surface).toBe(`rail`);
+        expect(view.detect(noRepos, [])).toEqual([{ key: `network`, title: `Network`, icon: `globe` }]);
     });
 });
 

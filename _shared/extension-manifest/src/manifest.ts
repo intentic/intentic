@@ -145,6 +145,21 @@ const ManifestShape = z.object({
                 .describe(
                     "What your agent tools (`contributes.tools`, served by `api.tools.serve`) may do with the grants of the turn that calls them: `browser`, drive the sandbox's signed-in browser of an account the turn holds, on that account's own sites (`api.browser.call`); `owner-browser`, call the owner's own browser the turn holds (`api.ownerBrowser.call`); `jobs`, start a background job in the calling conversation that the agent collects with `wait` (`api.jobs.start`). Never more than the turn holds.",
                 ),
+            // (2026-11-28) What it may do as this sandbox's identity (permissions.ts EXTENSION_IDENTITY_VERBS); the daemon
+            // signs for it and refuses each undeclared verb. The key never leaves the daemon.
+            identity: z
+                .array(
+                    z.literal("sign").meta({
+                        power: {
+                            key: "identity:sign",
+                            sentence: "its backend signs records as this sandbox, which anyone can verify with the sandbox's public key",
+                        },
+                    }),
+                )
+                .optional()
+                .describe(
+                    "What your backend may do as this sandbox's identity: `sign`, have the daemon sign a JSON record as this sandbox (`api.identity.sign(purpose, payload)`), under a domain naming your extension and the record's purpose, which anyone verifies with the sandbox's published keys. The key never reaches your code.",
+                ),
         })
         .optional()
         .describe(

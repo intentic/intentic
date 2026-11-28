@@ -1,0 +1,125 @@
+{
+    "title": "Sieć",
+    "tabs": {
+        "feed": "Kanał",
+        "sources": "Źródła",
+        "settings": "Ustawienia",
+        "published": "Opublikowane",
+        "peers": "Sieć"
+    },
+    "view": {
+        "refresh": "Odczytaj wszystko teraz",
+        "couldNotRead": "Nie udało się odczytać Sieci.",
+        "pressFailed": "To się nie udało."
+    },
+    "feed": {
+        "title": "Kanał",
+        "curate": "Oceń {count} nowy | Oceń {count} nowe | Oceń {count} nowych",
+        "untitled": "(bez tytułu)",
+        "empty": "Na razie pusto. Dodaj źródło w zakładce Źródła i odczytaj je.",
+        "signed": "podpisane",
+        "invalid": "nieważny podpis",
+        "unsigned": "bez podpisu"
+    },
+    "sources": {
+        "add": "Dodaj źródło",
+        "kindLabel": "Rodzaj źródła",
+        "title": "Źródła",
+        "kind": {
+            "rss": "Kanał",
+            "bluesky": "Bluesky",
+            "nostr": "Nostr",
+            "atlas": "Atlas",
+            "intentic": "Sandbox"
+        },
+        "placeholder": {
+            "rss": "https://example.com/feed.xml",
+            "bluesky": "nazwa.bsky.social lub did:plc:…",
+            "nostr": "npub1… lub klucz publiczny hex",
+            "atlas": "https://rejestr.example"
+        },
+        "trust": {
+            "rss": "RSS, Atom lub JSON Feed. Odczyt przez HTTPS; nic w kanale nie jest podpisane.",
+            "bluesky": "Publiczny kanał autora, odczytywany bez logowania. Odpowiedź AppView jest przyjmowana bez weryfikacji.",
+            "nostr": "Identyfikator i podpis Schnorra każdego zdarzenia są sprawdzane względem klucza autora.",
+            "atlas": "Podpis Falcon-1024 każdej koperty jest sprawdzany według opublikowanej dokumentacji Atlasa."
+        },
+        "labelPlaceholder": "Nazwa (opcjonalnie)",
+        "addButton": "Dodaj i odczytaj",
+        "failing": "błąd ({count}×): {error}",
+        "notRead": "jeszcze nie odczytane",
+        "read": "odczytane {when}",
+        "off": "wyłączone",
+        "readNow": "Odczytaj teraz",
+        "enabled": "Odczytuj to źródło",
+        "remove": "Usuń razem z wpisami",
+        "empty": "Brak źródeł."
+    },
+    "settings": {
+        "title": "Ustawienia",
+        "rules": "Zasady kuratora",
+        "rulesHint": "Twoimi słowami: co jest dla Ciebie ważne, co odrzucać, jak etykietować. Czyta je agent-kurator.",
+        "autoCurate": "Oceniaj nowe wpisy po każdym zaplanowanym odczycie",
+        "relays": "Relaye Nostr (jeden adres wss:// w wierszu)",
+        "save": "Zapisz"
+    },
+    "published": {
+        "compose": "Napisz",
+        "kind": "Rodzaj",
+        "post": "Wpis",
+        "article": "Artykuł",
+        "headline": "Tytuł",
+        "text": "Co chcesz opublikować, dokładnie w tej formie",
+        "keywords": "Tematy, po przecinku (opcjonalnie)",
+        "submit": "Wyślij do zatwierdzenia",
+        "approvalNote": "Nic nie zostanie opublikowane bez zatwierdzenia w Zatwierdzeniach, jeśli chcesz, passkeyem.",
+        "waiting": "Czeka na zatwierdzenie",
+        "waitingPublish": "do publikacji · złożone {when}",
+        "waitingWithdraw": "do wycofania · złożone {when}",
+        "passkeyRequired": "wymagany passkey",
+        "title": "Opublikowane ({count}) | Opublikowane ({count}) | Opublikowane ({count})",
+        "publicLink": "publiczny katalog",
+        "withdrawn": "(wycofane)",
+        "tombstone": "(wycofanie)",
+        "withdrawNote": "wycofano #{seq} · {when}",
+        "cosigned": "zatwierdzone passkeyem",
+        "withdraw": "Wycofaj",
+        "empty": "Nic jeszcze nie opublikowano. Wszystko tutaj jest podpisane kluczem tego sandboxa i każdy może to przeczytać."
+    },
+    "peers": {
+        "follow": "Obserwuj sandbox",
+        "addressPlaceholder": "jego adres: host sandboxa lub jego własna domena",
+        "followButton": "Obserwuj",
+        "followHint": "Jego klucz jest przypinany przy pierwszym kontakcie; każdy kolejny wpis i checkpoint jest z nim sprawdzany, a przepisana historia zostaje wykryta.",
+        "title": "Obserwowane sandboxy",
+        "completeness": "zweryfikowano {verified} z {declared} wpisów",
+        "witnessed": "{count} z {of} świadków podpisało",
+        "passkeyShare": "{percent}% zatwierdzonych passkeyem",
+        "synced": "odczytano {when}",
+        "level": {
+            "0": "L0 klucz",
+            "1": "L1 domena",
+            "2": "L2 passkey",
+            "3": "L3 poświadczony"
+        },
+        "equivocation": "historia przepisana",
+        "held": "wstrzymany",
+        "release": "Zaufaj ponownie",
+        "evidenceKept": "Oba podpisane checkpointy są zachowane jako dowód.",
+        "empty": "Nie obserwujesz jeszcze żadnego sandboxa."
+    },
+    "discover": {
+        "title": "Odkrywaj przez przewodniki",
+        "anyType": "Dowolny typ",
+        "keyword": "Temat",
+        "search": "Szukaj",
+        "hint": "Pyta przewodników z Ustawień (guides). Każda odpowiedź jest weryfikowana względem sandboxa, który wskazuje.",
+        "via": "przez {guide}",
+        "none": "Żaden przewodnik nie zna pasującego źródła.",
+        "types": {
+            "posts": "Wpisy",
+            "articles": "Artykuły",
+            "blogPosts": "Wpisy blogowe"
+        }
+    }
+}

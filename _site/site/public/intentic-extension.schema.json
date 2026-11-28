@@ -202,6 +202,18 @@
                             }
                         ]
                     }
+                },
+                "identity": {
+                    "description": "What your backend may do as this sandbox's identity: `sign`, have the daemon sign a JSON record as this sandbox (`api.identity.sign(purpose, payload)`), under a domain naming your extension and the record's purpose, which anyone verifies with the sandbox's published keys. The key never reaches your code.",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "const": "sign",
+                        "power": {
+                            "key": "identity:sign",
+                            "sentence": "its backend signs records as this sandbox, which anyone can verify with the sandbox's public key"
+                        }
+                    }
                 }
             },
             "additionalProperties": false

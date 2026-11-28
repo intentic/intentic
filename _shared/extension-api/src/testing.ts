@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type DeclaredPermissions, declaredReachOf, type ExtensionReach, extensionRouteReach } from "@intentic/extension-manifest/permissions";
+import { type DeclaredPermissions, declaredReachOf, type ExtensionDeclaredReach, type ExtensionReach, extensionRouteReach } from "@intentic/extension-manifest/permissions";
 import { type PublicRouteContribution, publicRouteAutomationOf, publicRouteFor } from "@intentic/extension-manifest";
 import {
     type ExtensionActivity,
@@ -32,8 +32,25 @@ import {
     ExtensionWorkHoldSchema,
     NO_TOOL_GRANTS,
     readCallerClaim,
+    ExtensionIdentitySignSchema,
+    type ExtensionIdentitySigned,
+    extensionIdentitySignUrl,
+    extensionIdentityUrl,
 } from "@intentic/sandbox-contract/extension-protocol";
 import { EXTENSION_TOKEN_HEADER } from "@intentic/sandbox-contract/headers";
+import {
+    canonicalBytes,
+    EXTENSION_SIGN_PAYLOAD_MAX_BYTES,
+    type ExtensionSignPayload,
+    extensionSignDomain,
+    extensionSignProblem,
+    generateKeySet,
+    type S2sKeySet,
+    secretKeysOf,
+    signExtensionPayload,
+    signIdentity,
+} from "@intentic/sandbox-contract/s2s";
+import type { SandboxIdentity } from "@intentic/sandbox-contract/schemas/s2s";
 import { activateServerModule, createServerApi, deactivateWithin, healthWithin } from "./runtime.js";
 import { type FakeSleep, fakeSleep } from "./sleep-fake.js";
 import type {
@@ -171,6 +188,10 @@ export interface FakeExtension {
     // (2026-11-27) Hosted sleep (`api.sleep`): `now()` tells every before-sleep watch and resolves with how many answered
     // ready, `boot` is what `api.sleep.boot()` answers, and `wakeUrls` every URL handed out (sleep-fake.ts).
     readonly sleep: Omit<FakeSleep, "door">;
+    // (2026-11-28) This sandbox's identity (`api.identity`): a real key set made on the first ask, the document it signed,
+    // and every record signed through it (fakeIdentity below). Verify what the backend was handed with the contract's
+    // `verifyExtensionPayload` against `identity.document().keys`.
+    readonly identity: FakeIdentity;
     // (2026-11-26) The job's end once its work told it, as `wait` hands it to the agent.
     jobEnd(id: string): Promise<JobEnd>;
     // (2026-11-26) The agent or a person stopping the job: its work's signal aborts.
@@ -435,6 +456,76 @@ const fakeTurn = (options: FakeExtensionOptions, declared: readonly string[]) =>
     };
 };
 
+// (2026-11-28) The daemon's side of `api.identity` for `fakeExtensionApi` (below): a real hybrid key set, made on
+// the first ask (an ML-DSA key costs milliseconds no other suite should pay), a document it signs, and signatures made
+// with it under the extension's own domain, refused as the daemon refuses them. So a test verifies what its backend was
+// handed with the contract's own `verifyExtensionPayload` against `document.keys`, as a far sandbox would.
+
+// Who the fake sandbox is in its document.
+export const FAKE_SANDBOX_IDENTITY = { sandbox: "fake", name: "Fake sandbox", host: "sandbox-fake.sbx.test" } as const;
+
+// A record the extension had signed, as the daemon took it.
+export interface FakeSigned {
+    readonly purpose: string;
+    readonly payload: ExtensionSignPayload;
+    readonly domain: string;
+}
+
+export interface FakeIdentity {
+    // The fake sandbox's signed document: the one `api.identity.document()` answers and whose keys verify every signature.
+    document(): SandboxIdentity;
+    // Its key set, secret half included: a test signing as a far sandbox, or checking by hand.
+    keySet(): S2sKeySet;
+    // Every record signed, in order.
+    readonly signed: readonly FakeSigned[];
+}
+
+const fakeIdentity = (id: string, declared: ExtensionDeclaredReach) => {
+    let made: { readonly keySet: S2sKeySet; readonly document: SandboxIdentity } | undefined;
+    const ensure = (): { readonly keySet: S2sKeySet; readonly document: SandboxIdentity } => {
+        if (made === undefined) {
+            const keySet = generateKeySet();
+            made = { keySet, document: signIdentity({ ...FAKE_SANDBOX_IDENTITY, domains: [], issuedAt: Date.now() }, keySet) };
+        }
+        return made;
+    };
+    const signed: FakeSigned[] = [];
+
+    // The two doors as the daemon answers them (own-identity.ts), undefined for a request that is for neither.
+    const door = async (request: Request, url: URL): Promise<Response | undefined> => {
+        if (request.method === "GET" && url.pathname === extensionIdentityUrl()) {
+            return json(ensure().document);
+        }
+        if (request.method !== "POST" || url.pathname !== extensionIdentitySignUrl()) {
+            return undefined;
+        }
+        if (!declared.identity.includes("sign")) {
+            return json({ error: `extension "${id}" did not declare permissions.identity ["sign"], so it signs nothing as this sandbox` }, 403);
+        }
+        // allow(silent-catch): a body that is not JSON is no record to sign, which the schema refuses just below
+        const asked = ExtensionIdentitySignSchema.safeParse(await request.json().catch(() => undefined));
+        if (!asked.success) {
+            return json({ error: "not a record to sign: the body is { purpose, payload }, the payload any JSON value" }, 400);
+        }
+        const { purpose, payload } = asked.data;
+        const problem = extensionSignProblem(id, purpose);
+        if (problem !== undefined) {
+            return json({ error: problem }, 400);
+        }
+        if (canonicalBytes(payload).length > EXTENSION_SIGN_PAYLOAD_MAX_BYTES) {
+            return json({ error: `a record to sign is at most ${EXTENSION_SIGN_PAYLOAD_MAX_BYTES} bytes of canonical JSON` }, 413);
+        }
+        const { keySet, document } = ensure();
+        const domain = extensionSignDomain(id, purpose);
+        signed.push({ purpose, payload, domain });
+        const sig = signExtensionPayload(id, purpose, payload, secretKeysOf(keySet.secret));
+        return json({ domain, sig, fingerprint: document.fingerprint, document } satisfies ExtensionIdentitySigned);
+    };
+
+    const identity: FakeIdentity = { document: () => ensure().document, keySet: () => ensure().keySet, signed };
+    return { door, identity };
+};
+
 export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<FakeExtension> => {
     const made: string[] = [];
     const dirOf = async (given: string | undefined, label: string): Promise<string> => {
@@ -456,6 +547,7 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
     const activities: ExtensionActivity[] = [];
     const turn = fakeTurn(options, declared.turn);
     const sleeping = fakeSleep(id, options.manifest.contributes?.publicRoutes ?? []);
+    const identity = fakeIdentity(id, declared);
     let settings: ExtensionSettingValues = { ...options.settings };
     // Every event stream the extension holds open, each written to by `emit`. A frame sent while none is open waits for
     // the next one: the runtime opens its stream a moment after the first listener registers, and a test that listens
@@ -528,7 +620,9 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
             activities.push(row.data);
             return json({ ok: true });
         }
-        return (await sleeping.door(request, url, signal)) ?? (request.method === "POST" ? await turn.door(request, url) : undefined);
+        return (
+            (await sleeping.door(request, url, signal)) ?? (await identity.door(request, url)) ?? (request.method === "POST" ? await turn.door(request, url) : undefined)
+        );
     };
 
     const eventStream = (signal: AbortSignal | null): Response => {
@@ -620,6 +714,7 @@ export const fakeExtensionApi = async (options: FakeExtensionOptions): Promise<F
             return turn.jobs();
         },
         sleep: sleeping,
+        identity: identity.identity,
         jobEnd: turn.jobEnd,
         stopJob: turn.stopJob,
         activate: async (module) => {

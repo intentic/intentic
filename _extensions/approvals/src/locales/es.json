@@ -93,7 +93,12 @@
         "startItem": "Iniciar {item}",
         "approveItem": "Aprobar {item}",
         "invalidFiles": "No se ha podido leer {count} archivo y no se ejecutará: | No se han podido leer {count} archivos y no se ejecutarán:",
-        "unreadableHeldWakes": "No se ha podido leer {count} automatización retenida y no se puede liberar: | No se han podido leer {count} automatizaciones retenidas y no se pueden liberar:"
+        "unreadableHeldWakes": "No se ha podido leer {count} automatización retenida y no se puede liberar: | No se han podido leer {count} automatizaciones retenidas y no se pueden liberar:",
+        "approveWithPasskey": "Aprobar con llave de acceso",
+        "approveWithPasskeyItem": "Aprobar {item} con tu llave de acceso",
+        "passkeyNotUsed": "No se usó ninguna llave de acceso, así que no se ha aprobado.",
+        "passkeyUnsupported": "Este navegador no puede usar llaves de acceso. Apruébalo desde un navegador que pueda.",
+        "passkeyNoneHeld": "Aún no tienes una llave de acceso en este sandbox. Añade una desde Acceso y luego apruébalo."
     },
     "extension": {
         "approvals": "Aprobaciones"

@@ -12422,7 +12422,9 @@
                 "task": "Tarea",
                 "contact": "Contacto",
                 "identity": "Cambio de clave",
-                "receipt": "Acuse"
+                "receipt": "Acuse",
+                "attestation": "Aval",
+                "attestationRequest": "Solicitud de aval"
             },
             "delivery": {
                 "queued": "Esperando entrega",
@@ -12640,6 +12642,59 @@
                     "declined": "Rechazada",
                     "stopped": "Detenida"
                 }
+            },
+            "claims": {
+                "kind": "Qué es",
+                "verifiedBy": "Comprobado por",
+                "country": "País",
+                "over18": "Mayor de 18",
+                "displayName": "Nombre",
+                "organisation": "Organización",
+                "kinds": {
+                    "person": "Una persona",
+                    "organisation": "Una organización"
+                },
+                "methods": {
+                    "inPerson": "En persona",
+                    "document": "Un documento de identidad",
+                    "domain": "Su dominio",
+                    "employment": "Empleo"
+                },
+                "yes": "Sí",
+                "no": "No",
+                "none": "Sin afirmaciones",
+                "notClaimed": "No se afirma"
+            },
+            "attestations": {
+                "title": "Avalado por",
+                "about": "Lo que otros sandboxes dicen de este",
+                "aboutBody": "Cada aval lo firma el sandbox que avala, y la identidad de este sandbox lo lleva a quien la lea. Dice quién avala y qué, no que sea cierto: cada lector decide en qué avalistas confía.",
+                "none": "Ningún sandbox avala este todavía.",
+                "ask": "Pedir a un contacto",
+                "until": "hasta {date}",
+                "lapsed": "Caducó el {date}: la identidad ya no lo lleva. Pide un aval nuevo o quítalo.",
+                "notCarried": "No está en la identidad: {problem}",
+                "otherType": "Una atestación de tipo {type}",
+                "remove": "Quitar",
+                "removeAsk": "¿Quitar el aval de {name}?",
+                "removeWhat": "La identidad de este sandbox deja de llevarlo. Para tenerlo de nuevo, {name} tendrá que avalar otra vez.",
+                "removeFailed": "No se pudo quitar el aval",
+                "contact": "Contacto",
+                "pickContact": "Elige un contacto",
+                "noContacts": "Aún no hay un contacto sandbox al que pedir: añade uno en Contactos.",
+                "note": "Nota",
+                "send": "Pedir aval",
+                "askFailed": "No se pudo pedir a {name}",
+                "claims": "Lo que avalas",
+                "claimsHint": "Solo lo que comprobaste tú. Este sandbox lo firma con su clave, y quien confíe en él puede fiarse de ello.",
+                "validUntil": "Válido hasta",
+                "sign": "Firmar y enviar",
+                "vouchFailed": "No se pudo avalar a {name}",
+                "vouch": "Avalar este contacto",
+                "vouchShort": "Avalar",
+                "addToIdentity": "Añadir a la identidad de este sandbox",
+                "added": "En la identidad de este sandbox",
+                "addFailed": "No se pudo añadir el aval"
             }
         }
     },

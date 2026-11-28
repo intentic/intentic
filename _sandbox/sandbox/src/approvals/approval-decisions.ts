@@ -6,7 +6,9 @@ import { insideRel } from "@intentic/base/contained";
 import { errnoCode } from "@intentic/base/errors";
 import type { ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
 import type { AutomationApproval } from "@intentic/sandbox-contract/schemas/automations";
+import { type PasskeyCosign, PasskeyCosignSchema } from "@intentic/sandbox-contract/protocol/s2s/passkey-cosign";
 import { z } from "zod";
+import { opt } from "../opt.js";
 import { defineDocument } from "../store/evolution/documents.js";
 import { openApprovalLedger } from "../store/open-document.js";
 
@@ -17,7 +19,17 @@ import { openApprovalLedger } from "../store/open-document.js";
  * ledger this build cannot read approves nothing. */
 
 const LedgerSchema = z.object({
-    approved: z.record(z.string(), z.object({ digest: z.string(), approvedAt: z.number(), approver: z.string().optional() })),
+    approved: z.record(
+        z.string(),
+        z.object({
+            digest: z.string(),
+            approvedAt: z.number(),
+            approver: z.string().optional(),
+            // (2026-11-28) The person's passkey assertion over what they approved (protocol/s2s/passkey-cosign.ts), when
+            // they approved it with one; handed to the performer with the yes. Optional, so a pin from before reads as is.
+            cosign: PasskeyCosignSchema.optional(),
+        }),
+    ),
 });
 
 export const approvalDecisionsDocument = defineDocument({
@@ -93,20 +105,30 @@ export const approvalDigest = async (workspaceRoot: string, item: ApprovalSummar
 
 // Pins the owner's yes to `key` as it stands, whatever kind of thing the key names (an item in the queue by its id, a held
 // wake by `wake:<id>`). Written only by a route that has already checked a person gave it.
-export const recordDecision = async (historyRoot: string, key: string, digest: string, approver: string | undefined, now = Date.now()): Promise<void> => {
-    const pin = { digest, approvedAt: now, ...(approver === undefined ? {} : { approver }) };
+export const recordDecision = async (
+    historyRoot: string,
+    key: string,
+    digest: string,
+    approver: string | undefined,
+    now = Date.now(),
+    cosign?: PasskeyCosign,
+): Promise<void> => {
+    const pin = { digest, approvedAt: now, ...opt("approver", approver), ...opt("cosign", cosign) };
     await ledgerOf(historyRoot).update((approved) => ({ ...approved, [key]: pin }));
 };
 
 // Pins the owner's yes to the item exactly as it is about to be written. The route records it before writing the
 // file, so whoever reads the file as approved already finds its yes.
-export const recordApproval = async (roots: ApprovalRoots, item: ApprovalSummary, approver: string | undefined, now = Date.now()): Promise<void> =>
-    recordDecision(roots.historyRoot, item.id, await approvalDigest(roots.workspaceRoot, item), approver, now);
+// (2026-11-28) A yes given with a passkey keeps the passkey's co-signature beside it.
+export const recordApproval = async (roots: ApprovalRoots, item: ApprovalSummary, approver: string | undefined, now = Date.now(), cosign?: PasskeyCosign): Promise<void> =>
+    recordDecision(roots.historyRoot, item.id, await approvalDigest(roots.workspaceRoot, item), approver, now, cosign);
 
-// One yes, as it was spent: who gave it and when. A yes given again (a retry) has a later `approvedAt`.
+// One yes, as it was spent: who gave it and when, and (2026-11-28) the passkey's co-signature when they gave it with one.
+// A yes given again (a retry) has a later `approvedAt`.
 export interface SpentApproval {
     readonly approver: string | undefined;
     readonly approvedAt: number;
+    readonly cosign?: PasskeyCosign | undefined;
 }
 
 // Spends the yes of every item that still matches it, in ONE serialized read-change-write of the ledger, and answers the
@@ -121,7 +143,7 @@ export const spendApprovals = async (roots: ApprovalRoots, items: readonly Appro
         for (const { id, digest } of wanted) {
             const pin = Object.hasOwn(approved, id) ? approved[id] : undefined;
             if (pin?.digest === digest) {
-                spent.set(id, { approver: pin.approver, approvedAt: pin.approvedAt });
+                spent.set(id, { approver: pin.approver, approvedAt: pin.approvedAt, cosign: pin.cosign });
             }
         }
         return spent.size === 0 ? approved : Object.fromEntries(Object.entries(approved).filter(([id]) => !spent.has(id)));

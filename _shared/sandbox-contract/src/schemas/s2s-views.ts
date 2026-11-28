@@ -2,6 +2,8 @@ import { z } from "zod";
 import { DropTakeSchema, DropTakenSchema } from "./account-routes.js";
 import {
     S2sAddressSchema,
+    S2sAttestationSchema,
+    S2sClaimsSchema,
     S2sContactNoticeSchema,
     S2sContactOriginSchema,
     S2sContactScopeSchema,
@@ -162,6 +164,44 @@ export type S2sRecoveryMinted = z.infer<typeof S2sRecoveryMintedSchema>;
 export const S2sRecoverInputSchema = z.object({ secret: z.string().trim().min(1).max(400) });
 export type S2sRecoverInput = z.infer<typeof S2sRecoverInputSchema>;
 
+/* ATTESTATIONS, as the Identity section lists them (messages.md, "Attestations"): what other sandboxes signed about this
+   one and a person here added to its identity, and the two sends that ask for one and issue one. */
+
+export const S2sAttestationRowSchema = z.object({
+    id: z.string().min(1).max(64).describe("The attestation's id (attestationIdOf): what removing it names."),
+    attestation: S2sAttestationSchema,
+    contact: S2sRefSchema.optional().describe("The contact it came from."),
+    message: S2sEnvelopeIdSchema.optional().describe("The message that carried it, in that contact's thread."),
+    acceptedAt: z.number().int().describe("When a person here added it."),
+    verified: z.boolean().describe("It verifies against this sandbox's document now: its issuer's keys and signature, its dates and its subject."),
+    problem: z.string().max(500).optional().describe("Why it does not, in words: lapsed, or about a key two rotations back."),
+    published: z.boolean().describe("This sandbox's document carries it now, which it does exactly while it verifies."),
+});
+export type S2sAttestationRow = z.infer<typeof S2sAttestationRowSchema>;
+export const S2sAttestationsSchema = z.object({ attestations: z.array(S2sAttestationRowSchema).describe("Newest first.") });
+export type S2sAttestations = z.infer<typeof S2sAttestationsSchema>;
+// POST /s2s/me/attestations: add the attestation a contact sent (its `attestation.issued` message) to this identity, once
+// it verifies against this sandbox's own document. One per issuer: a newer one from the same issuer replaces the older.
+export const S2sAttestationAcceptSchema = z.object({ message: S2sEnvelopeIdSchema.describe("The attestation.issued message, by its id.") });
+export type S2sAttestationAccept = z.infer<typeof S2sAttestationAcceptSchema>;
+// POST /s2s/me/attestations/ask: ask a sandbox-scoped contact to vouch for this sandbox (`attestation.request`).
+export const S2sAttestationAskSchema = z.object({
+    contact: S2sRefSchema.describe("The contact asked, by its id here."),
+    claims: S2sClaimsSchema.prefault({}).describe("What it is asked to vouch for; the contact decides what it signs."),
+    note: z.string().max(S2S_NOTE_MAX).optional(),
+});
+export type S2sAttestationAsk = z.infer<typeof S2sAttestationAskSchema>;
+// POST /s2s/attestations/issue: vouch for a sandbox-scoped contact, signed now by this sandbox's key for the contact's
+// pinned key, and sent to it (`attestation.issued`).
+export const S2sAttestationIssueSchema = z.object({
+    contact: S2sRefSchema.describe("The contact vouched for, by its id here."),
+    claims: S2sClaimsSchema,
+    validUntil: z.number().int().describe("When it lapses, in epoch milliseconds: later than now, at most a year from now."),
+    note: z.string().max(S2S_NOTE_MAX).optional(),
+    replyTo: S2sEnvelopeIdSchema.optional().describe("The contact's attestation.request it answers; the vouch goes into that thread."),
+});
+export type S2sAttestationIssue = z.infer<typeof S2sAttestationIssueSchema>;
+
 /* THREADS AND MESSAGES, as the Inbox shows them. */
 
 export const S2sDirectionSchema = z.enum(["in", "out"]);
@@ -181,12 +221,14 @@ export const S2sThreadMessageSchema = z.object({
     thread: S2sRefSchema,
     contact: contactId,
     direction: S2sDirectionSchema,
-    kind: S2sPayloadKindSchema.describe("message, report, contact.request or a task's kind: what the thread shows."),
+    kind: S2sPayloadKindSchema.describe("message, report, contact.request, a task's kind or an attestation's: what the thread shows."),
     subject: z.string().max(S2S_SUBJECT_MAX).optional(),
     text: z.string().describe("The words, or for a report or a task the line it is shown by."),
     attachments: z.array(S2sAttachmentMetaSchema),
     as: S2sPersonSchema.optional().describe("The person a person-scoped contact carried it for."),
     replyTo: S2sEnvelopeIdSchema.optional(),
+    claims: S2sClaimsSchema.optional().describe("An attestation.request's claims: what it asks to be vouched for."),
+    attestation: S2sAttestationSchema.optional().describe("An attestation.issued's attestation, whole."),
     sentAt: z.number().int(),
     receivedAt: z.number().int().optional(),
     read: z.boolean(),

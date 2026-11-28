@@ -3,6 +3,7 @@ import { normalizeAddress } from "@intentic/sandbox-contract/s2s";
 import type { CompositionCore, Services } from "../../composition.js";
 import { type Config, publicAddressOf } from "../../env.config.js";
 import { defineSlice } from "../../seams/slice.js";
+import { identityAttestationsDocument } from "./identity-attestations.js";
 import { identityDomainsDocument, nodeTxtResolver } from "./identity-domains.js";
 import { sandboxIdentityDocument } from "./identity-keys.js";
 import { createS2sIdentity, type IdentitySelf, type S2sIdentity } from "./s2s-identity.js";
@@ -30,6 +31,7 @@ export const s2sIdentitySlice = defineSlice<S2sIdentitySlice>({
         s2sIdentity: createS2sIdentity({
             keysPath: join(authRoot, sandboxIdentityDocument.path),
             domainsPath: join(config.historyRoot, identityDomainsDocument.path),
+            attestationsPath: join(config.historyRoot, identityAttestationsDocument.path),
             // Read through `whole` when asked: the sandbox's info is composed beside this slice.
             self: () => identitySelfOf(config, whole().info?.name),
             resolveTxt: nodeTxtResolver,

@@ -51,6 +51,10 @@ flowchart LR
   of the extension declaring `channel.publish`, with a target its pattern matches and no attachments, reaches the
   handler as `ApprovedPost` (its words, title and target exactly as approved, the yes and the action rules), in place of
   an agent turn driving the logged-in browser. `fakeExtensionApi`'s `publish(post)` hands one over as the daemon does.
+  (2026-11-28, 2.60.0) An action filed with `cosign: "offered"` or `"required"` may be approved with the person's
+  passkey: the handler then gets `ApprovedAction.cosign`, their WebAuthn assertion over the sandbox's id, the item and
+  its digest, which `verifyPasskeyCosign` (`@intentic/sandbox-contract/s2s`) checks without the sandbox. The item is a
+  workspace file a turn can rewrite, so a performer that filed it `required` checks the co-signature is there itself.
 - A card states what the core used to keep in tables keyed by provider name (2026-11-26, 2.54.0): `channel.messageLimit`
   (the approvals inbox counts a post against it; a gateway reads its own with connector-runtime's
   `declaredMessageLimit`), `channel.publish` and `channel.posting` (what a publishing turn reads about the platform),
@@ -105,6 +109,16 @@ flowchart LR
   it, `failed`), one frame a batch and an empty batch after a gap in the stream; `api.activity.append(row)` writes a row
   in the sandbox's activity feed as the extension's own, undeclared. `fakeExtensionApi` emits `ci` frames and keeps the
   rows (`activities`). Main's fix agent, the pipelines extension's since then, is the first to use both.
+- A backend signs as the sandbox without holding its key (2026-11-28, 2.60.0): `api.identity.document()` answers the
+  sandbox's public identity document, undeclared, and `api.identity.sign(purpose, payload)` has the daemon sign a JSON
+  record with the sandbox's hybrid Ed25519 + ML-DSA-65 key (`permissions.identity: ["sign"]`, refused undeclared before
+  anything is sent). The signature covers the payload's canonical JSON under `ext:<publisher.name>/<purpose>`, so it
+  verifies only as that extension's record for that purpose, never as one of the core's own; it comes back with the
+  domain, the fingerprint and the document whose keys verify it. Anyone checks it with `verifyExtensionPayload` after
+  `verifyIdentity`, both in `@intentic/sandbox-contract/s2s`, a wire subpath from this version with `.../schemas/s2s`.
+  A payload is at most 256 KiB of canonical JSON, and the daemon answers 600 signatures a minute.
+  `fakeExtensionApi` signs with a real key set it makes on the first ask (`identity`: `document()`, `keySet()`, and
+  every record `signed`).
 - An agent tool acts within the turn calling it (2026-11-26, 2.55.0), each power declared under `permissions.turn`,
   refused by the runtime before anything is sent when undeclared and by the daemon for anything the turn does not
   hold. A call's `ToolCallContext` carries `grants` (the sandbox browser accounts the turn holds, each with the sites it

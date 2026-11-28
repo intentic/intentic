@@ -1,11 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { verifyExtensionPayload, verifyIdentity } from "@intentic/sandbox-contract/s2s";
 import { waitFor } from "@intentic/testing/bun";
 import { connectExtensionProcess } from "./runtime.js";
 import type { AutomationFire } from "./server.js";
 import type { RunSettled, SandboxActivity } from "./server-reach.js";
-import { type FakeExtension, type FakeManifest, fakeExtensionApi } from "./testing.js";
+import { FAKE_SANDBOX_IDENTITY, type FakeExtension, type FakeManifest, fakeExtensionApi } from "./testing.js";
 
 // What a backend hears, holds, runs and is woken by beyond its routes (backend-reach.ts, runtime.ts), each declared under
 // its manifest's `permissions`: driven through the SDK's own fake daemon, which refuses what the manifest does not
@@ -151,4 +152,52 @@ test("a process reads its declared reach from the environment the daemon started
     } finally {
         await rm(root, { recursive: true, force: true });
     }
+});
+
+const RECORD = { "@type": "Event", name: "Launch", startDate: "2026-12-01" };
+
+// (2026-11-28) `api.identity`: the fake daemon signs with a real key set and refuses what the manifest does not declare,
+// as own-identity.ts does in the sandbox, so what a backend is handed verifies with the contract's own verifier.
+describe("api.identity", () => {
+    test("answers the sandbox's document, undeclared, and it verifies as itself", async () => {
+        const extension = await fake({ manifest: { publisher: "acme", name: "plain" } });
+        const document = await extension.api.identity.document();
+        expect(document).toEqual(extension.identity.document());
+        expect(document).toMatchObject({ ...FAKE_SANDBOX_IDENTITY, v: 1 });
+        expect(verifyIdentity(document)).toEqual({ ok: true });
+        expect(extension.calls).toEqual([{ line: "GET /extension/identity", admitted: true }]);
+    });
+
+    test("signs a declared extension's record under its own domain, verifiable with the document's keys", async () => {
+        const extension = await fake({ manifest: { publisher: "acme", name: "network", permissions: { identity: ["sign"] } } });
+        const signed = await extension.api.identity.sign("log.entry", RECORD);
+        expect(signed.domain).toBe("ext:acme.network/log.entry");
+        expect(signed.document).toEqual(extension.identity.document());
+        expect(signed.fingerprint).toBe(signed.document.fingerprint);
+        expect(verifyExtensionPayload("acme.network", "log.entry", RECORD, signed.sig, signed.document.keys)).toBe(true);
+        expect(verifyExtensionPayload("acme.network", "log.entry", { ...RECORD, name: "Lunch" }, signed.sig, signed.document.keys)).toBe(false);
+        expect(extension.identity.signed).toEqual([{ purpose: "log.entry", payload: RECORD, domain: "ext:acme.network/log.entry" }]);
+    });
+
+    test("refuses to sign undeclared before anything is sent, and the daemon refuses it too", async () => {
+        const extension = await fake({ manifest: { publisher: "acme", name: "plain" } });
+        await expect(extension.api.identity.sign("log.entry", RECORD)).rejects.toThrow(
+            `extension "acme.plain" signed a record ("log.entry") as the sandbox without declaring it: declare it in permissions.identity ["sign"] in its manifest`,
+        );
+        expect(extension.calls).toEqual([]);
+        const asked = await extension.api.daemon.request("/extension/identity/sign", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ purpose: "log.entry", payload: RECORD }),
+        });
+        expect(asked.status).toBe(403);
+    });
+
+    test("rejects with the daemon's words for a purpose outside its pattern", async () => {
+        const extension = await fake({ manifest: { publisher: "acme", name: "network", permissions: { identity: ["sign"] } } });
+        await expect(extension.api.identity.sign("Log Entry", RECORD)).rejects.toThrow(
+            `daemon answered 400 for POST /extension/identity/sign: {"error":"\\"Log Entry\\" is not a signing purpose: a lowercase word of up to 64 characters, dots and dashes inside"}`,
+        );
+        expect(extension.identity.signed).toEqual([]);
+    });
 });

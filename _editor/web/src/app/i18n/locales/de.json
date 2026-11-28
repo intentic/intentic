@@ -12422,7 +12422,9 @@
                 "task": "Aufgabe",
                 "contact": "Kontakt",
                 "identity": "Schlüsselwechsel",
-                "receipt": "Bestätigung"
+                "receipt": "Bestätigung",
+                "attestation": "Bürgschaft",
+                "attestationRequest": "Bitte um Bürgschaft"
             },
             "delivery": {
                 "queued": "Wartet auf Zustellung",
@@ -12640,6 +12642,59 @@
                     "declined": "Abgelehnt",
                     "stopped": "Gestoppt"
                 }
+            },
+            "claims": {
+                "kind": "Was es ist",
+                "verifiedBy": "Geprüft durch",
+                "country": "Land",
+                "over18": "Über 18",
+                "displayName": "Name",
+                "organisation": "Organisation",
+                "kinds": {
+                    "person": "Eine Person",
+                    "organisation": "Eine Organisation"
+                },
+                "methods": {
+                    "inPerson": "Persönliches Treffen",
+                    "document": "Ein Ausweisdokument",
+                    "domain": "Ihre Domain",
+                    "employment": "Anstellung"
+                },
+                "yes": "Ja",
+                "no": "Nein",
+                "none": "Keine Angaben",
+                "notClaimed": "Nicht angegeben"
+            },
+            "attestations": {
+                "title": "Verbürgt von",
+                "about": "Was andere Sandboxes über diese sagen",
+                "aboutBody": "Jede Bürgschaft ist von der bürgenden Sandbox signiert, und die Identität dieser Sandbox trägt sie zu allen, die sie lesen. Sie sagt, wer wofür bürgt, nicht, dass es stimmt: Jeder Leser entscheidet selbst, welchen Bürgen er vertraut.",
+                "none": "Noch bürgt keine Sandbox für diese.",
+                "ask": "Kontakt fragen",
+                "until": "bis {date}",
+                "lapsed": "Abgelaufen am {date}: Die Identität trägt sie nicht mehr. Um eine neue Bürgschaft bitten oder sie entfernen.",
+                "notCarried": "Nicht in der Identität: {problem}",
+                "otherType": "Eine Bescheinigung vom Typ {type}",
+                "remove": "Entfernen",
+                "removeAsk": "Bürgschaft von {name} entfernen?",
+                "removeWhat": "Die Identität dieser Sandbox trägt sie dann nicht mehr. Um sie wiederzuhaben, muss {name} erneut bürgen.",
+                "removeFailed": "Die Bürgschaft konnte nicht entfernt werden",
+                "contact": "Kontakt",
+                "pickContact": "Kontakt wählen",
+                "noContacts": "Noch kein Sandbox-Kontakt zum Fragen: unter Kontakte einen hinzufügen.",
+                "note": "Notiz",
+                "send": "Um Bürgschaft bitten",
+                "askFailed": "{name} konnte nicht gefragt werden",
+                "claims": "Wofür du bürgst",
+                "claimsHint": "Nur was du selbst geprüft hast. Diese Sandbox signiert es mit ihrem Schlüssel, und wer ihr vertraut, kann sich darauf verlassen.",
+                "validUntil": "Gültig bis",
+                "sign": "Signieren und senden",
+                "vouchFailed": "Bürgschaft für {name} fehlgeschlagen",
+                "vouch": "Für diesen Kontakt bürgen",
+                "vouchShort": "Bürgen",
+                "addToIdentity": "Zur Identität dieser Sandbox hinzufügen",
+                "added": "In der Identität dieser Sandbox",
+                "addFailed": "Die Bürgschaft konnte nicht hinzugefügt werden"
             }
         }
     },

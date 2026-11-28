@@ -123,7 +123,7 @@ describe("extensionRouteReach", () => {
 
 describe("declaredReachOf", () => {
     test("nothing declared reaches nothing", () => {
-        expect(declaredReachOf(undefined)).toEqual({ events: [], work: false, exec: [], fires: [], turn: [] });
+        expect(declaredReachOf(undefined)).toEqual({ events: [], work: false, exec: [], fires: [], turn: [], identity: [] });
     });
 
     test("reads each declaration off a parsed manifest's permissions", () => {
@@ -133,7 +133,14 @@ describe("declaredReachOf", () => {
             version: "1.0.0",
             engines: { intentic: "^2.50.0" },
             server: "dist/server.js",
-            permissions: { events: ["run", "activity", "ci"], work: true, exec: ["toolchain"], fires: ["sweep", "nightly-report"], turn: ["browser", "jobs"] },
+            permissions: {
+                events: ["run", "activity", "ci"],
+                work: true,
+                exec: ["toolchain"],
+                fires: ["sweep", "nightly-report"],
+                turn: ["browser", "jobs"],
+                identity: ["sign"],
+            },
         });
         expect(declaredReachOf(manifest.permissions)).toEqual({
             events: ["run", "activity", "ci"],
@@ -141,6 +148,7 @@ describe("declaredReachOf", () => {
             exec: ["toolchain"],
             fires: ["sweep", "nightly-report"],
             turn: ["browser", "jobs"],
+            identity: ["sign"],
         });
     });
 
@@ -149,6 +157,7 @@ describe("declaredReachOf", () => {
         ["a class outside the two", { exec: ["service"] }],
         ["a handler that is not a lowercase word", { fires: ["Sweep Now"] }],
         ["a turn power nobody serves", { turn: ["devices"] }],
+        ["an identity verb nobody serves", { identity: ["encrypt"] }],
     ])("the manifest refuses %s", (_name, permissions) => {
         const parsed = ExtensionManifestSchema.safeParse({ publisher: "acme", name: "demo", version: "1.0.0", engines: { intentic: "^2.50.0" }, permissions });
         expect(parsed.success).toBe(false);

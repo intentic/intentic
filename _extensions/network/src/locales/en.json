@@ -1,0 +1,125 @@
+{
+    "title": "Network",
+    "tabs": {
+        "feed": "Feed",
+        "sources": "Sources",
+        "settings": "Settings",
+        "published": "Published",
+        "peers": "Peers"
+    },
+    "view": {
+        "refresh": "Read all now",
+        "couldNotRead": "Couldn't read the Network.",
+        "pressFailed": "That didn't go through."
+    },
+    "feed": {
+        "title": "Feed",
+        "curate": "Curate {count} new | Curate {count} new",
+        "untitled": "(untitled)",
+        "empty": "Nothing yet. Add a source on the Sources tab and read it.",
+        "signed": "signed",
+        "invalid": "signature invalid",
+        "unsigned": "unsigned"
+    },
+    "sources": {
+        "add": "Add a source",
+        "kindLabel": "Kind of source",
+        "title": "Sources",
+        "kind": {
+            "rss": "Feed",
+            "bluesky": "Bluesky",
+            "nostr": "Nostr",
+            "atlas": "Atlas",
+            "intentic": "Sandbox"
+        },
+        "placeholder": {
+            "rss": "https://example.com/feed.xml",
+            "bluesky": "handle.bsky.social or did:plc:…",
+            "nostr": "npub1… or hex public key",
+            "atlas": "https://registry.example"
+        },
+        "trust": {
+            "rss": "RSS, Atom or JSON Feed. Read over HTTPS; nothing in a feed is signed.",
+            "bluesky": "A public author feed, read without signing in. The AppView's answer is trusted as is.",
+            "nostr": "Each event's id and Schnorr signature are checked against the author's key.",
+            "atlas": "Each envelope's Falcon-1024 signature is checked, by Atlas's published docs."
+        },
+        "labelPlaceholder": "Name (optional)",
+        "addButton": "Add and read",
+        "failing": "failing ({count}×): {error}",
+        "notRead": "not read yet",
+        "read": "read {when}",
+        "off": "off",
+        "readNow": "Read now",
+        "enabled": "Read this source",
+        "remove": "Remove with its items",
+        "empty": "No sources yet."
+    },
+    "settings": {
+        "title": "Settings",
+        "rules": "Curation rules",
+        "rulesHint": "In your own words: what matters to you, what to drop, how to label. The curator agent reads these.",
+        "autoCurate": "Curate new items after each scheduled read",
+        "relays": "Nostr relays (one wss:// address per line)",
+        "save": "Save"
+    },
+    "published": {
+        "compose": "Write",
+        "kind": "Kind",
+        "post": "Post",
+        "article": "Article",
+        "headline": "Title",
+        "text": "What you want to publish, exactly as it should read",
+        "keywords": "Topics, comma-separated (optional)",
+        "submit": "Send for approval",
+        "approvalNote": "Nothing is published until it is approved in Approvals, with your passkey if you like.",
+        "waiting": "Waiting for approval",
+        "waitingPublish": "to publish · filed {when}",
+        "waitingWithdraw": "to withdraw · filed {when}",
+        "passkeyRequired": "passkey required",
+        "title": "Published ({count}) | Published ({count})",
+        "publicLink": "public catalog",
+        "withdrawn": "(withdrawn)",
+        "tombstone": "(withdrawal)",
+        "withdrawNote": "withdrew #{seq} · {when}",
+        "cosigned": "approved with a passkey",
+        "withdraw": "Withdraw",
+        "empty": "Nothing published yet. Everything here is signed with this sandbox's key and readable by anyone."
+    },
+    "peers": {
+        "follow": "Follow a sandbox",
+        "addressPlaceholder": "its address: a sandbox host or its own domain",
+        "followButton": "Follow",
+        "followHint": "Its key is pinned on first contact; every entry and checkpoint after is checked against it, and a rewritten history is caught.",
+        "title": "Followed sandboxes",
+        "completeness": "{verified} of {declared} entries verified",
+        "witnessed": "{count} of {of} witnesses cosigned",
+        "passkeyShare": "{percent}% approved with a passkey",
+        "synced": "read {when}",
+        "level": {
+            "0": "L0 key",
+            "1": "L1 domain",
+            "2": "L2 passkey",
+            "3": "L3 vouched"
+        },
+        "equivocation": "history rewritten",
+        "held": "held",
+        "release": "Trust again",
+        "evidenceKept": "Both signed checkpoints are kept as evidence.",
+        "empty": "Not following any sandbox yet."
+    },
+    "discover": {
+        "title": "Discover through guides",
+        "anyType": "Any type",
+        "keyword": "Topic",
+        "search": "Search",
+        "hint": "Asks the guides in Settings (guides). Each answer is verified against the sandbox it names.",
+        "via": "via {guide}",
+        "none": "No guide knows a match.",
+        "types": {
+            "posts": "Posts",
+            "articles": "Articles",
+            "blogPosts": "Blog posts"
+        }
+    }
+}

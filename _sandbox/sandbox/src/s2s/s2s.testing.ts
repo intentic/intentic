@@ -15,9 +15,11 @@ import type { Services } from "../composition.js";
 import { serveRawRoutes } from "../http/raw-route-server.js";
 import { actionRefusal } from "../guard/outbound-guard.js";
 import type { AskerDeps } from "./askers.js";
+import { attestationsRoutesOf } from "./attestations/attestations.routes.js";
 import { callsRoutesOf } from "./calls/calls.routes.js";
 import { contactsRoutesOf } from "./contacts/contacts.routes.js";
 import type { S2sHeard } from "./heard.js";
+import { identityRoutesOf } from "./identity/identity.routes.js";
 import { createS2sIdentity, type S2sIdentity } from "./identity/s2s-identity.js";
 import { messagesRoutesOf } from "./messages/messages.routes.js";
 import type { S2sFetch } from "./messages/outbox.js";
@@ -26,8 +28,8 @@ import { createS2s, type S2s } from "./s2s-service.js";
 import { hostUrl, identityFetcher } from "./s2s-wiring.js";
 
 // A WHOLE SANDBOX'S S2S SIDE ON A PORT, for suites that make two or three of them talk over HTTP as two daemons do: its
-// identity (real keys on disk), its contacts, admission, inbox and outbox, and its calls door (whose methods a suite
-// serves itself), served on 127.0.0.1 under the very route tables the daemon serves. A request names its person with `x-test-as` (the bearer middleware's place); the roster is
+// identity (real keys on disk), its contacts, admission, inbox and outbox, its calls door (whose methods a suite
+// serves itself) and its attestations, served on 127.0.0.1 under the very route tables the daemon serves. A request names its person with `x-test-as` (the bearer middleware's place); the roster is
 // the suite's. Every outgoing request goes through `intercept` first, so a suite can stand in for the edge (a 503 while
 // a sandbox wakes) or watch the `?wake=` an attempt carried. The identity can be swapped for a fresh one (`loseKeys`), as
 // a sandbox whose volume was lost. Integration suites only: it opens a port and temp directories.
@@ -135,6 +137,7 @@ export const s2sDaemon = async (name: string, options: S2sDaemonOptions): Promis
         createS2sIdentity({
             keysPath: join(root, "auth", `sandbox-identity-${keysAt}.json`),
             domainsPath: join(root, "history", "s2s", "identity-domains.json"),
+            attestationsPath: join(root, "history", "s2s", "identity-attestations.json"),
             self: () => ({ sandbox: options.sandbox ?? `${name}-sandbox`, name, host }),
             resolveTxt: options.txt ?? (async () => ({ kind: "missing" })),
             now: Date.now,
@@ -178,8 +181,12 @@ export const s2sDaemon = async (name: string, options: S2sDaemonOptions): Promis
     });
     const askers = askersFor(options);
     serveRawRoutes(app, {
-        // The document of whichever identity is current, as a daemon serves its own.
+        // The document of whichever identity is current, as a daemon serves its own, and the attestations it carries.
         "GET /s2s/identity": async (c) => c.json(await identity.document()),
+        // The identity's own attestation routes, over whichever identity is current when asked.
+        "GET /s2s/me/attestations": async (c) => identityRoutesOf(identity)["GET /s2s/me/attestations"](c),
+        "DELETE /s2s/me/attestations/{id}": async (c) => identityRoutesOf(identity)["DELETE /s2s/me/attestations/{id}"](c),
+        ...attestationsRoutesOf(s2s, () => identity),
         ...contactsRoutesOf(s2s, askers),
         ...callsRoutesOf(s2s.calls.door),
         ...messagesRoutesOf(s2s, {

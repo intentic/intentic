@@ -99,6 +99,10 @@ import {
     IssueAcceptedSchema,
 } from "../../schemas/issues.js";
 import {
+    S2sAttestationAcceptSchema,
+    S2sAttestationAskSchema,
+    S2sAttestationIssueSchema,
+    S2sAttestationsSchema,
     S2sCallSealedSchema,
     S2sContactAcceptInputSchema,
     S2sContactAddSchema,
@@ -314,6 +318,12 @@ export const RAW_JSON_ROUTES = {
     "POST /s2s/me/rotate": { output: S2sMeSchema },
     "POST /s2s/me/recovery": { output: S2sRecoveryMintedSchema },
     "POST /s2s/me/recover": { input: S2sRecoverInputSchema, output: S2sMeSchema },
+    // Attestations: the list after each change; asking and issuing answer as a message's send does.
+    "GET /s2s/me/attestations": { output: S2sAttestationsSchema },
+    "POST /s2s/me/attestations": { input: S2sAttestationAcceptSchema, output: S2sAttestationsSchema },
+    "DELETE /s2s/me/attestations/{id}": { output: S2sAttestationsSchema },
+    "POST /s2s/me/attestations/ask": { input: S2sAttestationAskSchema, output: S2sMessageSendOutcomeSchema },
+    "POST /s2s/attestations/issue": { input: S2sAttestationIssueSchema, output: S2sMessageSendOutcomeSchema },
     // Contacts: every write answers the contact after it.
     "GET /s2s/contacts": { output: S2sContactsListSchema },
     "POST /s2s/contacts/paired": { input: S2sPairedSchema, output: S2sContactSchema },

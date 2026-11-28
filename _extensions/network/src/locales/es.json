@@ -1,0 +1,125 @@
+{
+    "title": "Red",
+    "tabs": {
+        "feed": "Feed",
+        "sources": "Fuentes",
+        "settings": "Ajustes",
+        "published": "Publicado",
+        "peers": "Pares"
+    },
+    "view": {
+        "refresh": "Leer todo ahora",
+        "couldNotRead": "No se pudo leer la Red.",
+        "pressFailed": "No se pudo hacer."
+    },
+    "feed": {
+        "title": "Feed",
+        "curate": "Valorar {count} nuevo | Valorar {count} nuevos",
+        "untitled": "(sin título)",
+        "empty": "Aún nada. Añade una fuente en la pestaña Fuentes y léela.",
+        "signed": "firmado",
+        "invalid": "firma no válida",
+        "unsigned": "sin firmar"
+    },
+    "sources": {
+        "add": "Añadir una fuente",
+        "kindLabel": "Tipo de fuente",
+        "title": "Fuentes",
+        "kind": {
+            "rss": "Feed",
+            "bluesky": "Bluesky",
+            "nostr": "Nostr",
+            "atlas": "Atlas",
+            "intentic": "Sandbox"
+        },
+        "placeholder": {
+            "rss": "https://example.com/feed.xml",
+            "bluesky": "nombre.bsky.social o did:plc:…",
+            "nostr": "npub1… o clave pública hex",
+            "atlas": "https://registro.example"
+        },
+        "trust": {
+            "rss": "RSS, Atom o JSON Feed. Se lee por HTTPS; nada en un feed está firmado.",
+            "bluesky": "Un feed público de autor, leído sin iniciar sesión. Se confía en la respuesta del AppView tal cual.",
+            "nostr": "Se comprueban el id y la firma Schnorr de cada evento con la clave del autor.",
+            "atlas": "Se comprueba la firma Falcon-1024 de cada sobre, según la documentación publicada de Atlas."
+        },
+        "labelPlaceholder": "Nombre (opcional)",
+        "addButton": "Añadir y leer",
+        "failing": "fallando ({count}×): {error}",
+        "notRead": "aún sin leer",
+        "read": "leído {when}",
+        "off": "desactivada",
+        "readNow": "Leer ahora",
+        "enabled": "Leer esta fuente",
+        "remove": "Quitar con sus elementos",
+        "empty": "Aún no hay fuentes."
+    },
+    "settings": {
+        "title": "Ajustes",
+        "rules": "Reglas de curación",
+        "rulesHint": "Con tus palabras: qué te importa, qué descartar, cómo etiquetar. Las lee el agente curador.",
+        "autoCurate": "Valorar los elementos nuevos tras cada lectura programada",
+        "relays": "Relays de Nostr (una dirección wss:// por línea)",
+        "save": "Guardar"
+    },
+    "published": {
+        "compose": "Escribir",
+        "kind": "Tipo",
+        "post": "Publicación",
+        "article": "Artículo",
+        "headline": "Título",
+        "text": "Lo que quieres publicar, tal como debe leerse",
+        "keywords": "Temas, separados por comas (opcional)",
+        "submit": "Enviar a aprobación",
+        "approvalNote": "Nada se publica hasta que se aprueba en Aprobaciones, con tu passkey si quieres.",
+        "waiting": "Esperando aprobación",
+        "waitingPublish": "para publicar · enviado {when}",
+        "waitingWithdraw": "para retirar · enviado {when}",
+        "passkeyRequired": "passkey obligatoria",
+        "title": "Publicado ({count}) | Publicado ({count})",
+        "publicLink": "catálogo público",
+        "withdrawn": "(retirado)",
+        "tombstone": "(retirada)",
+        "withdrawNote": "retiró #{seq} · {when}",
+        "cosigned": "aprobado con passkey",
+        "withdraw": "Retirar",
+        "empty": "Aún no hay nada publicado. Todo aquí va firmado con la clave de este sandbox y cualquiera puede leerlo."
+    },
+    "peers": {
+        "follow": "Seguir un sandbox",
+        "addressPlaceholder": "su dirección: un host de sandbox o su propio dominio",
+        "followButton": "Seguir",
+        "followHint": "Su clave se fija en el primer contacto; cada entrada y checkpoint posterior se comprueba con ella, y una historia reescrita se detecta.",
+        "title": "Sandboxes seguidos",
+        "completeness": "{verified} de {declared} entradas verificadas",
+        "witnessed": "{count} de {of} testigos firmaron",
+        "passkeyShare": "{percent}% aprobado con passkey",
+        "synced": "leído {when}",
+        "level": {
+            "0": "L0 clave",
+            "1": "L1 dominio",
+            "2": "L2 passkey",
+            "3": "L3 avalado"
+        },
+        "equivocation": "historia reescrita",
+        "held": "retenido",
+        "release": "Confiar de nuevo",
+        "evidenceKept": "Ambos checkpoints firmados se guardan como prueba.",
+        "empty": "Aún no sigues ningún sandbox."
+    },
+    "discover": {
+        "title": "Descubrir con guías",
+        "anyType": "Cualquier tipo",
+        "keyword": "Tema",
+        "search": "Buscar",
+        "hint": "Pregunta a las guías de Ajustes (guides). Cada respuesta se verifica con el sandbox que nombra.",
+        "via": "vía {guide}",
+        "none": "Ninguna guía conoce una coincidencia.",
+        "types": {
+            "posts": "Publicaciones",
+            "articles": "Artículos",
+            "blogPosts": "Entradas de blog"
+        }
+    }
+}

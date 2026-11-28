@@ -20,6 +20,7 @@ export const DocumentContributionSchema = m["DocumentContributionSchema"];
 export const EXTENSION_DECLARED_EVENTS = m["EXTENSION_DECLARED_EVENTS"];
 export const EXTENSION_EXEC_CLASSES = m["EXTENSION_EXEC_CLASSES"];
 export const EXTENSION_FIRE_HANDLER = m["EXTENSION_FIRE_HANDLER"];
+export const EXTENSION_IDENTITY_VERBS = m["EXTENSION_IDENTITY_VERBS"];
 export const EXTENSION_OWN_ROUTES = m["EXTENSION_OWN_ROUTES"];
 export const EXTENSION_TURN_POWERS = m["EXTENSION_TURN_POWERS"];
 export const EnvironmentContributionSchema = m["EnvironmentContributionSchema"];

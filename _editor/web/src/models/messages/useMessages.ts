@@ -2,7 +2,7 @@ import { type MaybeRefOrGetter, computed, toValue } from "vue";
 import { useSandboxQuery } from "../../client/sandbox/useSandboxQuery";
 import { supportsRoute } from "../../client/sandbox/useDaemonRoutes";
 import { useTier } from "../../client/sandbox/useTier";
-import { S2S_CONTACTS, S2S_ME, S2S_OUTBOX, S2S_TASKS, S2S_THREAD, S2S_THREADS } from "../../lib/queryKeys";
+import { S2S_ATTESTATIONS, S2S_CONTACTS, S2S_ME, S2S_OUTBOX, S2S_TASKS, S2S_THREAD, S2S_THREADS } from "../../lib/queryKeys";
 import { queryClient } from "../../lib/queryPersistence";
 import { useMessagesApi } from "./messagesApi";
 import { contactsBadge, messagesBadge, unreadThreads, waitingTasks } from "./messagesView";
@@ -100,6 +100,23 @@ export const useMe = (enabled: MaybeRefOrGetter<boolean>) => {
     return { loaded, me: computed(() => query.data.value) };
 };
 
+/**
+ * What other sandboxes vouched for and this identity carries, read only by a maintainer, whom the daemon answers it to; a
+ * daemon from before attestations serves no list, and nothing about them is drawn.
+ */
+export const useAttestations = (enabled: MaybeRefOrGetter<boolean>) => {
+    const api = useMessagesApi();
+    const { query, loaded } = useSandboxQuery({
+        queryKey: S2S_ATTESTATIONS.of(),
+        queryFn: async () => (await api.attestations()).attestations,
+        enabled: computed(() => toValue(enabled) && attestationsServed()),
+    });
+    return { loaded, attestations: computed(() => query.data.value ?? []) };
+};
+
+/** Whether the daemon carries attestations at all. */
+export const attestationsServed = (): boolean => supportsRoute(`GET /s2s/me/attestations`);
+
 /** What waits in the outbox, read only by a maintainer, whom the daemon answers it to. */
 export const useOutbox = (enabled: MaybeRefOrGetter<boolean>) => {
     const api = useMessagesApi();
@@ -127,5 +144,5 @@ export const contactsChanged = (): Promise<void> => stale([S2S_CONTACTS, S2S_THR
 /** After a contact's waiting task was allowed or declined: the tasks, and the badges they count into. */
 export const tasksChanged = (): Promise<void> => stale([S2S_TASKS]);
 
-/** After the identity changed (a domain, a rotation, a recovery). */
-export const identityChanged = (): Promise<void> => stale([S2S_ME]);
+/** After the identity changed (a domain, a rotation, a recovery, an attestation added or removed). */
+export const identityChanged = (): Promise<void> => stale([S2S_ME, S2S_ATTESTATIONS]);

@@ -189,7 +189,9 @@ flowchart LR
   Reach group, badged with unread threads and waiting contact requests: the Inbox (threads, each read and answered in
   place, files downloaded or taken into a folder), Contacts (requests first, then each contact's key, notices and
   grants, added by address or by pairing two of the reader's sandboxes, which this editor does since it is signed in to
-  both) and Identity (address, fingerprint, own domains and their TXT records, rotation, the owner's recovery key). Its reads,
+  both, and vouched for) and Identity (address, fingerprint, own domains and their TXT records, rotation, the vouches it
+  carries and asking a contact for one, the owner's recovery key); a thread offers to vouch back for a request and to add a
+  vouch received. Its reads,
   derivations and words live in `models/messages/` (the `contact` need card reads them too), every call through
   `messagesApi.ts`, injected (`MESSAGES_API`) so its suites hand it a fake; a daemon that serves no `/s2s/threads`
   leaves the row out. It replaced the Overview's Received card.

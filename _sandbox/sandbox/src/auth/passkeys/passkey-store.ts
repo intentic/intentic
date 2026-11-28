@@ -208,6 +208,17 @@ export interface PasskeyCeremonies {
     readonly authenticate: (input: { readonly origin: string | undefined; readonly response: AuthenticationResponse }) => Promise<StoredCredential>;
     // Spends one of the owner's codes; false for a code that is not one of theirs or was already used.
     readonly spendRecoveryCode: (code: string) => Promise<boolean>;
+    // (2026-11-28) A passkey co-signing a person's yes to an approval (approvals/approval-cosign.ts): the request options
+    // over a challenge the caller computed from what is approved, allowing only that person's own passkeys, and the check
+    // of their answer. No challenge is kept between the two: it is the approval's own digest, the same on every ask.
+    readonly cosignOptions: (input: { readonly email: string; readonly origin: string | undefined; readonly challenge: string }) => Promise<AuthenticationOptionsJSON>;
+    // The person's own credential that signed `challenge`, its counter advanced, and the relying party it answered for.
+    readonly cosign: (input: {
+        readonly email: string;
+        readonly origin: string | undefined;
+        readonly challenge: string;
+        readonly response: AuthenticationResponse;
+    }) => Promise<{ readonly credential: StoredCredential; readonly rpId: string }>;
 }
 
 export interface PasskeyCeremonyDeps {
@@ -268,6 +279,38 @@ const relyingPartyOf =
         return { origin, rpId: appRpId };
     };
 
+// The credentials a ceremony on this relying party may answer with, as WebAuthn's descriptors.
+const descriptorsFor = (credentials: readonly StoredCredential[], rpId: string) =>
+    credentials.filter((credential) => credential.rpId === rpId).map((credential) => ({ type: "public-key" as const, id: credential.id, transports: credential.transports }));
+
+// (2026-11-28) A passkey co-signing an approval, beside the sign-in ceremonies: the same relying party and verifier, a
+// challenge the caller computed, and only the person's own passkeys.
+const cosignCeremonies = (deps: PasskeyCeremonyDeps, now: () => number): Pick<PasskeyCeremonies, "cosignOptions" | "cosign"> => {
+    const relyingParty = relyingPartyOf(deps);
+    return {
+        cosignOptions: async ({ email, origin, challenge }) => {
+            const rp = await relyingParty(origin);
+            const own = (await deps.store.list()).filter((credential) => credential.email.toLowerCase() === email.toLowerCase());
+            const allowCredentials = descriptorsFor(own, rp.rpId);
+            return { rpId: rp.rpId, challenge, timeout: CEREMONY_TIMEOUT_MS, userVerification: "required", allowCredentials, available: allowCredentials.length > 0 };
+        },
+        cosign: async ({ email, origin, challenge, response }) => {
+            const rp = await relyingParty(origin);
+            const credential = await deps.store.find(response.id);
+            if (credential === undefined || credential.rpId !== rp.rpId) {
+                throw new PasskeyError(404, "no passkey registered with this sandbox answers that id");
+            }
+            if (credential.email.toLowerCase() !== email.toLowerCase()) {
+                throw new PasskeyError(403, "that passkey is someone else's: approve with one of your own");
+            }
+            const assertion = verified(() => verifyAuthentication(response, { challenge, ...rp, publicKey: credential.publicKey, counter: credential.counter }));
+            const at = now();
+            await deps.store.used(credential.id, assertion.counter, assertion.backedUp, at);
+            return { credential: { ...credential, counter: assertion.counter, backedUp: assertion.backedUp, lastUsedAt: at }, rpId: rp.rpId };
+        },
+    };
+};
+
 export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCeremonies => {
     const now = deps.now ?? Date.now;
     const pending = new BoundedMap<string, PendingChallenge>(MAX_PENDING_CHALLENGES);
@@ -310,9 +353,6 @@ export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCerem
 
     const userHandle = (email: string): string =>
         base64url.encode(createHash("sha256").update(`${deps.sandboxId}:${email.toLowerCase()}`).digest());
-
-    const descriptorsFor = (credentials: readonly StoredCredential[], rpId: string) =>
-        credentials.filter((credential) => credential.rpId === rpId).map((credential) => ({ type: "public-key" as const, id: credential.id, transports: credential.transports }));
 
     return {
         registrationOptions: async ({ identity, origin }) => {
@@ -390,6 +430,7 @@ export const createPasskeyCeremonies = (deps: PasskeyCeremonyDeps): PasskeyCerem
             await deps.store.used(credential.id, assertion.counter, assertion.backedUp, at);
             return { ...credential, counter: assertion.counter, backedUp: assertion.backedUp, lastUsedAt: at };
         },
+        ...cosignCeremonies(deps, now),
         spendRecoveryCode: async (code) => {
             const at = now();
             if (at < recoveryLockedUntil) {

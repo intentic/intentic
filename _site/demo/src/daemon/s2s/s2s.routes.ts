@@ -1,5 +1,8 @@
 import { type RawRoutes, refuse } from "@intentic/contract-serve";
 import {
+    S2sAttestationAcceptSchema,
+    S2sAttestationAskSchema,
+    S2sAttestationIssueSchema,
     S2sContactAcceptInputSchema,
     S2sContactAddSchema,
     S2sContactChangeSchema,
@@ -13,13 +16,14 @@ import {
     S2sTrustKeySchema,
 } from "@intentic/sandbox-contract/schemas/s2s";
 import { json } from "../../transport";
+import { acceptAttestation, askVouch, attestationsList, issueVouch, removeAttestation } from "./s2sAttestations";
 import { acceptContact, addContact, blockContact, changeContact, contactsList, pairHere, paired, removeContact, trustKey } from "./s2sContacts";
 import { checkDomain, claimDomain, dropDomain, identityDocument, meAt, mintRecovery, recover, rotate } from "./s2sIdentity";
 import { contactTasks, decideTask } from "./s2sTasks";
 import { deleteThread, fileOf, markRead, outbox, send, take, threadOf, threadsList } from "./s2sThreads";
 
-// Contacts and messages (docs/architecture/messages.md), the editor's side of them: this sandbox's identity and its
-// domains, its contacts and the pairing between two of the owner's sandboxes, the tasks contacts handed it and the owner's
+// Contacts and messages (docs/architecture/messages.md), the editor's side of them: this sandbox's identity, its
+// domains and what other sandboxes vouched for it, its contacts and the pairing between two of the owner's sandboxes, the tasks contacts handed it and the owner's
 // Allow or Decline for one that waits, its threads, their files and the outbox,
 // each against the store of the sandbox the call was sent to. Bodies are parsed here, as the daemon's routes parse them,
 // and refused whole. Spread into daemon/raw.ts's table.
@@ -36,6 +40,11 @@ export const s2sRoutes = {
     "POST /s2s/me/rotate": ({ url }) => json(rotate(url)),
     "POST /s2s/me/recovery": ({ url }) => json(mintRecovery(url)),
     "POST /s2s/me/recover": async ({ request, url }) => json(recover(url, accepted(S2sRecoverInputSchema.safeParse(await request.json())).secret)),
+    "GET /s2s/me/attestations": () => json(attestationsList()),
+    "POST /s2s/me/attestations": async ({ request }) => json(acceptAttestation(accepted(S2sAttestationAcceptSchema.safeParse(await request.json())).message)),
+    "DELETE /s2s/me/attestations/{id}": ({ param }) => json(removeAttestation(param(`id`))),
+    "POST /s2s/me/attestations/ask": async ({ request }) => json(askVouch(accepted(S2sAttestationAskSchema.safeParse(await request.json())))),
+    "POST /s2s/attestations/issue": async ({ request }) => json(issueVouch(accepted(S2sAttestationIssueSchema.safeParse(await request.json())))),
     "GET /s2s/contacts": ({ url }) => json(contactsList(url)),
     "POST /s2s/contacts/paired": async ({ request, url }) => json(paired(url, accepted(S2sPairedSchema.safeParse(await request.json())))),
     "POST /s2s/contacts": async ({ request, url }) => json(addContact(url, accepted(S2sContactAddSchema.safeParse(await request.json())))),

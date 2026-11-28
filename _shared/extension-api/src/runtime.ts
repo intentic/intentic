@@ -324,6 +324,7 @@ export const createExtensionRuntime = (options: ExtensionRuntimeOptions): Extens
             exec: reach.exec,
             activity: reach.activity,
             sleep,
+            identity: reach.identity,
         },
         close: () => {
             reach.close();

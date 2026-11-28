@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { S2sThreadMessage } from "@intentic/sandbox-contract/schemas/s2s";
+import { attestationText, type S2sThreadMessage } from "@intentic/sandbox-contract/schemas/s2s";
 import { tierAtLeast } from "@intentic/sandbox-contract/schemas/shared";
 import { Notice, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
@@ -8,14 +8,17 @@ import { useT } from "@intentic/ui/i18n";
 import { computed, ref, shallowRef } from "vue";
 import { useTier } from "../../../../client/sandbox/useTier";
 import { useMessagesApi } from "../../../../models/messages/messagesApi";
+import { vouchFacts } from "../../../../models/messages/attestations";
 import { deliveryMark } from "../../../../models/messages/messagesView";
+import AttestationMessage from "./AttestationMessage.vue";
 import TakeFiles from "./TakeFiles.vue";
 
 // ONE MESSAGE in its thread: received ones on the reading edge, sent ones tinted on the far edge, the way a conversation is
 // read. A run's first message names its sender; a report, a task or a contact's own message says what kind it is. The words
 // are another sandbox's, drawn as plain text, never as markup. Files download one by one, and a received message's files
-// can be copied into a folder of the workspace (a collaborator's, as the daemon floors the take). A sent message says how
-// its delivery stands.
+// can be copied into a folder of the workspace (a collaborator's, as the daemon floors the take). An attestation asked for or
+// sent shows its claims (AttestationMessage.vue), and its words only when they are a person's note rather than the claims
+// again. A sent message says how its delivery stands.
 
 const props = defineProps<{
     message: S2sThreadMessage;
@@ -45,9 +48,19 @@ const kindWord = computed((): string | undefined => {
             return t(`sandbox.messages.kinds.identity`);
         case `receipt`:
             return t(`sandbox.messages.kinds.receipt`);
+        case `attestation`:
+            return props.message.kind === `attestation.request` ? t(`sandbox.messages.kinds.attestationRequest`) : t(`sandbox.messages.kinds.attestation`);
         default:
             return undefined;
     }
+});
+
+const attestation = computed(() => props.message.kind.startsWith(`attestation.`));
+// The words to draw: none for an attestation's line that only names its claims, which are drawn themselves.
+const words = computed((): string => {
+    const { claims, attestation: vouch, text } = props.message;
+    const claimed = claims ?? (vouch === undefined ? undefined : vouchFacts(vouch)?.claims);
+    return attestation.value && claimed !== undefined && text === attestationText(claimed) ? `` : text;
 });
 
 const mark = computed(() => deliveryMark(props.message));
@@ -98,7 +111,8 @@ const takes = computed(() => !out.value && props.message.attachments.length > 0 
         </p>
         <div class="flex flex-col gap-2 rounded-2xl px-3.5 py-2.5" :class="out ? `rounded-br-md bg-primary-tint` : `rounded-bl-md border border-line-subtle bg-card`">
             <p v-if="message.subject" class="text-xs font-semibold text-content">{{ message.subject }}</p>
-            <p v-if="message.text" class="whitespace-pre-wrap break-words text-sm leading-relaxed text-content">{{ message.text }}</p>
+            <p v-if="words" class="whitespace-pre-wrap break-words text-sm leading-relaxed text-content">{{ words }}</p>
+            <AttestationMessage v-if="attestation" :message="message" :contact-name="contactName" />
             <ul v-if="message.attachments.length > 0" class="flex flex-wrap gap-1.5">
                 <li v-for="file in message.attachments" :key="file.name">
                     <button

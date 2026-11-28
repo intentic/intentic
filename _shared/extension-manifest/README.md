@@ -39,9 +39,10 @@ flowchart LR
   (`**`, a `*` inside a segment, an unknown method, a relative path) fails the manifest parse rather than the first
   call it gates.
 - `extensionRouteReach` is the whole rule for an extension's own token: the routes every extension reaches about
-  itself (`EXTENSION_OWN_ROUTES`: its settings and its event stream, the doors its other `permissions` open, and since
+  itself (`EXTENSION_OWN_ROUTES`: its settings and its event stream, the doors its other `permissions` open, since
   2026-11-26 the turn doors its tools' calls open, each judged by the daemon on its own declaration and the call's
-  ticket), its own listener provider's routes, and whatever
+  ticket, and since 2026-11-28 the sandbox's identity document and the door that signs as it, which only a manifest
+  declaring `permissions.identity: ["sign"]` passes), its own listener provider's routes, and whatever
   `permissions.daemon` declares. The daemon's grant and the SDK's test fake both judge by it, and `./permissions` exports
   the rule alone, for a process that should not load the manifest schema.
 - What a field MEANS to the host is declared on the field, with `.meta({ power, effect, mintsServer })`

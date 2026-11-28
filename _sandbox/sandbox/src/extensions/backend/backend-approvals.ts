@@ -1,4 +1,5 @@
 import type { ApprovedAction, ApprovedActionOutcome, ApprovedPost } from "@intentic/extension-api/runtime";
+import { PasskeyCosignSchema } from "@intentic/sandbox-contract/protocol/s2s/passkey-cosign";
 import { z } from "zod";
 
 // The wire between the daemon's approvals executor and the backend host's `POST /approvals/<id>` door: one approved
@@ -13,6 +14,8 @@ const ApprovedActionSchema = z.object({
     approver: z.string().optional(),
     approvedAt: z.number(),
     actionRules: z.record(z.string(), z.string()),
+    // (2026-11-28) The person's passkey co-signature over the item, when they approved it with one.
+    cosign: PasskeyCosignSchema.optional(),
 });
 
 // (2026-11-26) An approved post a card of the extension publishes on (`api.approvals.publish`).

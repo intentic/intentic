@@ -1,4 +1,4 @@
-import type { ApprovalsList, ApprovalSummary } from "@intentic/sandbox-contract/schemas/approvals";
+import type { ApprovalsList, ApprovalSummary, ApprovalUpsert } from "@intentic/sandbox-contract/schemas/approvals";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
@@ -21,7 +21,8 @@ export function useApprovals() {
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: spec.queryKey });
 
     const save = useMutation({
-        mutationFn: (approval: ApprovalSummary) => api.sandbox.rpc.approvals.upsert(approval),
+        // (2026-11-28) An approve may carry a passkey's assertion (passkeyApprove.ts), which the daemon keeps off the file.
+        mutationFn: (approval: ApprovalUpsert) => api.sandbox.rpc.approvals.upsert(approval),
         onSuccess: invalidate,
     });
     const remove = useMutation({

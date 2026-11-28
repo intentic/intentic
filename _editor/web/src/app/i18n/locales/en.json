@@ -12422,7 +12422,9 @@
                 "task": "Task",
                 "contact": "Contact",
                 "identity": "Key change",
-                "receipt": "Receipt"
+                "receipt": "Receipt",
+                "attestation": "Vouch",
+                "attestationRequest": "Vouch request"
             },
             "delivery": {
                 "queued": "Waiting to be delivered",
@@ -12640,6 +12642,59 @@
                     "declined": "Declined",
                     "stopped": "Stopped"
                 }
+            },
+            "claims": {
+                "kind": "What it is",
+                "verifiedBy": "Checked by",
+                "country": "Country",
+                "over18": "Over 18",
+                "displayName": "Name",
+                "organisation": "Organisation",
+                "kinds": {
+                    "person": "A person",
+                    "organisation": "An organisation"
+                },
+                "methods": {
+                    "inPerson": "Meeting in person",
+                    "document": "An identity document",
+                    "domain": "Their domain",
+                    "employment": "Employment"
+                },
+                "yes": "Yes",
+                "no": "No",
+                "none": "No claims",
+                "notClaimed": "Not claimed"
+            },
+            "attestations": {
+                "title": "Vouched for by",
+                "about": "Other sandboxes' word about this one",
+                "aboutBody": "Each is signed by the sandbox that vouched, and this sandbox's identity carries it to whoever reads it. It says who vouched and for what, not that it is true: every reader decides which vouchers it trusts.",
+                "none": "No sandbox vouches for this one yet.",
+                "ask": "Ask a contact",
+                "until": "until {date}",
+                "lapsed": "Lapsed on {date}: the identity no longer carries it. Ask for a new vouch, or remove it.",
+                "notCarried": "Not carried in the identity: {problem}",
+                "otherType": "A {type} attestation",
+                "remove": "Remove",
+                "removeAsk": "Remove the vouch from {name}?",
+                "removeWhat": "This sandbox's identity stops carrying it. To have it again, {name} has to vouch again.",
+                "removeFailed": "Couldn't remove the vouch",
+                "contact": "Contact",
+                "pickContact": "Pick a contact",
+                "noContacts": "No sandbox contact to ask yet: add one on Contacts.",
+                "note": "Note",
+                "send": "Ask to vouch",
+                "askFailed": "Couldn't ask {name}",
+                "claims": "What you vouch for",
+                "claimsHint": "Only what you checked yourself. This sandbox signs it with its key, and whoever trusts this sandbox may rely on it.",
+                "validUntil": "Valid until",
+                "sign": "Sign and send",
+                "vouchFailed": "Couldn't vouch for {name}",
+                "vouch": "Vouch for this contact",
+                "vouchShort": "Vouch",
+                "addToIdentity": "Add to this sandbox's identity",
+                "added": "In this sandbox's identity",
+                "addFailed": "Couldn't add the vouch"
             }
         }
     },

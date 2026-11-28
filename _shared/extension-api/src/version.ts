@@ -155,4 +155,18 @@
 // `s2s` source (what other sandboxes send) declares it. A trigger source's `strangers` and an agent's needs carry it
 // too (a `contact` need, raised when an agent would make or accept a contact). Additive: a manifest without it is
 // unchanged. The recorded surface grows the manifest schema and the wire's agents and automations schemas.
-export const extensionApiVersion = "2.59.0";
+// 2.60.0 (2026-11-28) lets an extension sign as this sandbox and carry out an approval a person co-signed with a passkey.
+// `api.identity.document()` answers the sandbox's public identity document (`GET /extension/identity`, undeclared), and
+// `api.identity.sign(purpose, payload)` has the daemon sign a JSON record with the sandbox's key, which the extension
+// never holds (`POST /extension/identity/sign`, a power declared as `permissions.identity: ["sign"]` and refused
+// undeclared): a hybrid signature over the payload's canonical JSON under `ext:<publisher.name>/<purpose>`, answered with
+// the domain, the fingerprint and the document whose keys verify it. Rejected: handing an extension a delegated key,
+// which the daemon could not take back. The wire grows by the s2s primitives and shapes
+// (`@intentic/sandbox-contract/s2s`, `.../schemas/s2s`), so an extension verifies a foreign document and what it signed
+// (`verifyIdentity`, `verifyExtensionPayload`, `verifyPasskeyCosign`, and the `attestations` an identity document may
+// carry, with `verifyAttestation`) without the daemon. An action item may ask for a
+// passkey (`cosign: "offered" | "required"`); a yes given with one hands the performer `ApprovedAction.cosign`, the
+// person's assertion over the sandbox, the item and its digest. Additive: a manifest that declares none of it and an item
+// without `cosign` are unchanged, and `fakeExtensionApi` signs with a real key set (`identity`). The recorded surface
+// grows `serverApi`, the manifest schema, the wire's approvals and extension-protocol schemas, and the two s2s subpaths.
+export const extensionApiVersion = "2.60.0";

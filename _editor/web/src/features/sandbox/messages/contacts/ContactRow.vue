@@ -10,15 +10,17 @@ import Fingerprint from "../../../../parts/messages/Fingerprint.vue";
 import { grantsLine } from "../../../../models/messages/grantWords";
 import { useMessagesApi } from "../../../../models/messages/messagesApi";
 import { noticeTone, unseenNotices, withGrants } from "../../../../models/messages/messagesView";
-import { contactsChanged } from "../../../../models/messages/useMessages";
+import { attestationsServed, contactsChanged } from "../../../../models/messages/useMessages";
 import ContactTasks from "./ContactTasks.vue";
 import GrantsEditor from "./GrantsEditor.vue";
+import VouchForm from "./VouchForm.vue";
 
 // ONE CONTACT: its name and address, whom it speaks for, and what it may do here, on one line. What is true of it now
 // stands under the row without opening it: a key that changed with no proof (held both ways until a person compares the
 // new fingerprint and trusts it) and the notices not yet read (a rotation, a recovery, a key vouched for only by DNS, a
 // move, a removal). Opened, it shows the key pinned for it, what it lets this sandbox do there, and its grants, each
-// changed where it is shown, and the tasks it handed this sandbox; Remove ends it after asking. A link naming it
+// changed where it is shown, and the tasks it handed this sandbox; an accepted contact that is a sandbox as itself can be
+// vouched for, from its drawer (VouchForm.vue); Remove ends it after asking. A link naming it
 // (`?open=<contact>`, as the push saying one of its tasks waits does) opens it and brings it into view.
 
 const props = defineProps<{
@@ -127,6 +129,10 @@ const trust = async (): Promise<void> => {
     }
 };
 
+// Vouching is the sandbox speaking as itself, for a sandbox doing the same: the owner's or a maintainer's.
+const vouchable = computed(() => props.manages && contact.value.scope.kind === `sandbox` && contact.value.state === `accepted` && attestationsServed());
+const vouching = ref(false);
+
 const removing = ref(false);
 const remove = async (): Promise<void> => {
     if (await write(async () => {
@@ -160,7 +166,11 @@ const remove = async (): Promise<void> => {
                     <span class="text-2xs text-subtle">{{ t(`sandbox.messages.contacts.mayHere`) }}</span>
                     <GrantsEditor :grants="contact.grants" :personal="contact.scope.kind === `person`" :disabled="!manages || busy" @change="changeGrants" />
                 </div>
-                <div v-if="manages || contact.scope.kind === `person`" class="flex justify-end">
+                <VouchForm v-if="vouching" :contact="contact.id" :contact-name="contact.name" @done="vouching = false" @cancel="vouching = false" />
+                <div v-if="manages || contact.scope.kind === `person`" class="flex justify-end gap-2">
+                    <Button v-if="vouchable && !vouching" :label="t(`sandbox.messages.attestations.vouch`)" size="small" tier="boring" :disabled="busy" @click="vouching = true">
+                        <template #icon><Icon name="shield" /></template>
+                    </Button>
                     <Button :label="t(`sandbox.messages.contacts.remove`)" size="small" tier="quiet" tone="danger" :disabled="busy" @click="removing = true" />
                 </div>
             </div>

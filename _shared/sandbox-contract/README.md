@@ -33,12 +33,21 @@ flowchart LR
   daemons and the editor must agree on every byte of it: its wire and editor shapes in `src/schemas/s2s.ts`, and its
   primitives in `src/protocol/s2s/`, imported as `@intentic/sandbox-contract/s2s`: canonical JSON, hybrid Ed25519 and
   ML-DSA-65 signatures, X25519 and ML-KEM-768 key agreement, the identity document and its rotation table, addresses
-  and their TXT records, the envelope, and call sessions. They are plain JavaScript on the `@noble` libraries, so Node,
-  Bun and a browser run the same code; Bun has no ML-KEM in `node:crypto`.
+  and their TXT records, the envelope, and call sessions; and (2026-11-28) an extension's sign domains
+  (`ext:<publisher.name>/<purpose>`, `signExtensionPayload` and `verifyExtensionPayload`) and the passkey co-signature
+  on an approval (`PasskeyCosignSchema`, `cosignChallenge`, `verifyPasskeyCosign`, which verifies with WebCrypto and is
+  imported alone by `schemas/approvals.ts`, so no curve code loads with the schema). They are plain JavaScript on the
+  `@noble` libraries, so Node, Bun and a browser run the same code; Bun has no ML-KEM in `node:crypto`.
 - The daemon names the routes it implements on the `/events` hello frame, and the browser diffs that list against its
   own build, so a route an older daemon lacks shows as a missing feature instead of a 404. The desktop app's folder
   sidecar sends the same frame with `surface: "folder"` and only the few routes it serves, which the browser offers
   and never reads as out of date.
+- (2026-11-28) Attestations: one sandbox's signed word about another, carried in the other's identity document
+  (`S2sAttestationSchema`, the identity document's `attestations`). `signAttestation` makes a `sandbox-vouch` under a
+  key set for the sign domain `attestation`; `verifyAttestation(attestation, document, { now, trustedIssuers })` checks
+  it against the subject's document (one key rotation keeps it) and says `trusted` only for an issuer the reader lists,
+  since no issuer is trusted by default. A type this build does not read, `eudi-pid` among them, parses and is kept whole
+  but never verifies.
 - Every file the daemon keeps says whether it travels in an environment bundle (`carry`, `secret`, `identity` or
   `derived`, `src/state/state-portability.ts`). The contract holds the tables for the two roots other programs read:
   `WORKSPACE_STATE_FILES`, and `AUTH_STATE_FILES` for the auth root of provider logins, secret vaults and trust files.

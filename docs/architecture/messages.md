@@ -4,7 +4,7 @@ A sandbox has an identity of its own (an address and a post-quantum key pair), k
 
 ```mermaid
 flowchart TB
-  id["Identity<br/>address · hybrid key set · own domains · rotation"]
+  id["Identity<br/>address · hybrid key set · own domains · rotation · attestations"]
   contact["Contacts<br/>handshake or editor pairing · sandbox- or person-scoped<br/>grants: message · report · task · records · operate · wake"]
   msg["Messages<br/>signed + encrypted envelope · one outbox · inbox · automations"]
   call["Calls<br/>session key · request/response · nothing stored"]
@@ -65,16 +65,35 @@ in 0.7 ms and verifies in 0.13 ms; the noble implementation is slower and still 
   rotated away still opens.
 - **The identity document** (`SandboxIdentitySchema`) is public: the sandbox id, its display name, its current host,
   the own domains it has verified, the four public keys, the fingerprint, an optional recovery fingerprint, the
-  protocols it speaks (`s2s/1`), when it was issued, an optional `prev` and its own hybrid signature. `prev` is a
+  protocols it speaks (`s2s/1`), when it was issued, an optional `prev`, the attestations it carries when it has any
+  ([Attestations](#attestations)) and its own hybrid signature. `prev` is a
   standing vouch, not a signature over the document: the previous key (or the recovery key) signs
   `{sandbox, successor fingerprint, by, fingerprint, at}`, so a recovered sandbox, which never keeps the recovery
   secret, can still re-sign its document later (to add a domain). Bytes are signed in canonical JSON (keys sorted, no
-  whitespace), each behind a domain prefix (`intentic-s2s/1 <identity|identity-prev|envelope|session>\n`), so a
-  signature made for one purpose never verifies for another.
+  whitespace), each behind a domain prefix (`intentic-s2s/1 <identity|identity-prev|envelope|session|attestation>\n`),
+  so a signature made for one purpose never verifies for another.
 - **The fingerprint** is `isk1:` and the base32 of the SHA-256 over the canonical public keys. It is what a person
   compares and what a contact pins.
 - **Served** at `GET /s2s/identity` (`auth: "door"`, no credential). Answering it at all is how a far daemon says it
   speaks this protocol; a daemon from before answers 401 `unauthorized`, the existing "too old for the door" signal.
+- **Signing for an extension** (2026-11-28). An extension that declares `permissions.identity: ["sign"]` has the daemon
+  sign a JSON record as this sandbox (`api.identity.sign`, `POST /extension/identity/sign`), and never holds the key.
+  The domain is `ext:<publisher.name>/<purpose>`, the extension read off its token and the purpose a lowercase word,
+  over the record's canonical JSON ([`extension-sign.ts`](../../_shared/sandbox-contract/src/protocol/s2s/extension-sign.ts)).
+  The core's domains are single words with no `:` or `/` and a domain ends at its newline, so no extension's signature
+  is ever the bytes of a document, a vouch, an envelope or a session. Anyone holding the document checks a record with
+  `verifyExtensionPayload(extension, purpose, payload, sig, document.keys)`.
+- **A person's passkey on an approval** (2026-11-28). An action in the approvals queue whose filer marked it
+  `cosign: "offered" | "required"` may be approved with the person's passkey, an ordinary WebAuthn assertion whose
+  challenge is SHA-256 over the canonical JSON of `{ v: 1, sandbox, item, digest, purpose: "intentic-approval/1" }`:
+  this sandbox's id as its document names it, the item's id and its performer's digest of exactly what it will do
+  ([`passkey-cosign.ts`](../../_shared/sandbox-contract/src/protocol/s2s/passkey-cosign.ts)). The daemon checks the
+  answer against that person's own stored passkey (origin, counter, user verification), keeps the co-signature with
+  the recorded yes and hands it to the performer (`ApprovedAction.cosign`). It carries the passkey's public key and
+  label, never the email. `verifyPasskeyCosign` checks one anywhere WebCrypto runs: the client data is a `webauthn.get`
+  over that challenge, the authenticator data is scoped to its `rpId` with the person present and verified, and the
+  signature verifies under the key (ES256, EdDSA, RS256). Whose key it is and which origin ran the ceremony are the
+  verifier's to know; the signature binds the rest.
 
 **Addresses.** A contact is addressed by a sandbox host (`<id>.<zone>`, what every sandbox has) or by an own domain.
 
@@ -205,7 +224,8 @@ ephemeral X25519 key, an ML-KEM-768 ciphertext, a nonce), the sealed `body`, and
   it can see who talks to whom and when, never what.
 - Kinds: `contact.request`, `contact.accept`, `contact.update` (grants or wake secret changed), `contact.remove`,
   `identity.rotated`, `message` (`subject?`, `text`, attachments inline, at most 20 files and 10 MB, the drops' limits),
-  `report`, `task.request`, `task.update`, `task.message`, `task.answer`, `task.stop`, and `receipt`.
+  `report`, `task.request`, `task.update`, `task.message`, `task.answer`, `task.stop`, `receipt`, and
+  `attestation.request` and `attestation.issued` ([Attestations](#attestations)).
 - The body is capped at 16 MB; an unknown kind is refused 422, never misread. The signature covers the canonical
   envelope without `sig`.
 - `sentAt` is when it was sealed, and the outbox seals afresh at every attempt, so an honest envelope is seconds old.
@@ -423,14 +443,77 @@ before, or one that does not take the introduction (a contact there waiting on a
 the report at `/account/report`. The platform stays a directory (which sandbox claims a project, where a sandbox is)
 and is a notary only for that one introduction.
 
+## Attestations
+
+An attestation is one sandbox's signed word about another, which the other carries in its own identity document: the
+third level of trust a reader can have in a source, after its key alone and its own domain (2026-11-28). It says **who
+vouched, about which key, for what and until when**. It does not say the claim is true, and it is not Intentic's word:
+Intentic signs none and keeps no list of issuers. Each reader decides which issuers it trusts, by their fingerprint, and
+an attestation from an issuer it does not know is just a signed statement from a stranger.
+
+- **A `sandbox-vouch`** (`S2sSandboxVouchSchema`): `v`, `type`, the issuer (its sandbox id, the address it was reached
+  at, its fingerprint, its four public keys, since a fingerprint is over all four, and its name), the subject (sandbox
+  id, address, and the fingerprint it was vouched for under), `claims`, `issuedAt`, `validUntil` (a year at most) and
+  the issuer's hybrid signature over the canonical attestation without `sig`, under the domain `attestation`.
+- **Claims** are a name and a word, a number or a yes/no each, at most 12 and 768 bytes of JSON together. Readers can
+  expect these to mean the same from anyone (`S2S_WELL_KNOWN_CLAIMS`): `kind` (`person`, `organisation`), `verifiedBy`
+  (`in-person`, `document`, `domain`, `employment`), `country` (ISO 3166-1 alpha-2), `over18`, `displayName`,
+  `organisation`. Any other name is the issuer's own word.
+- **Checking one** (`verifyAttestation(attestation, document, { now, trustedIssuers })` in
+  [`attestation.ts`](../../_shared/sandbox-contract/src/protocol/s2s/attestation.ts), pure): the issuer's fingerprint
+  is over the keys it carries, the signature verifies under them, it is current and dated no more than five minutes
+  ahead, it is about the document's sandbox, the issuer is not that sandbox, and the subject's fingerprint is the
+  document's own or the one its `prev` vouched for by key. So one rotation keeps an attestation; a second, or a recovery,
+  needs it issued again. It answers `ok` with the reason when not, and `trusted` only when the reader lists the issuer.
+  `verifyAttestations(document, …)` checks every one a document carries once the document itself verifies.
+- **In the document**: `attestations`, absent when there are none, so a sandbox without any signs the very bytes it signed
+  before they existed. A vouch is about 10 KB (the issuer's keys and signature), and every daemon reads at most 64 KiB of
+  a document (`S2S_IDENTITY_MAX_BYTES`, which older daemons keep), so a sandbox keeps at most four
+  (`S2S_ATTESTATIONS_KEPT_MAX`), one per issuer, a renewal replacing the earlier one. A reader parses up to 16, and keeps
+  one of a type it does not read whole (`S2sOtherAttestationSchema`), so a document from a later build still verifies.
+- **Kept** in `s2s/identity-attestations.json` on the history volume (portability `identity`: about this sandbox's
+  key, so it holds nowhere else). The document lists those that hold when it is signed (current, about its key or the
+  one before) and is signed again whenever that set changes, so one that lapses drops out by itself. Its row stays,
+  listed with why, until a person removes it or adds another vouch, which clears the lapsed ones first.
+- **`eudi-pid`** is a reserved slot for a person identification credential from an EU digital identity wallet
+  (`S2sEudiPidAttestationSchema`): parsed, carried, never verified yet; the verifier answers that it is not supported.
+
+**Asking and vouching** go as messages under the contact's `message` grant, between sandbox-scoped contacts only, since
+each is the sandbox speaking as itself:
+
+| Kind | Carries | On arrival |
+|---|---|---|
+| `attestation.request` | the claims it asks to be vouched for, a note | filed unread in the contact's thread |
+| `attestation.issued` | the signed vouch, a note; `replyTo` names the request | checked (a vouch this build reads, signed by the sender's key or the one before, verifying against this sandbox's document), refused `malformed` with the reason if not, else filed unread in the thread |
+
+Neither is acted on when it arrives, by an automation or otherwise, and no agent token reaches the routes that act on
+one. The owner or a maintainer answers from the thread or the Identity section:
+
+- `POST /s2s/me/attestations/ask` (`{ contact, claims, note? }`) sends a request.
+- `POST /s2s/attestations/issue` (`{ contact, claims, validUntil, note?, replyTo? }`) signs a `sandbox-vouch` now, for the
+  key the contact is pinned under, and sends it into the request's thread when it answers one.
+- `POST /s2s/me/attestations` (`{ message }`) adds the vouch an `attestation.issued` message carried, checked against this
+  sandbox's document first.
+- `GET /s2s/me/attestations` lists what the identity holds, each with whether it verifies and is carried now;
+  `DELETE /s2s/me/attestations/{id}` removes one.
+
+**Not yet.**
+
+- Issuers outside Intentic: EUDI wallets and Poland's mObywatel need relying-party registration and a real wallet to
+  test, so `eudi-pid` is a slot only.
+- Zero-knowledge proofs of uniqueness (one person, one sandbox) without revealing who.
+- Revocation before `validUntil`: a vouch is withdrawn by letting it lapse, which a year at most bounds.
+
 ## The editor
 
 - **Messages** is a tab of the sandbox (`sandboxNav.ts`, group `reach`), badged with unread threads, waiting
   requests and contact tasks waiting for the owner. Its parts: **Inbox** (threads, a thread's messages, a composer with
   files, waiting and undelivered marks), **Contacts** (requests to accept or block and tasks waiting for an Allow, both at
   the top; each contact's key status, notices, grants and the tasks it handed this sandbox, with a link to each one's
-  conversation; add by address, pair with one of your sandboxes), and **Identity** (the address, the fingerprint, own
-  domains and the TXT record each needs, rotate, recovery key). `?section=contacts&open=<contact>` opens that contact,
+  conversation; add by address, pair with one of your sandboxes; vouch for an accepted sandbox contact), and **Identity**
+  (the address, the fingerprint, own domains and the TXT record each needs, rotate, the vouches this sandbox carries and
+  asking a contact for one, recovery key). A thread shows an attestation's claims, with Vouch on a request and Add to
+  this sandbox's identity on a vouch received. `?section=contacts&open=<contact>` opens that contact,
   which is where the push saying a task waits lands.
 - The Overview's Received card is gone: its attention item points at the Messages tab.
 - The `contact` card answers an agent's ask to add or accept a contact.
@@ -489,6 +572,10 @@ and is a notary only for that one introduction.
 - **Domain plus key, no authority.** The platform signs nothing a contact relies on after the first report's
   introduction. DNS and pinning were chosen over a platform-signed statement (the `sp1.` pass) so that two owners need
   nothing from intentic to trust each other.
+- **Vouches from anyone, trusted by each reader** (2026-11-28). Any sandbox may vouch for another, and a reader trusts an
+  issuer by its fingerprint or not at all. A platform-signed verification badge was rejected: it would make intentic an
+  authority every sandbox has to trust, which the rule above refuses. A vouch carries its issuer's whole key set rather
+  than a reference to fetch, so it checks offline and survives its issuer moving.
 - **Automations decide, not the protocol.** With no automation set, no agent runs for anything received.
 - **Messages and calls share identity, contacts and admission, not transport.** Putting a `read_file` through an
   inbox would store and retry what must be answered now.
@@ -499,11 +586,21 @@ and is a notary only for that one introduction.
   a call opens (no session, a replay, no grant) goes in the clear, which says nothing of the callee's records.
 - **Upgrade, not re-pair.** Every existing link and pairing already proves both sides; making people pair again would
   have spent their trust for nothing.
+- **An extension gets signatures, never the key** (2026-11-28). The daemon signs each record at a door that checks the
+  declaration and names the extension in the domain. Handing an extension a delegated key of its own was rejected: a
+  key once handed out cannot be taken back by the daemon, and a backend's leak would sign as the sandbox until every
+  verifier heard of a revocation.
+- **A passkey co-signs the yes, it does not replace it** (2026-11-28). The approve still needs a maintainer's session and
+  is recorded off the workspace as before; the passkey adds a statement anyone can check later. The challenge is the
+  approval's digest rather than a random nonce, so the assertion itself says what was approved; a replay of it can only
+  approve that same digest of that same item again, behind a session. Signing the yes with the sandbox's own key was
+  rejected: it proves the sandbox said so, which it already does, not that a person did.
 
 ## Key files
 
 - [`protocol/s2s/`](../../_shared/sandbox-contract/src/protocol/s2s): the hybrid primitives, canonical JSON, the
-  identity document, address resolution and the envelope's seal and open.
+  identity document, address resolution and the envelope's seal and open; (2026-11-28) an extension's sign domains and
+  the passkey co-signature on an approval.
 - [`schemas/s2s.ts`](../../_shared/sandbox-contract/src/schemas/s2s.ts): every wire and editor shape.
 - [`s2s/identity/`](../../_sandbox/sandbox/src/s2s/identity): the key store, `/s2s/identity`, domains, rotation and
   recovery.
@@ -524,3 +621,7 @@ and is a notary only for that one introduction.
   [`s2s/tasks/`](../../_sandbox/sandbox/src/s2s/tasks) the asking side's reach into the outbox and the task tools;
   [`s2s/contacts/contact-mounts.ts`](../../_sandbox/sandbox/src/s2s/contacts/contact-mounts.ts) each contact as a turn's
   tool server.
+- [`protocol/s2s/attestation.ts`](../../_shared/sandbox-contract/src/protocol/s2s/attestation.ts) signing and checking a
+  vouch; [`s2s/identity/identity-attestations.ts`](../../_sandbox/sandbox/src/s2s/identity/identity-attestations.ts) the
+  ones this identity carries; [`s2s/attestations/`](../../_sandbox/sandbox/src/s2s/attestations) asking, vouching and
+  their kinds.

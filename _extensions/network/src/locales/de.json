@@ -1,0 +1,125 @@
+{
+    "title": "Netzwerk",
+    "tabs": {
+        "feed": "Feed",
+        "sources": "Quellen",
+        "settings": "Einstellungen",
+        "published": "Veröffentlicht",
+        "peers": "Peers"
+    },
+    "view": {
+        "refresh": "Jetzt alle lesen",
+        "couldNotRead": "Das Netzwerk konnte nicht gelesen werden.",
+        "pressFailed": "Das hat nicht geklappt."
+    },
+    "feed": {
+        "title": "Feed",
+        "curate": "{count} neuen bewerten | {count} neue bewerten",
+        "untitled": "(ohne Titel)",
+        "empty": "Noch nichts. Füge im Tab Quellen eine Quelle hinzu und lies sie.",
+        "signed": "signiert",
+        "invalid": "Signatur ungültig",
+        "unsigned": "unsigniert"
+    },
+    "sources": {
+        "add": "Quelle hinzufügen",
+        "kindLabel": "Art der Quelle",
+        "title": "Quellen",
+        "kind": {
+            "rss": "Feed",
+            "bluesky": "Bluesky",
+            "nostr": "Nostr",
+            "atlas": "Atlas",
+            "intentic": "Sandbox"
+        },
+        "placeholder": {
+            "rss": "https://example.com/feed.xml",
+            "bluesky": "name.bsky.social oder did:plc:…",
+            "nostr": "npub1… oder Hex-Schlüssel",
+            "atlas": "https://registry.example"
+        },
+        "trust": {
+            "rss": "RSS, Atom oder JSON Feed. Über HTTPS gelesen; nichts in einem Feed ist signiert.",
+            "bluesky": "Ein öffentlicher Autor-Feed, ohne Anmeldung gelesen. Der AppView-Antwort wird so vertraut.",
+            "nostr": "Id und Schnorr-Signatur jedes Ereignisses werden gegen den Schlüssel des Autors geprüft.",
+            "atlas": "Die Falcon-1024-Signatur jedes Umschlags wird nach Atlas' veröffentlichter Doku geprüft."
+        },
+        "labelPlaceholder": "Name (optional)",
+        "addButton": "Hinzufügen und lesen",
+        "failing": "fehlerhaft ({count}×): {error}",
+        "notRead": "noch nicht gelesen",
+        "read": "gelesen {when}",
+        "off": "aus",
+        "readNow": "Jetzt lesen",
+        "enabled": "Diese Quelle lesen",
+        "remove": "Mit ihren Einträgen entfernen",
+        "empty": "Noch keine Quellen."
+    },
+    "settings": {
+        "title": "Einstellungen",
+        "rules": "Kurationsregeln",
+        "rulesHint": "In deinen Worten: was dir wichtig ist, was wegfällt, wie gelabelt wird. Der Kurator-Agent liest sie.",
+        "autoCurate": "Neue Einträge nach jedem geplanten Lesen bewerten",
+        "relays": "Nostr-Relays (eine wss://-Adresse pro Zeile)",
+        "save": "Speichern"
+    },
+    "published": {
+        "compose": "Schreiben",
+        "kind": "Art",
+        "post": "Beitrag",
+        "article": "Artikel",
+        "headline": "Titel",
+        "text": "Was du veröffentlichen willst, genau so, wie es lauten soll",
+        "keywords": "Themen, durch Kommas getrennt (optional)",
+        "submit": "Zur Freigabe senden",
+        "approvalNote": "Nichts wird veröffentlicht, bevor es unter Freigaben bestätigt ist, auf Wunsch mit deinem Passkey.",
+        "waiting": "Wartet auf Freigabe",
+        "waitingPublish": "zu veröffentlichen · eingereicht {when}",
+        "waitingWithdraw": "zurückzuziehen · eingereicht {when}",
+        "passkeyRequired": "Passkey nötig",
+        "title": "Veröffentlicht ({count}) | Veröffentlicht ({count})",
+        "publicLink": "öffentlicher Katalog",
+        "withdrawn": "(zurückgezogen)",
+        "tombstone": "(Rückzug)",
+        "withdrawNote": "#{seq} zurückgezogen · {when}",
+        "cosigned": "mit Passkey freigegeben",
+        "withdraw": "Zurückziehen",
+        "empty": "Noch nichts veröffentlicht. Alles hier ist mit dem Schlüssel dieser Sandbox signiert und für alle lesbar."
+    },
+    "peers": {
+        "follow": "Einer Sandbox folgen",
+        "addressPlaceholder": "ihre Adresse: ein Sandbox-Host oder ihre eigene Domain",
+        "followButton": "Folgen",
+        "followHint": "Ihr Schlüssel wird beim ersten Kontakt festgehalten; jeder Eintrag und Checkpoint danach wird damit geprüft, und eine umgeschriebene Geschichte fällt auf.",
+        "title": "Gefolgte Sandboxen",
+        "completeness": "{verified} von {declared} Einträgen geprüft",
+        "witnessed": "{count} von {of} Zeugen haben mitsigniert",
+        "passkeyShare": "{percent}% mit Passkey freigegeben",
+        "synced": "gelesen {when}",
+        "level": {
+            "0": "L0 Schlüssel",
+            "1": "L1 Domain",
+            "2": "L2 Passkey",
+            "3": "L3 verbürgt"
+        },
+        "equivocation": "Geschichte umgeschrieben",
+        "held": "angehalten",
+        "release": "Wieder vertrauen",
+        "evidenceKept": "Beide signierten Checkpoints bleiben als Beweis erhalten.",
+        "empty": "Du folgst noch keiner Sandbox."
+    },
+    "discover": {
+        "title": "Über Guides entdecken",
+        "anyType": "Jeder Typ",
+        "keyword": "Thema",
+        "search": "Suchen",
+        "hint": "Fragt die Guides aus den Einstellungen (guides). Jede Antwort wird gegen die genannte Sandbox geprüft.",
+        "via": "über {guide}",
+        "none": "Kein Guide kennt einen Treffer.",
+        "types": {
+            "posts": "Beiträge",
+            "articles": "Artikel",
+            "blogPosts": "Blogbeiträge"
+        }
+    }
+}

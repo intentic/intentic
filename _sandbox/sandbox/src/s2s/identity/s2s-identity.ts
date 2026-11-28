@@ -1,5 +1,6 @@
 import {
     canonicalJson,
+    type ExtensionSignDomain,
     formatTxtRecord,
     generateKeySet,
     hybridSign,
@@ -11,8 +12,9 @@ import {
     type TxtAnswer,
     txtRecordName,
 } from "@intentic/sandbox-contract/s2s";
-import type { HybridSig, S2sMe, S2sRecoveryMinted, SandboxIdentity } from "@intentic/sandbox-contract/schemas/s2s";
+import type { HybridSig, S2sAttestations, S2sClaims, S2sMe, S2sRecoveryMinted, S2sSandboxVouch, SandboxIdentity } from "@intentic/sandbox-contract/schemas/s2s";
 import type { JsonFile } from "../../store/json-file.js";
+import { type AttestationRow, attestationChanges, idsOf, openIdentityAttestations, publishable } from "./identity-attestations.js";
 import { type DomainRow, openIdentityDomains, verifiedFor } from "./identity-domains.js";
 import { type IdentityKeys, keySetOf, openIdentityKeys, type StoredKeySet, storedOf } from "./identity-keys.js";
 import { domainChanges, keyChanges } from "./identity-changes.js";
@@ -51,8 +53,9 @@ export interface S2sIdentity {
     readonly document: () => Promise<SandboxIdentity>;
     // Every key set an envelope or a session may be sealed to: the current one first, then the kept previous ones.
     readonly openWith: () => Promise<readonly S2sKeySet[]>;
-    // A hybrid signature under the current key set over the bytes, for what they are (protocol/s2s sign.ts SignDomain).
-    readonly sign: (domain: SignDomain, bytes: Uint8Array) => Promise<HybridSig>;
+    // A hybrid signature under the current key set over the bytes, for what they are (protocol/s2s sign.ts SignDomain), or
+    // (2026-11-28) for an extension's record (extension-sign.ts, the `/extension/identity/sign` door).
+    readonly sign: (domain: SignDomain | ExtensionSignDomain, bytes: Uint8Array) => Promise<HybridSig>;
     // The addresses this sandbox answers to: its host, then the own domains its document lists.
     readonly addresses: () => Promise<readonly string[]>;
     // The Identity section's view.
@@ -70,11 +73,26 @@ export interface S2sIdentity {
     readonly recover: (secret: string) => Promise<S2sMe | IdentityRefusal>;
     // Told after every rotation or recovery, so the contacts module can send `identity.rotated`. Answers the unsubscribe.
     readonly onRotated: (listener: (rotation: S2sRotation) => void) => () => void;
+    // What other sandboxes vouched for and a person here added (identity-attestations.ts), each checked against the document.
+    readonly attestations: () => Promise<S2sAttestations>;
+    // One a contact sent, added once it verifies against this document; one per issuer, at most S2S_ATTESTATIONS_KEPT_MAX.
+    readonly addAttestation: (
+        attestation: AttestationRow["attestation"],
+        from: { readonly contact?: string | undefined; readonly message?: string | undefined },
+    ) => Promise<S2sAttestations | IdentityRefusal>;
+    readonly removeAttestation: (id: string) => Promise<S2sAttestations | IdentityRefusal>;
+    // A vouch for another sandbox under its key, signed now by the current key set; refused for claims or dates past the bounds.
+    readonly issueVouch: (
+        subject: { readonly sandbox: string; readonly address: string; readonly fingerprint: string },
+        claims: S2sClaims,
+        validUntil: number,
+    ) => Promise<S2sSandboxVouch | IdentityRefusal>;
 }
 
 export interface IdentityDeps {
     readonly keysPath: string;
     readonly domainsPath: string;
+    readonly attestationsPath: string;
     readonly self: () => IdentitySelf;
     readonly resolveTxt: (name: string) => Promise<TxtAnswer>;
     readonly now: () => number;
@@ -87,6 +105,7 @@ export interface IdentityCore {
     readonly deps: IdentityDeps;
     readonly keysFile: JsonFile<IdentityKeys>;
     readonly domainsFile: JsonFile<{ domains: DomainRow[] }>;
+    readonly attestationsFile: JsonFile<{ attestations: AttestationRow[] }>;
     readonly keys: () => Promise<IdentityKeys & { readonly current: StoredKeySet }>;
     readonly document: () => Promise<SandboxIdentity>;
     readonly me: () => Promise<S2sMe>;
@@ -111,6 +130,7 @@ const domainView = (row: DomainRow, fingerprint: string, host: string): S2sMe["d
 const createCore = (deps: IdentityDeps): IdentityCore => {
     const keysFile = openIdentityKeys(deps.keysPath);
     const domainsFile = openIdentityDomains(deps.domainsPath);
+    const attestationsFile = openIdentityAttestations(deps.attestationsPath);
     let signed: { readonly key: string; readonly document: SandboxIdentity } | undefined;
 
     // The keys with a current set, made under the file's own lock so two first needs make one.
@@ -131,8 +151,16 @@ const createCore = (deps: IdentityDeps): IdentityCore => {
         const current = keySetOf(stored.current);
         const self = deps.self();
         const domains = (await domainsFile.read()).domains.filter((row) => verifiedFor(row, current.fingerprint, self.host)).map((row) => row.domain);
-        const facts = { ...self, domains, recovery: stored.recovery?.fingerprint };
-        const key = canonicalJson({ ...facts, recovery: facts.recovery ?? null, fingerprint: current.fingerprint, prev: stored.current.prev?.sig ?? null });
+        // Those that hold as of now: one that lapsed since the last signing changes the key, so the document is signed again.
+        const attestations = publishable((await attestationsFile.read()).attestations, { sandbox: self.sandbox, fingerprint: current.fingerprint, prev: stored.current.prev }, deps.now());
+        const facts = { ...self, domains, recovery: stored.recovery?.fingerprint, attestations };
+        const key = canonicalJson({
+            ...facts,
+            recovery: facts.recovery ?? null,
+            attestations: idsOf(attestations),
+            fingerprint: current.fingerprint,
+            prev: stored.current.prev?.sig ?? null,
+        });
         if (signed?.key !== key) {
             signed = { key, document: signIdentity({ ...facts, issuedAt: deps.now() }, current, stored.current.prev) };
         }
@@ -150,7 +178,7 @@ const createCore = (deps: IdentityDeps): IdentityCore => {
         };
     };
 
-    return { deps, keysFile, domainsFile, keys, document, me };
+    return { deps, keysFile, domainsFile, attestationsFile, keys, document, me };
 };
 
 export const createS2sIdentity = (deps: IdentityDeps): S2sIdentity => {
@@ -171,5 +199,6 @@ export const createS2sIdentity = (deps: IdentityDeps): S2sIdentity => {
         me: core.me,
         ...domainChanges(core),
         ...keyChanges(core),
+        ...attestationChanges(core),
     };
 };

@@ -267,6 +267,10 @@ export const RAW_ROUTES = {
     "POST /extension/sleep/ready": { floor: "maintainer", panel: false, control: "never" },
     // (2026-11-27) What the platform's sleep watch heard for the extension's own connections while the sandbox slept.
     "POST /extension/sleep/heard": { floor: "maintainer", panel: false, control: "never" },
+    // (2026-11-28) This sandbox's public identity document, and a signature as this sandbox over a record of the calling
+    // extension's own (`permissions.identity`). Reached the same way, undeclared; the sign door checks its declaration.
+    "GET /extension/identity": { floor: "maintainer", panel: false, control: "never" },
+    "POST /extension/identity/sign": { floor: "maintainer", panel: false, control: "never" },
     // The CI webhook receiver, gated by the per-sandbox webhook secret.
     "POST /ci/webhook/{host}": { auth: "door" },
     // (2026-11-25) What the forges said, as it is heard, for a program (schemas/ci.ts CiFeedEventSchema): Server-Sent
@@ -461,6 +465,14 @@ export const RAW_ROUTES = {
     "POST /s2s/me/rotate": { panel: false, control: "never" },
     "POST /s2s/me/recovery": { floor: "owner", panel: false, control: "never" },
     "POST /s2s/me/recover": { floor: "owner", panel: false, control: "never" },
+    // (2026-11-28) Attestations: what other sandboxes vouched for and this one carries in its document, listed, added from
+    // the contact's message and removed by the owner or a maintainer; asking a contact to vouch for this sandbox, and
+    // vouching for one, both the sandbox speaking as itself. No agent token: an agent never signs or adds one.
+    "GET /s2s/me/attestations": { floor: "maintainer", control: "never" },
+    "POST /s2s/me/attestations": { panel: false, control: "never" },
+    "DELETE /s2s/me/attestations/{id}": { panel: false, control: "never" },
+    "POST /s2s/me/attestations/ask": { panel: false, control: "never" },
+    "POST /s2s/attestations/issue": { panel: false, control: "never" },
     // Contacts: a sandbox-scoped one is the owner's or a maintainer's to make, accept, re-grant and block. A person-scoped
     // one is that person's own (a viewer's too), so listing, pairing back, removing and trusting a new key floor at the
     // viewer and the handler holds a person to their own. `paired` first: it would otherwise read as a contact's id. The

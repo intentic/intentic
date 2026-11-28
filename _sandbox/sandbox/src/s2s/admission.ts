@@ -91,6 +91,8 @@ const BEFORE_ACCEPT = {
 } as const satisfies Readonly<Record<"pending-out" | "pending-in", ReadonlySet<string>>>;
 
 const TASK_KINDS: ReadonlySet<S2sPayloadKind> = new Set(["task.request", "task.message", "task.answer", "task.stop"]);
+// Asking for a vouch and sending one are words between two sandboxes, under the `message` grant (2026-11-28).
+const ATTESTATION_KINDS: ReadonlySet<S2sPayloadKind> = new Set(["attestation.request", "attestation.issued"]);
 
 // The grant a kind or a call method needs; a kind absent here needs none beyond the contact being accepted.
 const grantOf = (kind: S2sPayloadKind | S2sCallMethod): ((grants: S2sGrants) => boolean) | undefined => {
@@ -98,7 +100,7 @@ const grantOf = (kind: S2sPayloadKind | S2sCallMethod): ((grants: S2sGrants) => 
         const grant = S2S_CALLS[kind].grant;
         return grant === "task" ? (grants) => grants.task !== undefined : (grants) => grants[grant];
     }
-    if (kind === "message") {
+    if (kind === "message" || ATTESTATION_KINDS.has(kind)) {
         return (grants) => grants.message;
     }
     if (kind === "report") {

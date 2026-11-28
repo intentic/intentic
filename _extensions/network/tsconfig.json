@@ -1,0 +1,5 @@
+{
+    "extends": "@intentic/tsconfig/tsconfig.vue.json",
+    "compilerOptions": { "types": ["node", "bun", "@intentic/testing/globals"], "noEmit": true, "rootDir": "./src", "resolveJsonModule": true },
+    "include": ["./src/**/*.ts", "./src/**/*.vue", "./intentic-extension.json"]
+}

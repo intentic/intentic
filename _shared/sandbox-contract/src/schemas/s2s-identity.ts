@@ -109,6 +109,107 @@ export const S2sIdentityPrevSchema = z.discriminatedUnion("by", [
 ]);
 export type S2sIdentityPrev = z.infer<typeof S2sIdentityPrevSchema>;
 
+/* ATTESTATIONS (docs/architecture/messages.md, "Attestations"): another sandbox's signed word about this one, carried in
+   this one's document. It says who vouched and for what, never that the claim is true; which issuers count is each
+   reader's own choice, by fingerprint. Every object in one is loose: the document's signature covers it whole, so a
+   field a later build adds must survive this build's parse, or the document would stop verifying here. */
+
+// What a daemon reads of another's identity document at most (s2s-wiring.ts IDENTITY_BODY_MAX, which older daemons keep).
+export const S2S_IDENTITY_MAX_BYTES = 64 * 1024;
+// The most attestations a document lists as any reader parses it. A vouch carries its issuer's four public keys and a
+// hybrid signature, about 10 KB, so no document under S2S_IDENTITY_MAX_BYTES comes near: this bound only refuses junk.
+export const S2S_ATTESTATIONS_MAX = 16;
+// The most this sandbox keeps and publishes: four of the largest vouches fit beside the largest document there is (sixteen
+// domains and a `prev`) inside S2S_IDENTITY_MAX_BYTES (attestation.test.ts measures it).
+export const S2S_ATTESTATIONS_KEPT_MAX = 4;
+// How long one attestation may be valid from when it was issued: a year, so a vouch nobody renews lapses by itself.
+export const S2S_ATTESTATION_VALID_MAX_MS = 365 * 24 * 60 * 60 * 1000;
+// Claims: how many, how long a word may be, and how many bytes of JSON they come to whole. The bytes are what keeps four
+// of the largest vouches inside S2S_IDENTITY_MAX_BYTES: at 1,024 the fullest document came to 66,104 bytes.
+export const S2S_CLAIMS_MAX = 12;
+export const S2S_CLAIM_VALUE_MAX = 120;
+export const S2S_CLAIMS_BYTES_MAX = 768;
+// The claims a reader can expect to mean the same whoever wrote them; any other key is the issuer's own word.
+// `kind`: what the subject is (S2S_CLAIM_KINDS). `verifiedBy`: how the issuer checked (S2S_CLAIM_METHODS). `country`: an
+// ISO 3166-1 alpha-2 code. `over18`: true when the issuer checked the person is an adult. `displayName`: the name the
+// issuer knows the subject by. `organisation`: the organisation the subject is or belongs to.
+export const S2S_WELL_KNOWN_CLAIMS = ["kind", "verifiedBy", "country", "over18", "displayName", "organisation"] as const;
+export const S2S_CLAIM_KINDS = ["person", "organisation"] as const;
+export const S2S_CLAIM_METHODS = ["in-person", "document", "domain", "employment"] as const;
+// The types this build knows. `sandbox-vouch` it verifies; `eudi-pid` is a slot for an EU digital identity wallet's
+// person identification data, parsed and never verified yet (it needs relying-party registration and a real wallet).
+export const S2S_ATTESTATION_TYPES = ["sandbox-vouch", "eudi-pid"] as const;
+
+const utf8Length = (text: string): number => new TextEncoder().encode(text).length;
+
+export const S2sClaimKeySchema = z
+    .string()
+    .regex(/^[a-z][A-Za-z0-9_-]{0,39}$/u)
+    .describe("A claim's name: a lowercase letter, then up to 39 letters, digits, `_` or `-` (S2S_WELL_KNOWN_CLAIMS).");
+export const S2sClaimValueSchema = z.union([z.string().max(S2S_CLAIM_VALUE_MAX), z.number(), z.boolean()]);
+export const S2sClaimsSchema = z
+    .record(S2sClaimKeySchema, S2sClaimValueSchema)
+    .refine((claims) => Object.keys(claims).length <= S2S_CLAIMS_MAX, `at most ${S2S_CLAIMS_MAX} claims`)
+    .refine((claims) => utf8Length(JSON.stringify(claims)) <= S2S_CLAIMS_BYTES_MAX, `at most ${S2S_CLAIMS_BYTES_MAX} bytes of claims`)
+    .describe("What the issuer says of the subject, by name: a word, a number or a yes/no each.");
+export type S2sClaims = z.infer<typeof S2sClaimsSchema>;
+
+const attestedSandbox = {
+    sandbox: z.string().min(1).max(100).describe("Its sandbox id, as its own document names it."),
+    address: S2sAddressSchema.describe("Where it was reached: its host or an own domain."),
+    fingerprint: S2sFingerprintSchema.describe("Its key set's fingerprint when the attestation was made."),
+};
+const attestedAt = {
+    issuedAt: z.number().int().nonnegative().describe("When it was made, in epoch milliseconds."),
+    validUntil: z.number().int().nonnegative().describe("When it lapses, in epoch milliseconds: at most a year after `issuedAt`."),
+};
+export const S2sAttestationSubjectSchema = z.looseObject(attestedSandbox).describe("The sandbox it is about.");
+export const S2sAttestationIssuerSchema = z
+    .looseObject({
+        ...attestedSandbox,
+        // All four, not the signing pair alone: a key set's fingerprint is over all four, and the fingerprint is what a
+        // reader trusts an issuer by.
+        keys: S2sPublicKeysSchema.loose().describe("The issuer's public keys, which its fingerprint is over."),
+        name: z.string().max(120).optional().describe("The issuer's display name, as its document gave it."),
+    })
+    .describe("The sandbox that vouches, with the keys its signature verifies under.");
+
+const vouchFields = {
+    v: z.literal(1),
+    type: z.literal("sandbox-vouch"),
+    issuer: S2sAttestationIssuerSchema,
+    subject: S2sAttestationSubjectSchema,
+    claims: S2sClaimsSchema,
+    ...attestedAt,
+    sig: HybridSigSchema.loose().describe("The issuer's signature over the canonical attestation without `sig`, signed for `attestation`."),
+};
+export const S2sSandboxVouchSchema = z
+    .looseObject(vouchFields)
+    .describe("Another sandbox's signed word about this one: who vouched, about which key, for what, until when.");
+export type S2sSandboxVouch = z.infer<z.ZodObject<typeof vouchFields>>;
+
+const eudiPidFields = {
+    v: z.literal(1),
+    type: z.literal("eudi-pid"),
+    format: z.enum(["dc+sd-jwt", "mso_mdoc"]).describe("The credential's format, as OpenID for Verifiable Presentations names it."),
+    presentation: z.string().min(1).max(8192).describe("The wallet's presentation, as it gave it."),
+    subject: S2sAttestationSubjectSchema,
+    ...attestedAt,
+};
+export const S2sEudiPidAttestationSchema = z
+    .looseObject(eudiPidFields)
+    .describe("Reserved: a person identification credential from an EU digital identity wallet. Parsed, never verified yet.");
+export type S2sEudiPidAttestation = z.infer<z.ZodObject<typeof eudiPidFields>>;
+
+export const S2sOtherAttestationSchema = z
+    .looseObject({ type: z.string().min(1).max(64) })
+    .describe("An attestation this build cannot read (a later type, or a known one it cannot parse), kept whole so the document carrying it still verifies.");
+export type S2sOtherAttestation = z.infer<typeof S2sOtherAttestationSchema>;
+
+// The first that parses: a vouch, the wallet slot, else anything with a type, kept as it came.
+export const S2sAttestationSchema = z.union([S2sSandboxVouchSchema, S2sEudiPidAttestationSchema, S2sOtherAttestationSchema]);
+export type S2sAttestation = S2sSandboxVouch | S2sEudiPidAttestation | S2sOtherAttestation;
+
 // The public identity document, served at GET /s2s/identity.
 const identityFields = {
     v: z.literal(1),
@@ -122,6 +223,11 @@ const identityFields = {
     protocols: z.array(z.string().min(1).max(40)).min(1).max(16).describe("The protocols it speaks: `s2s/1`."),
     issuedAt: z.number().int().nonnegative().describe("When this document was signed, in epoch milliseconds."),
     prev: S2sIdentityPrevSchema.optional(),
+    attestations: z
+        .array(S2sAttestationSchema)
+        .max(S2S_ATTESTATIONS_MAX)
+        .optional()
+        .describe("What other sandboxes signed about this one, as it chose to publish them; absent when none. Each reader decides which issuers it trusts."),
     sig: HybridSigSchema.describe("Its own key set's signature over the canonical document without `sig`."),
 };
 // Loose on purpose: a later document may carry fields this build does not know, and its signature is over all of them,

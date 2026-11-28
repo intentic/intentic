@@ -106,6 +106,8 @@ export const performApprovedAction = async (deps: PerformerDeps, item: Performed
             approver: yes.approver,
             approvedAt: yes.approvedAt,
             actionRules,
+            // (2026-11-28) The person's passkey over exactly this, when they approved it with one.
+            ...opt("cosign", yes.cosign),
         };
         return approvalRequestBody({ action });
     });

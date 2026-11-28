@@ -116,6 +116,10 @@ export const EXTENSION_OWN_ROUTES: readonly string[] = [
     "POST /extension/sleep/ready",
     // (2026-11-27) What the platform's sleep watch heard for its own connections while the sandbox slept.
     "POST /extension/sleep/heard",
+    // (2026-11-28) This sandbox's public identity document, and a signature as this sandbox over a record of the
+    // extension's own, which the door refuses unless `permissions.identity` declares `sign`.
+    "GET /extension/identity",
+    "POST /extension/identity/sign",
 ];
 
 // (2026-11-26) What an extension's own code may hear, hold and run beyond its routes, each a power its manifest declares
@@ -145,6 +149,13 @@ export const EXTENSION_FIRE_HANDLER = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 export const EXTENSION_TURN_POWERS = ["browser", "owner-browser", "jobs"] as const;
 export type ExtensionTurnPower = (typeof EXTENSION_TURN_POWERS)[number];
 
+// (2026-11-28) What an extension may do as this sandbox's identity (`permissions.identity`): `sign`, have the daemon sign
+// a record of its own with the sandbox's key, under a domain naming the extension and the record's purpose
+// (`ext:<publisher.name>/<purpose>`), which anyone verifies with the sandbox's published keys. The key never leaves the
+// daemon. A list, so more verbs can join it.
+export const EXTENSION_IDENTITY_VERBS = ["sign"] as const;
+export type ExtensionIdentityVerb = (typeof EXTENSION_IDENTITY_VERBS)[number];
+
 // The rest of an extension's declared reach, read off its manifest's `permissions`.
 export interface ExtensionDeclaredReach {
     readonly events: readonly ExtensionDeclaredEvent[];
@@ -154,6 +165,8 @@ export interface ExtensionDeclaredReach {
     readonly fires: readonly string[];
     // What its agent tools may do with the calling turn's grants.
     readonly turn: readonly ExtensionTurnPower[];
+    // (2026-11-28) What it may do as this sandbox's identity.
+    readonly identity: readonly ExtensionIdentityVerb[];
 }
 
 // The fields of a manifest's `permissions` this reads, as parsed.
@@ -163,6 +176,7 @@ export interface DeclaredPermissions {
     readonly exec?: readonly ExtensionExecClass[] | undefined;
     readonly fires?: readonly string[] | undefined;
     readonly turn?: readonly ExtensionTurnPower[] | undefined;
+    readonly identity?: readonly ExtensionIdentityVerb[] | undefined;
 }
 
 export const declaredReachOf = (permissions: DeclaredPermissions | undefined): ExtensionDeclaredReach => ({
@@ -171,6 +185,7 @@ export const declaredReachOf = (permissions: DeclaredPermissions | undefined): E
     exec: permissions?.exec ?? [],
     fires: permissions?.fires ?? [],
     turn: permissions?.turn ?? [],
+    identity: permissions?.identity ?? [],
 });
 
 // Nothing declared: what an extension with no such `permissions` holds.

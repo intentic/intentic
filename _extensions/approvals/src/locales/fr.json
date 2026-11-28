@@ -93,7 +93,12 @@
         "startItem": "Démarrer {item}",
         "approveItem": "Approuver {item}",
         "invalidFiles": "{count} fichier n'a pas pu être lu et ne s'exécutera pas : | {count} fichiers n'ont pas pu être lus et ne s'exécuteront pas :",
-        "unreadableHeldWakes": "{count} automatisation retenue n'a pas pu être lue et ne peut pas être libérée : | {count} automatisations retenues n'ont pas pu être lues et ne peuvent pas être libérées :"
+        "unreadableHeldWakes": "{count} automatisation retenue n'a pas pu être lue et ne peut pas être libérée : | {count} automatisations retenues n'ont pas pu être lues et ne peuvent pas être libérées :",
+        "approveWithPasskey": "Approuver avec une clé d’accès",
+        "approveWithPasskeyItem": "Approuver {item} avec votre clé d’accès",
+        "passkeyNotUsed": "Aucune clé d’accès n’a été utilisée, ce n’est donc pas approuvé.",
+        "passkeyUnsupported": "Ce navigateur ne peut pas utiliser de clés d’accès. Approuvez-le depuis un navigateur qui le peut.",
+        "passkeyNoneHeld": "Vous n’avez pas encore de clé d’accès sur ce sandbox. Ajoutez-en une depuis Accès, puis approuvez-le."
     },
     "extension": {
         "approvals": "Approbations"

@@ -101,6 +101,7 @@ import { ruleFiringsDocument } from "../rules/rule-firings.js";
 import { runnerIdentityDocument } from "../runners/runner-identity.js";
 import { s2sContactsDocument } from "../s2s/contacts/contacts-store.js";
 import { s2sSecretsDocument } from "../s2s/contacts/s2s-secrets.js";
+import { identityAttestationsDocument } from "../s2s/identity/identity-attestations.js";
 import { identityDomainsDocument } from "../s2s/identity/identity-domains.js";
 import { sandboxIdentityDocument } from "../s2s/identity/identity-keys.js";
 import { s2sOutboxDocument } from "../s2s/messages/outbox.js";
@@ -220,10 +221,10 @@ const documentsPart1 = (): readonly DocumentSpec[] => [
     composerDraftsDocument,
     projectDeliveriesDocument,
     conversationRecordDocument,
+    definitionDocument,
 ];
 
 const documentsPart2 = (): readonly DocumentSpec[] => [
-    definitionDocument,
     enginePolicyDocument,
     engineStateDocument,
     runtimeInstallsDocument,
@@ -274,13 +275,14 @@ const documentsPart2 = (): readonly DocumentSpec[] => [
     runnerIdentityDocument,
     s2sContactsDocument,
     s2sSecretsDocument,
+    identityAttestationsDocument,
     identityDomainsDocument,
     sandboxIdentityDocument,
     s2sOutboxDocument,
+    s2sThreadsDocument,
 ];
 
 const documentsPart3 = (): readonly DocumentSpec[] => [
-    s2sThreadsDocument,
     s2sSeenIdsDocument,
     safetyLogDocument,
     autostartDocument,

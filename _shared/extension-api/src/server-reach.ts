@@ -1,7 +1,9 @@
+import type { ExtensionSignPayload } from "@intentic/sandbox-contract/s2s";
 import type { CiFeedEvent } from "@intentic/sandbox-contract/schemas/ci";
+import type { HybridSig, SandboxIdentity } from "@intentic/sandbox-contract/schemas/s2s";
 
 // What a backend (and a declared process) hears, holds, runs and writes beside its routes (`ExtensionServerApi`'s
-// `events`, `exec`, `activity` and `sleep`, server.ts), split from server.ts to keep each file one reading.
+// `events`, `exec`, `activity`, `sleep` and `identity`, server.ts), split from server.ts to keep each file one reading.
 
 // (2026-11-26) A run ending in a conversation this extension started (POST /agent with its own token), as
 // `api.events.onRunSettled` hears it. `stopped`: a person's stop or a parent's cancel ended it, not the turn itself.
@@ -101,4 +103,36 @@ export interface SleepHeardMessage {
     readonly guildId?: string | undefined;
     // When the platform heard it (ms).
     readonly at: number;
+}
+
+// (2026-11-28) This sandbox's public identity document (`api.identity.document()`): its id, name, host, own domains, its
+// hybrid public keys and their fingerprint, signed by itself. The contract's `@intentic/sandbox-contract/s2s` verifies
+// one (`verifyIdentity`) and what it signed (`verifyExtensionPayload`).
+export type { SandboxIdentity };
+
+// (2026-11-28) What `api.identity.sign` signs: any JSON value, as its canonical JSON (keys sorted, no whitespace).
+export type IdentityPayload = ExtensionSignPayload;
+
+// (2026-11-28) A record signed as this sandbox (`api.identity.sign`): the domain it was signed under
+// (`ext:<publisher.name>/<purpose>`), the hybrid signature, and the document whose keys verify it, with its fingerprint.
+// Publish the three together; anyone checks them with `verifyExtensionPayload(extension, purpose, payload, sig,
+// document.keys)` after `verifyIdentity(document)`.
+export interface IdentitySigned {
+    readonly domain: string;
+    readonly sig: HybridSig;
+    readonly fingerprint: string;
+    readonly document: SandboxIdentity;
+}
+
+// (2026-11-28) `api.identity` (docs/architecture/messages.md, "Identity").
+export interface IdentityReach {
+    // The sandbox's public identity document, as GET /s2s/identity serves it to anyone. Reached without declaring
+    // anything; rejects with the daemon's words when refused (a daemon from before 2.60.0 answers 404).
+    document(): Promise<SandboxIdentity>;
+    // `payload` signed as this sandbox (`permissions.identity: ["sign"]`; throws undeclared before asking): a hybrid
+    // signature over its canonical JSON under `ext:<publisher.name>/<purpose>`, so it verifies only as this extension's
+    // record for this purpose and never as one of the core's own signatures. `purpose` is a lowercase word of up to 64
+    // characters, dots and dashes inside (`log.entry`); the payload is at most 256 KiB of canonical JSON, and the daemon
+    // answers 600 signatures a minute (429 past it). Answers the current document, whose keys verify the signature.
+    sign(purpose: string, payload: IdentityPayload): Promise<IdentitySigned>;
 }

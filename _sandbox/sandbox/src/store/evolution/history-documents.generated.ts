@@ -75,6 +75,7 @@ export const HISTORY_DOCUMENT_FILES: readonly StateFile[] = [
     { path: "s2s-threads/", portability: "carry" },
     { path: "s2s/contact-tasks.json", portability: "carry" },
     { path: "s2s/contacts.json", portability: "identity", note: "Add your contacts again from the Messages tab: the new sandbox has a key of its own." },
+    { path: "s2s/identity-attestations.json", portability: "identity" },
     { path: "s2s/identity-domains.json", portability: "identity" },
     { path: "s2s/seen-ids.jsonl", portability: "carry" },
     { path: "script-runs/", portability: "carry" },

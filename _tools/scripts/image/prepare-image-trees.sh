@@ -37,7 +37,7 @@ TREES="
 # pipelines' (dist/server.js, main's fix agent and the Pipelines board's backend, 2026-11-26), which the daemon's
 # extension host runs in every sandbox. The feature backends (deployments, knowledge) are not here: they moved to their
 # own repositories and install from the registry, as e-urzad and prawo did. The copy loop below carries each entry.
-BUNDLES="onlyoffice repo-apps connectors visitor-chat chatgpt pipelines product-health"
+BUNDLES="onlyoffice repo-apps connectors visitor-chat chatgpt pipelines product-health network"
 
 filters=()
 for entry in $TREES; do filters+=(--filter="${entry%%:*}"); done

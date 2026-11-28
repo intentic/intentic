@@ -12422,7 +12422,9 @@
                 "task": "Tâche",
                 "contact": "Contact",
                 "identity": "Changement de clé",
-                "receipt": "Accusé"
+                "receipt": "Accusé",
+                "attestation": "Garantie",
+                "attestationRequest": "Demande de garantie"
             },
             "delivery": {
                 "queued": "En attente de remise",
@@ -12640,6 +12642,59 @@
                     "declined": "Refusée",
                     "stopped": "Arrêtée"
                 }
+            },
+            "claims": {
+                "kind": "Ce que c'est",
+                "verifiedBy": "Vérifié par",
+                "country": "Pays",
+                "over18": "Plus de 18 ans",
+                "displayName": "Nom",
+                "organisation": "Organisation",
+                "kinds": {
+                    "person": "Une personne",
+                    "organisation": "Une organisation"
+                },
+                "methods": {
+                    "inPerson": "Rencontre en personne",
+                    "document": "Une pièce d'identité",
+                    "domain": "Son domaine",
+                    "employment": "Emploi"
+                },
+                "yes": "Oui",
+                "no": "Non",
+                "none": "Aucune affirmation",
+                "notClaimed": "Non affirmé"
+            },
+            "attestations": {
+                "title": "Garanti par",
+                "about": "Ce que d'autres sandboxes disent de celui-ci",
+                "aboutBody": "Chaque garantie est signée par le sandbox qui se porte garant, et l'identité de ce sandbox la transmet à qui la lit. Elle dit qui se porte garant et de quoi, pas que c'est vrai : chaque lecteur choisit à quels garants il fait confiance.",
+                "none": "Aucun sandbox ne se porte encore garant de celui-ci.",
+                "ask": "Demander à un contact",
+                "until": "jusqu'au {date}",
+                "lapsed": "Expirée le {date} : l'identité ne la porte plus. Demandez une nouvelle garantie, ou retirez-la.",
+                "notCarried": "Absente de l'identité : {problem}",
+                "otherType": "Une attestation de type {type}",
+                "remove": "Retirer",
+                "removeAsk": "Retirer la garantie de {name} ?",
+                "removeWhat": "L'identité de ce sandbox ne la porte plus. Pour la retrouver, {name} devra se porter garant à nouveau.",
+                "removeFailed": "Impossible de retirer la garantie",
+                "contact": "Contact",
+                "pickContact": "Choisir un contact",
+                "noContacts": "Aucun contact sandbox à solliciter pour l'instant : ajoutez-en un dans Contacts.",
+                "note": "Note",
+                "send": "Demander une garantie",
+                "askFailed": "Impossible de solliciter {name}",
+                "claims": "Ce que vous garantissez",
+                "claimsHint": "Seulement ce que vous avez vérifié vous-même. Ce sandbox le signe avec sa clé, et qui lui fait confiance peut s'y fier.",
+                "validUntil": "Valable jusqu'au",
+                "sign": "Signer et envoyer",
+                "vouchFailed": "Impossible de se porter garant de {name}",
+                "vouch": "Se porter garant de ce contact",
+                "vouchShort": "Garantir",
+                "addToIdentity": "Ajouter à l'identité de ce sandbox",
+                "added": "Dans l'identité de ce sandbox",
+                "addFailed": "Impossible d'ajouter la garantie"
             }
         }
     },

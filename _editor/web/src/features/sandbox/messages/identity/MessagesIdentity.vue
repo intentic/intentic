@@ -6,15 +6,17 @@ import { computed, ref } from "vue";
 import { useTier } from "../../../../client/sandbox/useTier";
 import Fingerprint from "../../../../parts/messages/Fingerprint.vue";
 import { useMessagesApi } from "../../../../models/messages/messagesApi";
-import { useMe } from "../../../../models/messages/useMessages";
+import { attestationsServed, useMe } from "../../../../models/messages/useMessages";
+import AttestationRows from "./AttestationRows.vue";
 import DomainRows from "./DomainRows.vue";
 import RecoveryKey from "./RecoveryKey.vue";
 import { useIdentityWrite } from "./useIdentityWrite";
 
 // MESSAGES ▸ IDENTITY: what other sandboxes know this one by. Its address and the fingerprint of its key, set to be read
 // aloud to whoever adds it; the key's age and the rotation that replaces it (vouched for by the old one, every contact
-// told); the own domains it may be addressed by, each with the TXT record to publish; and, for the owner alone, the
-// recovery key that brings the identity back if the sandbox's volume is lost. A maintainer's, as the daemon floors it.
+// told); the own domains it may be addressed by, each with the TXT record to publish; what other sandboxes vouched for it;
+// and, for the owner alone, the recovery key that brings the identity back if the sandbox's volume is lost. A
+// maintainer's, as the daemon floors it.
 
 const t = useT();
 const api = useMessagesApi();
@@ -73,6 +75,7 @@ const keyLine = computed(() => {
             </RowGroup>
 
             <DomainRows :domains="me.domains" />
+            <AttestationRows v-if="attestationsServed()" />
             <RecoveryKey v-if="isOwner" :me="me" />
 
             <ConfirmDialog

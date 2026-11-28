@@ -1,5 +1,12 @@
 import { procedure } from "../protocol/route-meta.js";
-import { ApprovalIdParamSchema, ApprovalsListSchema, ApprovalSummarySchema, HookDigestParamSchema, HookRequestsSchema } from "../schemas/approvals.js";
+import {
+    ApprovalIdParamSchema,
+    ApprovalPasskeyOptionsSchema,
+    ApprovalsListSchema,
+    ApprovalUpsertSchema,
+    HookDigestParamSchema,
+    HookRequestsSchema,
+} from "../schemas/approvals.js";
 import { OkSchema } from "../schemas/shared.js";
 
 // The sandbox's approvals queue (things the agent prepared and may not do until the owner says yes). The agent
@@ -21,10 +28,24 @@ export const approvalsContract = {
             method: "POST",
             path: "/approvals",
             summary: "Approve, edit or retry one",
-            description: "All three are the same act with a different field changed, so they share one call. Send the item back as you want it.",
+            description:
+                "All three are the same act with a different field changed, so they share one call. Send the item back as you want it. Approving an action with your passkey adds `passkey`, the assertion over the challenge `passkeyOptions` gave; an item whose `cosign` is `required` is approved only that way.",
         })
-        .input(ApprovalSummarySchema)
+        .input(ApprovalUpsertSchema)
         .output(OkSchema),
+    // (2026-11-28) The passkey ceremony's options for co-signing one action's yes: its challenge binds this sandbox, the
+    // item and its performer's digest, so the signature says a person approved exactly that.
+    passkeyOptions: procedure
+        .route({
+            method: "POST",
+            path: "/approvals/{id}/passkey",
+            summary: "Start approving one with your passkey",
+            description:
+                "The passkey request for approving this action: its challenge is the digest of exactly what will be done, and only your own passkeys on this sandbox may answer it. Send the answer back with the item when approving it.",
+        })
+        .meta({ panel: false, control: "never" })
+        .input(ApprovalIdParamSchema)
+        .output(ApprovalPasskeyOptionsSchema),
     remove: procedure
         .route({
             method: "DELETE",

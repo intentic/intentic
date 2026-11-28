@@ -25,6 +25,9 @@ export const EXTENSION_WIRE = [
     "@intentic/sandbox-contract/policy/keyring-origins",
     "@intentic/sandbox-contract/policy/role-capability",
     "@intentic/sandbox-contract/protocol/doors/listener-protocol",
+    // (2026-11-28, 2.60.0) The s2s primitives and shapes, so an extension verifies a foreign sandbox's identity document
+    // and the records it signed (`verifyIdentity`, `verifyExtensionPayload`) without the daemon.
+    "@intentic/sandbox-contract/s2s",
     "@intentic/sandbox-contract/schemas/access-profiles",
     "@intentic/sandbox-contract/schemas/activity",
     "@intentic/sandbox-contract/schemas/agent",
@@ -39,6 +42,7 @@ export const EXTENSION_WIRE = [
     "@intentic/sandbox-contract/schemas/ports",
     "@intentic/sandbox-contract/schemas/public",
     "@intentic/sandbox-contract/schemas/roles",
+    "@intentic/sandbox-contract/schemas/s2s",
     "@intentic/sandbox-contract/schemas/services",
     "@intentic/sandbox-contract/schemas/share",
     "@intentic/sandbox-contract/schemas/shared",

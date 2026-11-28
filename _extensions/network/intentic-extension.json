@@ -1,0 +1,250 @@
+{
+    "$schema": "https://intentic.dev/intentic-extension.schema.json",
+    "publisher": "intentic",
+    "name": "network",
+    "version": "1.0.0",
+    "category": "work",
+    "icon": "globe",
+    "engines": {
+        "intentic": "^2.60.0"
+    },
+    "server": "dist/server.js",
+    "permissions": {
+        "daemon": [
+            "POST /agent",
+            "POST /approvals"
+        ],
+        "fires": [
+            "poll"
+        ],
+        "identity": [
+            "sign"
+        ]
+    },
+    "contributes": {
+        "views": [
+            {
+                "id": "network",
+                "label": "Network",
+                "surface": "rail"
+            }
+        ],
+        "tools": {},
+        "modelRoles": [
+            {
+                "id": "network-curator",
+                "label": "Network curator",
+                "explanation": "Reads new Network items using your rules and saves scores, summaries and labels.",
+                "icon": "globe",
+                "setup": "low"
+            }
+        ],
+        "settings": [
+            {
+                "key": "curationRules",
+                "type": "string",
+                "title": "Curation rules",
+                "default": "Prefer original, useful sources. Summarize the substance, label the topic, and score relevance from 0 to 100."
+            },
+            {
+                "key": "pollMinutes",
+                "type": "number",
+                "title": "Poll interval (minutes)",
+                "default": 30
+            },
+            {
+                "key": "retentionDays",
+                "type": "number",
+                "title": "Keep items for (days)",
+                "default": 30
+            },
+            {
+                "key": "maxItems",
+                "type": "number",
+                "title": "Maximum stored items",
+                "default": 10000
+            },
+            {
+                "key": "nostrRelays",
+                "type": "string",
+                "title": "Nostr relays (one wss:// URL per line)",
+                "default": "wss://relay.damus.io\nwss://nos.lol"
+            },
+            {
+                "key": "autoCurate",
+                "type": "boolean",
+                "title": "Curate new items by itself after a poll",
+                "default": false
+            },
+            {
+                "key": "curateBatches",
+                "type": "number",
+                "title": "Rounds of 50 items one curator run reads at most",
+                "default": 4
+            },
+            {
+                "key": "requirePasskey",
+                "type": "boolean",
+                "title": "Approving a publication needs a passkey",
+                "default": false
+            },
+            {
+                "key": "authorName",
+                "type": "string",
+                "title": "Author name on publications (empty: the sandbox's name)",
+                "default": ""
+            },
+            {
+                "key": "catalogKeywords",
+                "type": "string",
+                "title": "What this sandbox publishes about (comma-separated)",
+                "default": ""
+            },
+            {
+                "key": "catalogLanguages",
+                "type": "string",
+                "title": "Languages it publishes in (comma-separated codes)",
+                "default": ""
+            },
+            {
+                "key": "witnesses",
+                "type": "string",
+                "title": "Witnesses you trust (sandbox addresses, one a line)",
+                "default": ""
+            },
+            {
+                "key": "guides",
+                "type": "string",
+                "title": "Guides to search (sandbox addresses, one a line)",
+                "default": ""
+            },
+            {
+                "key": "trustedIssuers",
+                "type": "string",
+                "title": "Attestation issuers you trust (key fingerprints, one a line)",
+                "default": ""
+            },
+            {
+                "key": "witnessMode",
+                "type": "boolean",
+                "title": "Cosign other sandboxes' checkpoints (be a witness)",
+                "default": false
+            },
+            {
+                "key": "mirrorMode",
+                "type": "boolean",
+                "title": "Serve verified copies of the logs this sandbox follows (mirror)",
+                "default": false
+            },
+            {
+                "key": "guideMode",
+                "type": "boolean",
+                "title": "Answer searches over the catalogs this sandbox follows (guide)",
+                "default": false
+            }
+        ],
+        "automationTemplates": [
+            {
+                "id": "network-poll",
+                "title": "Read Network sources",
+                "icon": "globe",
+                "trigger": {
+                    "kind": "schedule",
+                    "cron": "*/5 * * * *",
+                    "tz": "UTC"
+                },
+                "target": {
+                    "kind": "extension",
+                    "extension": "intentic.network",
+                    "handler": "poll"
+                },
+                "prompt": "Poll due Network sources. The per-source interval and backoff decide what is read.",
+                "description": "Read enabled sources when due and retain items within your limits.",
+                "offer": "create"
+            }
+        ],
+        "publicRoutes": [
+            {
+                "path": "log/checkpoint",
+                "methods": [
+                    "GET"
+                ],
+                "rate": 120,
+                "dailyMax": "none"
+            },
+            {
+                "path": "log/entries",
+                "methods": [
+                    "GET"
+                ],
+                "rate": 120,
+                "dailyMax": "none"
+            },
+            {
+                "path": "log/proof/*",
+                "methods": [
+                    "GET"
+                ],
+                "rate": 120,
+                "dailyMax": "none"
+            },
+            {
+                "path": "catalog",
+                "methods": [
+                    "GET"
+                ],
+                "rate": 60,
+                "dailyMax": "none"
+            },
+            {
+                "path": "identity",
+                "methods": [
+                    "GET"
+                ],
+                "rate": 60,
+                "dailyMax": "none"
+            },
+            {
+                "path": "witness/cosign",
+                "methods": [
+                    "POST"
+                ],
+                "rate": 30,
+                "dailyMax": 5000,
+                "bodyMax": 16384
+            },
+            {
+                "path": "mirror/*/log/checkpoint",
+                "methods": [
+                    "GET"
+                ],
+                "rate": 120,
+                "dailyMax": "none"
+            },
+            {
+                "path": "mirror/*/log/entries",
+                "methods": [
+                    "GET"
+                ],
+                "rate": 120,
+                "dailyMax": "none"
+            },
+            {
+                "path": "mirror/*/identity",
+                "methods": [
+                    "GET"
+                ],
+                "rate": 60,
+                "dailyMax": "none"
+            },
+            {
+                "path": "guide/search",
+                "methods": [
+                    "GET"
+                ],
+                "rate": 60,
+                "dailyMax": 20000
+            }
+        ]
+    }
+}

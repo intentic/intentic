@@ -1,5 +1,6 @@
 import {
     S2S_PROTOCOL,
+    type S2sAttestation,
     type S2sIdentityPrev,
     type S2sTxtRecord,
     type SandboxIdentity,
@@ -21,6 +22,9 @@ export interface IdentityFacts {
     readonly domains: readonly string[];
     readonly recovery?: string | undefined;
     readonly issuedAt: number;
+    // What other sandboxes signed about it, as it publishes them (attestation.ts); none leaves the field out, so a sandbox
+    // with no attestations signs the very document it signed before they existed.
+    readonly attestations?: readonly S2sAttestation[] | undefined;
 }
 
 // Who vouches for a new key set: the one before it, or the recovery key.
@@ -62,6 +66,9 @@ export const signIdentity = (facts: IdentityFacts, keySet: S2sKeySet, prev?: S2s
     }
     if (prev !== undefined) {
         unsigned.prev = prev;
+    }
+    if (facts.attestations !== undefined && facts.attestations.length > 0) {
+        unsigned.attestations = [...facts.attestations];
     }
     return { ...unsigned, sig: hybridSign("identity", canonicalBytes(unsigned), secretKeysOf(keySet.secret)) };
 };

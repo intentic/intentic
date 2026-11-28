@@ -1,8 +1,26 @@
 import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { classifyIdentityChange, openEnvelope, sealEnvelope, type TxtAnswer, verifyIdentity } from "@intentic/sandbox-contract/s2s";
-import { S2sMeSchema, S2sRecoveryMintedSchema, type SandboxIdentity, SandboxIdentitySchema } from "@intentic/sandbox-contract/schemas/s2s";
+import { keySetFor } from "@intentic/sandbox-contract/protocol/s2s/s2s.testing";
+import {
+    attestationIdOf,
+    classifyIdentityChange,
+    openEnvelope,
+    sealEnvelope,
+    signAttestation,
+    type TxtAnswer,
+    uuidv7,
+    verifyAttestation,
+    verifyIdentity,
+} from "@intentic/sandbox-contract/s2s";
+import {
+    S2S_ATTESTATIONS_KEPT_MAX,
+    S2sAttestationsSchema,
+    S2sMeSchema,
+    S2sRecoveryMintedSchema,
+    type SandboxIdentity,
+    SandboxIdentitySchema,
+} from "@intentic/sandbox-contract/schemas/s2s";
 import { Hono } from "hono";
 import type { AppEnv } from "../../app-env.js";
 import { serveRawRoutes } from "../../http/raw-route-server.js";
@@ -10,12 +28,27 @@ import { identityRoutesOf } from "./identity.routes.js";
 import { createS2sIdentity, type S2sRotation } from "./s2s-identity.js";
 
 // The identity's routes over HTTP, on real files: the document every other daemon fetches, the Identity section's view,
-// an own domain from its claim through its TXT check into the document, rotation with a prev the old key signed, and a
-// recovery key shown once that brings the identity back on a sandbox whose volume was lost.
+// an own domain from its claim through its TXT check into the document, rotation with a prev the old key signed, a
+// recovery key shown once that brings the identity back on a sandbox whose volume was lost, and the attestations other
+// sandboxes signed about it, in the document while they hold.
 
 const HOST = `0123456789ab.sandbox.example`;
 const DOMAIN = `ops.acme.example`;
 const START = 1_800_000_000_000;
+const DAY = 24 * 60 * 60 * 1000;
+
+// A vouch by the named issuer about the document's sandbox and key, made at START.
+const vouchAbout = (doc: Pick<SandboxIdentity, "sandbox" | "fingerprint">, issuer = `notary`, validUntil = START + DAY) =>
+    signAttestation(
+        {
+            issuer: { sandbox: `${issuer}-sandbox`, address: `${issuer}.example`, name: issuer },
+            subject: { sandbox: doc.sandbox, address: HOST, fingerprint: doc.fingerprint },
+            claims: { kind: `organisation`, organisation: `Acme` },
+            issuedAt: START,
+            validUntil,
+        },
+        keySetFor(issuer),
+    );
 
 const setup = (root = mkdtempSync(join(tmpdir(), `s2s-identity-`))) => {
     const txt = new Map<string, TxtAnswer>();
@@ -25,6 +58,7 @@ const setup = (root = mkdtempSync(join(tmpdir(), `s2s-identity-`))) => {
     const identity = createS2sIdentity({
         keysPath,
         domainsPath: join(root, `history`, `s2s`, `identity-domains.json`),
+        attestationsPath: join(root, `history`, `s2s`, `identity-attestations.json`),
         self: () => ({ sandbox: `0123456789ab`, name: `ops`, host: HOST }),
         resolveTxt: async (name) => txt.get(name) ?? { kind: `missing` },
         now: () => clock.now,
@@ -179,4 +213,73 @@ test(`refuses a recovery key that is not one, or not this sandbox's`, async () =
     expect((await one.call(`POST`, `/s2s/me/recover`, { secret })).status).toBe(409);
     expect((await one.call(`POST`, `/s2s/me/recover`, {})).status).toBe(400);
     expect(one.rotations).toEqual([]);
+});
+
+test(`carries a vouch a person added while it holds, signs again without it once it lapses, and lists why`, async () => {
+    const { clock, call, served, identity } = setup();
+    const before = await served();
+    const vouch = vouchAbout(before);
+    const message = uuidv7(START);
+    const id = attestationIdOf(vouch);
+
+    clock.now = START + 1_000;
+    expect(await identity.addAttestation(vouch, { contact: `c-notary`, message })).toEqual({
+        attestations: [{ id, attestation: vouch, contact: `c-notary`, message, acceptedAt: START + 1_000, verified: true, published: true }],
+    });
+    const carrying = await served();
+    expect(carrying.attestations).toEqual([vouch]);
+    expect(carrying.issuedAt).toBe(START + 1_000);
+    expect(verifyIdentity(carrying)).toEqual({ ok: true });
+    expect(verifyAttestation(vouch, carrying, { now: clock.now, trustedIssuers: [keySetFor(`notary`).fingerprint] })).toEqual({ ok: true, trusted: true });
+
+    // Lapsed: the next signing leaves it out by itself; the row stays, saying why, until a person removes it.
+    clock.now = START + DAY;
+    const lapsed = await served();
+    expect(Object.keys(lapsed)).not.toContain(`attestations`);
+    expect(lapsed.issuedAt).toBe(START + DAY);
+    expect(verifyIdentity(lapsed)).toEqual({ ok: true });
+    const listed = S2sAttestationsSchema.parse((await call(`GET`, `/s2s/me/attestations`)).body);
+    expect(listed.attestations).toEqual([
+        { id, attestation: vouch, contact: `c-notary`, message, acceptedAt: START + 1_000, verified: false, problem: `it lapsed at ${new Date(START + DAY).toISOString()}`, published: false },
+    ]);
+
+    expect(await call(`DELETE`, `/s2s/me/attestations/${id}`)).toEqual({ status: 200, body: { attestations: [] } });
+    expect(await call(`DELETE`, `/s2s/me/attestations/${id}`)).toEqual({ status: 404, body: { error: `no attestation ${id} is held here` } });
+});
+
+test(`refuses a vouch about another sandbox or key, keeps one per issuer, holds at most four, and keeps one through one rotation only`, async () => {
+    const { clock, call, served, identity } = setup();
+    const before = await served();
+    clock.now = START + 1_000;
+    expect(await identity.addAttestation(vouchAbout({ ...before, sandbox: `elsewhere` }), {})).toEqual({
+        refused: `that attestation does not verify against this sandbox's identity: it is about sandbox elsewhere, not 0123456789ab`,
+        status: 409,
+    });
+
+    const issuers = Array.from({ length: S2S_ATTESTATIONS_KEPT_MAX + 1 }, (_, index) => `issuer-${index}`);
+    for (const [index, issuer] of issuers.slice(0, -1).entries()) {
+        expect(S2sAttestationsSchema.parse(await identity.addAttestation(vouchAbout(before, issuer), {})).attestations).toHaveLength(index + 1);
+    }
+    expect(await identity.addAttestation(vouchAbout(before, issuers.at(-1)), {})).toEqual({
+        refused: `this sandbox's identity already carries ${S2S_ATTESTATIONS_KEPT_MAX} attestations, as many as fit in its document: remove one first`,
+        status: 409,
+    });
+    // A renewal from an issuer already held replaces its earlier one.
+    const renewed = vouchAbout(before, `issuer-0`, START + 30 * DAY);
+    const afterRenewal = S2sAttestationsSchema.parse(await identity.addAttestation(renewed, {}));
+    expect(afterRenewal.attestations.map((row) => row.id).toSorted()).toEqual(
+        [renewed, ...issuers.slice(1, -1).map((issuer) => vouchAbout(before, issuer))].map(attestationIdOf).toSorted(),
+    );
+    expect((await served()).attestations).toHaveLength(S2S_ATTESTATIONS_KEPT_MAX);
+
+    // One rotation keeps them: the new document's prev names the key they were made for. A second leaves them behind.
+    await call(`POST`, `/s2s/me/rotate`);
+    const rotated = await served();
+    expect(rotated.attestations).toHaveLength(S2S_ATTESTATIONS_KEPT_MAX);
+    expect(verifyIdentity(rotated)).toEqual({ ok: true });
+    await call(`POST`, `/s2s/me/rotate`);
+    expect(Object.keys(await served())).not.toContain(`attestations`);
+    const listed = S2sAttestationsSchema.parse((await call(`GET`, `/s2s/me/attestations`)).body);
+    expect(listed.attestations.map((row) => [row.verified, row.published])).toEqual(Array.from({ length: S2S_ATTESTATIONS_KEPT_MAX }, () => [false, false]));
+    expect(listed.attestations[0]?.problem).toBe(`it names key ${before.fingerprint}, which is neither this sandbox's key nor the one before it: its issuer has to vouch again`);
 });

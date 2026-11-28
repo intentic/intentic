@@ -1,6 +1,7 @@
 import type { sandboxContract } from "@intentic/sandbox-contract";
 import type { Conversion, Granularity } from "@intentic/sandbox-contract/documents";
 import type { ToolEffect } from "@intentic/sandbox-contract/peer-mcp-server";
+import type { PasskeyCosign } from "@intentic/sandbox-contract/s2s";
 import type { WebhookSignatureScheme } from "@intentic/sandbox-contract/schemas/automations";
 import type { MemberTier } from "@intentic/sandbox-contract/schemas/shared";
 import type { ContractRouterClient } from "@orpc/contract";
@@ -10,6 +11,7 @@ import type {
     CiFeedEvent,
     ExecOptions,
     ExecResult,
+    IdentityReach,
     RunSettled,
     SandboxActivity,
     SleepBoot,
@@ -223,6 +225,8 @@ export interface PublicRouteVerification {
 
 // (2026-11-27) What `api.sleep` hands its callers (server-reach.ts).
 export type { SleepBoot, SleepHandler, SleepHeardMessage, SleepNotice } from "./server-reach.js";
+// (2026-11-28) What `api.identity` hands its callers (server-reach.ts).
+export type { IdentityPayload, IdentityReach, IdentitySigned, SandboxIdentity } from "./server-reach.js";
 
 // One call through a public route, path relative to /door/<id>, its door key (if any) already taken off. Return
 // `undefined` for "not mine": the host answers 404.
@@ -247,6 +251,9 @@ export interface ApprovedAction {
     // The sandbox's action rules as the daemon reads them now, organisation pins applied: a rule set to deny after the
     // yes still refuses.
     readonly actionRules: Readonly<Record<string, string>>;
+    // (2026-11-28) Their passkey over exactly this (sandbox, `id`, `digest`), when approved with one; one filed `required`
+    // checks it is here (a turn can rewrite the item) with `verifyPasskeyCosign`. Anyone may check it once published.
+    readonly cosign?: PasskeyCosign | undefined;
 }
 
 // What carrying out an approved action came to, in the three states the queue keeps apart.
@@ -484,6 +491,9 @@ export interface ExtensionServerApi {
         // platform could not say, leaving them there to ask again.
         heard(): Promise<readonly SleepHeardMessage[]>;
     };
+    // (2026-11-28) This sandbox's identity: its public document, and records signed as it with its key, which never
+    // reaches this code (server-reach.ts IdentityReach). The backend and every declared process get it.
+    readonly identity: IdentityReach;
     readonly routes: {
         // Serves this extension's route namespace; the daemon proxies /x/<id>/* here through its ordinary auth. A
         // second mount replaces the first.

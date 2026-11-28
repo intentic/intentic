@@ -81,6 +81,7 @@
                 "_extensions/google-workspace",
                 "_extensions/imap",
                 "_extensions/microsoft-365",
+                "_extensions/network",
                 "_extensions/onlyoffice",
                 "_extensions/phones",
                 "_extensions/pi-agent",

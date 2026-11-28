@@ -1,6 +1,7 @@
 import type { RawJsonInput } from "@intentic/sandbox-contract/protocol/raw/raw-json-routes";
 import { rawRouteUrl } from "@intentic/sandbox-contract/protocol/raw/raw-routes";
 import type {
+    S2sAttestations,
     S2sContact,
     S2sContactTask,
     S2sContactTasks,
@@ -34,6 +35,8 @@ export type S2sContactChangeInput = RawJsonInput<`POST /s2s/contacts/{id}`>;
 export type S2sPairedInput = RawJsonInput<`POST /s2s/contacts/paired`>;
 export type S2sPairingRequestInput = RawJsonInput<`POST /s2s/pairings`>;
 export type S2sTakeInput = RawJsonInput<`POST /s2s/messages/{id}/take`>;
+export type S2sAttestationAskInput = RawJsonInput<`POST /s2s/me/attestations/ask`>;
+export type S2sAttestationIssueInput = RawJsonInput<`POST /s2s/attestations/issue`>;
 
 export interface MessagesApi {
     readonly threads: () => Promise<S2sThreadsList>;
@@ -67,6 +70,15 @@ export interface MessagesApi {
     readonly rotate: () => Promise<S2sMe>;
     readonly mintRecovery: () => Promise<S2sRecoveryMinted>;
     readonly recover: (secret: string) => Promise<S2sMe>;
+    /** What other sandboxes vouched for and this identity carries, each checked against it: a maintainer's read. */
+    readonly attestations: () => Promise<S2sAttestations>;
+    /** Adds the vouch a contact's `attestation.issued` message carried, once it verifies here. */
+    readonly acceptAttestation: (message: string) => Promise<S2sAttestations>;
+    readonly removeAttestation: (id: string) => Promise<S2sAttestations>;
+    /** Asks a sandbox contact to vouch for this sandbox. */
+    readonly askVouch: (ask: S2sAttestationAskInput) => Promise<S2sMessageSendOutcome>;
+    /** Vouches for a sandbox contact, signed by this sandbox's key, and sends it. */
+    readonly issueVouch: (issue: S2sAttestationIssueInput) => Promise<S2sMessageSendOutcome>;
 }
 
 const sandboxMessagesApi: MessagesApi = {
@@ -101,6 +113,11 @@ const sandboxMessagesApi: MessagesApi = {
     rotate: () => sandboxRaw(`POST /s2s/me/rotate`),
     mintRecovery: () => sandboxRaw(`POST /s2s/me/recovery`),
     recover: (secret) => sandboxRaw(`POST /s2s/me/recover`, { input: { secret } }),
+    attestations: () => sandboxRaw(`GET /s2s/me/attestations`),
+    acceptAttestation: (message) => sandboxRaw(`POST /s2s/me/attestations`, { input: { message } }),
+    removeAttestation: (id) => sandboxRaw(`DELETE /s2s/me/attestations/{id}`, { params: { id } }),
+    askVouch: (ask) => sandboxRaw(`POST /s2s/me/attestations/ask`, { input: ask }),
+    issueVouch: (issue) => sandboxRaw(`POST /s2s/attestations/issue`, { input: issue }),
 };
 
 export const MESSAGES_API: InjectionKey<MessagesApi> = Symbol.for(`intentic.messages-api`);
