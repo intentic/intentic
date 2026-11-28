@@ -24,9 +24,14 @@ const renderButton = jest.fn<() => Promise<boolean>>().mockResolvedValue(true);
 const cancelSignIn = jest.fn();
 jest.mock(`../../../client/auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ needsSignIn, renderButton, cancelSignIn }) }));
 jest.mock(`../../../client/auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+// The sandbox the prompts below are for, as the platform lists it: its name is the card's title.
+const SANDBOX = { id: `sb-1`, name: `acme-shop`, image: null, color: null };
 // A sandbox still being set up unless a test says it has answered before (`lastSeenAt`).
-const activeSandbox = ref<{ tier: string; lastSeenAt?: string | null; removedAt?: string | null } | undefined>({ tier: `owner` });
-jest.mock(`../../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox }) }));
+type ActiveRow = typeof SANDBOX & { tier: string; lastSeenAt?: string | null; removedAt?: string | null };
+const activeSandbox = ref<ActiveRow | undefined>({ ...SANDBOX, tier: `owner` });
+jest.mock(`../../../client/sandbox/useSandbox`, () => ({
+    useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox, sandboxes: ref([SANDBOX]) }),
+}));
 
 const signInThroughBrowser = jest.fn();
 const desktopVersion = jest.fn<() => string | undefined>();
@@ -68,8 +73,9 @@ const mount = async (): Promise<HTMLElement> => {
     return el;
 };
 
+// By what it says or, for a compact one ("Passkey"), the name it gives a screen reader ("Use a passkey").
 const buttonSaying = (text: string): HTMLButtonElement | undefined =>
-    [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(text));
+    [...document.querySelectorAll(`button`)].find((button) => button.textContent?.includes(text) === true || button.getAttribute(`aria-label`)?.includes(text) === true);
 
 const settle = async (): Promise<void> => {
     await new Promise((resolve) => setTimeout(resolve));
@@ -80,7 +86,7 @@ beforeEach(() => {
     push.mockReset();
     cancelSignIn.mockReset();
     needsSignIn.value = true;
-    activeSandbox.value = { tier: `owner` };
+    activeSandbox.value = { ...SANDBOX, tier: `owner` };
     renderButton.mockClear().mockResolvedValue(true);
     signInThroughBrowser.mockReset();
     desktopVersion.mockReset().mockReturnValue(undefined);
@@ -95,6 +101,25 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
+});
+
+// 2026-11-28, the owner: "a G icon and 'sign in' three times". The card is titled by what it opens, shows the account
+// once, and leaves the words "sign in" to the dialog's accessible name.
+it(`names the sandbox it opens and the account once, and never says "sign in" on the card`, async () => {
+    void raiseSignIn({ kind: `choose`, target: TARGET, passkey: false });
+    const el = await mount();
+
+    expect([...el.querySelectorAll(`h2`)].map((heading) => heading.textContent?.trim())).toEqual([`acme-shop`]);
+    expect(el.querySelector(`[role="dialog"]`)?.getAttribute(`aria-label`)).toBe(`Sign in to acme-shop`);
+    expect(el.textContent?.split(`owner@example.com`)).toHaveLength(2);
+    expect(el.textContent).not.toMatch(/sign in/iu);
+});
+
+it(`calls a sandbox the platform does not list "your sandbox"`, async () => {
+    void raiseSignIn({ kind: `choose`, target: { ...TARGET, sandboxId: undefined }, passkey: false });
+    const el = await mount();
+
+    expect(el.querySelector(`h2`)?.textContent?.trim()).toBe(`Sign in to your sandbox`);
 });
 
 it(`hands sign-in to the real browser inside the desktop app`, async () => {
@@ -160,7 +185,7 @@ it(`the step-up asks for the passkey held, with no Google button in sight`, asyn
     const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: sameBearer(`google-proof`) });
     const el = await mount();
 
-    expect(el.textContent).toContain(`Confirm it's you`);
+    expect(el.textContent).toContain(`This sandbox also asks for your passkey.`);
     expect(renderButton).not.toHaveBeenCalled();
     signInWithPasskey.mockResolvedValue(SESSION);
     buttonSaying(`Use your passkey`)?.click();
@@ -173,7 +198,7 @@ it(`the step-up for someone with no passkey yet walks through adding the first, 
     needsSignIn.value = false;
     const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: false, bearer: sameBearer(`google-proof`) });
     const el = await mount();
-    expect(el.textContent).toContain(`Add a passkey to continue`);
+    expect(el.textContent).toContain(`This sandbox requires a passkey.`);
 
     const field = el.querySelector(`input[placeholder^="Name it"]`) as HTMLInputElement;
     field.value = `work laptop`;
@@ -206,7 +231,7 @@ it(`a refused ceremony is said on the card and the prompt stands, so the person 
 
 it(`only the owner is offered a recovery code, and it is spent under the proof that was taken`, async () => {
     needsSignIn.value = false;
-    activeSandbox.value = { tier: `collaborator` };
+    activeSandbox.value = { ...SANDBOX, tier: `collaborator` };
     void raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: sameBearer(`google-proof`) });
     let el = await mount();
     expect(el.textContent).not.toContain(`recovery code`);
@@ -214,10 +239,13 @@ it(`only the owner is offered a recovery code, and it is spent under the proof t
     app?.unmount();
     document.body.innerHTML = ``;
 
-    activeSandbox.value = { tier: `owner` };
+    activeSandbox.value = { ...SANDBOX, tier: `owner` };
     const outcome = raiseSignIn({ kind: `step-up`, target: TARGET, enrolled: true, bearer: sameBearer(`google-proof`) });
     el = await mount();
-    expect(el.textContent).toContain(`recovery code`);
+    // Folded behind a quiet link until it is wanted.
+    expect(el.querySelector(`input[placeholder^="xxxxx"]`)).toBeNull();
+    buttonSaying(`Use a recovery code`)?.click();
+    await nextTick();
     const field = el.querySelector(`input[placeholder^="xxxxx"]`) as HTMLInputElement;
     field.value = `abcde-fghjk-mnpqr-stuvw`;
     field.dispatchEvent(new Event(`input`));
@@ -245,7 +273,7 @@ it(`back to setup settles both roads with nothing`, async () => {
 // saying its container was cleaned up. A working sandbox's reader is offered "Not now" and stays where they are.
 describe(`the way out of the wall`, () => {
     it(`is "Not now" on a sandbox that has answered before, and goes nowhere`, async () => {
-        activeSandbox.value = { tier: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
+        activeSandbox.value = { ...SANDBOX, tier: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
         await mount();
 
         expect(buttonSaying(`Back to setup`)).toBeUndefined();
@@ -257,7 +285,7 @@ describe(`the way out of the wall`, () => {
     });
 
     it(`is "Back to setup" on a sandbox that never answered`, async () => {
-        activeSandbox.value = { tier: `owner`, lastSeenAt: null, removedAt: null };
+        activeSandbox.value = { ...SANDBOX, tier: `owner`, lastSeenAt: null, removedAt: null };
         await mount();
 
         expect(buttonSaying(`Not now`)).toBeUndefined();
@@ -271,15 +299,15 @@ describe(`the way out of the wall`, () => {
 // The desktop window used to stay exactly as it was while the sign-in ran in the browser.
 it(`shows one browser instruction after handoff, with a quiet browser link and one way out`, async () => {
     desktopVersion.mockReturnValue(`1.2.3`);
-    activeSandbox.value = { tier: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
+    activeSandbox.value = { ...SANDBOX, tier: `owner`, lastSeenAt: `2026-09-28T08:44:00Z`, removedAt: null };
     const outcome = raiseSignIn({ kind: `choose`, target: TARGET, passkey: true });
     const el = await mount();
 
     buttonSaying(`Continue with Google`)?.click();
     await nextTick();
 
-    expect([...el.querySelectorAll(`h2`)].map((heading) => heading.textContent?.trim())).toEqual([`Continue in your browser`]);
-    expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`You’ll return here automatically.`);
+    expect([...el.querySelectorAll(`h2`)].map((heading) => heading.textContent?.trim())).toEqual([`acme-shop`]);
+    expect(el.querySelector(`[role="status"]`)?.textContent).toContain(`Finish in your browser.`);
     expect(el.textContent).toContain(`owner@example.com`);
     expect([...el.querySelectorAll(`button`)].map((button) => button.textContent?.trim())).toEqual([`Open browser`, `Not now`]);
     buttonSaying(`Open browser`)?.click();
@@ -295,7 +323,7 @@ it(`shows one browser instruction after handoff, with a quiet browser link and o
     await expect(outcome).resolves.toBeUndefined();
 });
 
-/* THE EMAIL ROAD: "Continue as", spending the platform's identity assertion, and what stops it, said by name. */
+/* THE EMAIL ROAD: "Continue" (or "Email" beside Google), spending the platform's identity assertion, and what stops it, said by name. */
 
 describe(`an account that signs in by email`, () => {
     const spend = jest.fn<() => Promise<{ session: DaemonSession } | { stepUp: { error: string; requires: `passkey`; enrolled: boolean }; bearer: () => Promise<string> }>>();
@@ -307,15 +335,14 @@ describe(`an account that signs in by email`, () => {
         spend.mockReset();
     });
 
-    it(`puts the wall up with no Google surface at all, and "Continue as" settles the prompt`, async () => {
+    it(`puts the wall up with no Google surface at all, and "Continue" settles the prompt`, async () => {
         const outcome = raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: offered() });
-        const el = await mount();
+        await mount();
 
-        expect(el.textContent).toContain(`intentic confirms your address to the sandbox`);
         expect(renderButton).not.toHaveBeenCalled();
         expect(buttonSaying(`Continue with Google`)).toBeUndefined();
         spend.mockResolvedValue({ session: SESSION });
-        buttonSaying(`Continue as ana@corp.example`)?.click();
+        buttonSaying(`Continue`)?.click();
         await settle();
 
         expect(spend).toHaveBeenCalledTimes(1);
@@ -328,7 +355,7 @@ describe(`an account that signs in by email`, () => {
         await mount();
 
         expect(buttonSaying(`Continue with Google`)).toBeUndefined();
-        expect(buttonSaying(`Continue as ana@corp.example`)).toEqual(expect.any(HTMLButtonElement));
+        expect(buttonSaying(`Continue`)).toEqual(expect.any(HTMLButtonElement));
     });
 
     it(`says what the last assertion met before anything is pressed`, async () => {
@@ -342,11 +369,11 @@ describe(`an account that signs in by email`, () => {
         const outcome = raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: offered() });
         const el = await mount();
         spend.mockRejectedValue(new Error(`This sandbox's owner hasn't let you sign in to it with an email code. Ask them to turn it on for you.`));
-        buttonSaying(`Continue as ana@corp.example`)?.click();
+        buttonSaying(`Continue`)?.click();
         await settle();
 
         expect(el.textContent).toContain(`Ask them to turn it on for you.`);
-        expect(buttonSaying(`Continue as ana@corp.example`)).toEqual(expect.any(HTMLButtonElement));
+        expect(buttonSaying(`Continue`)).toEqual(expect.any(HTMLButtonElement));
         dismissSignIn();
         await expect(outcome).resolves.toBeUndefined();
     });
@@ -357,10 +384,10 @@ describe(`an account that signs in by email`, () => {
         const outcome = raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: offered() });
         const el = await mount();
         spend.mockResolvedValue({ stepUp: { error: `this sandbox requires a passkey`, requires: `passkey`, enrolled: true }, bearer: async () => `pa1.fresh` });
-        buttonSaying(`Continue as ana@corp.example`)?.click();
+        buttonSaying(`Continue`)?.click();
         await settle();
 
-        expect(el.textContent).toContain(`Confirm it's you`);
+        expect(el.textContent).toContain(`This sandbox also asks for your passkey.`);
         signInWithPasskey.mockResolvedValue(SESSION);
         buttonSaying(`Use your passkey`)?.click();
         await settle();
@@ -370,12 +397,12 @@ describe(`an account that signs in by email`, () => {
 
     // app-plane.md: an older path is never taken silently. The gap is named, with who closes it.
     it(`names a daemon too old for email sign-in, and who can update it`, async () => {
-        activeSandbox.value = { tier: `collaborator`, lastSeenAt: `2026-10-01T12:00:00.000Z` };
+        activeSandbox.value = { ...SANDBOX, tier: `collaborator`, lastSeenAt: `2026-10-01T12:00:00.000Z` };
         void raiseSignIn({ kind: `choose`, target: TARGET, passkey: false, withoutGoogle: true, email: { kind: `outdated`, address: `ana@corp.example` } });
         const el = await mount();
 
         expect(el.textContent).toContain(`This sandbox needs an update before it accepts email sign-in. Ask its owner to update it.`);
-        expect(buttonSaying(`Continue as`)).toBeUndefined();
+        expect(buttonSaying(`Continue`)).toBeUndefined();
     });
 
     it(`sits beside Google's own button for an account that has both`, async () => {
@@ -384,6 +411,6 @@ describe(`an account that signs in by email`, () => {
         await mount();
 
         expect(renderButton).toHaveBeenCalledTimes(1);
-        expect(buttonSaying(`Continue as ana@corp.example`)).toEqual(expect.any(HTMLButtonElement));
+        expect(buttonSaying(`Continue with email`)).toEqual(expect.any(HTMLButtonElement));
     });
 });

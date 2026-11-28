@@ -57,7 +57,9 @@ jest.mock(`../../client/auth/useAuth`, () => ({
         signInWithGoogleCredential: jest.fn(),
     }),
 }));
-jest.mock(`../../client/sandbox/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined) }) }));
+jest.mock(`../../client/sandbox/useSandbox`, () => ({
+    useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined), sandboxes: ref([]) }),
+}));
 jest.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff: jest.fn() } } }));
 
 const { default: Login } = await import("./Login.vue");
