@@ -1,6 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { withTimeout } from "@intentic/base/async";
+import { SETTLES } from "@intentic/testing/bun";
 import { pino } from "pino";
 import { createApp } from "../../app.js";
 import { services } from "../../harness/route-services.testing.js";
@@ -54,22 +56,17 @@ const sandbox = async () => {
     return { app, as, id, token, withToken };
 };
 
-// True once the stream has ended; false while it is still open, when `done` accepts what arrived or the time runs out.
-const readUntil = async (reader: ReadableStreamDefaultReader<Uint8Array>, done: (text: string) => boolean, ms: number): Promise<boolean> => {
+const readUntil = async (reader: ReadableStreamDefaultReader<Uint8Array>, matches: (text: string) => boolean): Promise<"closed" | "matched"> => {
     const decoder = new TextDecoder();
     let text = "";
-    const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), ms));
     for (;;) {
-        const next = await Promise.race([reader.read(), timeout]);
-        if (next === "timeout") {
-            return false;
-        }
+        const next = await reader.read();
         if (next.done) {
-            return true;
+            return "closed";
         }
         text += decoder.decode(next.value, { stream: true });
-        if (done(text)) {
-            return false;
+        if (matches(text)) {
+            return "matched";
         }
     }
 };
@@ -95,12 +92,17 @@ test("revoking a control token cuts the event stream it holds open, not only its
     const stream = await app.request("/events", { headers: { "x-intentic-control": token } });
     expect(stream.status).toBe(200);
     const reader = stream.body!.getReader();
-    // Every frame after hello comes from the loop, which starts only once the stream is registered.
-    expect(await readUntil(reader, (text) => text.split("data:").length > 2, 5_000)).toBe(false);
+    try {
+        // The event after hello comes from the loop, which starts only once the stream is registered.
+        const ready = readUntil(reader, (text) => (text.match(/^data:/gm)?.length ?? 0) >= 2);
+        expect(await withTimeout(ready, SETTLES.timeout, "the stream did not send an event after hello")).toBe("matched");
 
-    expect((await as("tok-owner", "DELETE", `/system/control/tokens/${id}`)).status).toBe(200);
+        expect((await as("tok-owner", "DELETE", `/system/control/tokens/${id}`)).status).toBe(200);
 
-    // Ends well inside a heartbeat or two; a stream nobody cut would beat every 2s for as long as the test waited.
-    expect(await readUntil(reader, () => false, 5_000)).toBe(true);
-    expect((await app.request("/events", { headers: { "x-intentic-control": token } })).status).toBe(401);
+        const closed = readUntil(reader, () => false);
+        expect(await withTimeout(closed, SETTLES.timeout, "the revoked stream stayed open")).toBe("closed");
+        expect((await app.request("/events", { headers: { "x-intentic-control": token } })).status).toBe(401);
+    } finally {
+        await reader.cancel();
+    }
 });

@@ -3,7 +3,7 @@ import { Button, Notice, type NoticeModel, Picker, type PickerOption, RowNote, u
 import { formatBytes } from "@intentic/ui/format";
 import { useT } from "@intentic/ui/i18n";
 import { computed, ref, useTemplateRef } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink } from "vue-router";
 import { messagesPath } from "../../../../models/sandbox/sandboxNav";
 import { messageable } from "../../../../models/messages/messagesView";
 import { useContacts } from "../../../../models/messages/useMessages";
@@ -24,7 +24,6 @@ const props = defineProps<{
 const emit = defineEmits<{ started: [thread: string]; cancel: [] }>();
 
 const t = useT();
-const router = useRouter();
 const fresh = computed(() => props.thread === undefined);
 
 const { contacts } = useContacts();
@@ -75,7 +74,7 @@ const notice = computed((): NoticeModel | undefined => {
     <RowNote v-if="fresh && reachable.length === 0" variant="empty">
         <div class="flex flex-col items-center gap-3">
             <span>{{ t(`sandbox.messages.composer.noContacts`) }}</span>
-            <Button tier="accent" size="small" :label="t(`sandbox.messages.composer.openContacts`)" @click="router.push(messagesPath(`contacts`))" />
+            <Button :as="RouterLink" :to="messagesPath(`contacts`)" tier="accent" size="small" :label="t(`sandbox.messages.composer.openContacts`)" />
         </div>
     </RowNote>
     <form v-else class="flex flex-col gap-2 rounded-xl border border-line-subtle bg-card p-3" data-composer @submit.prevent="submit">

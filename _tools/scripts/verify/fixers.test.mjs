@@ -68,7 +68,7 @@ test("a derived file is written again only for its own sources, and counts only 
     }
 });
 
-test("extension settings refresh the wire lock, and a changed recipe refreshes it too", () => {
+test("extension schemas, SDK snapshots and generator changes refresh the wire lock", () => {
     const root = mkdtempSync(join(tmpdir(), "derived-contract-"));
     const contract = join(root, "_shared/sandbox-contract");
     const out = join(contract, "contract.lock.json");
@@ -77,7 +77,12 @@ test("extension settings refresh the wire lock, and a changed recipe refreshes i
         mkdirSync(join(contract, "scripts"), { recursive: true });
         writeFileSync(join(contract, "scripts/write-lock.mjs"), `import { writeFileSync } from "node:fs";\nwriteFileSync("contract.lock.json", "updated\\n");\n`);
         assert.deepEqual(writeDerived(root, ["_shared/extension-manifest/README.md"]), []);
-        for (const source of ["_shared/extension-manifest/src/points/settings.ts", "_shared/sandbox-contract/scripts/write-lock.mjs", "_tools/scripts/verify/fixers.mjs"]) {
+        for (const source of [
+            "_shared/extension-manifest/src/points/settings.ts",
+            "_shared/extension-api/src/surface.json",
+            "_shared/sandbox-contract/scripts/write-lock.mjs",
+            "_tools/scripts/verify/fixers.mjs",
+        ]) {
             rmSync(out, { force: true });
             assert.deepEqual(writeDerived(root, [source]), ["contract lock"]);
             assert.equal(readFileSync(out, "utf8"), "updated\n");

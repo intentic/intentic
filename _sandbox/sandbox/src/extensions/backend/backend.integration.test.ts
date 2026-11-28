@@ -13,7 +13,7 @@ import { testConfig } from "../../env.config.testing.js";
 import { workspaceExtensionsRoot } from "../../capabilities/extension-dirs.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { approveExtension } from "../../capabilities/extension-inventory/extension-approvals.js";
-import { createExtensionBackend, type ExtensionBackend, type ExtensionBackendOptions } from "./backend-supervisor.js";
+import { createExtensionBackend, type ExtensionBackend } from "./backend-supervisor.js";
 import { extensionMcpToolsOf } from "./extension-mcp.js";
 import { performApprovedAction, publishApprovedPost } from "../../approvals/approval-performers.js";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract/schemas/settings";
@@ -80,7 +80,6 @@ const writeExtension = async (root: string, name: string, server: string, approv
 const harness = (
     root: string,
     capabilities: readonly Capability[] = [],
-    options?: ExtensionBackendOptions,
 ): { svc: Services; backend: ExtensionBackend } => {
     const holder: { current?: Services } = {};
     const backend = createExtensionBackend(
@@ -88,7 +87,6 @@ const harness = (
         0,
         // the test host's forwarded lines are noise unless it fails
         { info: () => {}, warn: console.warn, error: console.error } as unknown as Services["logger"],
-        options,
     );
     const svc = services({
         workspace: workspacePaths(root),
@@ -422,16 +420,17 @@ test("a host that never answers /health is killed and retried, and comes up once
     const root = mkdtempSync(join(tmpdir(), "ext-backend-hang-"));
     const pidFile = join(root, "host.pid");
     await writeExtension(root, "echo", hangingServer(pidFile));
-    const { backend } = harness(root, [], { healthTimeoutMs: 2_000 });
+    // Use the real startup deadline so the child has time to reach activation on a busy runner.
+    const { backend } = harness(root);
     await backend.start();
 
     expect(backend.status()).toMatchObject({ state: "error", detail: expect.stringContaining("did not become healthy") });
     expect(backend.proxyTarget()).toBeUndefined();
     const hung = Number(await readFile(pidFile, "utf8"));
-    expect(await pollUntil(() => !alive(hung), { intervalMs: 100, timeoutMs: 8_000 })).toBe(true);
 
     // Nothing calls restart(): the retry the timeout scheduled is what finds the fixed bundle and brings it up.
     await writeFile(join(workspaceExtensionsRoot(root), "echo", "server.js"), echoServer);
+    expect(await pollUntil(() => !alive(hung), { intervalMs: 100, timeoutMs: 8_000 })).toBe(true);
     expect(await pollUntil(() => backend.status().state === "running", { intervalMs: 100, timeoutMs: 30_000 })).toBe(true);
     expect(backend.statusOf("acme.echo")).toEqual({ id: "acme.echo", state: "running" });
 }, 60_000);

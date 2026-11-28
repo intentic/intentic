@@ -27869,7 +27869,7 @@
                     "TerminalSessionSchema",
                     "TerminalsListSchema"
                 ],
-                "schemas": "65b985c421c50221e30338485053d6a86004234c23dd01d871ecf7de79e6236d"
+                "schemas": "d82503798bfeb98cb08b158c862cc57c6b24d70ceb88e861653ec6a9674e3c39"
             },
             "@intentic/sandbox-contract/schemas/workspace/workspace-graph": {
                 "exports": [

@@ -154,7 +154,7 @@
 // asking to become one), held to the owner's floor for a contact request, which holds by default; the daemon's own
 // `s2s` source (what other sandboxes send) declares it. A trigger source's `strangers` and an agent's needs carry it
 // too (a `contact` need, raised when an agent would make or accept a contact). Additive: a manifest without it is
-// unchanged. The recorded surface grows the manifest schema and the wire's agents and automations schemas.
+// unchanged. The recorded surface grows the manifest schema and the wire's agents, automations and terminal schemas.
 // 2.60.0 (2026-11-28) lets an extension sign as this sandbox and carry out an approval a person co-signed with a passkey.
 // `api.identity.document()` answers the sandbox's public identity document (`GET /extension/identity`, undeclared), and
 // `api.identity.sign(purpose, payload)` has the daemon sign a JSON record with the sandbox's key, which the extension
