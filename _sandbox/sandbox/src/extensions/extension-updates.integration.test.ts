@@ -236,8 +236,11 @@ test("the sandbox's switch holds every extension without an answer of its own, a
 
     // Not at the next check: the switch itself looks at the update already waiting.
     await client.extensions.setUpdateDefaults({ updates: "auto" });
-    await waitFor(async () => expect(await installedVersion(workspace.root)).toBe("1.0.1"), SETTLES);
-    expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.health?.automatic).toBe(true);
+    // The background update swaps the checkout before it writes the health record.
+    await waitFor(async () => {
+        expect((await readExtensionUpdateState(workspace.root)).extensions["acme.demo"]?.health?.automatic).toBe(true);
+    }, SETTLES);
+    expect(await installedVersion(workspace.root)).toBe("1.0.1");
 });
 
 test("a release held for its powers stays held pass after pass; one that failed to take is tried again", async () => {
