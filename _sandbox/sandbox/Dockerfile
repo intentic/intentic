@@ -33,12 +33,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates procps tmux zsh ncurses-term curl openssh-server openssh-client sshpass rsync iproute2 python3 python3-pip python3-venv python-is-python3 python3-yaml python3-pil make g++ bubblewrap libjemalloc2
 # Standalone binaries must support both sandbox architectures without newer system libraries.
-ARG RIPGREP_VERSION=15.2.0
+ARG RIPGREP_VERSION=16.0.0
 ARG JQ_VERSION=1.8.2
 RUN set -eu; arch="$(dpkg --print-architecture)"; \
     case "$arch" in \
-      amd64) target=x86_64-unknown-linux-musl; rg_sha=33e15bcf1624b25cdd2a55813a47a2f95dbe126268203e76aa6a585d1e7b149c; jq_sha=b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f ;; \
-      arm64) target=aarch64-unknown-linux-musl; rg_sha=800b1e7206afe799dfb5a6901f23147cfaabe0e52210538100f61e86e1740915; jq_sha=8b85c817833814ddca00a144c33705546355afccf0cf39b188f3cdb48b852309 ;; \
+      amd64) target=x86_64-unknown-linux-musl; rg_sha=54268ab4643c00a290a29b0086066d64b3f56236dd805ec64629a86f9bd29fd0; jq_sha=b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f ;; \
+      arm64) target=aarch64-unknown-linux-musl; rg_sha=374f1886be881e8e8683d7107278f7af1b6017fda75eb97de71f5783f42b0110; jq_sha=8b85c817833814ddca00a144c33705546355afccf0cf39b188f3cdb48b852309 ;; \
       *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/BurntSushi/ripgrep/releases/download/${RIPGREP_VERSION}/ripgrep-${RIPGREP_VERSION}-${target}.tar.gz" -o /tmp/ripgrep.tar.gz; \
@@ -161,7 +161,7 @@ RUN --mount=type=cache,target=/root/.npm \
 # this spot with a `zrok2` binary that WAS the reachability fabric; that fabric is the platform's own edge now,
 # which the daemon dials over an outbound WebSocket with no binary to install (sandbox-contract/ingress-contract.ts).
 # Placed HERE, before the tree COPYs below, so the layer stays cache-stable across source changes.
-ARG CLOUDFLARED_VERSION=2026.11.1
+ARG CLOUDFLARED_VERSION=2026.11.2
 RUN arch="$(dpkg --print-architecture)" \
     && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${arch}" -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
