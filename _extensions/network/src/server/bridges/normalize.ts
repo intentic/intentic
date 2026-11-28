@@ -5,9 +5,23 @@ export const plain = (html: string, limit = 100000): string => {
     let result = "";
     let hidden = 0;
     const parser = new Parser({
-        onopentag(name) { if (["script", "style", "template"].includes(name)) {hidden++;} else if (!hidden && ["p", "div", "br", "li"].includes(name)) {result += "\n";} },
-        onclosetag(name) { if (["script", "style", "template"].includes(name) && hidden) {hidden--;} },
-        ontext(text) { if (!hidden && result.length < limit) {result += text;} },
+        onopentag(name) {
+            if (["script", "style", "template"].includes(name)) {
+                hidden++;
+            } else if (hidden === 0 && ["p", "div", "br", "li"].includes(name)) {
+                result += "\n";
+            }
+        },
+        onclosetag(name) {
+            if (["script", "style", "template"].includes(name) && hidden > 0) {
+                hidden--;
+            }
+        },
+        ontext(text) {
+            if (hidden === 0 && result.length < limit) {
+                result += text;
+            }
+        },
     }, { decodeEntities: true });
     parser.end(html);
     return result.replaceAll(/\n{3,}/gu, "\n\n").trim().slice(0, limit);

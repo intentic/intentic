@@ -90,6 +90,8 @@ export const parseFeed = (body: string, sourceUrl: string): BridgeItem[] => {
     const feed = children(tree, "feed")[0];
     const channel = children(children(tree, "rss")[0] ?? tree, "channel")[0];
     const container = feed ?? channel;
-    if (!container) {throw new Error("Expected RSS 2.0, Atom or JSON Feed");}
+    if (container === undefined) {
+        throw new Error("Expected RSS 2.0, Atom or JSON Feed");
+    }
     return children(container, feed ? "entry" : "item").slice(0, 100).map((entry) => xmlItem(entry, { feed, channel, sourceUrl }));
 };

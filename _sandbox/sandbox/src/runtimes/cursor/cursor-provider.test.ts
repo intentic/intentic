@@ -79,7 +79,7 @@ const planned = async (granted: readonly Capability[], overrides: Partial<Servic
 };
 
 // Core and built-in extension servers mounted through the daemon's door.
-const DOOR = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code", "gate", "terminal", "chatgpt", "pipelines", "product-health"]);
+const DOOR = new Set(["ui", "accounts", "secrets", "subagents", "watch", "deps", "diagnostics", "code", "gate", "terminal", "chatgpt", "network", "pipelines", "product-health"]);
 const own = (request: AgentRequest) => request.tools.remote?.filter((tool) => !DOOR.has(tool.name));
 
 beforeEach(() => {
@@ -141,6 +141,7 @@ test("a sandbox with nothing connected still carries the daemon's own servers, n
     const names = (request.tools.remote ?? []).map((tool) => tool.name);
     expect(own(request)).toEqual([]);
     expect(names).toContain("diagnostics");
+    expect(names).toContain("network");
     expect(names).toContain("product-health");
     expect(names.filter((name) => ["ui", "code", "subagents"].includes(name))).toEqual([]);
     expect(Object.keys(request.hooks)).toContain("relay");

@@ -159,6 +159,7 @@ test("the extension list carries every first-party extension, compiled-in UI one
         "intentic.google-workspace",
         "intentic.imap",
         "intentic.microsoft-365",
+        "intentic.network",
         "intentic.onlyoffice",
         "intentic.phones",
         "intentic.pi-agent",

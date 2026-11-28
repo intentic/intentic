@@ -20,7 +20,7 @@ const state = {
     // The daemon's extension list, as a thunk so a test can hold the answer and stage a switch mid-pass.
     list: (): Promise<ProcedureOutput<`extensions.list`>> => Promise.resolve({ extensions: [], invalid: [], pending: [] }),
     // What runActivate awaits before it registers: the seam the overtaking test squeezes into.
-    settingsLoad: (): Promise<void> => Promise.resolve(),
+    settingsLoad: (_id: string): Promise<void> => Promise.resolve(),
 };
 
 jest.mock(`../apiImpl`, () => ({
@@ -33,7 +33,7 @@ jest.mock(`../apiImpl`, () => ({
 }));
 jest.mock(`../builtins`, () => ({ builtinModules: state.builtins }));
 jest.mock(`../../features/extensions/useExtensionSettings`, () => ({
-    extensionSettingsStore: () => ({ load: () => state.settingsLoad() }),
+    extensionSettingsStore: (id: string) => ({ load: () => state.settingsLoad(id) }),
 }));
 jest.mock(`../../client/sandbox/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { list: () => state.list() } }) }));
 jest.mock(`../../client/sandbox/sandboxClient`, () => ({
@@ -112,6 +112,23 @@ test(`an ordinary pass activates what the sandbox lists and reports it as final`
     expect(state.activated).toEqual([`maintenance`]);
     expect(extensionsLoaded.value).toBe(true);
     expect(extensionStatuses.value.map((status) => status.state)).toEqual([`active`]);
+});
+
+test(`a compiled-in extension omitted by the sandbox activates without a settings request`, async () => {
+    const listed = compiled(`maintenance`, true);
+    compiled(`network`, true);
+    state.list = () => Promise.resolve({ extensions: [listed], invalid: [], pending: [] });
+    const loaded = jest.fn<(id: string) => Promise<void>>().mockResolvedValue(undefined);
+    state.settingsLoad = loaded;
+
+    await loadExtensions(bindings);
+
+    expect(loaded.mock.calls).toEqual([[`maintenance`]]);
+    expect(state.activated.toSorted()).toEqual([`intentic.network`, `maintenance`]);
+    expect(extensionStatuses.value.map((status) => ({ id: status.id, state: status.state }))).toEqual([
+        { id: `maintenance`, state: `active` },
+        { id: `intentic.network`, state: `unlisted` },
+    ]);
 });
 
 // A relocale retires too (useExtensionHost), so what the extensions hold for this sandbox is left to the switch itself

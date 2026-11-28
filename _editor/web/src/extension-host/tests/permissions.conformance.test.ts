@@ -259,6 +259,7 @@ jest.mock(`../sandboxUsage`, () => ({
     recordSandboxCall: (_id: string, _permissions: readonly string[], method: string, path: string) => void judged.calls.push(`${method} ${path}`),
 }));
 const { createExtensionApi, deactivateAllExtensions } = await import("../apiImpl");
+const { extensionSettingsStore } = await import("../../features/extensions/useExtensionSettings");
 const { queryClient } = await import("../../lib/queryPersistence");
 const { rpcKey } = await import("../../lib/queryKeys");
 
@@ -304,6 +305,22 @@ test(`only the older Pipelines manifest grants the legacy board routes`, async (
     expect(await doorOutcome(() => previous.sandbox.rpc.ci.runs())).toBe(reads[0]);
     expect(await doorOutcome(() => previous.sandbox.rpc.ci.jobs({ repo: `demo`, runId: 1 }))).toBe(reads[1]);
     expect(hostApiOf(current, false).backend.available).toBeUndefined();
+});
+
+test(`an unlisted extension uses its manifest defaults instead of settings from another sandbox`, async () => {
+    const manifest = manifestOf(`network`);
+    const store = extensionSettingsStore(extensionIdOf(manifest));
+    const previous = store.values.value;
+    try {
+        store.values.value = { autoCurate: true };
+        expect(hostApiOf(manifest).settings.get(`autoCurate`)).toBe(true);
+
+        const fallback = hostApiOf(manifest, false).settings;
+        expect(fallback.get(`autoCurate`)).toBe(false);
+        await expect(fallback.set(`autoCurate`, true)).rejects.toThrow(`cannot be saved until the sandbox lists extension`);
+    } finally {
+        store.values.value = previous;
+    }
 });
 
 // The list the daemon answers, as the page's own read of it holds it: `extensions.list`, read at `updatedAt`.

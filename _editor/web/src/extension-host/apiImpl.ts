@@ -21,9 +21,9 @@ import { startAgent } from "../models/fleet/agentActions";
 import { draftFromBranch } from "../models/fleet/branches/branchStart";
 import { hostLaunchAgent } from "./agentLaunch";
 import { extensionBackendApi } from "./backendApi";
+import { extensionSettingsApi } from "./settingsApi";
 import { declaredChord } from "../workbench/commands/builtinCommands";
 import { registerCommand, executeCommand } from "../workbench/commands/useCommands";
-import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
 import { queryClient } from "../lib/queryPersistence";
 import { sandboxJson, sandboxRequest } from "../client/sandbox/sandboxClient";
 import { sandboxRaw } from "../client/sandbox/sandboxRaw";
@@ -174,7 +174,6 @@ export const createExtensionApi = (
     const declaredViewers = new Map((contributes?.viewers ?? []).map((viewer) => [viewer.id, viewer]));
     const declaredDocuments = new Map((contributes?.documents ?? []).map((document) => [document.id, document]));
     const declaredCommands = new Map((contributes?.commands ?? []).map((command) => [command.command, command]));
-    const declaredSettings = contributes?.settings ?? [];
     const declaredProcesses = new Set((contributes?.processes ?? []).map((process) => process.name));
 
     // Declarative, like settings and processes: unwinds along with the extension's other subscriptions.
@@ -184,14 +183,6 @@ export const createExtensionApi = (
     // The prefixes `onDidChangeFiles` scopes listeners to, from the approved manifest, so an extension cannot widen
     // what wakes it.
     const declaredFilePaths = (contributes?.files ?? []).map((file) => file.path);
-
-    // Manifest defaults under persisted values; the shared store keeps this and the Extensions tab looking at the same
-    // record.
-    const settingDefaults = Object.fromEntries(
-        declaredSettings.flatMap((setting) => (setting.default === undefined ? [] : [[setting.key, setting.default] as const])),
-    );
-    const declaredSettingKeys = new Set(declaredSettings.map((setting) => setting.key));
-    const settings = extensionSettingsStore(summary.id);
 
     const declaredProcess = (name: string): { readonly id: string; readonly name: string } => {
         if (!declaredProcesses.has(name)) {
@@ -337,29 +328,7 @@ export const createExtensionApi = (
             },
             execute: (command, ...args) => executeCommand(command, ...args),
         },
-        settings: {
-            get: (key) => settings.values.value?.[key] ?? settingDefaults[key],
-            set: async (key, value) => {
-                if (!declaredSettingKeys.has(key)) {
-                    throw new Error(`setting "${key}" is not declared in the manifest's contributes.settings`);
-                }
-                await settings.save({ ...settings.values.value, [key]: value });
-            },
-            onDidChange: (listener) => {
-                let previous = settings.values.value ?? {};
-                const stop = watch(settings.values, (next) => {
-                    const current = next ?? {};
-                    const before = previous;
-                    previous = current;
-                    for (const key of new Set([...Object.keys(before), ...Object.keys(current)])) {
-                        if (before[key] !== current[key]) {
-                            listener(key);
-                        }
-                    }
-                });
-                return track({ dispose: () => stop() });
-            },
-        },
+        settings: extensionSettingsApi(summary, fromInventory, track),
         backend: extensionBackendApi(backendPath, summary, fromInventory),
         sandbox: {
             rpc,

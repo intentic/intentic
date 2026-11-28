@@ -80,8 +80,7 @@ const hasUi = (manifest: ExtensionManifest): boolean =>
     (manifest.contributes?.sideViews ?? []).length > 0 ||
     (manifest.contributes?.commands ?? []).length > 0;
 
-// Loads settings first only if the manifest declares any, so compiled-ins with none skip a round-trip; then checks
-// startedIn against the current scope.
+// Loads settings first for listed extensions that declare them, then checks startedIn against the current scope.
 // Skips activation silently if scope moved (a sandbox switch), since an overtaken pass's report is discarded anyway.
 const runActivate = async (
     summary: ExtensionSummary,
@@ -90,7 +89,7 @@ const runActivate = async (
     startedIn: number,
     fromInventory = true,
 ): Promise<void> => {
-    if ((summary.manifest.contributes?.settings ?? []).length > 0) {
+    if (fromInventory && (summary.manifest.contributes?.settings ?? []).length > 0) {
         await extensionSettingsStore(summary.id).load();
     }
     if (module.messages !== undefined) {
